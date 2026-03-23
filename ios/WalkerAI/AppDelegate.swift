@@ -29,6 +29,7 @@ class AppDelegate: UIResponder, UIApplicationDelegate {
       launchOptions: launchOptions
     )
 
+    // TODO: RNSplashScreen.show() - requires bridging header setup
     return true
   }
 }

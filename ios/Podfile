@@ -17,6 +17,9 @@ end
 target 'WalkerAI' do
   config = use_native_modules!
 
+  # react-native-worklets (required by react-native-reanimated v4)
+  pod 'RNWorklets', :path => '../node_modules/react-native-worklets'
+
   use_react_native!(
     :path => config[:reactNativePath],
     # An absolute path to your application root.
@@ -30,5 +33,20 @@ target 'WalkerAI' do
       :mac_catalyst_enabled => false,
       # :ccache_enabled => true
     )
+    # Remove font files from RNVectorIcons pod to prevent duplicate bundling
+    # (fonts are already added to the main target via react-native-asset)
+    installer.pods_project.targets.each do |target|
+      if target.name == 'RNVectorIcons'
+        target.build_phases.each do |phase|
+          if phase.is_a?(Xcodeproj::Project::Object::PBXResourcesBuildPhase)
+            phase.files.each do |file|
+              if file.file_ref && file.file_ref.path.to_s.end_with?('.ttf')
+                phase.files.delete(file)
+              end
+            end
+          end
+        end
+      end
+    end
   end
 end

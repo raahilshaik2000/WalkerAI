@@ -1,0 +1,9 @@
+export { DashboardHeader } from './DashboardHeader';
+export { HeroCTA } from './HeroCTA';
+export { QuickActions } from './QuickActions';
+export { ProjectsCarousel } from './ProjectsCarousel';
+export { InspirationCarousel } from './InspirationCarousel';
+export { NewsAndUpdates } from './NewsAndUpdates';
+export { ActivityTimeline } from './ActivityTimeline';
+export { SectionHeader } from './SectionHeader';
+export { ProgressRing } from './ProgressRing';
