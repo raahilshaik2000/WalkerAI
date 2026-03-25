@@ -1,10 +1,22 @@
 import { createClient } from 'jsr:@supabase/supabase-js@2';
-import Anthropic from 'npm:@anthropic-ai/sdk@0.30';
+import Anthropic from 'npm:@anthropic-ai/sdk@0.39';
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 };
+
+async function urlToBase64(url: string): Promise<string> {
+  const res = await fetch(url);
+  if (!res.ok) throw new Error(`Failed to fetch image (${res.status}): ${url}`);
+  const buffer = await res.arrayBuffer();
+  const bytes = new Uint8Array(buffer);
+  let binary = '';
+  for (let i = 0; i < bytes.byteLength; i++) {
+    binary += String.fromCharCode(bytes[i]);
+  }
+  return btoa(binary);
+}
 
 Deno.serve(async (req) => {
   if (req.method === 'OPTIONS') return new Response('ok', { headers: corsHeaders });
@@ -57,11 +69,24 @@ Deno.serve(async (req) => {
 
     const anthropic = new Anthropic({ apiKey: Deno.env.get('ANTHROPIC_API_KEY')! });
 
-    // Build image content blocks (use up to 8 photos to stay within token limits)
-    const imageBlocks = photo_urls.slice(0, 8).map((url: string) => ({
-      type: 'image' as const,
-      source: { type: 'url' as const, url },
-    }));
+    // Fetch images and convert to base64 (works with private buckets + any SDK version)
+    const urlsToProcess = photo_urls.slice(0, 8);
+    const imageBlocks: Anthropic.ImageBlockParam[] = [];
+    for (const url of urlsToProcess) {
+      try {
+        const base64Data = await urlToBase64(url);
+        imageBlocks.push({
+          type: 'image',
+          source: { type: 'base64', media_type: 'image/jpeg', data: base64Data },
+        });
+      } catch (fetchErr) {
+        console.error('Failed to fetch image, skipping:', fetchErr);
+      }
+    }
+
+    if (imageBlocks.length === 0) {
+      throw new Error('Failed to load any photos for analysis.');
+    }
 
     const roomType = project.room_type ?? 'kitchen';
 

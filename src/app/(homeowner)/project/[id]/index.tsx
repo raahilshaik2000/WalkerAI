@@ -89,7 +89,7 @@ function DispatchRadar() {
 const radarStyles = StyleSheet.create({
   container: { width: 120, height: 120, alignItems: 'center', justifyContent: 'center', alignSelf: 'center', marginVertical: Spacing.md },
   ring: { position: 'absolute', width: 120, height: 120, borderRadius: 60, borderWidth: 1.5, borderColor: Colors.accent },
-  core: { width: 50, height: 50, borderRadius: 25, backgroundColor: 'rgba(59,130,246,0.2)', alignItems: 'center', justifyContent: 'center', borderWidth: 1, borderColor: Colors.accent },
+  core: { width: 50, height: 50, borderRadius: 25, backgroundColor: 'rgba(255, 107, 0, 0.12)', alignItems: 'center', justifyContent: 'center', borderWidth: 1, borderColor: Colors.success },
   coreText: { fontSize: 22 },
 });
 

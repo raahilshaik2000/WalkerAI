@@ -17,9 +17,9 @@ export const Colors = {
   // Primary action: white button, black text (Uber CTA style)
   accent: '#FFFFFF',
   accentFg: '#000000',
-  // Brand green for success/active states
-  success: '#06C167',
-  successGlow: 'rgba(6, 193, 103, 0.2)',
+  // Brand orange for success/active states
+  success: '#FF6B00',
+  successGlow: 'rgba(255, 107, 0, 0.2)',
   warning: '#F5A623',
   error: '#E00B0B',
   text: {

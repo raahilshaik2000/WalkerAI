@@ -249,12 +249,12 @@ const styles = StyleSheet.create({
   explainerText: { ...Typography.bodySecondary, lineHeight: 22, marginBottom: Spacing.md },
   orderCard: { marginBottom: 10 },
   orderCardAction: {
-    borderColor: 'rgba(59,130,246,0.4)',
-    backgroundColor: 'rgba(59,130,246,0.05)',
+    borderColor: 'rgba(255, 107, 0, 0.35)',
+    backgroundColor: 'rgba(255, 107, 0, 0.05)',
   },
   actionBanner: {
     marginBottom: 12, paddingBottom: 12,
-    borderBottomWidth: 1, borderBottomColor: 'rgba(59,130,246,0.2)',
+    borderBottomWidth: 1, borderBottomColor: 'rgba(255, 107, 0, 0.2)',
   },
   actionBannerText: { color: Colors.accent, fontSize: 13, fontWeight: '700' },
   orderHeader: {

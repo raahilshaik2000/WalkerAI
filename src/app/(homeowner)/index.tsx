@@ -6,7 +6,6 @@ import { Colors } from '@/constants/theme';
 import { GradientBackground } from '@/components/ui';
 import {
   DashboardHeader,
-  HeroCTA,
   QuickActions,
   ProjectsCarousel,
   InspirationCarousel,
@@ -33,7 +32,6 @@ export default function HomeownerDashboard() {
           }
         >
           <DashboardHeader />
-          <HeroCTA />
           <QuickActions />
           <ProjectsCarousel />
           <InspirationCarousel />

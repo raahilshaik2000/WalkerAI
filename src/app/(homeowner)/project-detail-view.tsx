@@ -1,7 +1,10 @@
-import React from 'react';
+import React, { useState } from 'react';
 import {
   Dimensions,
+  FlatList,
   Image,
+  NativeScrollEvent,
+  NativeSyntheticEvent,
   ScrollView,
   StyleSheet,
   Text,
@@ -18,7 +21,8 @@ import { ProgressRing } from '@/components/dashboard/ProgressRing';
 import { MILESTONES } from '@/components/dashboard/projectDetailData';
 import { CHAT_THREADS } from '@/components/dashboard/messageData';
 
-const { width: SCREEN_WIDTH } = Dimensions.get('window');
+const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = Dimensions.get('window');
+const HERO_HEIGHT = SCREEN_HEIGHT * 0.42;
 
 const ACTIONS = [
   { key: 'DetailMilestones', icon: 'flag-outline', label: 'Milestones' },
@@ -34,17 +38,39 @@ export default function ProjectDetailViewScreen() {
   const route = useRoute<any>();
   const project: DashboardProject = route.params?.project;
   const milestones = MILESTONES[project.id] ?? [];
+  const [activeIndex, setActiveIndex] = useState(0);
+
+  const images = project.images?.length ? project.images : [project.coverImage];
+
+  const onScroll = (e: NativeSyntheticEvent<NativeScrollEvent>) => {
+    const idx = Math.round(e.nativeEvent.contentOffset.x / SCREEN_WIDTH);
+    setActiveIndex(idx);
+  };
 
   return (
     <GradientBackground>
       <View style={styles.container}>
-        {/* Hero */}
-        <View style={styles.hero}>
-          <Image source={{ uri: project.coverImage }} style={styles.heroImage} />
-          <LinearGradient
-            colors={['rgba(0,0,0,0.5)', 'transparent', 'rgba(0,0,0,0.85)']}
-            style={styles.heroGradient}
+        {/* Hero image carousel */}
+        <View style={styles.heroWrapper}>
+          <FlatList
+            data={images}
+            keyExtractor={(_, i) => `img-${i}`}
+            horizontal
+            pagingEnabled
+            showsHorizontalScrollIndicator={false}
+            onScroll={onScroll}
+            scrollEventThrottle={16}
+            renderItem={({ item: uri }) => (
+              <Image source={{ uri }} style={styles.heroImage} />
+            )}
           />
+          <LinearGradient
+            colors={['rgba(0,0,0,0.45)', 'transparent', 'rgba(0,0,0,0.85)']}
+            style={styles.heroGradient}
+            pointerEvents="none"
+          />
+
+          {/* Top bar */}
           <SafeAreaView style={styles.topBar}>
             <AnimatedPressable style={styles.iconBtn} haptic onPress={() => navigation.goBack()}>
               <Ionicons name="arrow-back" size={20} color="#fff" />
@@ -53,16 +79,31 @@ export default function ProjectDetailViewScreen() {
               <Ionicons name="share-outline" size={20} color="#fff" />
             </AnimatedPressable>
           </SafeAreaView>
+
+          {/* Hero bottom content */}
           <View style={styles.heroBottom}>
             <View style={[styles.statusBadge, { backgroundColor: project.statusColor + '22', borderColor: project.statusColor + '55' }]}>
               <View style={[styles.statusDot, { backgroundColor: project.statusColor }]} />
               <Text style={[styles.statusText, { color: project.statusColor }]}>{project.statusLabel}</Text>
             </View>
             <Text style={styles.heroTitle}>{project.title}</Text>
-            <Text style={styles.heroAddress}>
-              <Ionicons name="location-outline" size={12} color="rgba(255,255,255,0.6)" /> {project.address}
-            </Text>
+            <View style={styles.addressRow}>
+              <Ionicons name="location-outline" size={13} color="rgba(255,255,255,0.6)" />
+              <Text style={styles.heroAddress}>{project.address}</Text>
+            </View>
           </View>
+
+          {/* Page dots */}
+          {images.length > 1 && (
+            <View style={styles.dotsContainer}>
+              {images.map((_, i) => (
+                <View
+                  key={i}
+                  style={[styles.dot, i === activeIndex && styles.dotActive]}
+                />
+              ))}
+            </View>
+          )}
         </View>
 
         <ScrollView
@@ -195,7 +236,7 @@ export default function ProjectDetailViewScreen() {
             <View style={styles.infoRow}>
               <Text style={styles.infoLabel}>Room Type</Text>
               <Text style={styles.infoValue}>
-                {project.roomType === 'kitchen' ? '🍳 Kitchen' : '🚿 Bathroom'}
+                {project.roomType === 'kitchen' ? 'Kitchen' : 'Bathroom'}
               </Text>
             </View>
             <View style={styles.infoDivider} />
@@ -217,8 +258,10 @@ export default function ProjectDetailViewScreen() {
 
 const styles = StyleSheet.create({
   container: { flex: 1 },
-  hero: { height: 280, width: SCREEN_WIDTH },
-  heroImage: { width: '100%', height: '100%', resizeMode: 'cover' },
+
+  // Hero carousel
+  heroWrapper: { height: HERO_HEIGHT, width: SCREEN_WIDTH },
+  heroImage: { width: SCREEN_WIDTH, height: HERO_HEIGHT, resizeMode: 'cover' },
   heroGradient: { position: 'absolute', top: 0, left: 0, right: 0, bottom: 0 },
   topBar: {
     position: 'absolute', top: 0, left: 0, right: 0,
@@ -230,7 +273,9 @@ const styles = StyleSheet.create({
     backgroundColor: 'rgba(0,0,0,0.4)',
     alignItems: 'center', justifyContent: 'center',
   },
-  heroBottom: { position: 'absolute', bottom: 20, left: 16, right: 16 },
+  heroBottom: {
+    position: 'absolute', bottom: 44, left: 16, right: 16,
+  },
   statusBadge: {
     alignSelf: 'flex-start', flexDirection: 'row', alignItems: 'center',
     gap: 5, paddingHorizontal: 10, paddingVertical: 4,
@@ -238,9 +283,35 @@ const styles = StyleSheet.create({
   },
   statusDot: { width: 6, height: 6, borderRadius: 3 },
   statusText: { fontSize: 11, fontWeight: '600' },
-  heroTitle: { fontSize: 26, fontWeight: '700', color: '#fff', marginBottom: 4 },
-  heroAddress: { fontSize: 13, color: 'rgba(255,255,255,0.6)' },
+  heroTitle: { fontSize: 28, fontWeight: '700', color: '#fff', letterSpacing: -0.3, marginBottom: 6 },
+  addressRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+  },
+  heroAddress: { fontSize: 13, color: 'rgba(255,255,255,0.7)' },
 
+  // Page dots
+  dotsContainer: {
+    position: 'absolute',
+    bottom: 28,
+    alignSelf: 'center',
+    flexDirection: 'row',
+    gap: 6,
+  },
+  dot: {
+    width: 6,
+    height: 6,
+    borderRadius: 3,
+    backgroundColor: 'rgba(255,255,255,0.4)',
+  },
+  dotActive: {
+    backgroundColor: '#fff',
+    width: 18,
+    borderRadius: 3,
+  },
+
+  // Body
   body: { flex: 1, marginTop: -20, borderTopLeftRadius: 24, borderTopRightRadius: 24, backgroundColor: Colors.bg.primary },
   bodyContent: { padding: 16, paddingTop: 28, paddingBottom: 120 },
 

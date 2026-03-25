@@ -1,3 +1,4 @@
+import Config from 'react-native-config';
 import { supabase } from './client';
 
 export type StorageBucket =
@@ -14,6 +15,25 @@ interface UploadResult {
   storagePath: string;
 }
 
+// React Native's fetch() returns empty blobs for file:// URIs.
+// Use XMLHttpRequest with responseType='blob' instead — it correctly reads local files.
+function readLocalFileAsBlob(uri: string): Promise<Blob> {
+  return new Promise((resolve, reject) => {
+    const xhr = new XMLHttpRequest();
+    xhr.open('GET', uri, true);
+    xhr.responseType = 'blob';
+    xhr.onload = () => {
+      if (xhr.status === 200 || xhr.status === 0) {
+        resolve(xhr.response as Blob);
+      } else {
+        reject(new Error(`Failed to read file (${xhr.status}): ${uri}`));
+      }
+    };
+    xhr.onerror = () => reject(new Error(`Network error reading file: ${uri}`));
+    xhr.send();
+  });
+}
+
 export async function uploadFile(
   bucket: StorageBucket,
   path: string,
@@ -21,16 +41,14 @@ export async function uploadFile(
   contentType: string = 'image/jpeg',
   onProgress?: (progress: number) => void
 ): Promise<UploadResult> {
-  const response = await fetch(fileUri);
-  const blob = await response.blob();
+  const blob = await readLocalFileAsBlob(fileUri);
 
-  // Use XMLHttpRequest for progress tracking
   if (onProgress) {
     await uploadWithProgress(bucket, path, blob, contentType, onProgress);
   } else {
     const { error } = await supabase.storage.from(bucket).upload(path, blob, {
       contentType,
-      upsert: false,
+      upsert: true,
     });
     if (error) throw error;
   }

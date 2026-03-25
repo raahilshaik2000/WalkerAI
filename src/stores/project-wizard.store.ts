@@ -40,10 +40,10 @@ interface ProjectWizardState {
   // DB
   projectId: string | null;
 
-  step: 1 | 2 | 3 | 4 | 5 | 6 | 7;
+  step: 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8;
 
   // Actions
-  setAddress: (address: string, coordinates?: WizardCoordinates | null, lat?: number, province?: string) => void;
+  setAddress: (address: string, coordinates?: WizardCoordinates | null, province?: string) => void;
   setRoomType: (roomType: RoomType) => void;
   addPhoto: (photo: UploadedPhoto) => void;
   updatePhoto: (id: string, updates: Partial<UploadedPhoto>) => void;
@@ -81,7 +81,7 @@ const initialState: Omit<ProjectWizardState,
 export const useProjectWizardStore = create<ProjectWizardState>()((set, get) => ({
   ...initialState,
 
-  setAddress: (address, coordinates, _lat, province) =>
+  setAddress: (address, coordinates, province) =>
     set({ address, coordinates: coordinates ?? null, province: province ?? null }),
 
   setRoomType: (roomType) => set({ roomType }),

@@ -217,10 +217,10 @@ const styles = StyleSheet.create({
   uploadText: { color: Colors.text.secondary, fontSize: 14, fontWeight: '500' },
   advanceBtn: {
     alignSelf: 'flex-start',
-    backgroundColor: 'rgba(59,130,246,0.15)',
+    backgroundColor: 'rgba(255, 107, 0, 0.12)',
     borderRadius: Radius.pill,
     borderWidth: 1,
-    borderColor: 'rgba(59,130,246,0.3)',
+    borderColor: 'rgba(255, 107, 0, 0.3)',
     paddingHorizontal: 14,
     paddingVertical: 7,
   },

@@ -1,7 +1,6 @@
 import { useState } from 'react';
 import {
   Alert,
-  FlatList,
   Image,
   ScrollView,
   StyleSheet,
@@ -12,18 +11,17 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useNavigation } from '@react-navigation/native';
 import { launchImageLibrary } from 'react-native-image-picker';
-import { uploadFile } from '@/lib/supabase/storage';
-import { supabase } from '@/lib/supabase/client';
+import Ionicons from 'react-native-vector-icons/Ionicons';
 import { useProjectWizardStore } from '@/stores/project-wizard.store';
 import { Colors, Radius, Spacing, Typography } from '@/constants/theme';
-import { GlassButton, GradientBackground, Skeleton } from '@/components/ui';
+import { GlassButton, GradientBackground, Skeleton, WizardHeader } from '@/components/ui';
 
 const MIN_PHOTOS = 4;
 const MAX_PHOTOS = 12;
 
 export default function PhotosStep() {
   const navigation = useNavigation<any>();
-  const { projectId, addPhoto, updatePhoto, removePhoto, photos } = useProjectWizardStore();
+  const { addPhoto, removePhoto, photos } = useProjectWizardStore();
   const [analyzing, setAnalyzing] = useState(false);
 
   const pickPhotos = async () => {
@@ -34,29 +32,9 @@ export default function PhotosStep() {
     });
 
     if (!result.didCancel && result.assets) {
-      // Add photos to store as 'uploading'
       for (const asset of result.assets) {
         const tempId = `temp_${Date.now()}_${Math.random()}`;
-        addPhoto({ id: tempId, uri: asset.uri ?? '', status: 'uploading', progress: 0, url: '' });
-
-        // Upload in background
-        uploadFile(
-          'project-photos',
-          `${projectId}/${tempId}.jpg`,
-          asset.uri ?? '',
-          'image/jpeg',
-          (progress) => updatePhoto(tempId, { progress })
-        )
-          .then(async ({ publicUrl }) => {
-            updatePhoto(tempId, { status: 'done', url: publicUrl, progress: 100 });
-            // Save to project_photos table
-            await supabase.from('project_photos').insert({
-              project_id: projectId,
-              url: publicUrl,
-              storage_path: `project-photos/${projectId}/${tempId}.jpg`,
-            });
-          })
-          .catch(() => updatePhoto(tempId, { status: 'error' }));
+        addPhoto({ id: tempId, uri: asset.uri ?? '', status: 'done', progress: 100, url: '' });
       }
     }
   };
@@ -87,17 +65,9 @@ export default function PhotosStep() {
           contentContainerStyle={styles.scroll}
           showsVerticalScrollIndicator={false}
         >
-          {/* Progress */}
-          <View style={styles.progressRow}>
-            {Array.from({ length: 7 }, (_, i) => (
-              <View
-                key={i}
-                style={[styles.progressSeg, i <= 1 && styles.progressSegActive]}
-              />
-            ))}
-          </View>
+          <WizardHeader currentStep={2} />
 
-          <Text style={styles.stepLabel}>STEP 2 OF 7</Text>
+          <Text style={styles.stepLabel}>STEP 2 OF 8</Text>
           <Text style={styles.title}>Add photos</Text>
           <Text style={styles.subtitle}>
             The more photos, the better Claude can analyze your space.
@@ -155,7 +125,7 @@ export default function PhotosStep() {
           {/* Upload CTA when empty */}
           {photos.length === 0 && (
             <TouchableOpacity style={styles.emptyArea} onPress={pickPhotos} activeOpacity={0.8}>
-              <Text style={styles.emptyIcon}>📷</Text>
+              <Ionicons name="camera-outline" size={48} color={Colors.text.tertiary} />
               <Text style={styles.emptyTitle}>Select {MIN_PHOTOS}+ photos</Text>
               <Text style={styles.emptySub}>From your camera roll</Text>
             </TouchableOpacity>
@@ -177,7 +147,6 @@ export default function PhotosStep() {
             loading={analyzing}
             fullWidth
             size="lg"
-            style={styles.cta}
           />
         </ScrollView>
       </SafeAreaView>
@@ -195,14 +164,6 @@ const styles = StyleSheet.create({
     paddingTop: Spacing.sm,
     paddingBottom: Spacing.xl,
   },
-  progressRow: { flexDirection: 'row', gap: 5, marginBottom: Spacing.lg },
-  progressSeg: {
-    flex: 1,
-    height: 3,
-    borderRadius: 2,
-    backgroundColor: Colors.glass.surface,
-  },
-  progressSegActive: { backgroundColor: Colors.accent },
   stepLabel: { ...Typography.label, color: Colors.accent, marginBottom: 8 },
   title: { ...Typography.h1, marginBottom: 8 },
   subtitle: { ...Typography.bodySecondary, marginBottom: Spacing.sm, lineHeight: 22 },
@@ -300,9 +261,7 @@ const styles = StyleSheet.create({
     marginBottom: Spacing.sm,
     gap: 10,
   },
-  emptyIcon: { fontSize: 48 },
   emptyTitle: { color: Colors.text.primary, fontSize: 16, fontWeight: '600' },
   emptySub: { color: Colors.text.tertiary, fontSize: 14 },
   statusLine: { ...Typography.caption, textAlign: 'center', marginBottom: Spacing.md },
-  cta: {},
 });

@@ -239,8 +239,8 @@ const styles = StyleSheet.create({
   milestoneRowBorder: { borderBottomWidth: 1, borderBottomColor: Colors.glass.border },
   milestoneNum: {
     width: 26, height: 26, borderRadius: 13,
-    backgroundColor: 'rgba(59,130,246,0.2)',
-    borderWidth: 1, borderColor: Colors.accent,
+    backgroundColor: 'rgba(255, 107, 0, 0.12)',
+    borderWidth: 1, borderColor: Colors.success,
     alignItems: 'center', justifyContent: 'center',
   },
   milestoneNumText: { color: Colors.accent, fontSize: 12, fontWeight: '700' },

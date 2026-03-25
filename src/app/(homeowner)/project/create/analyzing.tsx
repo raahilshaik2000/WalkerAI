@@ -8,12 +8,17 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useNavigation } from '@react-navigation/native';
+import Ionicons from 'react-native-vector-icons/Ionicons';
 import { supabase } from '@/lib/supabase/client';
+import { uploadFile, getSignedUrl } from '@/lib/supabase/storage';
 import { useProjectWizardStore } from '@/stores/project-wizard.store';
+import { useAuthStore } from '@/stores/auth.store';
 import { Colors, Spacing, Typography } from '@/constants/theme';
 import { GradientBackground } from '@/components/ui';
 
 const ANALYSIS_STEPS = [
+  'Creating your project…',
+  'Uploading photos…',
   'Scanning room dimensions…',
   'Identifying existing materials…',
   'Detecting fixtures & appliances…',
@@ -23,21 +28,19 @@ const ANALYSIS_STEPS = [
 
 export default function AnalyzingScreen() {
   const navigation = useNavigation<any>();
-  const { projectId, photos, setAnalysisResult, setQuestions } = useProjectWizardStore();
+  const { user } = useAuthStore();
+  const { projectId, photos, roomType, setAnalysisResult, setQuestions } = useProjectWizardStore();
 
   const [currentStep, setCurrentStep] = useState(0);
   const [error, setError] = useState<string | null>(null);
 
-  // Pulse animation for the outer ring
   const pulseAnim = useRef(new Animated.Value(1)).current;
   const rotateAnim = useRef(new Animated.Value(0)).current;
   const opacityAnim = useRef(new Animated.Value(0)).current;
 
   useEffect(() => {
-    // Fade in
     Animated.timing(opacityAnim, { toValue: 1, duration: 400, useNativeDriver: true }).start();
 
-    // Continuous pulse
     Animated.loop(
       Animated.sequence([
         Animated.timing(pulseAnim, { toValue: 1.15, duration: 800, easing: Easing.out(Easing.ease), useNativeDriver: true }),
@@ -45,13 +48,11 @@ export default function AnalyzingScreen() {
       ])
     ).start();
 
-    // Spinning arc
     Animated.loop(
       Animated.timing(rotateAnim, { toValue: 1, duration: 2000, easing: Easing.linear, useNativeDriver: true })
     ).start();
   }, []);
 
-  // Cycle through step labels
   useEffect(() => {
     const interval = setInterval(() => {
       setCurrentStep((prev) => (prev + 1) % ANALYSIS_STEPS.length);
@@ -59,37 +60,100 @@ export default function AnalyzingScreen() {
     return () => clearInterval(interval);
   }, []);
 
-  // Trigger AI analysis
   useEffect(() => {
     const runAnalysis = async () => {
       try {
-        const photoUrls = photos
-          .filter((p) => p.status === 'done' && p.url)
-          .map((p) => p.url);
+        let pid = projectId;
 
-        if (photoUrls.length === 0) throw new Error('No uploaded photos found.');
+        if (!pid) {
+          const { data: project, error: createError } = await supabase
+            .from('projects')
+            .insert({
+              homeowner_id: user!.id,
+              room_type: roomType || 'kitchen',
+              status: 'draft',
+            })
+            .select('id')
+            .single();
 
-        // Call analyze-photos edge function
+          if (createError) {
+            throw new Error(`Project creation failed: ${createError.message}`);
+          }
+          pid = project.id;
+          useProjectWizardStore.getState().setProjectId(pid);
+        }
+
+        const localPhotos = photos.filter((p) => p.status === 'done');
+        if (localPhotos.length === 0) throw new Error('No photos found.');
+
+        const photoUrls: string[] = [];
+        for (const photo of localPhotos) {
+          const storagePath = `${pid}/${photo.id}.jpg`;
+
+          let publicUrl: string;
+          try {
+            const result = await uploadFile('project-photos', storagePath, photo.uri, 'image/jpeg');
+            publicUrl = result.publicUrl;
+          } catch (uploadErr: any) {
+            throw new Error(`Photo upload failed: ${uploadErr?.message ?? String(uploadErr)}`);
+          }
+
+          // project-photos bucket is private — get a signed URL so Anthropic can fetch the image
+          let signedUrl: string;
+          try {
+            signedUrl = await getSignedUrl('project-photos', storagePath, 3600);
+          } catch (signErr: any) {
+            throw new Error(`Could not create signed URL: ${signErr?.message ?? String(signErr)}`);
+          }
+          photoUrls.push(signedUrl);
+
+          await supabase.from('project_photos').insert({
+            project_id: pid,
+            url: publicUrl,
+            storage_path: `project-photos/${storagePath}`,
+          });
+
+          useProjectWizardStore.getState().updatePhoto(photo.id, {
+            status: 'done',
+            url: publicUrl,
+            progress: 100,
+          });
+        }
+
         const { data: analysisData, error: analysisError } = await supabase.functions.invoke(
           'analyze-photos',
-          { body: { project_id: projectId, photo_urls: photoUrls } }
+          { body: { project_id: pid, photo_urls: photoUrls } }
         );
-        if (analysisError) throw analysisError;
+        if (analysisError) {
+          let msg = analysisError.message;
+          try {
+            const body = await (analysisError.context as Response).clone().json();
+            if (body?.error) msg = body.error;
+          } catch {}
+          throw new Error(msg);
+        }
 
         setAnalysisResult(analysisData.analysis);
 
-        // Call generate-questionnaire edge function
         const { data: questionnaireData, error: questionnaireError } = await supabase.functions.invoke(
           'generate-questionnaire',
-          { body: { project_id: projectId, analysis: analysisData.analysis } }
+          { body: { project_id: pid, analysis: analysisData.analysis } }
         );
-        if (questionnaireError) throw questionnaireError;
+        if (questionnaireError) {
+          let msg = questionnaireError.message;
+          try {
+            const body = await (questionnaireError.context as Response).clone().json();
+            if (body?.error) msg = body.error;
+          } catch {}
+          throw new Error(msg);
+        }
 
         setQuestions(questionnaireData.questions);
         useProjectWizardStore.getState().setStep(4);
         navigation.navigate('Questionnaire');
-      } catch (err) {
-        setError(err instanceof Error ? err.message : 'Analysis failed. Please try again.');
+      } catch (err: any) {
+        const msg = err?.message || err?.details || JSON.stringify(err);
+        setError(msg);
       }
     };
 
@@ -103,10 +167,12 @@ export default function AnalyzingScreen() {
 
   if (error) {
     return (
-      <GradientBackground glow="center">
+      <GradientBackground>
         <SafeAreaView style={styles.safe}>
           <View style={styles.center}>
-            <Text style={styles.errorIcon}>⚠️</Text>
+            <View style={styles.errorCircle}>
+              <Ionicons name="alert-circle-outline" size={48} color="#FF6B00" />
+            </View>
             <Text style={styles.errorTitle}>Analysis failed</Text>
             <Text style={styles.errorBody}>{error}</Text>
           </View>
@@ -116,7 +182,7 @@ export default function AnalyzingScreen() {
   }
 
   return (
-    <GradientBackground glow="center">
+    <GradientBackground>
       <SafeAreaView style={styles.safe}>
         <Animated.View style={[styles.center, { opacity: opacityAnim }]}>
           {/* Pulsing rings */}
@@ -131,7 +197,7 @@ export default function AnalyzingScreen() {
 
             {/* Core icon */}
             <View style={styles.core}>
-              <Text style={styles.coreIcon}>🤖</Text>
+              <Ionicons name="sparkles" size={32} color="#FF6B00" />
             </View>
           </View>
 
@@ -142,10 +208,7 @@ export default function AnalyzingScreen() {
             {ANALYSIS_STEPS.map((_, i) => (
               <View
                 key={i}
-                style={[
-                  styles.dot,
-                  i === currentStep && styles.dotActive,
-                ]}
+                style={[styles.dot, i === currentStep && styles.dotActive]}
               />
             ))}
           </View>
@@ -179,12 +242,12 @@ const styles = StyleSheet.create({
   ringOuter: {
     width: 180,
     height: 180,
-    borderColor: 'rgba(59, 130, 246, 0.2)',
+    borderColor: 'rgba(255, 107, 0, 0.2)',
   },
   ringMid: {
     width: 130,
     height: 130,
-    borderColor: 'rgba(59, 130, 246, 0.35)',
+    borderColor: 'rgba(255, 107, 0, 0.35)',
   },
   spinArc: {
     position: 'absolute',
@@ -197,20 +260,19 @@ const styles = StyleSheet.create({
     width: 10,
     height: 10,
     borderRadius: 5,
-    backgroundColor: Colors.accent,
+    backgroundColor: '#FF6B00',
     marginTop: 2,
   },
   core: {
     width: 80,
     height: 80,
     borderRadius: 40,
-    backgroundColor: 'rgba(59, 130, 246, 0.15)',
+    backgroundColor: 'rgba(255, 107, 0, 0.1)',
     borderWidth: 1,
-    borderColor: 'rgba(59, 130, 246, 0.4)',
+    borderColor: 'rgba(255, 107, 0, 0.3)',
     alignItems: 'center',
     justifyContent: 'center',
   },
-  coreIcon: { fontSize: 34 },
   headline: { ...Typography.h2, textAlign: 'center', marginBottom: 12 },
   stepText: {
     ...Typography.bodySecondary,
@@ -228,8 +290,16 @@ const styles = StyleSheet.create({
     borderRadius: 3,
     backgroundColor: Colors.glass.border,
   },
-  dotActive: { backgroundColor: Colors.accent },
-  errorIcon: { fontSize: 48, marginBottom: Spacing.sm },
+  dotActive: { backgroundColor: '#FF6B00' },
+  errorCircle: {
+    width: 80,
+    height: 80,
+    borderRadius: 40,
+    backgroundColor: 'rgba(255, 107, 0, 0.1)',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: Spacing.md,
+  },
   errorTitle: { ...Typography.h2, marginBottom: 10, textAlign: 'center' },
   errorBody: { ...Typography.bodySecondary, textAlign: 'center', lineHeight: 22 },
 });

@@ -11,7 +11,7 @@ CREATE EXTENSION IF NOT EXISTS pg_cron;  -- for dispatch timeout scheduling
 -- USERS
 -- ============================================================
 CREATE TABLE users (
-  id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   email TEXT UNIQUE NOT NULL,
   role TEXT NOT NULL CHECK (role IN ('homeowner', 'company', 'admin')),
   push_token TEXT,
@@ -22,7 +22,7 @@ CREATE TABLE users (
 -- COMPANIES
 -- ============================================================
 CREATE TABLE companies (
-  id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   user_id UUID REFERENCES users(id) ON DELETE CASCADE,
   name TEXT NOT NULL,
   address TEXT,
@@ -44,9 +44,9 @@ CREATE INDEX companies_location_idx ON companies USING GIST (location);
 -- PROJECTS
 -- ============================================================
 CREATE TABLE projects (
-  id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   homeowner_id UUID REFERENCES users(id) ON DELETE CASCADE,
-  address TEXT NOT NULL,
+  address TEXT,
   location GEOGRAPHY(POINT, 4326),
   room_type TEXT CHECK (room_type IN ('kitchen', 'bathroom')),
   status TEXT DEFAULT 'draft' CHECK (status IN (
@@ -68,7 +68,7 @@ CREATE INDEX projects_location_idx ON projects USING GIST (location);
 -- PROJECT PHOTOS
 -- ============================================================
 CREATE TABLE project_photos (
-  id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   project_id UUID REFERENCES projects(id) ON DELETE CASCADE,
   url TEXT NOT NULL,
   storage_path TEXT NOT NULL,
@@ -79,7 +79,7 @@ CREATE TABLE project_photos (
 -- AI RENDERS
 -- ============================================================
 CREATE TABLE renders (
-  id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   project_id UUID REFERENCES projects(id) ON DELETE CASCADE,
   url TEXT NOT NULL,
   style_params JSONB,
@@ -91,7 +91,7 @@ CREATE TABLE renders (
 -- MATERIALS
 -- ============================================================
 CREATE TABLE materials (
-  id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   project_id UUID REFERENCES projects(id) ON DELETE CASCADE,
   item TEXT NOT NULL,
   quantity NUMERIC,
@@ -103,7 +103,7 @@ CREATE TABLE materials (
 -- SCOPE OF WORK
 -- ============================================================
 CREATE TABLE scope_of_work (
-  id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   project_id UUID REFERENCES projects(id) ON DELETE CASCADE,
   phase TEXT NOT NULL,
   description TEXT NOT NULL,
@@ -114,7 +114,7 @@ CREATE TABLE scope_of_work (
 -- PERMITS
 -- ============================================================
 CREATE TABLE permits (
-  id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   project_id UUID REFERENCES projects(id) ON DELETE CASCADE,
   permit_type TEXT NOT NULL,
   status TEXT DEFAULT 'not_applied' CHECK (status IN (
@@ -129,7 +129,7 @@ CREATE TABLE permits (
 -- QUOTES
 -- ============================================================
 CREATE TABLE quotes (
-  id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   project_id UUID REFERENCES projects(id) ON DELETE CASCADE,
   company_id UUID REFERENCES companies(id),
   total_amount INTEGER NOT NULL,    -- CAD cents
@@ -144,7 +144,7 @@ CREATE TABLE quotes (
 -- MILESTONES
 -- ============================================================
 CREATE TABLE milestones (
-  id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   quote_id UUID REFERENCES quotes(id) ON DELETE CASCADE,
   title TEXT NOT NULL,
   amount INTEGER NOT NULL,          -- CAD cents
@@ -162,7 +162,7 @@ CREATE TABLE milestones (
 -- MESSAGES
 -- ============================================================
 CREATE TABLE messages (
-  id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   project_id UUID REFERENCES projects(id) ON DELETE CASCADE,
   sender_id UUID REFERENCES users(id),
   body TEXT,
@@ -176,7 +176,7 @@ CREATE INDEX messages_project_idx ON messages (project_id, sent_at);
 -- REVIEWS
 -- ============================================================
 CREATE TABLE reviews (
-  id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   project_id UUID REFERENCES projects(id),
   reviewer_id UUID REFERENCES users(id),
   reviewee_id UUID REFERENCES users(id),
@@ -194,7 +194,7 @@ CREATE TABLE reviews (
 -- WARRANTIES
 -- ============================================================
 CREATE TABLE warranties (
-  id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   project_id UUID REFERENCES projects(id) ON DELETE CASCADE,
   document_url TEXT NOT NULL,
   expiry_date DATE,
@@ -205,7 +205,7 @@ CREATE TABLE warranties (
 -- CHANGE ORDERS
 -- ============================================================
 CREATE TABLE change_orders (
-  id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   project_id UUID REFERENCES projects(id) ON DELETE CASCADE,
   description TEXT NOT NULL,
   cost_delta INTEGER,               -- CAD cents, can be negative
@@ -219,7 +219,7 @@ CREATE TABLE change_orders (
 -- DISPUTES
 -- ============================================================
 CREATE TABLE disputes (
-  id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   project_id UUID REFERENCES projects(id) ON DELETE CASCADE,
   raised_by UUID REFERENCES users(id),
   milestone_id UUID REFERENCES milestones(id),
@@ -232,7 +232,7 @@ CREATE TABLE disputes (
 -- NOTIFICATIONS
 -- ============================================================
 CREATE TABLE notifications (
-  id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   user_id UUID REFERENCES users(id) ON DELETE CASCADE,
   type TEXT NOT NULL,
   payload JSONB,
@@ -246,7 +246,7 @@ CREATE INDEX notifications_user_idx ON notifications (user_id, read, created_at 
 -- DISPATCH LOGS
 -- ============================================================
 CREATE TABLE dispatch_logs (
-  id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   project_id UUID REFERENCES projects(id) ON DELETE CASCADE,
   company_id UUID REFERENCES companies(id),
   round INTEGER DEFAULT 1,

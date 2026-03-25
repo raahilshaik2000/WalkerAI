@@ -13,6 +13,7 @@ export interface DashboardProject {
   contractor: string;
   contractorAvatar: string | null;
   coverImage: string;
+  images: string[];
   budget: string;
   dueDate: string;
   roomType: RoomType;
@@ -33,6 +34,7 @@ export type InspirationCategory = 'photos' | 'ai_render' | 'pro_work';
 export interface InspirationItem {
   id: string;
   imageUrl: string;
+  images: string[];
   title: string;
   category: InspirationCategory;
   categoryLabel: string;
@@ -75,7 +77,7 @@ export const ROOM_TYPE_PICKS: RoomTypePick[] = [
 
 export const QUICK_ACTIONS: QuickAction[] = [
   { id: 'find-pro', label: 'Find a Pro', icon: 'search', route: 'FindPro', color: '#FFFFFF' },
-  { id: 'estimate', label: 'Get Estimate', icon: 'calculator-outline', route: 'ProjectCreate', color: '#06C167' },
+  { id: 'estimate', label: 'Get Estimate', icon: 'calculator-outline', route: 'ProjectCreate', color: '#FF6B00' },
   { id: 'ideas', label: 'Browse Ideas', icon: 'images-outline', route: 'BrowseIdeas', color: '#A78BFA' },
   { id: 'schedule', label: 'My Schedule', icon: 'calendar-outline', route: 'Schedule', color: '#60A5FA' },
 ];
@@ -92,6 +94,11 @@ export const PROJECTS_LIST: DashboardProject[] = [
     contractor: 'BuildRight Co.',
     contractorAvatar: 'https://i.pravatar.cc/40?img=12',
     coverImage: 'https://images.unsplash.com/photo-1639173925921-5d5fd027713c?w=600&q=80',
+    images: [
+      'https://images.unsplash.com/photo-1639173925921-5d5fd027713c?w=600&q=80',
+      'https://images.unsplash.com/photo-1745151469070-24c9e2fb2058?w=600&q=80',
+      'https://images.unsplash.com/photo-1649083048597-d7b4f1e8a386?w=600&q=80',
+    ],
     budget: '$24,500',
     dueDate: 'Mar 28',
     roomType: 'kitchen',
@@ -109,6 +116,11 @@ export const PROJECTS_LIST: DashboardProject[] = [
     contractor: '3 bids received',
     contractorAvatar: null,
     coverImage: 'https://images.unsplash.com/photo-1721564130821-5ac091ee399c?w=600&q=80',
+    images: [
+      'https://images.unsplash.com/photo-1721564130821-5ac091ee399c?w=600&q=80',
+      'https://images.unsplash.com/photo-1753605788101-04d1e653e74a?w=600&q=80',
+      'https://images.unsplash.com/photo-1760546120487-ccb54df9838c?w=600&q=80',
+    ],
     budget: '$11,200–$15,800',
     dueDate: 'TBD',
     roomType: 'bathroom',
@@ -121,11 +133,15 @@ export const PROJECTS_LIST: DashboardProject[] = [
     address: '88 Oak Ave, Mississauga',
     status: 'completed',
     statusLabel: 'Completed',
-    statusColor: '#06C167',
+    statusColor: '#FF6B00',
     progress: 1.0,
     contractor: 'AquaTile Bathrooms',
     contractorAvatar: 'https://i.pravatar.cc/40?img=22',
     coverImage: 'https://images.unsplash.com/photo-1753605788101-04d1e653e74a?w=600&q=80',
+    images: [
+      'https://images.unsplash.com/photo-1753605788101-04d1e653e74a?w=600&q=80',
+      'https://images.unsplash.com/photo-1722650271096-bf3af586c406?w=600&q=80',
+    ],
     budget: '$9,000',
     dueDate: 'Mar 5',
     roomType: 'bathroom',
@@ -143,6 +159,11 @@ export const PROJECTS_LIST: DashboardProject[] = [
     contractor: 'Urban Kitchen Studio',
     contractorAvatar: 'https://i.pravatar.cc/40?img=48',
     coverImage: 'https://images.unsplash.com/photo-1641584191698-3f7e03e245b6?w=600&q=80',
+    images: [
+      'https://images.unsplash.com/photo-1641584191698-3f7e03e245b6?w=600&q=80',
+      'https://images.unsplash.com/photo-1755272853203-1469840c4c60?w=600&q=80',
+      'https://images.unsplash.com/photo-1709747820806-057272eddd5d?w=600&q=80',
+    ],
     budget: '$35,000',
     dueDate: 'May 20',
     roomType: 'kitchen',
@@ -160,6 +181,10 @@ export const PROJECTS_LIST: DashboardProject[] = [
     contractor: 'Not assigned',
     contractorAvatar: null,
     coverImage: 'https://images.unsplash.com/photo-1564540579594-0930edb6de43?w=600&q=80',
+    images: [
+      'https://images.unsplash.com/photo-1564540579594-0930edb6de43?w=600&q=80',
+      'https://images.unsplash.com/photo-1754522711595-84428937b07a?w=600&q=80',
+    ],
     budget: 'TBD',
     dueDate: 'TBD',
     roomType: 'bathroom',
@@ -177,6 +202,11 @@ export const INSPIRATION_ITEMS: InspirationItem[] = [
   {
     id: 'i1',
     imageUrl: 'https://images.unsplash.com/photo-1745151469070-24c9e2fb2058?w=400&q=80',
+    images: [
+      'https://images.unsplash.com/photo-1745151469070-24c9e2fb2058?w=600&q=80',
+      'https://images.unsplash.com/photo-1639173925921-5d5fd027713c?w=600&q=80',
+      'https://images.unsplash.com/photo-1649083048597-d7b4f1e8a386?w=600&q=80',
+    ],
     title: 'Modern White Kitchen',
     category: 'photos',
     categoryLabel: 'Photos',
@@ -186,6 +216,11 @@ export const INSPIRATION_ITEMS: InspirationItem[] = [
   {
     id: 'i2',
     imageUrl: 'https://images.unsplash.com/photo-1754522711595-84428937b07a?w=400&q=80',
+    images: [
+      'https://images.unsplash.com/photo-1754522711595-84428937b07a?w=600&q=80',
+      'https://images.unsplash.com/photo-1760546120487-ccb54df9838c?w=600&q=80',
+      'https://images.unsplash.com/photo-1753605788101-04d1e653e74a?w=600&q=80',
+    ],
     title: 'AI Luxury Bathroom',
     category: 'ai_render',
     categoryLabel: 'AI Design',
@@ -195,15 +230,24 @@ export const INSPIRATION_ITEMS: InspirationItem[] = [
   {
     id: 'i3',
     imageUrl: 'https://images.unsplash.com/photo-1641584191698-3f7e03e245b6?w=400&q=80',
+    images: [
+      'https://images.unsplash.com/photo-1641584191698-3f7e03e245b6?w=600&q=80',
+      'https://images.unsplash.com/photo-1755272853203-1469840c4c60?w=600&q=80',
+      'https://images.unsplash.com/photo-1709747820806-057272eddd5d?w=600&q=80',
+    ],
     title: 'Industrial Kitchen Reno',
     category: 'pro_work',
     categoryLabel: 'Pro Work',
-    categoryColor: '#06C167',
+    categoryColor: '#FF6B00',
     saves: 2105,
   },
   {
     id: 'i4',
     imageUrl: 'https://images.unsplash.com/photo-1753605788101-04d1e653e74a?w=400&q=80',
+    images: [
+      'https://images.unsplash.com/photo-1753605788101-04d1e653e74a?w=600&q=80',
+      'https://images.unsplash.com/photo-1722650271096-bf3af586c406?w=600&q=80',
+    ],
     title: 'Spa-Style Bathroom',
     category: 'ai_render',
     categoryLabel: 'AI Design',
@@ -213,15 +257,24 @@ export const INSPIRATION_ITEMS: InspirationItem[] = [
   {
     id: 'i5',
     imageUrl: 'https://images.unsplash.com/photo-1709747820806-057272eddd5d?w=400&q=80',
+    images: [
+      'https://images.unsplash.com/photo-1709747820806-057272eddd5d?w=600&q=80',
+      'https://images.unsplash.com/photo-1649083048597-d7b4f1e8a386?w=600&q=80',
+      'https://images.unsplash.com/photo-1639173925921-5d5fd027713c?w=600&q=80',
+    ],
     title: 'Marble Countertop Install',
     category: 'pro_work',
     categoryLabel: 'Pro Work',
-    categoryColor: '#06C167',
+    categoryColor: '#FF6B00',
     saves: 932,
   },
   {
     id: 'i6',
     imageUrl: 'https://images.unsplash.com/photo-1722650271096-bf3af586c406?w=400&q=80',
+    images: [
+      'https://images.unsplash.com/photo-1722650271096-bf3af586c406?w=600&q=80',
+      'https://images.unsplash.com/photo-1760546120487-ccb54df9838c?w=600&q=80',
+    ],
     title: 'Walk-In Shower Remodel',
     category: 'photos',
     categoryLabel: 'Photos',
@@ -254,7 +307,7 @@ export const NEWS_ITEMS: NewsItem[] = [
     title: 'Milestone Payments Update',
     subtitle: 'Pay contractors securely as milestones are completed and verified.',
     icon: 'shield-checkmark-outline',
-    iconBgColor: '#06C167',
+    iconBgColor: '#FF6B00',
     tag: 'update',
     tagColor: '#60A5FA',
   },
@@ -332,6 +385,10 @@ export const ALL_INSPIRATION_ITEMS: InspirationItem[] = [
   {
     id: 'i7',
     imageUrl: 'https://images.unsplash.com/photo-1755272853203-1469840c4c60?w=400&q=80',
+    images: [
+      'https://images.unsplash.com/photo-1755272853203-1469840c4c60?w=600&q=80',
+      'https://images.unsplash.com/photo-1745151469070-24c9e2fb2058?w=600&q=80',
+    ],
     title: 'Farmhouse Kitchen Sink',
     category: 'photos',
     categoryLabel: 'Photos',
@@ -341,6 +398,10 @@ export const ALL_INSPIRATION_ITEMS: InspirationItem[] = [
   {
     id: 'i8',
     imageUrl: 'https://images.unsplash.com/photo-1564540579594-0930edb6de43?w=400&q=80',
+    images: [
+      'https://images.unsplash.com/photo-1564540579594-0930edb6de43?w=600&q=80',
+      'https://images.unsplash.com/photo-1754522711595-84428937b07a?w=600&q=80',
+    ],
     title: 'AI Double Vanity Design',
     category: 'ai_render',
     categoryLabel: 'AI Design',
@@ -350,15 +411,23 @@ export const ALL_INSPIRATION_ITEMS: InspirationItem[] = [
   {
     id: 'i9',
     imageUrl: 'https://images.unsplash.com/photo-1649083048597-d7b4f1e8a386?w=400&q=80',
+    images: [
+      'https://images.unsplash.com/photo-1649083048597-d7b4f1e8a386?w=600&q=80',
+      'https://images.unsplash.com/photo-1641584191698-3f7e03e245b6?w=600&q=80',
+    ],
     title: 'Quartz Kitchen Island',
     category: 'pro_work',
     categoryLabel: 'Pro Work',
-    categoryColor: '#06C167',
+    categoryColor: '#FF6B00',
     saves: 1340,
   },
   {
     id: 'i10',
     imageUrl: 'https://images.unsplash.com/photo-1760546120487-ccb54df9838c?w=400&q=80',
+    images: [
+      'https://images.unsplash.com/photo-1760546120487-ccb54df9838c?w=600&q=80',
+      'https://images.unsplash.com/photo-1722650271096-bf3af586c406?w=600&q=80',
+    ],
     title: 'Freestanding Bathtub',
     category: 'photos',
     categoryLabel: 'Photos',

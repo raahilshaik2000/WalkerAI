@@ -39,6 +39,7 @@ import MyReviewsScreen from '@/app/(homeowner)/my-reviews';
 import SavedAddressesScreen from '@/app/(homeowner)/saved-addresses';
 
 // Homeowner project create screens
+import RoomTypeStep from '@/app/(homeowner)/project/create/room-type';
 import AddressStep from '@/app/(homeowner)/project/create/address';
 import AnalyzingStep from '@/app/(homeowner)/project/create/analyzing';
 import BriefStep from '@/app/(homeowner)/project/create/brief';
@@ -80,6 +81,9 @@ const Tab = createBottomTabNavigator();
 const AuthStack = createStackNavigator();
 const HomeownerStack = createStackNavigator();
 const CompanyStack = createStackNavigator();
+const ProjectCreateStack = createStackNavigator();
+const ProjectDetailStack = createStackNavigator();
+const JobDetailStack = createStackNavigator();
 
 function icon(name: string, focused: boolean, color: string) {
   return <Ionicons name={focused ? name : `${name}-outline`} size={22} color={color} />;
@@ -126,33 +130,32 @@ function AuthNavigator() {
   );
 }
 
-function ProjectCreateStack() {
-  const S = createStackNavigator();
+function ProjectCreateNavigator() {
   return (
-    <S.Navigator screenOptions={{ headerShown: false }}>
-      <S.Screen name="Address" component={AddressStep} />
-      <S.Screen name="Photos" component={PhotosStep} />
-      <S.Screen name="Analyzing" component={AnalyzingStep} />
-      <S.Screen name="Brief" component={BriefStep} />
-      <S.Screen name="Questionnaire" component={QuestionnaireStep} />
-      <S.Screen name="Renders" component={RendersStep} />
-      <S.Screen name="Confirm" component={ConfirmStep} />
-    </S.Navigator>
+    <ProjectCreateStack.Navigator screenOptions={{ headerShown: false }}>
+      <ProjectCreateStack.Screen name="RoomType" component={RoomTypeStep} />
+      <ProjectCreateStack.Screen name="Photos" component={PhotosStep} />
+      <ProjectCreateStack.Screen name="Analyzing" component={AnalyzingStep} />
+      <ProjectCreateStack.Screen name="Questionnaire" component={QuestionnaireStep} />
+      <ProjectCreateStack.Screen name="Renders" component={RendersStep} />
+      <ProjectCreateStack.Screen name="Brief" component={BriefStep} />
+      <ProjectCreateStack.Screen name="Address" component={AddressStep} />
+      <ProjectCreateStack.Screen name="Confirm" component={ConfirmStep} />
+    </ProjectCreateStack.Navigator>
   );
 }
 
-function ProjectDetailStack() {
-  const S = createStackNavigator();
+function ProjectDetailNavigator() {
   return (
-    <S.Navigator screenOptions={{ headerShown: false }}>
-      <S.Screen name="ProjectDetailMain" component={ProjectDetail} />
-      <S.Screen name="ChangeOrders" component={ProjectChangeOrders} />
-      <S.Screen name="Messages" component={ProjectMessages} />
-      <S.Screen name="Milestones" component={ProjectMilestones} />
-      <S.Screen name="Permits" component={ProjectPermits} />
-      <S.Screen name="Quote" component={ProjectQuote} />
-      <S.Screen name="Review" component={ProjectReview} />
-    </S.Navigator>
+    <ProjectDetailStack.Navigator screenOptions={{ headerShown: false }}>
+      <ProjectDetailStack.Screen name="ProjectDetailMain" component={ProjectDetail} />
+      <ProjectDetailStack.Screen name="ChangeOrders" component={ProjectChangeOrders} />
+      <ProjectDetailStack.Screen name="Messages" component={ProjectMessages} />
+      <ProjectDetailStack.Screen name="Milestones" component={ProjectMilestones} />
+      <ProjectDetailStack.Screen name="Permits" component={ProjectPermits} />
+      <ProjectDetailStack.Screen name="Quote" component={ProjectQuote} />
+      <ProjectDetailStack.Screen name="Review" component={ProjectReview} />
+    </ProjectDetailStack.Navigator>
   );
 }
 
@@ -160,8 +163,8 @@ function HomeownerNavigator() {
   return (
     <HomeownerStack.Navigator screenOptions={{ headerShown: false }}>
       <HomeownerStack.Screen name="HomeownerTabs" component={HomeownerTabs} />
-      <HomeownerStack.Screen name="ProjectCreate" component={ProjectCreateStack} />
-      <HomeownerStack.Screen name="ProjectDetail" component={ProjectDetailStack} />
+      <HomeownerStack.Screen name="ProjectCreate" component={ProjectCreateNavigator} />
+      <HomeownerStack.Screen name="ProjectDetail" component={ProjectDetailNavigator} />
       <HomeownerStack.Screen name="Settings" component={HomeownerSettings} />
       <HomeownerStack.Screen name="Notifications" component={HomeownerNotifications} />
       <HomeownerStack.Screen name="Search" component={SearchScreen} />
@@ -185,16 +188,15 @@ function HomeownerNavigator() {
   );
 }
 
-function JobDetailStack() {
-  const S = createStackNavigator();
+function JobDetailNavigator() {
   return (
-    <S.Navigator screenOptions={{ headerShown: false }}>
-      <S.Screen name="JobDetailMain" component={JobDetail} />
-      <S.Screen name="JobChangeOrders" component={JobChangeOrders} />
-      <S.Screen name="JobMessages" component={JobMessages} />
-      <S.Screen name="JobMilestones" component={JobMilestones} />
-      <S.Screen name="QuoteBuilder" component={JobQuoteBuilder} />
-    </S.Navigator>
+    <JobDetailStack.Navigator screenOptions={{ headerShown: false }}>
+      <JobDetailStack.Screen name="JobDetailMain" component={JobDetail} />
+      <JobDetailStack.Screen name="JobChangeOrders" component={JobChangeOrders} />
+      <JobDetailStack.Screen name="JobMessages" component={JobMessages} />
+      <JobDetailStack.Screen name="JobMilestones" component={JobMilestones} />
+      <JobDetailStack.Screen name="QuoteBuilder" component={JobQuoteBuilder} />
+    </JobDetailStack.Navigator>
   );
 }
 
@@ -206,7 +208,7 @@ function CompanyNavigator() {
       <CompanyStack.Screen name="BusinessOnboarding" component={BusinessOnboarding} />
       <CompanyStack.Screen name="LicenseOnboarding" component={LicenseOnboarding} />
       <CompanyStack.Screen name="InsuranceOnboarding" component={InsuranceOnboarding} />
-      <CompanyStack.Screen name="JobDetail" component={JobDetailStack} />
+      <CompanyStack.Screen name="JobDetail" component={JobDetailNavigator} />
     </CompanyStack.Navigator>
   );
 }
@@ -215,9 +217,9 @@ export function RootNavigator() {
   const { session, role, hydrated, setSession, setHydrated } = useAuthStore();
 
   useEffect(() => {
-    const { data: { subscription } } = supabase.auth.onAuthStateChange(async (_event, newSession) => {
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, newSession) => {
       setSession(newSession);
-      if (!hydrated) setHydrated(true);
+      setHydrated(true);
     });
     supabase.auth.getSession().then(({ data: { session: existingSession } }) => {
       setSession(existingSession);

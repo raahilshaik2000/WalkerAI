@@ -288,8 +288,8 @@ const styles = StyleSheet.create({
   milestoneHeader: { flexDirection: 'row', alignItems: 'flex-start', gap: 12 },
   stepDot: {
     width: 28, height: 28, borderRadius: 14,
-    backgroundColor: 'rgba(59,130,246,0.2)',
-    borderWidth: 1, borderColor: Colors.accent,
+    backgroundColor: 'rgba(255, 107, 0, 0.12)',
+    borderWidth: 1, borderColor: Colors.success,
     alignItems: 'center', justifyContent: 'center',
   },
   stepNum: { color: Colors.accent, fontSize: 12, fontWeight: '700' },

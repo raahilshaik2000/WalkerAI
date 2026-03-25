@@ -6,5 +6,7 @@ export { StatusBadge } from './StatusBadge';
 export { FloatingTabBar } from './FloatingTabBar';
 export { Skeleton, CardSkeleton, ListItemSkeleton } from './SkeletonLoader';
 export { GradientBackground } from './GradientBackground';
+export { WalkerLogo } from './WalkerLogo';
+export { WizardHeader } from './WizardHeader';
 export { AddressAutocomplete } from './AddressAutocomplete';
 export type { AddressResult } from './AddressAutocomplete';

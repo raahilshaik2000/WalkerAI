@@ -73,7 +73,7 @@ export const CHAT_THREADS: ChatThread[] = [
     id: 't4',
     projectId: 'f3',
     projectTitle: 'Guest Bathroom',
-    projectStatusColor: '#06C167',
+    projectStatusColor: '#FF6B00',
     contractorName: 'AquaTile Bathrooms',
     contractorAvatar: 'https://i.pravatar.cc/80?img=22',
     isOnline: false,

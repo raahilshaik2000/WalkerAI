@@ -1,7 +1,6 @@
 import { useEffect, useState } from 'react';
 import {
   ActivityIndicator,
-  Animated,
   Image,
   ScrollView,
   StyleSheet,
@@ -15,7 +14,7 @@ import ReactNativeHapticFeedback from 'react-native-haptic-feedback';
 import { supabase } from '@/lib/supabase/client';
 import { useProjectWizardStore } from '@/stores/project-wizard.store';
 import { Colors, Radius, Spacing, Typography } from '@/constants/theme';
-import { GlassButton, GlassCard, GradientBackground } from '@/components/ui';
+import { GlassButton, GlassCard, GradientBackground, WizardHeader } from '@/components/ui';
 
 interface Render {
   id: string;
@@ -108,17 +107,9 @@ export default function RendersStep() {
           contentContainerStyle={styles.scroll}
           showsVerticalScrollIndicator={false}
         >
-          {/* Progress */}
-          <View style={styles.progressRow}>
-            {Array.from({ length: 7 }, (_, i) => (
-              <View
-                key={i}
-                style={[styles.progressSeg, i <= 4 && styles.progressSegActive]}
-              />
-            ))}
-          </View>
+          <WizardHeader currentStep={5} />
 
-          <Text style={styles.stepLabel}>STEP 5 OF 7</Text>
+          <Text style={styles.stepLabel}>STEP 5 OF 8</Text>
           <Text style={styles.title}>Your renovation renders</Text>
           <Text style={styles.subtitle}>
             {error
@@ -179,7 +170,6 @@ export default function RendersStep() {
             disabled={renders.length > 0 && !selectedId && !error}
             fullWidth
             size="lg"
-            style={styles.cta}
           />
         </ScrollView>
       </SafeAreaView>
@@ -195,9 +185,6 @@ const styles = StyleSheet.create({
     paddingTop: Spacing.sm,
     paddingBottom: Spacing.xl,
   },
-  progressRow: { flexDirection: 'row', gap: 5, marginBottom: Spacing.lg },
-  progressSeg: { flex: 1, height: 3, borderRadius: 2, backgroundColor: Colors.glass.surface },
-  progressSegActive: { backgroundColor: Colors.accent },
   stepLabel: { ...Typography.label, color: Colors.accent, marginBottom: 8 },
   title: { ...Typography.h1, marginBottom: 8 },
   subtitle: { ...Typography.bodySecondary, marginBottom: Spacing.lg, lineHeight: 22 },
@@ -249,5 +236,4 @@ const styles = StyleSheet.create({
   },
   loadingText: { ...Typography.h3 },
   loadingSubtext: { ...Typography.bodySecondary },
-  cta: {},
 });

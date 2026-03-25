@@ -262,7 +262,7 @@ const styles = StyleSheet.create({
   analysisText: { ...Typography.bodySecondary, lineHeight: 22 },
   scopeRow: { flexDirection: 'row', alignItems: 'flex-start', gap: 10, marginBottom: 10 },
   phaseTag: {
-    backgroundColor: 'rgba(59,130,246,0.15)',
+    backgroundColor: 'rgba(255, 107, 0, 0.12)',
     borderRadius: 6,
     paddingHorizontal: 8,
     paddingVertical: 3,

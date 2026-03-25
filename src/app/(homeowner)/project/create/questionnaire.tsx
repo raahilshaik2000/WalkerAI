@@ -12,7 +12,7 @@ import { useNavigation } from '@react-navigation/native';
 import ReactNativeHapticFeedback from 'react-native-haptic-feedback';
 import { useProjectWizardStore } from '@/stores/project-wizard.store';
 import { Colors, Radius, Spacing, Typography } from '@/constants/theme';
-import { GlassButton, GlassCard, GradientBackground } from '@/components/ui';
+import { GlassButton, GradientBackground, WizardHeader } from '@/components/ui';
 
 export default function QuestionnaireStep() {
   const navigation = useNavigation<any>();
@@ -82,13 +82,10 @@ export default function QuestionnaireStep() {
           showsVerticalScrollIndicator={false}
           keyboardShouldPersistTaps="handled"
         >
-          {/* Progress */}
-          <View style={styles.progressTrack}>
-            <View style={[styles.progressFill, { width: `${progress}%` }]} />
-          </View>
+          <WizardHeader currentStep={4} />
 
           <Text style={styles.stepLabel}>
-            {currentQuestionIndex + 1} OF {questions.length}
+            QUESTION {currentQuestionIndex + 1} OF {questions.length}
           </Text>
 
           <Animated.View style={{ opacity: fadeAnim, transform: [{ translateY: slideAnim }] }}>
@@ -130,7 +127,6 @@ export default function QuestionnaireStep() {
             disabled={!selectedAnswer}
             fullWidth
             size="lg"
-            style={styles.cta}
           />
         </ScrollView>
       </SafeAreaView>
@@ -145,18 +141,6 @@ const styles = StyleSheet.create({
     paddingHorizontal: Spacing.sm,
     paddingTop: Spacing.sm,
     paddingBottom: Spacing.xl,
-  },
-  progressTrack: {
-    height: 3,
-    backgroundColor: Colors.glass.surface,
-    borderRadius: 2,
-    marginBottom: Spacing.lg,
-    overflow: 'hidden',
-  },
-  progressFill: {
-    height: '100%',
-    backgroundColor: Colors.accent,
-    borderRadius: 2,
   },
   stepLabel: { ...Typography.label, color: Colors.accent, marginBottom: Spacing.md },
   questionText: {
@@ -190,8 +174,8 @@ const styles = StyleSheet.create({
     overflow: 'hidden',
   },
   optionCardSelected: {
-    borderColor: Colors.accent,
-    backgroundColor: 'rgba(59,130,246,0.1)',
+    borderColor: Colors.success,
+    backgroundColor: 'rgba(255, 107, 0, 0.06)',
   },
   selectedIndicator: {
     position: 'absolute',
@@ -199,7 +183,7 @@ const styles = StyleSheet.create({
     top: 0,
     bottom: 0,
     width: 3,
-    backgroundColor: Colors.accent,
+    backgroundColor: Colors.success,
     borderRadius: 2,
   },
   optionLabel: {
@@ -213,10 +197,9 @@ const styles = StyleSheet.create({
     fontWeight: '600',
   },
   checkmark: {
-    color: Colors.accent,
+    color: Colors.success,
     fontSize: 16,
     fontWeight: '700',
     marginLeft: 8,
   },
-  cta: {},
 });

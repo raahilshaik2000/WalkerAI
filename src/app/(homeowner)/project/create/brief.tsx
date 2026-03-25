@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import {
   ActivityIndicator,
   Image,
@@ -12,7 +12,7 @@ import { useNavigation } from '@react-navigation/native';
 import { supabase } from '@/lib/supabase/client';
 import { useProjectWizardStore } from '@/stores/project-wizard.store';
 import { Colors, Spacing, Typography, Radius } from '@/constants/theme';
-import { GlassButton, GlassCard, GradientBackground, StatusBadge } from '@/components/ui';
+import { GlassButton, GlassCard, GradientBackground, StatusBadge, WizardHeader } from '@/components/ui';
 
 interface BriefData {
   materials: Array<{
@@ -66,47 +66,48 @@ export default function BriefStep() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
-  useEffect(() => {
-    const generateBrief = async () => {
-      try {
-        // Load selected render URL if available
-        if (selectedRenderId) {
-          const { data: render } = await supabase
-            .from('renders')
-            .select('url')
-            .eq('id', selectedRenderId)
-            .single();
-          if (render) setRenderUrl(render.url);
-        }
-
-        const { data, error: briefError } = await supabase.functions.invoke(
-          'generate-project-brief',
-          {
-            body: {
-              project_id: projectId,
-              analysis: analysisResult,
-              questionnaire_answers: answers,
-              selected_render_id: selectedRenderId,
-              address,
-              province,
-            },
-          }
-        );
-        if (briefError) throw briefError;
-        setBrief(data);
-      } catch (err) {
-        setError(err instanceof Error ? err.message : 'Failed to generate brief.');
-      } finally {
-        setLoading(false);
+  const generateBrief = useCallback(async () => {
+    setLoading(true);
+    setError(null);
+    try {
+      if (selectedRenderId) {
+        const { data: render } = await supabase
+          .from('renders')
+          .select('url')
+          .eq('id', selectedRenderId)
+          .single();
+        if (render) setRenderUrl(render.url);
       }
-    };
 
+      const { data, error: briefError } = await supabase.functions.invoke(
+        'generate-project-brief',
+        {
+          body: {
+            project_id: projectId,
+            analysis: analysisResult,
+            questionnaire_answers: answers,
+            selected_render_id: selectedRenderId,
+            address,
+            province,
+          },
+        }
+      );
+      if (briefError) throw briefError;
+      setBrief(data);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to generate brief.');
+    } finally {
+      setLoading(false);
+    }
+  }, [projectId, analysisResult, answers, selectedRenderId, address, province]);
+
+  useEffect(() => {
     generateBrief();
-  }, []);
+  }, [generateBrief]);
 
   const handleConfirm = () => {
     useProjectWizardStore.getState().setStep(7);
-    navigation.navigate('Confirm');
+    navigation.navigate('Address');
   };
 
   if (loading) {
@@ -135,7 +136,7 @@ export default function BriefStep() {
             <Text style={styles.loadingSubtitle}>{error}</Text>
             <GlassButton
               label="Retry"
-              onPress={() => { setLoading(true); setError(null); }}
+              onPress={generateBrief}
               style={{ marginTop: 24 }}
             />
           </View>
@@ -151,17 +152,9 @@ export default function BriefStep() {
           contentContainerStyle={styles.scroll}
           showsVerticalScrollIndicator={false}
         >
-          {/* Progress */}
-          <View style={styles.progressRow}>
-            {Array.from({ length: 7 }, (_, i) => (
-              <View
-                key={i}
-                style={[styles.progressSeg, i <= 5 && styles.progressSegActive]}
-              />
-            ))}
-          </View>
+          <WizardHeader currentStep={6} />
 
-          <Text style={styles.stepLabel}>STEP 6 OF 7</Text>
+          <Text style={styles.stepLabel}>STEP 6 OF 8</Text>
           <Text style={styles.title}>Your project brief</Text>
           <Text style={styles.subtitle}>Review the AI-generated plan before dispatching to contractors.</Text>
 
@@ -263,9 +256,6 @@ const styles = StyleSheet.create({
     paddingTop: Spacing.sm,
     paddingBottom: Spacing.xl,
   },
-  progressRow: { flexDirection: 'row', gap: 5, marginBottom: Spacing.lg },
-  progressSeg: { flex: 1, height: 3, borderRadius: 2, backgroundColor: Colors.glass.surface },
-  progressSegActive: { backgroundColor: Colors.accent },
   stepLabel: { ...Typography.label, color: Colors.accent, marginBottom: 8 },
   title: { ...Typography.h1, marginBottom: 8 },
   subtitle: { ...Typography.bodySecondary, marginBottom: Spacing.md, lineHeight: 22 },
@@ -288,14 +278,14 @@ const styles = StyleSheet.create({
   costNote: { ...Typography.caption, lineHeight: 18 },
   scopeRow: { flexDirection: 'row', alignItems: 'flex-start', gap: 10, marginBottom: 12 },
   scopePhaseTag: {
-    backgroundColor: 'rgba(59,130,246,0.15)',
+    backgroundColor: 'rgba(255, 107, 0, 0.12)',
     borderRadius: 6,
     paddingHorizontal: 8,
     paddingVertical: 3,
     minWidth: 100,
   },
   scopePhaseText: {
-    color: Colors.accent,
+    color: Colors.success,
     fontSize: 11,
     fontWeight: '600',
     textTransform: 'capitalize',

@@ -174,8 +174,8 @@ const styles = StyleSheet.create({
     borderWidth: 1, borderColor: Colors.glass.border,
   },
   notifRowUnread: {
-    backgroundColor: 'rgba(59,130,246,0.08)',
-    borderColor: 'rgba(59,130,246,0.2)',
+    backgroundColor: 'rgba(255, 107, 0, 0.06)',
+    borderColor: 'rgba(255, 107, 0, 0.2)',
   },
   notifIcon: {
     width: 40, height: 40, borderRadius: 20,

@@ -12,6 +12,7 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useNavigation } from '@react-navigation/native';
 import { signUp } from '@/lib/supabase/auth';
+import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
 import { Colors, Radius, Spacing, Typography } from '@/constants/theme';
 import { GlassButton, GlassInput, GradientBackground } from '@/components/ui';
 import type { UserRole } from '@/constants/enums';
@@ -74,8 +75,8 @@ export default function RegisterScreen() {
             <Text style={styles.roleLabel}>I am a...</Text>
             <View style={styles.roleRow}>
               {([
-                { value: 'homeowner', icon: '🏡', label: 'Homeowner', sub: 'I want to renovate' },
-                { value: 'company', icon: '🔨', label: 'Contractor', sub: 'I do renovations' },
+                { value: 'homeowner', icon: 'home-outline', label: 'Homeowner', sub: 'I want to renovate' },
+                { value: 'company', icon: 'hammer-wrench', label: 'Contractor', sub: 'I do renovations' },
               ] as const).map((opt) => (
                 <TouchableOpacity
                   key={opt.value}
@@ -83,7 +84,11 @@ export default function RegisterScreen() {
                   onPress={() => setRole(opt.value)}
                   activeOpacity={0.8}
                 >
-                  <Text style={styles.roleIcon}>{opt.icon}</Text>
+                  <Icon
+                    name={opt.icon}
+                    size={28}
+                    color={role === opt.value ? '#FF6B00' : Colors.text.secondary}
+                  />
                   <Text style={[styles.roleText, role === opt.value && styles.roleTextActive]}>
                     {opt.label}
                   </Text>
@@ -169,7 +174,6 @@ const styles = StyleSheet.create({
     borderColor: Colors.accent,
     backgroundColor: 'rgba(255,255,255,0.08)',
   },
-  roleIcon: { fontSize: 28 },
   roleText: { fontSize: 15, fontWeight: '600', color: Colors.text.secondary },
   roleTextActive: { color: Colors.text.primary },
   roleSub: { fontSize: 12, color: Colors.text.tertiary },
