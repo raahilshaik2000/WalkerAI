@@ -78,6 +78,7 @@ export const ROOM_TYPE_PICKS: RoomTypePick[] = [
 export const QUICK_ACTIONS: QuickAction[] = [
   { id: 'find-pro', label: 'Find a Pro', icon: 'search', route: 'FindPro', color: '#FFFFFF' },
   { id: 'estimate', label: 'Get Estimate', icon: 'calculator-outline', route: 'ProjectCreate', color: '#FF6B00' },
+  { id: 'diy', label: 'DIY Guide', icon: 'hammer-outline', route: 'DIYCreate', color: '#34D399' },
   { id: 'ideas', label: 'Browse Ideas', icon: 'images-outline', route: 'BrowseIdeas', color: '#A78BFA' },
   { id: 'schedule', label: 'My Schedule', icon: 'calendar-outline', route: 'Schedule', color: '#60A5FA' },
 ];

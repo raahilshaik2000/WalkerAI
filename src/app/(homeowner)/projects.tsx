@@ -16,7 +16,7 @@ import { ProgressRing } from '@/components/dashboard/ProgressRing';
 import { Colors, Radius, Spacing } from '@/constants/theme';
 import { DashboardProject, PROJECTS_LIST } from '@/components/dashboard/data';
 
-const FILTERS = ['All', 'Active', 'Quoting', 'Completed'] as const;
+const FILTERS = ['All', 'Active', 'Quoting', 'Completed', 'DIY'] as const;
 type Filter = (typeof FILTERS)[number];
 
 const STATUS_MAP: Record<Filter, string[]> = {
@@ -24,6 +24,7 @@ const STATUS_MAP: Record<Filter, string[]> = {
   Active: ['active', 'draft', 'dispatching', 'accepted'],
   Quoting: ['quoting'],
   Completed: ['completed'],
+  DIY: ['diy_saved'],
 };
 
 export default function HomeownerProjects() {
@@ -54,7 +55,11 @@ export default function HomeownerProjects() {
     <AnimatedPressable
       style={styles.card}
       haptic
-      onPress={() => navigation.navigate('ProjectDetailView', { project: item })}
+      onPress={() =>
+        (item.status as string) === 'diy_saved'
+          ? null
+          : navigation.navigate('ProjectDetailView', { project: item })
+      }
     >
       {/* Cover */}
       <Image source={{ uri: item.coverImage }} style={styles.cover} />
@@ -111,6 +116,9 @@ export default function HomeownerProjects() {
             </AnimatedPressable>
             <AnimatedPressable style={styles.addBtn} haptic onPress={() => navigation.navigate('ProjectCreate')}>
               <Ionicons name="add" size={20} color="#000" />
+            </AnimatedPressable>
+            <AnimatedPressable style={styles.diyBtn} haptic onPress={() => navigation.navigate('DIYCreate')}>
+              <Ionicons name="hammer-outline" size={16} color="#fff" />
             </AnimatedPressable>
           </View>
         </View>
@@ -172,6 +180,7 @@ const styles = StyleSheet.create({
   headerTitle: { fontSize: 24, fontWeight: '700', color: '#fff' },
   headerActions: { flexDirection: 'row', alignItems: 'center', gap: 12 },
   addBtn: { width: 32, height: 32, borderRadius: 16, backgroundColor: '#fff', alignItems: 'center', justifyContent: 'center' },
+  diyBtn: { width: 32, height: 32, borderRadius: 16, backgroundColor: '#34D399', alignItems: 'center', justifyContent: 'center' },
 
   statsText: { fontSize: 13, color: Colors.text.tertiary, paddingHorizontal: 16, marginBottom: 12 },
   statNum: { fontWeight: '700', color: Colors.text.secondary },

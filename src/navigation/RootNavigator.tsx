@@ -1,4 +1,5 @@
 import React, { useEffect } from 'react';
+import { ActionSheetIOS } from 'react-native';
 import { NavigationContainer } from '@react-navigation/native';
 import { createStackNavigator } from '@react-navigation/stack';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
@@ -48,6 +49,13 @@ import PhotosStep from '@/app/(homeowner)/project/create/photos';
 import QuestionnaireStep from '@/app/(homeowner)/project/create/questionnaire';
 import RendersStep from '@/app/(homeowner)/project/create/renders';
 
+// DIY screens
+import DIYStartScreen from '@/app/(homeowner)/project/create/diy-start';
+import DIYPhotosScreen from '@/app/(homeowner)/project/create/diy-photos';
+import DIYDetailsScreen from '@/app/(homeowner)/project/create/diy-details';
+import DIYGeneratingScreen from '@/app/(homeowner)/project/create/diy-generating';
+import DIYGuideScreen from '@/app/(homeowner)/diy-guide';
+
 // Homeowner project detail screens
 import ProjectDetail from '@/app/(homeowner)/project/[id]/index';
 import ProjectChangeOrders from '@/app/(homeowner)/project/[id]/change-orders';
@@ -84,6 +92,7 @@ const CompanyStack = createStackNavigator();
 const ProjectCreateStack = createStackNavigator();
 const ProjectDetailStack = createStackNavigator();
 const JobDetailStack = createStackNavigator();
+const DIYCreateStack = createStackNavigator();
 
 function icon(name: string, focused: boolean, color: string) {
   return <Ionicons name={focused ? name : `${name}-outline`} size={22} color={color} />;
@@ -99,7 +108,21 @@ function HomeownerTabs() {
       <Tab.Screen name="Dashboard" component={HomeownerDashboard} options={{ tabBarIcon: ({ color, focused }) => icon('home', focused, color) }} />
       <Tab.Screen name="Projects" component={HomeownerProjects} options={{ tabBarIcon: ({ color, focused }) => icon('folder', focused, color) }} />
       <Tab.Screen name="Post" component={HomeownerProjects} listeners={({ navigation }) => ({
-        tabPress: (e) => { e.preventDefault(); navigation.navigate('ProjectCreate'); },
+        tabPress: (e) => {
+        e.preventDefault();
+        ActionSheetIOS.showActionSheetWithOptions(
+          {
+            options: ['Cancel', 'Post a Project', 'DIY Guide'],
+            cancelButtonIndex: 0,
+            title: 'Start a New Project',
+            message: 'What would you like to do?',
+          },
+          (index) => {
+            if (index === 1) navigation.navigate('ProjectCreate');
+            if (index === 2) navigation.navigate('DIYCreate');
+          },
+        );
+      },
       })} />
       <Tab.Screen name="Messages" component={HomeownerMessages} options={{ tabBarIcon: ({ color, focused }) => icon('chatbubbles', focused, color) }} />
       <Tab.Screen name="Profile" component={HomeownerProfile} options={{ tabBarIcon: ({ color, focused }) => icon('person', focused, color) }} />
@@ -147,6 +170,18 @@ function ProjectCreateNavigator() {
   );
 }
 
+function DIYCreateNavigator() {
+  return (
+    <DIYCreateStack.Navigator screenOptions={{ headerShown: false }}>
+      <DIYCreateStack.Screen name="DIYStart" component={DIYStartScreen} />
+      <DIYCreateStack.Screen name="DIYPhotos" component={DIYPhotosScreen} />
+      <DIYCreateStack.Screen name="DIYDetails" component={DIYDetailsScreen} />
+      <DIYCreateStack.Screen name="DIYGenerating" component={DIYGeneratingScreen} />
+      <DIYCreateStack.Screen name="DIYGuide" component={DIYGuideScreen} />
+    </DIYCreateStack.Navigator>
+  );
+}
+
 function ProjectDetailNavigator() {
   return (
     <ProjectDetailStack.Navigator screenOptions={{ headerShown: false }}>
@@ -166,6 +201,7 @@ function HomeownerNavigator() {
     <HomeownerStack.Navigator screenOptions={{ headerShown: false }}>
       <HomeownerStack.Screen name="HomeownerTabs" component={HomeownerTabs} />
       <HomeownerStack.Screen name="ProjectCreate" component={ProjectCreateNavigator} />
+      <HomeownerStack.Screen name="DIYCreate" component={DIYCreateNavigator} />
       <HomeownerStack.Screen name="ProjectDetail" component={ProjectDetailNavigator} />
       <HomeownerStack.Screen name="Settings" component={HomeownerSettings} />
       <HomeownerStack.Screen name="Notifications" component={HomeownerNotifications} />
