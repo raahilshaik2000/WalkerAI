@@ -1,5 +1,19 @@
 import { createClient } from 'jsr:@supabase/supabase-js@2';
-import Anthropic from 'npm:@anthropic-ai/sdk@0.30';
+
+async function callOpenAI(prompt: string, apiKey: string): Promise<string> {
+  const res = await fetch('https://api.openai.com/v1/chat/completions', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${apiKey}` },
+    body: JSON.stringify({
+      model: 'gpt-4o',
+      max_tokens: 4000,
+      messages: [{ role: 'user', content: prompt }],
+    }),
+  });
+  if (!res.ok) throw new Error(`OpenAI error ${res.status}: ${await res.text()}`);
+  const json = await res.json();
+  return json.choices[0].message.content as string;
+}
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -70,14 +84,7 @@ Deno.serve(async (req) => {
       CANADIAN_COST_RANGES[provinceCode]?.[roomType] ??
       (roomType === 'kitchen' ? DEFAULT_COST : { min: 700000, max: 2000000 });
 
-    const anthropic = new Anthropic({ apiKey: Deno.env.get('ANTHROPIC_API_KEY')! });
-
-    const response = await anthropic.messages.create({
-      model: 'claude-sonnet-4-6',
-      max_tokens: 4000,
-      messages: [{
-        role: 'user',
-        content: `Generate a detailed renovation project brief for a ${roomType} in ${provinceCode}, Canada.
+    const rawText = await callOpenAI(`Generate a detailed renovation project brief for a ${roomType} in ${provinceCode}, Canada.
 
 Room Analysis: ${JSON.stringify(analysis)}
 Homeowner Preferences (questionnaire answers): ${JSON.stringify(questionnaire_answers)}
@@ -106,12 +113,7 @@ Rules:
 - Include realistic Canadian permit requirements (building permit, plumbing, electrical as needed)
 - Materials should reflect the quality tier selected
 - scope_of_work must cover all phases in order
-- Return ONLY the JSON, no markdown`,
-      }],
-    });
-
-    const content = response.content[0];
-    if (content.type !== 'text') throw new Error('Unexpected response');
+- Return ONLY the JSON, no markdown`, Deno.env.get('OPENAI_API_KEY')!);
 
     let brief: {
       materials: unknown[];
@@ -123,9 +125,9 @@ Rules:
     };
 
     try {
-      brief = JSON.parse(content.text.trim());
+      brief = JSON.parse(rawText.trim());
     } catch {
-      const stripped = content.text.replace(/```json\n?/g, '').replace(/```\n?/g, '').trim();
+      const stripped = rawText.replace(/```json\n?/g, '').replace(/```\n?/g, '').trim();
       brief = JSON.parse(stripped);
     }
 

@@ -28,13 +28,23 @@ export default function PhotosStep() {
     const result = await launchImageLibrary({
       mediaType: 'photo',
       selectionLimit: MAX_PHOTOS - photos.length,
-      quality: 0.85,
+      quality: 0.3,       // Low quality keeps base64 small enough to send to Anthropic
+      maxWidth: 1024,
+      maxHeight: 1024,
+      includeBase64: true,
     });
 
     if (!result.didCancel && result.assets) {
       for (const asset of result.assets) {
         const tempId = `temp_${Date.now()}_${Math.random()}`;
-        addPhoto({ id: tempId, uri: asset.uri ?? '', status: 'done', progress: 100, url: '' });
+        addPhoto({
+          id: tempId,
+          uri: asset.uri ?? '',
+          base64: asset.base64 ?? undefined,
+          status: 'done',
+          progress: 100,
+          url: '',
+        });
       }
     }
   };
@@ -70,7 +80,7 @@ export default function PhotosStep() {
           <Text style={styles.stepLabel}>STEP 2 OF 8</Text>
           <Text style={styles.title}>Add photos</Text>
           <Text style={styles.subtitle}>
-            The more photos, the better Claude can analyze your space.
+            The more photos, the better WalkerAI can analyze your space.
             Include all angles, cabinets, floors, fixtures, and any problem areas.
           </Text>
 

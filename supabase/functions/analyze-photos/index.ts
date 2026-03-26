@@ -46,10 +46,13 @@ Deno.serve(async (req) => {
       });
     }
 
-    const { project_id, photo_urls } = await req.json();
+    const { project_id, photo_urls, photo_base64s } = await req.json();
 
-    if (!photo_urls || photo_urls.length < 1) {
-      return new Response(JSON.stringify({ error: 'At least one photo URL required' }), {
+    const hasUrls = Array.isArray(photo_urls) && photo_urls.length > 0;
+    const hasBase64s = Array.isArray(photo_base64s) && photo_base64s.length > 0;
+
+    if (!hasUrls && !hasBase64s) {
+      return new Response(JSON.stringify({ error: 'At least one photo is required' }), {
         status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' },
       });
     }
@@ -69,18 +72,28 @@ Deno.serve(async (req) => {
 
     const anthropic = new Anthropic({ apiKey: Deno.env.get('ANTHROPIC_API_KEY')! });
 
-    // Fetch images and convert to base64 (works with private buckets + any SDK version)
-    const urlsToProcess = photo_urls.slice(0, 8);
     const imageBlocks: Anthropic.ImageBlockParam[] = [];
-    for (const url of urlsToProcess) {
-      try {
-        const base64Data = await urlToBase64(url);
+
+    if (hasBase64s) {
+      // Base64 sent directly from the client — no fetching needed
+      for (const b64 of (photo_base64s as string[]).slice(0, 8)) {
         imageBlocks.push({
           type: 'image',
-          source: { type: 'base64', media_type: 'image/jpeg', data: base64Data },
+          source: { type: 'base64', media_type: 'image/jpeg', data: b64 },
         });
-      } catch (fetchErr) {
-        console.error('Failed to fetch image, skipping:', fetchErr);
+      }
+    } else {
+      // Fetch each signed URL and convert to base64
+      for (const url of (photo_urls as string[]).slice(0, 8)) {
+        try {
+          const base64Data = await urlToBase64(url);
+          imageBlocks.push({
+            type: 'image',
+            source: { type: 'base64', media_type: 'image/jpeg', data: base64Data },
+          });
+        } catch (fetchErr) {
+          console.error('Failed to fetch image, skipping:', fetchErr);
+        }
       }
     }
 

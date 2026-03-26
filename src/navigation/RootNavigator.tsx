@@ -93,6 +93,7 @@ function HomeownerTabs() {
   return (
     <Tab.Navigator
       tabBar={(props) => <FloatingTabBar {...props} />}
+      sceneContainerStyle={{ backgroundColor: '#000000' }}
       screenOptions={{ headerShown: false, tabBarShowLabel: false }}
     >
       <Tab.Screen name="Dashboard" component={HomeownerDashboard} options={{ tabBarIcon: ({ color, focused }) => icon('home', focused, color) }} />
@@ -110,6 +111,7 @@ function CompanyTabs() {
   return (
     <Tab.Navigator
       tabBar={(props) => <FloatingTabBar {...props} />}
+      sceneContainerStyle={{ backgroundColor: '#000000' }}
       screenOptions={{ headerShown: false, tabBarShowLabel: false }}
     >
       <Tab.Screen name="Jobs" component={CompanyDashboard} options={{ tabBarIcon: ({ color, focused }) => icon('briefcase', focused, color) }} />
@@ -231,7 +233,7 @@ export function RootNavigator() {
   if (!hydrated) return null;
 
   return (
-    <NavigationContainer>
+    <NavigationContainer theme={{ dark: true, colors: { primary: '#FF6B00', background: '#000000', card: '#000000', text: '#FFFFFF', border: 'transparent', notification: '#FF6B00' }, fonts: { regular: { fontFamily: 'System', fontWeight: '400' }, medium: { fontFamily: 'System', fontWeight: '500' }, bold: { fontFamily: 'System', fontWeight: '700' }, heavy: { fontFamily: 'System', fontWeight: '900' } } }}>
       <Stack.Navigator screenOptions={{ headerShown: false }}>
         {!session ? (
           <Stack.Screen name="Auth" component={AuthNavigator} />

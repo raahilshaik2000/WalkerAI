@@ -8,6 +8,7 @@ import {
   TouchableOpacity,
   View,
 } from 'react-native';
+import Ionicons from 'react-native-vector-icons/Ionicons';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useNavigation } from '@react-navigation/native';
 import ReactNativeHapticFeedback from 'react-native-haptic-feedback';
@@ -32,32 +33,9 @@ export default function RendersStep() {
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    const generateRenders = async () => {
-      try {
-        const { data, error: renderError } = await supabase.functions.invoke(
-          'generate-render',
-          {
-            body: {
-              project_id: projectId,
-              analysis: analysisResult,
-              questionnaire_answers: answers,
-            },
-          }
-        );
-        if (renderError) throw renderError;
-        setRenders(data.renders ?? []);
-        // Auto-select first if available
-        if (data.renders?.length > 0) {
-          setSelectedId(data.renders[0].id);
-        }
-      } catch (err) {
-        setError(err instanceof Error ? err.message : 'Failed to generate renders.');
-      } finally {
-        setLoading(false);
-      }
-    };
-
-    generateRenders();
+    // Render generation requires REimagineHome integration (coming soon).
+    // Skip the API call and go straight to the brief-ready state.
+    setLoading(false);
   }, []);
 
   const handleSelect = (renderId: string) => {
@@ -112,21 +90,16 @@ export default function RendersStep() {
           <Text style={styles.stepLabel}>STEP 5 OF 8</Text>
           <Text style={styles.title}>Your renovation renders</Text>
           <Text style={styles.subtitle}>
-            {error
-              ? 'Renders unavailable — see your text brief below.'
-              : 'Tap a render to select your preferred style. Your contractor will use this as a reference.'}
+            AI-generated renders are coming soon. Proceed to generate your detailed project brief.
           </Text>
 
-          {error && (
-            <GlassCard style={styles.errorCard}>
-              <Text style={styles.errorText}>
-                ⚠️ Render generation failed: {error}
-              </Text>
-              <Text style={styles.errorNote}>
-                You can still proceed — your project brief will be generated from your questionnaire answers.
-              </Text>
-            </GlassCard>
-          )}
+          <GlassCard style={styles.comingSoonCard}>
+            <Ionicons name="color-palette-outline" size={48} color={Colors.accent} style={{ alignSelf: 'center', marginBottom: 12 }} />
+            <Text style={styles.comingSoonTitle}>Renders coming soon</Text>
+            <Text style={styles.comingSoonNote}>
+              We're integrating AI render generation. Your contractor will visualize the renovation based on your brief and questionnaire answers.
+            </Text>
+          </GlassCard>
 
           {!error && renders.length > 0 && (
             <View style={styles.rendersGrid}>
@@ -188,9 +161,10 @@ const styles = StyleSheet.create({
   stepLabel: { ...Typography.label, color: Colors.accent, marginBottom: 8 },
   title: { ...Typography.h1, marginBottom: 8 },
   subtitle: { ...Typography.bodySecondary, marginBottom: Spacing.lg, lineHeight: 22 },
-  errorCard: { marginBottom: Spacing.md },
-  errorText: { color: Colors.warning, fontSize: 14, marginBottom: 8 },
-  errorNote: { ...Typography.caption, lineHeight: 18 },
+  comingSoonCard: { marginBottom: Spacing.lg, alignItems: 'center', paddingVertical: Spacing.lg },
+  comingSoonIcon: { fontSize: 40, marginBottom: 12 },
+  comingSoonTitle: { ...Typography.h3, marginBottom: 8, textAlign: 'center' },
+  comingSoonNote: { ...Typography.bodySecondary, textAlign: 'center', lineHeight: 20 },
   rendersGrid: { gap: 16, marginBottom: Spacing.lg },
   renderCard: {
     borderRadius: Radius.card,

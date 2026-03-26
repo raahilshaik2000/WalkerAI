@@ -105,6 +105,7 @@ export function ProjectsCarousel() {
           showsHorizontalScrollIndicator={false}
           snapToInterval={CARD_WIDTH + CARD_GAP}
           decelerationRate="fast"
+          style={styles.listOuter}
           contentContainerStyle={styles.list}
         />
       ) : (
@@ -116,7 +117,8 @@ export function ProjectsCarousel() {
 
 const styles = StyleSheet.create({
   container: { marginBottom: Spacing.md },
-  list: { gap: CARD_GAP },
+  listOuter: { marginHorizontal: -16 },
+  list: { gap: CARD_GAP, paddingHorizontal: 16 },
   card: {
     width: CARD_WIDTH,
     borderRadius: 20,

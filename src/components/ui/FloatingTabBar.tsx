@@ -65,11 +65,18 @@ export function FloatingTabBar({ state, descriptors, navigation }: BottomTabBarP
     transform: [{ translateX: indicatorX.value }],
   }));
 
+  const floorHeight = Math.max(insets.bottom, 8) + 12 + PILL_HEIGHT + 8;
+
   return (
     <View
       style={[styles.outerWrapper, { bottom: Math.max(insets.bottom, 8) + 12 }]}
       pointerEvents="box-none"
     >
+      {/* Solid floor: fills the gap between pill and screen bottom edge */}
+      <View
+        style={[styles.floor, { height: floorHeight, bottom: -floorHeight + PILL_HEIGHT / 2 }]}
+        pointerEvents="none"
+      />
       <View style={styles.shadowRing} pointerEvents="auto">
         <View style={styles.pill}>
 
@@ -173,6 +180,14 @@ const styles = StyleSheet.create({
     position: 'absolute',
     left: 16,
     right: 16,
+  },
+
+  floor: {
+    position: 'absolute',
+    left: -16,
+    right: -16,
+    backgroundColor: '#000000',
+    zIndex: -1,
   },
 
   shadowRing: {

@@ -1,4 +1,4 @@
-import { useState, useRef } from 'react';
+import { useState, useRef, useEffect } from 'react';
 import {
   Animated,
   ScrollView,
@@ -65,11 +65,14 @@ export default function QuestionnaireStep() {
     });
   };
 
-  if (!question) {
-    // No questions — skip to renders
-    navigation.navigate('Renders');
-    return null;
-  }
+  useEffect(() => {
+    if (!question) {
+      useProjectWizardStore.getState().setStep(5);
+      navigation.navigate('Renders');
+    }
+  }, [question]);
+
+  if (!question) return null;
 
   const selectedAnswer = answers[question.id];
   const progress = ((currentQuestionIndex + 1) / questions.length) * 100;
