@@ -14,12 +14,11 @@ export async function signUp(email: string, password: string, role: UserRole) {
   // Insert into our users table (trigger handles this in production,
   // but we do it explicitly here for reliability)
   if (data.user) {
-    const { error: insertError } = await supabase.from('users').upsert({
-      id: data.user.id,
-      email,
-      role,
-    });
-    if (insertError) throw insertError;
+    const { error: insertError } = await supabase.from('users').upsert(
+      { id: data.user.id, email, role },
+      { onConflict: 'id' },
+    );
+    if (insertError) throw new Error(`Database error saving new user: ${insertError.message} (code: ${insertError.code})`);
   }
 
   return data;
