@@ -8,7 +8,8 @@ export type StorageBucket =
   | 'warranties'
   | 'change-order-docs'
   | 'company-docs'
-  | 'progress-photos';
+  | 'progress-photos'
+  | 'avatars';
 
 interface UploadResult {
   publicUrl: string;
