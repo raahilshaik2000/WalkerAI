@@ -20,15 +20,17 @@ type Tab = 'steps' | 'materials';
 export default function DIYGuideScreen() {
   const navigation = useNavigation<any>();
   const store = useDIYWizardStore();
-  const guide = store.guide!;
+  const guide = store.guide;
   const [tab, setTab] = useState<Tab>('steps');
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
 
   const [converting, setConverting] = useState(false);
 
+  if (!guide) return null;
+
   const handleSave = async () => {
-    if (saved) return;
+    if (saved || saving) return;
     setSaving(true);
     try {
       const { error } = await supabase
@@ -37,13 +39,12 @@ export default function DIYGuideScreen() {
         .eq('id', store.projectId!);
       if (error) throw error;
       setSaved(true);
-      Alert.alert('Saved!', 'Your DIY guide has been saved to My Projects.', [
-        { text: 'View Projects', onPress: () => { store.reset(); navigation.navigate('HomeownerTabs', { screen: 'Projects' }); } },
-        { text: 'Stay Here', style: 'cancel' },
-      ]);
+      setTimeout(() => {
+        store.reset();
+        navigation.navigate('HomeownerTabs', { screen: 'Projects' });
+      }, 600);
     } catch (err: any) {
       Alert.alert('Error', err?.message ?? 'Failed to save guide.');
-    } finally {
       setSaving(false);
     }
   };
@@ -85,20 +86,7 @@ export default function DIYGuideScreen() {
       <SafeAreaView style={styles.safe}>
         {/* Header */}
         <View style={styles.header}>
-          <TouchableOpacity style={styles.backBtn} onPress={() => navigation.goBack()}>
-            <Ionicons name="chevron-back" size={22} color="#fff" />
-          </TouchableOpacity>
           <Text style={styles.headerTitle} numberOfLines={1}>DIY Guide</Text>
-          <TouchableOpacity
-            style={[styles.saveBtn, saved && styles.saveBtnDone]}
-            onPress={handleSave}
-            disabled={saving || saved}
-          >
-            <Ionicons name={saved ? 'checkmark' : 'bookmark-outline'} size={16} color={saved ? '#000' : '#fff'} />
-            <Text style={[styles.saveBtnText, saved && { color: '#000' }]}>
-              {saving ? 'Saving…' : saved ? 'Saved' : 'Save'}
-            </Text>
-          </TouchableOpacity>
         </View>
 
         <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.scroll}>
@@ -266,6 +254,25 @@ export default function DIYGuideScreen() {
               </TouchableOpacity>
             </View>
           </View>
+
+          {/* Big Save Button */}
+          <View style={styles.saveBtnSection}>
+            <TouchableOpacity
+              style={[styles.bigSaveBtn, saved && styles.bigSaveBtnDone]}
+              onPress={handleSave}
+              disabled={saving || saved}
+              activeOpacity={0.8}
+            >
+              <Ionicons
+                name={saved ? 'checkmark-circle' : 'bookmark'}
+                size={22}
+                color={saved ? '#000' : '#000'}
+              />
+              <Text style={styles.bigSaveBtnText}>
+                {saving ? 'Saving…' : saved ? 'Saved!' : 'Save to My Projects'}
+              </Text>
+            </TouchableOpacity>
+          </View>
         </ScrollView>
       </SafeAreaView>
     </GradientBackground>
@@ -274,12 +281,8 @@ export default function DIYGuideScreen() {
 
 const styles = StyleSheet.create({
   safe: { flex: 1 },
-  header: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 16, paddingVertical: 12, gap: 12 },
-  backBtn: { width: 36, height: 36, borderRadius: 18, backgroundColor: Colors.glass.surface, borderWidth: 1, borderColor: Colors.glass.border, alignItems: 'center', justifyContent: 'center' },
-  headerTitle: { flex: 1, fontSize: 17, fontWeight: '700', color: '#fff' },
-  saveBtn: { flexDirection: 'row', alignItems: 'center', gap: 6, backgroundColor: Colors.glass.surface, borderWidth: 1, borderColor: Colors.glass.border, borderRadius: Radius.pill, paddingHorizontal: 14, paddingVertical: 8 },
-  saveBtnDone: { backgroundColor: '#FF6B00', borderColor: '#FF6B00' },
-  saveBtnText: { fontSize: 13, fontWeight: '600', color: '#fff' },
+  header: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', paddingHorizontal: 16, paddingVertical: 12 },
+  headerTitle: { fontSize: 17, fontWeight: '700', color: '#fff' },
   scroll: { paddingBottom: 120 },
 
   hero: { margin: Spacing.md, backgroundColor: Colors.glass.surface, borderRadius: Radius.card, borderWidth: 1, borderColor: Colors.glass.border, padding: 20, alignItems: 'center' },
@@ -343,4 +346,9 @@ const styles = StyleSheet.create({
   proHelpBtn: { backgroundColor: '#60A5FA', borderRadius: Radius.pill, paddingHorizontal: 14, paddingVertical: 8 },
   proHelpBtnDisabled: { opacity: 0.5 },
   proHelpBtnText: { fontSize: 13, fontWeight: '700', color: '#000' },
+
+  saveBtnSection: { paddingHorizontal: Spacing.md, paddingTop: Spacing.lg, paddingBottom: 20 },
+  bigSaveBtn: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 10, backgroundColor: '#FF6B00', borderRadius: Radius.card, paddingVertical: 18 },
+  bigSaveBtnDone: { backgroundColor: '#34D399' },
+  bigSaveBtnText: { fontSize: 17, fontWeight: '700', color: '#000' },
 });

@@ -1,5 +1,12 @@
-import React, { useEffect } from 'react';
-import { ActionSheetIOS } from 'react-native';
+import React, { useEffect, useState, useCallback } from 'react';
+import {
+  Modal,
+  Pressable,
+  StyleSheet,
+  Text,
+  TouchableOpacity,
+  View,
+} from 'react-native';
 import { NavigationContainer } from '@react-navigation/native';
 import { createStackNavigator } from '@react-navigation/stack';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
@@ -99,36 +106,88 @@ function icon(name: string, focused: boolean, color: string) {
 }
 
 function HomeownerTabs() {
+  const [sheetVisible, setSheetVisible] = useState(false);
+  const [navRef, setNavRef] = useState<any>(null);
+
+  const handleOption = useCallback((route: string) => {
+    setSheetVisible(false);
+    setTimeout(() => navRef?.navigate(route), 150);
+  }, [navRef]);
+
   return (
-    <Tab.Navigator
-      tabBar={(props) => <FloatingTabBar {...props} />}
-      sceneContainerStyle={{ backgroundColor: '#000000' }}
-      screenOptions={{ headerShown: false, tabBarShowLabel: false }}
-    >
-      <Tab.Screen name="Dashboard" component={HomeownerDashboard} options={{ tabBarIcon: ({ color, focused }) => icon('home', focused, color) }} />
-      <Tab.Screen name="Projects" component={HomeownerProjects} options={{ tabBarIcon: ({ color, focused }) => icon('folder', focused, color) }} />
-      <Tab.Screen name="Post" component={HomeownerProjects} listeners={({ navigation }) => ({
-        tabPress: (e) => {
-        e.preventDefault();
-        ActionSheetIOS.showActionSheetWithOptions(
-          {
-            options: ['Cancel', 'Post a Project', 'DIY Guide'],
-            cancelButtonIndex: 0,
-            title: 'Start a New Project',
-            message: 'What would you like to do?',
+    <>
+      <Tab.Navigator
+        tabBar={(props) => <FloatingTabBar {...props} />}
+        sceneContainerStyle={{ backgroundColor: '#000000' }}
+        screenOptions={{ headerShown: false, tabBarShowLabel: false }}
+      >
+        <Tab.Screen name="Dashboard" component={HomeownerDashboard} options={{ tabBarIcon: ({ color, focused }) => icon('home', focused, color) }} />
+        <Tab.Screen name="Projects" component={HomeownerProjects} options={{ tabBarIcon: ({ color, focused }) => icon('folder', focused, color) }} />
+        <Tab.Screen name="Post" component={HomeownerProjects} listeners={({ navigation }) => ({
+          tabPress: (e) => {
+            e.preventDefault();
+            setNavRef(navigation);
+            setSheetVisible(true);
           },
-          (index) => {
-            if (index === 1) navigation.navigate('ProjectCreate');
-            if (index === 2) navigation.navigate('DIYCreate');
-          },
-        );
-      },
-      })} />
-      <Tab.Screen name="Messages" component={HomeownerMessages} options={{ tabBarIcon: ({ color, focused }) => icon('chatbubbles', focused, color) }} />
-      <Tab.Screen name="Profile" component={HomeownerProfile} options={{ tabBarIcon: ({ color, focused }) => icon('person', focused, color) }} />
-    </Tab.Navigator>
+        })} />
+        <Tab.Screen name="Messages" component={HomeownerMessages} options={{ tabBarIcon: ({ color, focused }) => icon('chatbubbles', focused, color) }} />
+        <Tab.Screen name="Profile" component={HomeownerProfile} options={{ tabBarIcon: ({ color, focused }) => icon('person', focused, color) }} />
+      </Tab.Navigator>
+
+      {/* Custom bottom sheet */}
+      <Modal visible={sheetVisible} transparent animationType="fade" onRequestClose={() => setSheetVisible(false)}>
+        <Pressable style={sheetStyles.overlay} onPress={() => setSheetVisible(false)}>
+          <Pressable style={sheetStyles.sheet} onPress={(e) => e.stopPropagation()}>
+            <View style={sheetStyles.handle} />
+            <Text style={sheetStyles.title}>Start a New Project</Text>
+            <Text style={sheetStyles.subtitle}>What would you like to do?</Text>
+
+            <TouchableOpacity style={sheetStyles.option} activeOpacity={0.7} onPress={() => handleOption('ProjectCreate')}>
+              <View style={[sheetStyles.optionIcon, { backgroundColor: 'rgba(255,255,255,0.1)' }]}>
+                <Ionicons name="add-circle-outline" size={22} color="#fff" />
+              </View>
+              <View style={sheetStyles.optionBody}>
+                <Text style={sheetStyles.optionTitle}>Post a Project</Text>
+                <Text style={sheetStyles.optionSub}>Get quotes from local contractors</Text>
+              </View>
+              <Ionicons name="chevron-forward" size={18} color="rgba(255,255,255,0.3)" />
+            </TouchableOpacity>
+
+            <TouchableOpacity style={sheetStyles.option} activeOpacity={0.7} onPress={() => handleOption('DIYCreate')}>
+              <View style={[sheetStyles.optionIcon, { backgroundColor: 'rgba(52,211,153,0.15)' }]}>
+                <Ionicons name="hammer-outline" size={22} color="#34D399" />
+              </View>
+              <View style={sheetStyles.optionBody}>
+                <Text style={sheetStyles.optionTitle}>DIY Guide</Text>
+                <Text style={sheetStyles.optionSub}>Get a step-by-step guide powered by AI</Text>
+              </View>
+              <Ionicons name="chevron-forward" size={18} color="rgba(255,255,255,0.3)" />
+            </TouchableOpacity>
+
+            <TouchableOpacity style={sheetStyles.cancelBtn} activeOpacity={0.7} onPress={() => setSheetVisible(false)}>
+              <Text style={sheetStyles.cancelText}>Cancel</Text>
+            </TouchableOpacity>
+          </Pressable>
+        </Pressable>
+      </Modal>
+    </>
   );
 }
+
+const sheetStyles = StyleSheet.create({
+  overlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.6)', justifyContent: 'flex-end' },
+  sheet: { backgroundColor: '#1C1C1E', borderTopLeftRadius: 20, borderTopRightRadius: 20, paddingHorizontal: 20, paddingBottom: 40, paddingTop: 12 },
+  handle: { width: 36, height: 4, borderRadius: 2, backgroundColor: 'rgba(255,255,255,0.2)', alignSelf: 'center', marginBottom: 16 },
+  title: { fontSize: 20, fontWeight: '700', color: '#fff', marginBottom: 4 },
+  subtitle: { fontSize: 14, color: 'rgba(255,255,255,0.5)', marginBottom: 20 },
+  option: { flexDirection: 'row', alignItems: 'center', gap: 14, backgroundColor: 'rgba(255,255,255,0.06)', borderRadius: 14, padding: 16, marginBottom: 10, borderWidth: 1, borderColor: 'rgba(255,255,255,0.08)' },
+  optionIcon: { width: 44, height: 44, borderRadius: 22, alignItems: 'center', justifyContent: 'center' },
+  optionBody: { flex: 1 },
+  optionTitle: { fontSize: 16, fontWeight: '600', color: '#fff', marginBottom: 2 },
+  optionSub: { fontSize: 13, color: 'rgba(255,255,255,0.45)' },
+  cancelBtn: { alignItems: 'center', paddingVertical: 14, marginTop: 6, backgroundColor: 'rgba(255,255,255,0.06)', borderRadius: 14, borderWidth: 1, borderColor: 'rgba(255,255,255,0.08)' },
+  cancelText: { fontSize: 16, fontWeight: '600', color: 'rgba(255,255,255,0.5)' },
+});
 
 function CompanyTabs() {
   return (
