@@ -216,6 +216,7 @@ function HomeownerNavigator() {
       <HomeownerStack.Screen name="DetailPermits" component={DetailPermitsScreen} />
       <HomeownerStack.Screen name="DetailChangeOrders" component={DetailChangeOrdersScreen} />
       <HomeownerStack.Screen name="DetailReview" component={DetailReviewScreen} />
+      <HomeownerStack.Screen name="DIYGuide" component={DIYGuideScreen} />
       <HomeownerStack.Screen name="Chat" component={ChatScreen} />
       <HomeownerStack.Screen name="EditProfile" component={EditProfileScreen} />
       <HomeownerStack.Screen name="MyReviews" component={MyReviewsScreen} />
