@@ -4,6 +4,7 @@ import {
   FlatList,
   Image,
   RefreshControl,
+  ScrollView,
   StyleSheet,
   Text,
   TouchableOpacity,
@@ -255,19 +256,25 @@ export default function HomeownerProjects() {
         </Text>
 
         {/* Filters */}
-        <View style={styles.filters}>
-          {FILTERS.map((f) => (
-            <AnimatedPressable
-              key={f}
-              style={[styles.filterPill, filter === f && styles.filterActive]}
-              haptic
-              onPress={() => setFilter(f)}
-            >
-              <Text style={[styles.filterText, filter === f && styles.filterTextActive]}>
-                {f}
-              </Text>
-            </AnimatedPressable>
-          ))}
+        <View style={styles.filtersWrapper}>
+          <ScrollView
+            horizontal
+            showsHorizontalScrollIndicator={false}
+            contentContainerStyle={styles.filters}
+          >
+            {FILTERS.map((f) => (
+              <AnimatedPressable
+                key={f}
+                style={[styles.filterPill, filter === f && styles.filterActive]}
+                haptic
+                onPress={() => setFilter(f)}
+              >
+                <Text style={[styles.filterText, filter === f && styles.filterTextActive]}>
+                  {f}
+                </Text>
+              </AnimatedPressable>
+            ))}
+          </ScrollView>
         </View>
 
         {/* DIY List */}
@@ -350,7 +357,8 @@ const styles = StyleSheet.create({
   statsText: { fontSize: 13, color: Colors.text.tertiary, paddingHorizontal: 16, marginBottom: 12 },
   statNum: { fontWeight: '700', color: Colors.text.secondary },
 
-  filters: { flexDirection: 'row', gap: 8, paddingHorizontal: 16, marginBottom: 16 },
+  filtersWrapper: { height: 48, marginBottom: 12 },
+  filters: { flexDirection: 'row', alignItems: 'center', gap: 8, paddingHorizontal: 16, height: 48 },
   filterPill: { paddingHorizontal: 16, paddingVertical: 8, borderRadius: Radius.pill, backgroundColor: Colors.surface.default, borderWidth: 1, borderColor: Colors.surface.border },
   filterActive: { backgroundColor: '#fff', borderColor: '#fff' },
   filterText: { fontSize: 13, fontWeight: '600', color: Colors.text.secondary },

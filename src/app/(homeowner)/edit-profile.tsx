@@ -19,6 +19,7 @@ import type { AddressResult } from '@/components/ui';
 import { Colors, Radius, Spacing } from '@/constants/theme';
 import { useProfileStore } from '@/stores/profile.store';
 import { useAuthStore } from '@/stores/auth.store';
+import { supabase } from '@/lib/supabase/client';
 
 export default function EditProfileScreen() {
   const navigation = useNavigation<any>();
@@ -62,11 +63,40 @@ export default function EditProfileScreen() {
     }
   };
 
+  const uploadAndSetAvatar = async (localUri: string) => {
+    try {
+      const userId = user?.id ?? 'unknown';
+      const path = `${userId}/avatar_${Date.now()}.jpg`;
+
+      // Read local file as blob via XHR (fetch doesn't work for file:// in RN)
+      const blob: Blob = await new Promise((resolve, reject) => {
+        const xhr = new XMLHttpRequest();
+        xhr.open('GET', localUri, true);
+        xhr.responseType = 'blob';
+        xhr.onload = () => (xhr.status === 200 || xhr.status === 0) ? resolve(xhr.response) : reject(new Error('Read failed'));
+        xhr.onerror = () => reject(new Error('Read error'));
+        xhr.send();
+      });
+
+      const { error } = await supabase.storage.from('avatars').upload(path, blob, {
+        contentType: 'image/jpeg',
+        upsert: true,
+      });
+      if (error) throw error;
+
+      const { data } = supabase.storage.from('avatars').getPublicUrl(path);
+      setAvatar(data.publicUrl);
+      ReactNativeHapticFeedback.trigger('impactMedium');
+    } catch (err: any) {
+      Alert.alert('Upload failed', err?.message ?? 'Could not upload photo.');
+      setAvatar(localUri);
+    }
+  };
+
   const pickFromCamera = () => {
     launchCamera({ mediaType: 'photo', maxWidth: 800, maxHeight: 800, quality: 0.8 }, (res) => {
       if (res.assets?.[0]?.uri) {
-        setAvatar(res.assets[0].uri);
-        ReactNativeHapticFeedback.trigger('impactMedium');
+        uploadAndSetAvatar(res.assets[0].uri);
       }
     });
   };
@@ -74,8 +104,7 @@ export default function EditProfileScreen() {
   const pickFromLibrary = () => {
     launchImageLibrary({ mediaType: 'photo', maxWidth: 800, maxHeight: 800, quality: 0.8 }, (res) => {
       if (res.assets?.[0]?.uri) {
-        setAvatar(res.assets[0].uri);
-        ReactNativeHapticFeedback.trigger('impactMedium');
+        uploadAndSetAvatar(res.assets[0].uri);
       }
     });
   };
