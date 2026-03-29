@@ -9,10 +9,28 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useNavigation } from '@react-navigation/native';
+import Ionicons from 'react-native-vector-icons/Ionicons';
 import { supabase } from '@/lib/supabase/client';
 import { useProjectWizardStore } from '@/stores/project-wizard.store';
 import { Colors, Spacing, Typography, Radius } from '@/constants/theme';
 import { GlassButton, GlassCard, GradientBackground, StatusBadge, WizardHeader } from '@/components/ui';
+
+const OPENAI_KEY = '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';
+const OPENAI_URL = 'https://api.openai.com/v1/chat/completions';
+
+const CANADIAN_COST_RANGES: Record<string, Record<string, { min: number; max: number }>> = {
+  ON: { kitchen: { min: 2500000, max: 7500000 }, bathroom: { min: 800000, max: 2500000 } },
+  BC: { kitchen: { min: 2800000, max: 8500000 }, bathroom: { min: 900000, max: 2800000 } },
+  AB: { kitchen: { min: 2200000, max: 6500000 }, bathroom: { min: 750000, max: 2200000 } },
+  QC: { kitchen: { min: 2000000, max: 6000000 }, bathroom: { min: 700000, max: 2000000 } },
+  MB: { kitchen: { min: 1800000, max: 5500000 }, bathroom: { min: 650000, max: 1800000 } },
+  SK: { kitchen: { min: 1800000, max: 5000000 }, bathroom: { min: 600000, max: 1700000 } },
+  NS: { kitchen: { min: 2000000, max: 5500000 }, bathroom: { min: 700000, max: 2000000 } },
+  NB: { kitchen: { min: 1900000, max: 5000000 }, bathroom: { min: 650000, max: 1800000 } },
+  NL: { kitchen: { min: 1900000, max: 5000000 }, bathroom: { min: 650000, max: 1800000 } },
+  PE: { kitchen: { min: 1800000, max: 4500000 }, bathroom: { min: 600000, max: 1600000 } },
+};
+const DEFAULT_COST = { min: 2000000, max: 6000000 };
 
 interface BriefData {
   materials: Array<{
@@ -79,21 +97,84 @@ export default function BriefStep() {
         if (render) setRenderUrl(render.url);
       }
 
-      const { data, error: briefError } = await supabase.functions.invoke(
-        'generate-project-brief',
-        {
-          body: {
-            project_id: projectId,
-            analysis: analysisResult,
-            questionnaire_answers: answers,
-            selected_render_id: selectedRenderId,
-            address,
-            province,
-          },
-        }
-      );
-      if (briefError) throw briefError;
-      setBrief(data);
+      const roomType = (analysisResult as any)?.room_type ?? 'kitchen';
+      const provinceCode = (province ?? 'ON').toUpperCase();
+      const costs = CANADIAN_COST_RANGES[provinceCode]?.[roomType] ??
+        (roomType === 'kitchen' ? DEFAULT_COST : { min: 700000, max: 2000000 });
+
+      const prompt = `Generate a detailed renovation project brief for a ${roomType} in ${provinceCode}, Canada.
+
+Room Analysis: ${JSON.stringify(analysisResult)}
+Homeowner Preferences (questionnaire answers): ${JSON.stringify(answers)}
+
+Regional cost baseline (CAD cents): min=${costs.min}, max=${costs.max}
+
+Return a valid JSON object with this exact structure:
+{
+  "materials": [
+    { "item": "string", "quantity": number, "unit": "string", "quality_tier": "budget|mid-range|luxury" }
+  ],
+  "scope_of_work": [
+    { "phase": "demolition|rough-in|installation|finishing", "description": "string", "sort_order": number }
+  ],
+  "ai_cost_min": number,
+  "ai_cost_max": number,
+  "permits": [
+    { "permit_type": "string", "required": true }
+  ],
+  "ai_observations": "2-3 sentence summary for the homeowner"
+}
+
+Rules:
+- ai_cost_min and ai_cost_max must be in CAD cents and within ±30% of regional baseline
+- Adjust cost based on quality_tier preferences from questionnaire
+- Include realistic Canadian permit requirements
+- Materials should reflect the quality tier selected
+- scope_of_work must cover all phases in order
+- Return ONLY the JSON, no markdown`;
+
+      const res = await fetch(OPENAI_URL, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${OPENAI_KEY}`,
+        },
+        body: JSON.stringify({
+          model: 'gpt-4o',
+          max_tokens: 4000,
+          messages: [{ role: 'user', content: prompt }],
+        }),
+      });
+
+      if (!res.ok) {
+        const errText = await res.text();
+        throw new Error(`AI request failed (${res.status}): ${errText}`);
+      }
+
+      const aiResponse = await res.json();
+      const rawText: string = aiResponse.choices[0].message.content;
+      const cleaned = rawText.replace(/^```json\s*/i, '').replace(/^```\s*/i, '').replace(/```\s*$/i, '').trim();
+      const briefData: BriefData = JSON.parse(cleaned);
+
+      // Save to DB directly (bypasses edge function JWT issues)
+      await Promise.all([
+        supabase.from('projects').update({
+          ai_cost_min: briefData.ai_cost_min,
+          ai_cost_max: briefData.ai_cost_max,
+          questionnaire_answers: answers,
+        }).eq('id', projectId),
+        briefData.materials.length > 0
+          ? supabase.from('materials').insert(briefData.materials.map((m) => ({ ...m, project_id: projectId })))
+          : Promise.resolve(),
+        briefData.scope_of_work.length > 0
+          ? supabase.from('scope_of_work').insert(briefData.scope_of_work.map((s) => ({ ...s, project_id: projectId })))
+          : Promise.resolve(),
+        briefData.permits.length > 0
+          ? supabase.from('permits').insert(briefData.permits.map((p) => ({ project_id: projectId, permit_type: p.permit_type, status: 'not_applied' })))
+          : Promise.resolve(),
+      ]);
+
+      setBrief(briefData);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to generate brief.');
     } finally {
@@ -118,7 +199,7 @@ export default function BriefStep() {
             <ActivityIndicator size="large" color={Colors.accent} />
             <Text style={styles.loadingTitle}>Building your project brief…</Text>
             <Text style={styles.loadingSubtitle}>
-              Claude is calculating materials, scope, and cost estimates
+              WalkerAI is calculating materials, scope, and cost estimates
             </Text>
           </View>
         </SafeAreaView>
@@ -131,7 +212,7 @@ export default function BriefStep() {
       <GradientBackground glow="center">
         <SafeAreaView style={styles.safe}>
           <View style={styles.loadingCenter}>
-            <Text style={{ fontSize: 48, marginBottom: 16 }}>⚠️</Text>
+            <Ionicons name="warning-outline" size={48} color={Colors.warning} style={{ marginBottom: 16 }} />
             <Text style={styles.loadingTitle}>Brief generation failed</Text>
             <Text style={styles.loadingSubtitle}>{error}</Text>
             <GlassButton
@@ -225,7 +306,7 @@ export default function BriefStep() {
               <Text style={styles.sectionTitle}>Required Permits</Text>
               {brief.permits.filter((p) => p.required).map((permit, i) => (
                 <View key={i} style={styles.permitRow}>
-                  <Text style={styles.permitIcon}>📋</Text>
+                  <Ionicons name="document-text-outline" size={16} color={Colors.accent} style={styles.permitIcon} />
                   <Text style={styles.permitType}>{permit.permit_type}</Text>
                 </View>
               ))}

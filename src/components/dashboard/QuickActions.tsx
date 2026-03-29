@@ -38,8 +38,8 @@ export function QuickActions() {
 }
 
 const styles = StyleSheet.create({
-  wrapper: { marginBottom: Spacing.md },
-  row: { gap: 10 },
+  wrapper: { marginBottom: Spacing.md, marginHorizontal: -16 },
+  row: { gap: 10, paddingHorizontal: 16 },
   item: {
     flexDirection: 'row',
     alignItems: 'center',

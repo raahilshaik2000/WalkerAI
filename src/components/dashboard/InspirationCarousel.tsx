@@ -54,6 +54,7 @@ export function InspirationCarousel() {
         renderItem={renderItem}
         horizontal
         showsHorizontalScrollIndicator={false}
+        style={styles.listOuter}
         contentContainerStyle={styles.list}
       />
     </Animated.View>
@@ -62,7 +63,8 @@ export function InspirationCarousel() {
 
 const styles = StyleSheet.create({
   container: { marginBottom: Spacing.md },
-  list: { gap: 12 },
+  listOuter: { marginHorizontal: -16 },
+  list: { gap: 12, paddingHorizontal: 16 },
   card: {
     width: CARD_WIDTH,
     height: 260,

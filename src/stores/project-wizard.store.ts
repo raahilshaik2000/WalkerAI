@@ -6,6 +6,7 @@ export interface UploadedPhoto {
   id: string;
   uri: string;           // local URI (for display)
   url: string;           // Supabase public URL (set after upload)
+  base64?: string;       // base64-encoded image data (no data: prefix)
   storagePath?: string;
   status: 'pending' | 'uploading' | 'done' | 'error';
   progress: number;
