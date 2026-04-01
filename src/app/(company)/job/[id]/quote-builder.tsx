@@ -13,6 +13,8 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useNavigation } from '@react-navigation/native'
 import { useRoute } from '@react-navigation/native';
+import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
+import Ionicons from 'react-native-vector-icons/Ionicons';
 import { supabase } from '@/lib/supabase/client';
 import { useAuthStore } from '@/stores/auth.store';
 import { Colors, Radius, Spacing, Typography } from '@/constants/theme';
@@ -185,7 +187,7 @@ export default function QuoteBuilderScreen() {
           >
             <View style={styles.header}>
               <TouchableOpacity onPress={() => navigation.goBack()}>
-                <Text style={styles.backText}>← Back</Text>
+                <Ionicons name="arrow-back" size={22} color={Colors.text.secondary} />
               </TouchableOpacity>
               <Text style={styles.title}>Build Quote</Text>
               <View style={{ width: 48 }} />
@@ -216,7 +218,7 @@ export default function QuoteBuilderScreen() {
                   </View>
                   {lineItems.length > 1 && (
                     <TouchableOpacity onPress={() => removeLineItem(item.id)} style={styles.removeBtn}>
-                      <Text style={styles.removeBtnText}>✕</Text>
+                      <Icon name="close-circle" size={18} color={Colors.error} />
                     </TouchableOpacity>
                   )}
                 </View>
