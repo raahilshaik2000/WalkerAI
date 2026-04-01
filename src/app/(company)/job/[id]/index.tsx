@@ -12,10 +12,13 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { useNavigation } from '@react-navigation/native'
 import { useRoute } from '@react-navigation/native';
 import ReactNativeHapticFeedback from 'react-native-haptic-feedback';
+import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
+import Ionicons from 'react-native-vector-icons/Ionicons';
 import { supabase } from '@/lib/supabase/client';
 import { useAuthStore } from '@/stores/auth.store';
 import { Colors, Radius, Spacing, Typography } from '@/constants/theme';
 import { GlassButton, GlassCard, GradientBackground, StatusBadge, CardSkeleton } from '@/components/ui';
+import { formatStatusLabel, formatCad } from '@/lib/formatters';
 
 interface JobBrief {
   id: string;
@@ -31,10 +34,6 @@ interface JobBrief {
   scope_of_work: Array<{ phase: string; description: string; sort_order: number }>;
   renders: Array<{ url: string; selected: boolean }>;
   dispatch_expires_at: string | null;
-}
-
-function formatCad(cents: number) {
-  return new Intl.NumberFormat('en-CA', { style: 'currency', currency: 'CAD', maximumFractionDigits: 0 }).format(cents / 100);
 }
 
 export default function JobBriefScreen() {
@@ -131,19 +130,34 @@ export default function JobBriefScreen() {
         <ScrollView contentContainerStyle={styles.scroll} showsVerticalScrollIndicator={false}>
           <View style={styles.header}>
             <TouchableOpacity onPress={() => navigation.goBack()}>
-              <Text style={styles.backText}>← Jobs</Text>
+              <Ionicons name="arrow-back" size={22} color={Colors.text.secondary} />
             </TouchableOpacity>
-            <StatusBadge label={job.status} variant={job.status === 'dispatching' ? 'dispatching' : 'active'} dot />
+            <StatusBadge label={formatStatusLabel(job.status)} variant={job.status === 'dispatching' ? 'dispatching' : 'active'} dot />
           </View>
 
           {/* Hero render */}
-          {selectedRender && (
+          {selectedRender ? (
             <Image source={{ uri: selectedRender.url }} style={styles.heroImage} resizeMode="cover" />
+          ) : (
+            <View style={styles.heroFallback}>
+              <Icon
+                name={job.room_type === 'kitchen' ? 'countertop-outline' : 'shower'}
+                size={48}
+                color={Colors.text.tertiary}
+              />
+            </View>
           )}
 
-          <Text style={styles.roomType}>
-            {job.room_type === 'kitchen' ? '🍳' : '🚿'} {job.room_type.charAt(0).toUpperCase() + job.room_type.slice(1)} Renovation
-          </Text>
+          <View style={styles.roomTypeRow}>
+            {job.room_type === 'kitchen' ? (
+              <Icon name="countertop-outline" size={18} color={Colors.text.primary} />
+            ) : (
+              <Icon name="shower" size={18} color={Colors.text.primary} />
+            )}
+            <Text style={styles.roomType}>
+              {job.room_type.charAt(0).toUpperCase() + job.room_type.slice(1)} Renovation
+            </Text>
+          </View>
           <Text style={styles.address}>{job.address}</Text>
 
           {/* Cost estimate */}
@@ -214,14 +228,17 @@ export default function JobBriefScreen() {
           ) : job.status !== 'dispatching' ? (
             <>
               <GlassCard style={[styles.card, styles.acceptedCard]}>
-                <Text style={styles.acceptedText}>✓ Job accepted</Text>
+                <View style={styles.acceptedRow}>
+                  <Icon name="check-circle" size={18} color={Colors.success} />
+                  <Text style={styles.acceptedText}>Job accepted</Text>
+                </View>
               </GlassCard>
               <View style={styles.actionGrid}>
                 {[
-                  { label: 'Quote', icon: '📄', route: 'quote-builder' },
-                  { label: 'Milestones', icon: '🪜', route: 'milestones' },
-                  { label: 'Messages', icon: '💬', route: 'messages' },
-                  { label: 'Changes', icon: '📝', route: 'change-orders' },
+                  { label: 'Quote', iconName: 'file-document-outline', route: 'quote-builder' },
+                  { label: 'Milestones', iconName: 'flag-checkered', route: 'milestones' },
+                  { label: 'Messages', iconName: 'chat-outline', route: 'messages' },
+                  { label: 'Changes', iconName: 'pencil-outline', route: 'change-orders' },
                 ].map((item) => (
                   <TouchableOpacity
                     key={item.route}
@@ -229,7 +246,7 @@ export default function JobBriefScreen() {
                     onPress={() => navigation.navigate(item.route as any)}
                     activeOpacity={0.85}
                   >
-                    <Text style={styles.actionTileIcon}>{item.icon}</Text>
+                    <Icon name={item.iconName} size={24} color={Colors.text.secondary} />
                     <Text style={styles.actionTileLabel}>{item.label}</Text>
                   </TouchableOpacity>
                 ))}
@@ -251,9 +268,20 @@ const styles = StyleSheet.create({
   scroll: { flexGrow: 1, paddingHorizontal: Spacing.sm, paddingTop: Spacing.sm, paddingBottom: Spacing.xl },
   center: { flex: 1, alignItems: 'center', justifyContent: 'center' },
   header: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: Spacing.md },
-  backText: { color: Colors.text.secondary, fontSize: 15 },
   heroImage: { width: '100%', height: 200, borderRadius: Radius.card, marginBottom: Spacing.md },
-  roomType: { ...Typography.h2, textTransform: 'capitalize', marginBottom: 6 },
+  heroFallback: {
+    width: '100%',
+    height: 200,
+    borderRadius: Radius.card,
+    marginBottom: Spacing.md,
+    backgroundColor: Colors.surface.default,
+    borderWidth: 1,
+    borderColor: Colors.glass.border,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  roomTypeRow: { flexDirection: 'row', alignItems: 'center', gap: 6, marginBottom: 6 },
+  roomType: { ...Typography.h2, textTransform: 'capitalize' },
   address: { ...Typography.bodySecondary, marginBottom: Spacing.md },
   card: { marginBottom: Spacing.sm },
   sectionLabel: { ...Typography.label, marginBottom: 10 },
@@ -276,6 +304,7 @@ const styles = StyleSheet.create({
   acceptBtn: { marginBottom: Spacing.xs },
   acceptNote: { ...Typography.caption, textAlign: 'center', paddingHorizontal: Spacing.md, lineHeight: 18, marginBottom: Spacing.md },
   acceptedCard: { alignItems: 'center', marginBottom: 10 },
+  acceptedRow: { flexDirection: 'row', alignItems: 'center', gap: 8 },
   acceptedText: { color: Colors.success, fontWeight: '600', fontSize: 15, textAlign: 'center' },
   actionGrid: {
     flexDirection: 'row', flexWrap: 'wrap', gap: 10, marginBottom: Spacing.md,
@@ -287,6 +316,5 @@ const styles = StyleSheet.create({
     borderRadius: Radius.item,
     paddingVertical: 20, alignItems: 'center', gap: 8,
   },
-  actionTileIcon: { fontSize: 24 },
   actionTileLabel: { ...Typography.label, color: Colors.text.secondary },
 });
