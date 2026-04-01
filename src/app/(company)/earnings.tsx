@@ -7,10 +7,12 @@ import {
   View,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
 import { supabase } from '@/lib/supabase/client';
 import { useAuthStore } from '@/stores/auth.store';
+import { formatCad } from '@/lib/formatters';
 import { Colors, Spacing, Typography } from '@/constants/theme';
-import { GlassCard, GradientBackground, StatusBadge } from '@/components/ui';
+import { CardSkeleton, GlassCard, GradientBackground, ListItemSkeleton, StatusBadge } from '@/components/ui';
 
 interface PaidMilestone {
   id: string;
@@ -19,12 +21,6 @@ interface PaidMilestone {
   completed_at: string | null;
   stripe_transfer_id: string | null;
   project: { address: string; city: string };
-}
-
-function formatCad(cents: number) {
-  return new Intl.NumberFormat('en-CA', {
-    style: 'currency', currency: 'CAD', maximumFractionDigits: 0,
-  }).format(cents / 100);
 }
 
 export default function EarningsScreen() {
@@ -106,10 +102,15 @@ export default function EarningsScreen() {
           <Text style={styles.sectionLabel}>PAYMENT HISTORY</Text>
 
           {loading ? (
-            <Text style={Typography.bodySecondary}>Loading…</Text>
+            <>
+              <CardSkeleton style={{ marginBottom: 12 }} />
+              <ListItemSkeleton style={{ marginBottom: 10 }} />
+              <ListItemSkeleton style={{ marginBottom: 10 }} />
+              <ListItemSkeleton style={{ marginBottom: 10 }} />
+            </>
           ) : milestones.length === 0 ? (
             <View style={styles.emptyState}>
-              <Text style={styles.emptyIcon}>💸</Text>
+              <Icon name="cash-remove" size={48} color={Colors.text.tertiary} />
               <Text style={styles.emptyTitle}>No payments yet</Text>
               <Text style={styles.emptySub}>Payments appear here when milestones are approved.</Text>
             </View>

@@ -14,6 +14,7 @@ import { launchImageLibrary } from 'react-native-image-picker';
 import { supabase } from '@/lib/supabase/client';
 import { uploadFile } from '@/lib/supabase/storage';
 import { useAuthStore } from '@/stores/auth.store';
+import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
 import { Colors, Radius, Spacing, Typography } from '@/constants/theme';
 import { GlassButton, GlassCard, GradientBackground } from '@/components/ui';
 
@@ -181,7 +182,7 @@ function DocUploadBlock({
           <Image source={{ uri: state.uri }} style={styles.uploadPreview} />
         ) : (
           <View style={styles.uploadPlaceholder}>
-            <Text style={styles.uploadIcon}>📎</Text>
+            <Icon name="file-upload-outline" size={28} color={Colors.text.secondary} />
             <Text style={styles.uploadText}>{label}</Text>
             <Text style={styles.uploadSub}>JPG or PNG, max 10MB</Text>
           </View>
@@ -204,15 +205,15 @@ const styles = StyleSheet.create({
     paddingTop: Spacing.sm,
     paddingBottom: Spacing.xl,
   },
-  progressRow: { flexDirection: 'row', gap: 8, marginBottom: Spacing.lg },
+  progressRow: { flexDirection: 'row', gap: 4, marginBottom: Spacing.lg },
   progressDot: {
-    width: 28,
-    height: 4,
+    flex: 1,
+    height: 3,
     borderRadius: 2,
     backgroundColor: Colors.glass.surface,
   },
-  progressDotActive: { backgroundColor: Colors.accent },
-  stepLabel: { ...Typography.label, color: Colors.accent, marginBottom: 8 },
+  progressDotActive: { backgroundColor: Colors.success },
+  stepLabel: { ...Typography.label, color: Colors.success, marginBottom: 8 },
   title: { ...Typography.h1, marginBottom: 8 },
   subtitle: { ...Typography.bodySecondary, marginBottom: Spacing.lg },
   card: { marginBottom: Spacing.md },

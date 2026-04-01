@@ -10,6 +10,7 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useNavigation } from '@react-navigation/native';
+import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
 import { supabase } from '@/lib/supabase/client';
 import { useAuthStore } from '@/stores/auth.store';
 import { Colors, Radius, Spacing, Typography } from '@/constants/theme';
@@ -138,9 +139,16 @@ export default function CompanyProfileScreen() {
 
             {company?.rating != null && (
               <View style={styles.ratingRow}>
-                <Text style={styles.ratingStars}>
-                  {'★'.repeat(Math.round(company.rating))}{'☆'.repeat(5 - Math.round(company.rating))}
-                </Text>
+                <View style={styles.ratingStars}>
+                  {Array.from({ length: 5 }).map((_, i) => (
+                    <Icon
+                      key={i}
+                      name={i < Math.round(company.rating!) ? 'star' : 'star-outline'}
+                      size={16}
+                      color={i < Math.round(company.rating!) ? Colors.warning : Colors.text.tertiary}
+                    />
+                  ))}
+                </View>
                 <Text style={styles.ratingValue}>{company.rating.toFixed(1)}</Text>
                 <Text style={styles.ratingCount}>({company.total_reviews} reviews)</Text>
               </View>
@@ -201,14 +209,18 @@ export default function CompanyProfileScreen() {
           {/* Actions */}
           <GlassCard style={styles.card}>
             <TouchableOpacity style={styles.menuRow} onPress={() => navigation.navigate('Earnings')}>
-              <Text style={styles.menuIcon}>💰</Text>
+              <View style={styles.menuIcon}>
+                <Icon name="cash-multiple" size={20} color={Colors.text.secondary} />
+              </View>
               <Text style={styles.menuLabel}>Earnings & Payouts</Text>
-              <Text style={styles.menuArrow}>›</Text>
+              <Icon name="chevron-right" size={20} color={Colors.text.tertiary} />
             </TouchableOpacity>
             <TouchableOpacity style={styles.menuRow} onPress={() => navigation.navigate('Calendar')}>
-              <Text style={styles.menuIcon}>📅</Text>
+              <View style={styles.menuIcon}>
+                <Icon name="calendar-month-outline" size={20} color={Colors.text.secondary} />
+              </View>
               <Text style={styles.menuLabel}>Calendar</Text>
-              <Text style={styles.menuArrow}>›</Text>
+              <Icon name="chevron-right" size={20} color={Colors.text.tertiary} />
             </TouchableOpacity>
           </GlassCard>
 
@@ -241,7 +253,7 @@ const styles = StyleSheet.create({
   companyName: { ...Typography.h3, marginBottom: 2 },
   email: { ...Typography.caption, marginBottom: 8 },
   ratingRow: { flexDirection: 'row', alignItems: 'center', gap: 6 },
-  ratingStars: { color: Colors.warning, fontSize: 14, letterSpacing: 1 },
+  ratingStars: { flexDirection: 'row' as const, gap: 2 },
   ratingValue: { color: Colors.text.primary, fontWeight: '700', fontSize: 14 },
   ratingCount: { ...Typography.caption },
   statsRow: { flexDirection: 'row', gap: 10, marginBottom: Spacing.sm },
@@ -261,8 +273,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row', alignItems: 'center', gap: 12,
     paddingVertical: 14, borderBottomWidth: 1, borderBottomColor: Colors.glass.border,
   },
-  menuIcon: { fontSize: 20, width: 28, textAlign: 'center' },
+  menuIcon: { width: 28, alignItems: 'center' as const, justifyContent: 'center' as const },
   menuLabel: { ...Typography.body, flex: 1 },
-  menuArrow: { color: Colors.text.tertiary ?? Colors.text.secondary, fontSize: 20 },
   signOutBtn: { marginTop: Spacing.sm },
 });
