@@ -83,6 +83,12 @@ export default function DIYGeneratingScreen() {
           if (upErr) throw new Error(`Photo upload failed: ${upErr.message}`);
           const { data } = supabase.storage.from('project-photos').getPublicUrl(storagePath);
           photoUrls.push(data.publicUrl);
+          // Insert into project_photos table so cover images work on the projects screen
+          await supabase.from('project_photos').insert({
+            project_id: pid,
+            url: data.publicUrl,
+            storage_path: storagePath,
+          });
         }
         if (photoUrls.length === 0) throw new Error('No photos could be uploaded.');
 

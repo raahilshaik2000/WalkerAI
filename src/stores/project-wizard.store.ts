@@ -2,6 +2,14 @@ import { create } from 'zustand';
 import type { AIAnalysis, QuestionnaireQuestion } from '@/types/database.types';
 import type { RoomType } from '@/constants/enums';
 
+export interface MaterialOverride {
+  quality_tier?: 'budget' | 'mid-range' | 'luxury';
+  brand_preference?: string;
+  color_finish?: string;
+  specific_model?: string;
+  contractor_notes?: string;
+}
+
 export interface UploadedPhoto {
   id: string;
   uri: string;           // local URI (for display)
@@ -38,6 +46,9 @@ interface ProjectWizardState {
   // Step 5
   selectedRenderId: string | null;
 
+  // Step 6 – material detail overrides keyed by material index
+  materialOverrides: Record<number, MaterialOverride>;
+
   // DB
   projectId: string | null;
 
@@ -55,6 +66,7 @@ interface ProjectWizardState {
   /** Move to next question. Pass nextQuestionId to jump; null advances sequentially */
   nextQuestion: (nextQuestionId?: string | null) => void;
   setSelectedRender: (renderId: string | null) => void;
+  setMaterialOverride: (index: number, override: MaterialOverride) => void;
   setProjectId: (id: string) => void;
   setStep: (step: ProjectWizardState['step']) => void;
   reset: () => void;
@@ -63,7 +75,7 @@ interface ProjectWizardState {
 const initialState: Omit<ProjectWizardState,
   | 'setAddress' | 'setRoomType' | 'addPhoto' | 'updatePhoto' | 'removePhoto'
   | 'setAnalysisResult' | 'setQuestions' | 'setAnswer' | 'nextQuestion'
-  | 'setSelectedRender' | 'setProjectId' | 'setStep' | 'reset'
+  | 'setSelectedRender' | 'setMaterialOverride' | 'setProjectId' | 'setStep' | 'reset'
 > = {
   address: '',
   coordinates: null,
@@ -75,6 +87,7 @@ const initialState: Omit<ProjectWizardState,
   answers: {},
   currentQuestionIndex: 0,
   selectedRenderId: null,
+  materialOverrides: {},
   projectId: null,
   step: 1,
 };
@@ -120,6 +133,11 @@ export const useProjectWizardStore = create<ProjectWizardState>()((set, get) => 
   },
 
   setSelectedRender: (selectedRenderId) => set({ selectedRenderId }),
+
+  setMaterialOverride: (index, override) =>
+    set((state) => ({
+      materialOverrides: { ...state.materialOverrides, [index]: { ...state.materialOverrides[index], ...override } },
+    })),
 
   setProjectId: (projectId) => set({ projectId }),
 

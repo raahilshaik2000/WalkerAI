@@ -1,4 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import { useFocusEffect } from '@react-navigation/native';
 import {
   ActivityIndicator,
   FlatList,
@@ -17,10 +18,32 @@ import LinearGradient from 'react-native-linear-gradient';
 import { AnimatedPressable, GlassButton, GradientBackground } from '@/components/ui';
 import { ProgressRing } from '@/components/dashboard/ProgressRing';
 import { Colors, Radius, Spacing } from '@/constants/theme';
-import { DashboardProject, PROJECTS_LIST } from '@/components/dashboard/data';
 import { supabase } from '@/lib/supabase/client';
 import { useAuthStore } from '@/stores/auth.store';
 import { useDIYWizardStore, type DIYGuide } from '@/stores/diy-wizard.store';
+
+interface RealProject {
+  id: string;
+  room_type: string;
+  status: string;
+  description: string;
+  address: string | null;
+  city: string | null;
+  ai_cost_min: number | null;
+  ai_cost_max: number | null;
+  created_at: string;
+  renders: Array<{ url: string }>;
+  project_photos: Array<{ url: string }>;
+}
+
+const STATUS_LABEL: Record<string, { label: string; color: string }> = {
+  draft:       { label: 'Draft',       color: '#6B7280' },
+  dispatching: { label: 'Dispatching', color: '#A78BFA' },
+  quoting:     { label: 'Quoting',     color: '#F59E0B' },
+  accepted:    { label: 'Accepted',    color: '#60A5FA' },
+  active:      { label: 'In Progress', color: '#22C55E' },
+  completed:   { label: 'Completed',   color: '#FF6B00' },
+};
 
 const FILTERS = ['All', 'Active', 'Quoting', 'Completed', 'DIY'] as const;
 type Filter = (typeof FILTERS)[number];
@@ -135,22 +158,37 @@ export default function HomeownerProjects() {
 
   const [filter, setFilter] = useState<Filter>('All');
   const [refreshing, setRefreshing] = useState(false);
+  const [projects, setProjects] = useState<RealProject[]>([]);
+  const [projectsLoading, setProjectsLoading] = useState(false);
   const [diyProjects, setDiyProjects] = useState<DIYProject[]>([]);
   const [diyLoading, setDiyLoading] = useState(false);
 
-  const filtered = useMemo(
-    () =>
-      filter === 'All'
-        ? PROJECTS_LIST
-        : PROJECTS_LIST.filter((p) => STATUS_MAP[filter].includes(p.status)),
-    [filter],
-  );
+  const filtered = useMemo(() => {
+    if (filter === 'All') return projects;
+    return projects.filter((p) => STATUS_MAP[filter].includes(p.status));
+  }, [filter, projects]);
 
   const counts = useMemo(() => ({
-    active: PROJECTS_LIST.filter((p) => STATUS_MAP.Active.includes(p.status)).length,
-    quoting: PROJECTS_LIST.filter((p) => p.status === 'quoting').length,
-    completed: PROJECTS_LIST.filter((p) => p.status === 'completed').length,
-  }), []);
+    active: projects.filter((p) => STATUS_MAP.Active.includes(p.status)).length,
+    quoting: projects.filter((p) => p.status === 'quoting').length,
+    completed: projects.filter((p) => p.status === 'completed').length,
+  }), [projects]);
+
+  const fetchProjects = useCallback(async () => {
+    if (!user) return;
+    setProjectsLoading(true);
+    try {
+      const { data } = await supabase
+        .from('projects')
+        .select('id, room_type, status, description, address, city, ai_cost_min, ai_cost_max, created_at, renders(url), project_photos(url)')
+        .eq('homeowner_id', user.id)
+        .not('status', 'eq', 'diy_saved')
+        .order('created_at', { ascending: false });
+      setProjects((data as RealProject[]) ?? []);
+    } finally {
+      setProjectsLoading(false);
+    }
+  }, [user]);
 
   const fetchDIYProjects = useCallback(async () => {
     if (!user) return;
@@ -169,14 +207,22 @@ export default function HomeownerProjects() {
     }
   }, [user]);
 
+  useFocusEffect(
+    useCallback(() => {
+      fetchProjects();
+    }, [fetchProjects])
+  );
+
   useEffect(() => {
     if (filter === 'DIY') fetchDIYProjects();
   }, [filter, fetchDIYProjects]);
 
   const onRefresh = async () => {
     setRefreshing(true);
-    if (filter === 'DIY') await fetchDIYProjects();
-    else setTimeout(() => {}, 800);
+    await Promise.all([
+      fetchProjects(),
+      filter === 'DIY' ? fetchDIYProjects() : Promise.resolve(),
+    ]);
     setRefreshing(false);
   };
 
@@ -186,48 +232,63 @@ export default function HomeownerProjects() {
     navigation.navigate('DIYGuide');
   };
 
-  const renderProject = ({ item }: { item: DashboardProject }) => (
-    <AnimatedPressable
-      style={styles.card}
-      haptic
-      onPress={() => navigation.navigate('ProjectDetailView', { project: item })}
-    >
-      <Image source={{ uri: item.coverImage }} style={styles.cover} />
-      <LinearGradient colors={['transparent', 'rgba(0,0,0,0.85)']} style={styles.gradient} />
-      <View style={[styles.badge, { backgroundColor: item.statusColor + '22', borderColor: item.statusColor + '55' }]}>
-        <View style={[styles.badgeDot, { backgroundColor: item.statusColor }]} />
-        <Text style={[styles.badgeText, { color: item.statusColor }]}>{item.statusLabel}</Text>
-      </View>
-      <View style={styles.body}>
-        <View style={styles.titleRow}>
-          <View style={styles.titleCol}>
-            <Text style={styles.title} numberOfLines={1}>{item.title}</Text>
-            <Text style={styles.address} numberOfLines={1}>
-              <Ionicons name="location-outline" size={11} color={Colors.text.tertiary} /> {item.address}
-            </Text>
+  const renderProject = ({ item }: { item: RealProject }) => {
+    const statusInfo = STATUS_LABEL[item.status] ?? { label: item.status, color: '#6B7280' };
+    const coverImage = item.renders?.[0]?.url ?? item.project_photos?.[0]?.url;
+    const title = item.room_type
+      ? item.room_type.charAt(0).toUpperCase() + item.room_type.slice(1) + ' Renovation'
+      : item.description?.slice(0, 40) ?? 'Project';
+    const location = [item.address, item.city].filter(Boolean).join(', ') || 'Address not set';
+    const budgetText = item.ai_cost_min && item.ai_cost_max
+      ? `$${Math.round(item.ai_cost_min / 100).toLocaleString()}–$${Math.round(item.ai_cost_max / 100).toLocaleString()}`
+      : 'TBD';
+    const progress = item.status === 'completed' ? 1 : item.status === 'active' ? 0.5 : 0.1;
+
+    return (
+      <AnimatedPressable
+        style={styles.card}
+        haptic
+        onPress={() => navigation.navigate('ProjectDetailView', { project: item })}
+      >
+        {coverImage ? (
+          <Image source={{ uri: coverImage }} style={styles.cover} />
+        ) : (
+          <View style={[styles.cover, styles.coverPlaceholder]}>
+            <Ionicons name="home-outline" size={40} color="rgba(255,255,255,0.15)" />
           </View>
-          <ProgressRing progress={item.progress} size={44} color={item.statusColor} />
+        )}
+        <LinearGradient colors={['transparent', 'rgba(0,0,0,0.85)']} style={styles.gradient} />
+        <View style={[styles.badge, { backgroundColor: statusInfo.color + '22', borderColor: statusInfo.color + '55' }]}>
+          <View style={[styles.badgeDot, { backgroundColor: statusInfo.color }]} />
+          <Text style={[styles.badgeText, { color: statusInfo.color }]}>{statusInfo.label}</Text>
         </View>
-        <View style={styles.footer}>
-          <View style={styles.contractorRow}>
-            {item.contractorAvatar ? (
-              <Image source={{ uri: item.contractorAvatar }} style={styles.avatar} />
-            ) : (
+        <View style={styles.body}>
+          <View style={styles.titleRow}>
+            <View style={styles.titleCol}>
+              <Text style={styles.title} numberOfLines={1}>{title}</Text>
+              <Text style={styles.address} numberOfLines={1}>
+                <Ionicons name="location-outline" size={11} color={Colors.text.tertiary} /> {location}
+              </Text>
+            </View>
+            <ProgressRing progress={progress} size={44} color={statusInfo.color} />
+          </View>
+          <View style={styles.footer}>
+            <View style={styles.contractorRow}>
               <View style={[styles.avatar, styles.avatarPlaceholder]}>
                 <Ionicons name="person" size={10} color="rgba(255,255,255,0.5)" />
               </View>
-            )}
-            <Text style={styles.contractorName} numberOfLines={1}>{item.contractor}</Text>
-          </View>
-          <View style={styles.metaRow}>
-            <Text style={styles.budget}>{item.budget}</Text>
-            <Text style={styles.dot}>·</Text>
-            <Text style={styles.dueDate}>{item.dueDate}</Text>
+              <Text style={styles.contractorName}>
+                {item.status === 'draft' || item.status === 'dispatching' ? 'Awaiting contractor' : 'Contractor assigned'}
+              </Text>
+            </View>
+            <View style={styles.metaRow}>
+              <Text style={styles.budget}>{budgetText}</Text>
+            </View>
           </View>
         </View>
-      </View>
-    </AnimatedPressable>
-  );
+      </AnimatedPressable>
+    );
+  };
 
   return (
     <GradientBackground>
@@ -315,6 +376,10 @@ export default function HomeownerProjects() {
               }
             />
           )
+        ) : projectsLoading ? (
+          <View style={styles.loadingWrap}>
+            <ActivityIndicator color={Colors.accent} size="large" />
+          </View>
         ) : (
           <FlatList
             data={filtered}
@@ -370,6 +435,7 @@ const styles = StyleSheet.create({
   // Regular project card
   card: { borderRadius: 20, overflow: 'hidden', backgroundColor: Colors.surface.default, borderWidth: 1, borderColor: Colors.surface.border },
   cover: { width: '100%', height: 160, resizeMode: 'cover' },
+  coverPlaceholder: { backgroundColor: Colors.surface.default, alignItems: 'center', justifyContent: 'center' },
   gradient: { position: 'absolute', left: 0, right: 0, top: 90, height: 70 },
   badge: { position: 'absolute', top: 12, right: 12, flexDirection: 'row', alignItems: 'center', gap: 5, paddingHorizontal: 10, paddingVertical: 4, borderRadius: 20, borderWidth: 1 },
   badgeDot: { width: 6, height: 6, borderRadius: 3 },
