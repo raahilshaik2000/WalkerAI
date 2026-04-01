@@ -51,7 +51,8 @@ export default function QuestionnaireStep() {
   const handleNext = () => {
     if (!answers[question.id]) return;
 
-    const selectedOption = question.options.find((o) => o.id === answers[question.id]);
+    const answerId = answers[question.id];
+    const selectedOption = question.options.find((o) => o.id === answerId);
     const nextQuestionId = selectedOption?.next_question_id;
 
     animateTransition(() => {
@@ -115,12 +116,11 @@ export default function QuestionnaireStep() {
                     <Text style={[styles.optionLabel, isSelected && styles.optionLabelSelected]}>
                       {option.label}
                     </Text>
-                    {isSelected && (
-                      <Text style={styles.checkmark}>✓</Text>
-                    )}
+                    {isSelected && <Text style={styles.checkmark}>✓</Text>}
                   </TouchableOpacity>
                 );
               })}
+
             </View>
           </Animated.View>
 

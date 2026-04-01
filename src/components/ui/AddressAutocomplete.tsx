@@ -1,7 +1,15 @@
-import React, { useRef } from 'react';
-import { StyleSheet, View, StyleProp, ViewStyle } from 'react-native';
-import { GooglePlacesAutocomplete, GooglePlacesAutocompleteRef } from 'react-native-google-places-autocomplete';
-import Config from 'react-native-config';
+import React, { useEffect, useRef, useState } from 'react';
+import {
+  ActivityIndicator,
+  FlatList,
+  StyleProp,
+  StyleSheet,
+  Text,
+  TextInput,
+  TouchableOpacity,
+  View,
+  ViewStyle,
+} from 'react-native';
 import Ionicons from 'react-native-vector-icons/Ionicons';
 import { Colors, Radius } from '@/constants/theme';
 
@@ -13,6 +21,23 @@ export interface AddressResult {
   postalCode: string;
   lat?: number;
   lng?: number;
+}
+
+interface NominatimResult {
+  place_id: number;
+  display_name: string;
+  lat: string;
+  lon: string;
+  address: {
+    house_number?: string;
+    road?: string;
+    city?: string;
+    town?: string;
+    village?: string;
+    state?: string;
+    postcode?: string;
+    county?: string;
+  };
 }
 
 interface AddressAutocompleteProps {
@@ -28,119 +53,157 @@ export function AddressAutocomplete({
   onSelect,
   containerStyle,
 }: AddressAutocompleteProps) {
-  const ref = useRef<GooglePlacesAutocompleteRef>(null);
+  const [query, setQuery] = useState(initialValue);
+  const [results, setResults] = useState<NominatimResult[]>([]);
+  const [loading, setLoading] = useState(false);
+  const [selected, setSelected] = useState(false);
+  const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  useEffect(() => {
+    if (selected || query.length < 4) {
+      setResults([]);
+      return;
+    }
+    if (debounceRef.current) clearTimeout(debounceRef.current);
+    debounceRef.current = setTimeout(async () => {
+      setLoading(true);
+      try {
+        const url =
+          `https://nominatim.openstreetmap.org/search?format=json&addressdetails=1&limit=5&countrycodes=ca&q=${encodeURIComponent(query)}`;
+        const res = await fetch(url, {
+          headers: { 'Accept-Language': 'en', 'User-Agent': 'WalkerAI/1.0' },
+        });
+        const data: NominatimResult[] = await res.json();
+        setResults(data);
+      } catch {
+        setResults([]);
+      } finally {
+        setLoading(false);
+      }
+    }, 350);
+    return () => { if (debounceRef.current) clearTimeout(debounceRef.current); };
+  }, [query, selected]);
+
+  const handleSelect = (item: NominatimResult) => {
+    const a = item.address;
+    const street = [a.house_number, a.road].filter(Boolean).join(' ');
+    const city = a.city || a.town || a.village || a.county || '';
+    const province = a.state || '';
+    const postalCode = a.postcode || '';
+
+    // Build a clean display name (strip the country suffix)
+    const parts = item.display_name.split(', ');
+    const cleaned = parts.slice(0, -1).join(', '); // drop "Canada"
+
+    setQuery(cleaned);
+    setResults([]);
+    setSelected(true);
+
+    onSelect({
+      fullAddress: cleaned,
+      street,
+      city,
+      province,
+      postalCode,
+      lat: parseFloat(item.lat),
+      lng: parseFloat(item.lon),
+    });
+  };
+
+  const handleChangeText = (text: string) => {
+    setSelected(false);
+    setQuery(text);
+  };
 
   return (
     <View style={[styles.container, containerStyle]}>
-      <GooglePlacesAutocomplete
-        ref={ref}
-        placeholder={placeholder}
-        textInputProps={{
-          placeholderTextColor: Colors.text.tertiary,
-          selectionColor: '#FFFFFF',
-          defaultValue: initialValue,
-        }}
-        fetchDetails
-        onPress={(data, details) => {
-          if (!details) return;
-
-          const components = details.address_components || [];
-          const get = (type: string) =>
-            components.find((c) => c.types.includes(type))?.long_name || '';
-          const getShort = (type: string) =>
-            components.find((c) => c.types.includes(type))?.short_name || '';
-
-          const streetNumber = get('street_number');
-          const route = get('route');
-          const street = streetNumber ? `${streetNumber} ${route}` : route;
-
-          onSelect({
-            fullAddress: details.formatted_address || data.description,
-            street,
-            city: get('locality') || get('sublocality') || get('administrative_area_level_2'),
-            province: getShort('administrative_area_level_1'),
-            postalCode: get('postal_code'),
-            lat: details.geometry?.location?.lat,
-            lng: details.geometry?.location?.lng,
-          });
-        }}
-        query={{
-          key: Config.GOOGLE_MAPS_API_KEY || '',
-          language: 'en',
-          components: 'country:ca',
-          types: 'address',
-        }}
-        enablePoweredByContainer={false}
-        minLength={3}
-        debounce={300}
-        nearbyPlacesAPI="GooglePlacesSearch"
-        renderLeftButton={() => (
-          <View style={styles.iconWrap}>
-            <Ionicons name="location-outline" size={18} color={Colors.text.tertiary} />
-          </View>
+      <View style={styles.inputRow}>
+        <Ionicons name="location-outline" size={18} color={Colors.text.tertiary} style={styles.icon} />
+        <TextInput
+          style={styles.textInput}
+          placeholder={placeholder}
+          placeholderTextColor={Colors.text.tertiary}
+          value={query}
+          onChangeText={handleChangeText}
+          selectionColor="#FF6B00"
+          autoCorrect={false}
+          autoCapitalize="words"
+          returnKeyType="search"
+        />
+        {loading && <ActivityIndicator size="small" color={Colors.text.tertiary} style={styles.spinner} />}
+        {query.length > 0 && !loading && (
+          <TouchableOpacity onPress={() => { setQuery(''); setResults([]); setSelected(false); }} style={styles.clearBtn}>
+            <Ionicons name="close-circle" size={18} color={Colors.text.tertiary} />
+          </TouchableOpacity>
         )}
-        styles={{
-          container: styles.autocompleteContainer,
-          textInputContainer: styles.textInputContainer,
-          textInput: styles.textInput,
-          listView: styles.listView,
-          row: styles.row,
-          separator: styles.separator,
-          description: styles.description,
-          predefinedPlacesDescription: styles.description,
-          poweredContainer: { display: 'none' },
-        }}
-      />
+      </View>
+
+      {results.length > 0 && (
+        <FlatList
+          data={results}
+          keyExtractor={(item) => String(item.place_id)}
+          style={styles.listView}
+          keyboardShouldPersistTaps="handled"
+          renderItem={({ item }) => {
+            const parts = item.display_name.split(', ');
+            const primary = parts.slice(0, 2).join(', ');
+            const secondary = parts.slice(2, -1).join(', '); // drop Canada
+            return (
+              <TouchableOpacity style={styles.row} onPress={() => handleSelect(item)} activeOpacity={0.7}>
+                <Ionicons name="location" size={14} color="#FF6B00" style={styles.rowIcon} />
+                <View style={styles.rowText}>
+                  <Text style={styles.rowPrimary} numberOfLines={1}>{primary}</Text>
+                  {secondary ? <Text style={styles.rowSecondary} numberOfLines={1}>{secondary}</Text> : null}
+                </View>
+              </TouchableOpacity>
+            );
+          }}
+          ItemSeparatorComponent={() => <View style={styles.separator} />}
+        />
+      )}
     </View>
   );
 }
 
 const styles = StyleSheet.create({
   container: { width: '100%', zIndex: 10 },
-  autocompleteContainer: { flex: 0 },
-  textInputContainer: {
+  inputRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
     backgroundColor: Colors.surface.default,
     borderRadius: Radius.item,
     borderWidth: 1,
     borderColor: Colors.surface.border,
-    flexDirection: 'row',
-    alignItems: 'center',
-    overflow: 'hidden',
-  },
-  textInput: {
-    backgroundColor: 'transparent',
+    paddingHorizontal: 14,
     height: 54,
+  },
+  icon: { marginRight: 8 },
+  textInput: {
+    flex: 1,
     fontSize: 15,
     color: '#FFFFFF',
-    paddingHorizontal: 0,
-    paddingRight: 16,
-    marginBottom: 0,
-    marginTop: 0,
+    height: 54,
   },
-  iconWrap: {
-    paddingLeft: 14,
-    paddingRight: 8,
-    justifyContent: 'center',
-  },
+  spinner: { marginLeft: 8 },
+  clearBtn: { marginLeft: 8, padding: 2 },
   listView: {
     backgroundColor: Colors.surface.default,
     borderRadius: Radius.card,
     borderWidth: 1,
     borderColor: Colors.surface.border,
     marginTop: 6,
-    overflow: 'hidden',
+    maxHeight: 260,
   },
   row: {
-    backgroundColor: Colors.surface.default,
+    flexDirection: 'row',
+    alignItems: 'center',
     paddingHorizontal: 14,
     paddingVertical: 13,
+    gap: 10,
   },
-  separator: {
-    height: 1,
-    backgroundColor: 'rgba(255,255,255,0.05)',
-  },
-  description: {
-    fontSize: 14,
-    color: '#FFFFFF',
-  },
+  rowIcon: { flexShrink: 0 },
+  rowText: { flex: 1 },
+  rowPrimary: { fontSize: 14, color: '#FFFFFF', fontWeight: '500' },
+  rowSecondary: { fontSize: 12, color: Colors.text.tertiary, marginTop: 2 },
+  separator: { height: 1, backgroundColor: 'rgba(255,255,255,0.05)', marginHorizontal: 14 },
 });
