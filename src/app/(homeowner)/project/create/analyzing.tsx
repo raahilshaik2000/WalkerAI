@@ -112,7 +112,7 @@ export default function AnalyzingScreen() {
   useEffect(() => {
     const runAnalysis = async () => {
       try {
-        let pid = projectId;
+        let pid: string = projectId ?? '';
 
         if (!pid) {
           const { data: project, error: createError } = await supabase
@@ -125,10 +125,10 @@ export default function AnalyzingScreen() {
             .select('id')
             .single();
 
-          if (createError) {
-            throw new Error(`Project creation failed: ${createError.message}`);
+          if (createError || !project) {
+            throw new Error(`Project creation failed: ${createError?.message ?? 'no data'}`);
           }
-          pid = project.id;
+          pid = project.id as string;
           useProjectWizardStore.getState().setProjectId(pid);
         }
 
