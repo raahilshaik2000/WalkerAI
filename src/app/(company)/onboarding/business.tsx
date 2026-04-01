@@ -6,10 +6,12 @@ import {
   ScrollView,
   StyleSheet,
   Text,
+  TouchableOpacity,
   View,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useNavigation } from '@react-navigation/native';
+import Ionicons from 'react-native-vector-icons/Ionicons';
 import { supabase } from '@/lib/supabase/client';
 import { useAuthStore } from '@/stores/auth.store';
 import { Colors, Spacing, Typography } from '@/constants/theme';
@@ -72,6 +74,10 @@ export default function BusinessOnboardingScreen() {
             keyboardShouldPersistTaps="handled"
             showsVerticalScrollIndicator={false}
           >
+            <TouchableOpacity onPress={() => navigation.goBack()} style={styles.backButton}>
+              <Ionicons name="arrow-back" size={22} color={Colors.text.secondary} />
+            </TouchableOpacity>
+
             {/* Progress */}
             <View style={styles.progressRow}>
               {[1, 2, 3].map((step) => (
@@ -167,21 +173,22 @@ const styles = StyleSheet.create({
     paddingTop: Spacing.sm,
     paddingBottom: Spacing.xl,
   },
+  backButton: { marginBottom: Spacing.sm },
   progressRow: {
     flexDirection: 'row',
-    gap: 8,
+    gap: 4,
     marginBottom: Spacing.lg,
   },
   progressDot: {
-    width: 28,
-    height: 4,
+    flex: 1,
+    height: 3,
     borderRadius: 2,
     backgroundColor: Colors.glass.surface,
   },
   progressDotActive: {
-    backgroundColor: Colors.accent,
+    backgroundColor: Colors.success,
   },
-  stepLabel: { ...Typography.label, color: Colors.accent, marginBottom: 8 },
+  stepLabel: { ...Typography.label, color: Colors.success, marginBottom: 8 },
   title: { ...Typography.h1, marginBottom: 8 },
   subtitle: { ...Typography.bodySecondary, marginBottom: Spacing.lg },
   card: { marginBottom: Spacing.md },
