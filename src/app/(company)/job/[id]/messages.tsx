@@ -13,6 +13,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { useNavigation } from '@react-navigation/native'
 import { useRoute } from '@react-navigation/native';
 import ReactNativeHapticFeedback from 'react-native-haptic-feedback';
+import Ionicons from 'react-native-vector-icons/Ionicons';
 import { supabase } from '@/lib/supabase/client';
 import { useAuthStore } from '@/stores/auth.store';
 import { Colors, Spacing, Typography } from '@/constants/theme';
@@ -84,8 +85,8 @@ export default function CompanyMessagesScreen() {
       <SafeAreaView style={styles.safe}>
         <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === 'ios' ? 'padding' : 'height'}>
           <View style={styles.header}>
-            <TouchableOpacity onPress={() => navigation.goBack()}>
-              <Text style={styles.backText}>← Back</Text>
+            <TouchableOpacity onPress={() => navigation.goBack()} style={{ width: 48 }}>
+              <Ionicons name="arrow-back" size={22} color={Colors.text.secondary} />
             </TouchableOpacity>
             <Text style={styles.title}>Messages</Text>
             <View style={{ width: 48 }} />
@@ -100,9 +101,14 @@ export default function CompanyMessagesScreen() {
             renderItem={({ item }) => {
               const isMe = item.sender_id === user?.id;
               return (
-                <View style={[styles.bubble, isMe ? styles.bubbleMe : styles.bubbleThem]}>
-                  <Text style={[styles.bubbleText, isMe ? { color: '#fff' } : { color: Colors.text.primary }]}>
-                    {item.body}
+                <View style={isMe ? styles.bubbleWrapMe : styles.bubbleWrapThem}>
+                  <View style={[styles.bubble, isMe ? styles.bubbleMe : styles.bubbleThem]}>
+                    <Text style={[styles.bubbleText, isMe ? { color: Colors.accentFg } : { color: Colors.text.primary }]}>
+                      {item.body}
+                    </Text>
+                  </View>
+                  <Text style={[styles.timestamp, isMe ? styles.timestampMe : styles.timestampThem]}>
+                    {new Date(item.sent_at).toLocaleTimeString('en-CA', { hour: 'numeric', minute: '2-digit' })}
                   </Text>
                 </View>
               );
@@ -123,7 +129,7 @@ export default function CompanyMessagesScreen() {
               onPress={sendMessage}
               disabled={!body.trim() || sending}
             >
-              <Text style={styles.sendBtnText}>↑</Text>
+              <Ionicons name="arrow-up" size={20} color={Colors.accentFg} />
             </TouchableOpacity>
           </View>
         </KeyboardAvoidingView>
@@ -139,18 +145,23 @@ const styles = StyleSheet.create({
     paddingHorizontal: Spacing.sm, paddingTop: Spacing.sm, paddingBottom: 12,
     borderBottomWidth: 1, borderBottomColor: Colors.glass.border,
   },
-  backText: { color: Colors.text.secondary, fontSize: 15, width: 48 },
+  backText: { color: Colors.text.secondary, fontSize: 15 },
   title: { ...Typography.h3 },
   list: { padding: Spacing.sm, paddingBottom: 16, flexGrow: 1, justifyContent: 'flex-end' },
   bubble: {
-    maxWidth: '78%', borderRadius: 18, paddingHorizontal: 14, paddingVertical: 10, marginBottom: 8,
+    borderRadius: 18, paddingHorizontal: 14, paddingVertical: 10,
   },
-  bubbleMe: { alignSelf: 'flex-end', backgroundColor: Colors.accent, borderBottomRightRadius: 4 },
+  bubbleMe: { backgroundColor: Colors.accent, borderBottomRightRadius: 4 },
   bubbleThem: {
-    alignSelf: 'flex-start', backgroundColor: Colors.glass.surface,
+    backgroundColor: Colors.glass.surface,
     borderWidth: 1, borderColor: Colors.glass.border, borderBottomLeftRadius: 4,
   },
   bubbleText: { fontSize: 15, lineHeight: 22 },
+  bubbleWrapMe: { alignSelf: 'flex-end', maxWidth: '78%', marginBottom: 8 },
+  bubbleWrapThem: { alignSelf: 'flex-start', maxWidth: '78%', marginBottom: 8 },
+  timestamp: { fontSize: 11, color: Colors.text.tertiary, marginTop: 3 },
+  timestampMe: { alignSelf: 'flex-end', marginRight: 4 },
+  timestampThem: { alignSelf: 'flex-start', marginLeft: 4 },
   compose: {
     flexDirection: 'row', alignItems: 'flex-end',
     padding: Spacing.sm, borderTopWidth: 1, borderTopColor: Colors.glass.border,
