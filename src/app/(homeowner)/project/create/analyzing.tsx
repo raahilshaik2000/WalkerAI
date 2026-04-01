@@ -10,6 +10,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { useNavigation } from '@react-navigation/native';
 import Ionicons from 'react-native-vector-icons/Ionicons';
 import { supabase } from '@/lib/supabase/client';
+import { uploadFile } from '@/lib/supabase/storage';
 
 import { useProjectWizardStore } from '@/stores/project-wizard.store';
 import { useAuthStore } from '@/stores/auth.store';
@@ -134,6 +135,24 @@ export default function AnalyzingScreen() {
         const localPhotos = photos.filter((p) => p.status === 'done');
         if (localPhotos.length === 0) throw new Error('No photos found.');
 
+        // Upload photos to storage IN PARALLEL with AI call so they complete before we navigate
+        const uploadPromise = Promise.all(
+          localPhotos.map(async (photo, i) => {
+            if (!photo.uri) return;
+            try {
+              const path = `${pid}/${i}_${Date.now()}.jpg`;
+              const { publicUrl, storagePath } = await uploadFile('project-photos', path, photo.uri, 'image/jpeg');
+              await supabase.from('project_photos').insert({
+                project_id: pid,
+                url: publicUrl,
+                storage_path: storagePath,
+              });
+            } catch {
+              // Individual upload failure should not block analysis
+            }
+          })
+        );
+
         const photoBase64s = localPhotos
           .map((p) => p.base64)
           .filter((b): b is string => !!b);
@@ -187,12 +206,17 @@ export default function AnalyzingScreen() {
         const analysis = parsed.analysis;
         const questions = parsed.questions;
 
-        // Save analysis to DB
-        await supabase
-          .from('projects')
-          .update({ ai_analysis: analysis })
-          .eq('id', pid);
+        // Save analysis + detected room type to DB, and wait for photo uploads to finish
+        const detectedRoomType = analysis.room_type === 'bathroom' ? 'bathroom' : 'kitchen';
+        await Promise.all([
+          supabase
+            .from('projects')
+            .update({ ai_analysis: analysis, room_type: detectedRoomType })
+            .eq('id', pid),
+          uploadPromise,
+        ]);
 
+        useProjectWizardStore.getState().setRoomType(detectedRoomType as any);
         setAnalysisResult(analysis);
         setQuestions(questions);
         useProjectWizardStore.getState().setStep(4);

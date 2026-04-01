@@ -51,6 +51,7 @@ import RoomTypeStep from '@/app/(homeowner)/project/create/room-type';
 import AddressStep from '@/app/(homeowner)/project/create/address';
 import AnalyzingStep from '@/app/(homeowner)/project/create/analyzing';
 import BriefStep from '@/app/(homeowner)/project/create/brief';
+import MaterialDetailScreen from '@/app/(homeowner)/project/create/material-detail';
 import ConfirmStep from '@/app/(homeowner)/project/create/confirm';
 import PhotosStep from '@/app/(homeowner)/project/create/photos';
 import QuestionnaireStep from '@/app/(homeowner)/project/create/questionnaire';
@@ -223,6 +224,7 @@ function ProjectCreateNavigator() {
       <ProjectCreateStack.Screen name="Questionnaire" component={QuestionnaireStep} />
       <ProjectCreateStack.Screen name="Renders" component={RendersStep} />
       <ProjectCreateStack.Screen name="Brief" component={BriefStep} />
+      <ProjectCreateStack.Screen name="MaterialDetail" component={MaterialDetailScreen} />
       <ProjectCreateStack.Screen name="Address" component={AddressStep} />
       <ProjectCreateStack.Screen name="Confirm" component={ConfirmStep} />
     </ProjectCreateStack.Navigator>
