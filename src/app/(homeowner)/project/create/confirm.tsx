@@ -27,10 +27,12 @@ export default function ConfirmStep() {
 
       // Mark project as dispatched in DB directly (service-side dispatch
       // runs asynchronously — edge function will be called when JWT is stable)
-      await supabase
+      const { error: updateError } = await supabase
         .from('projects')
-        .update({ status: 'dispatched' })
+        .update({ status: 'dispatching' })
         .eq('id', projectId);
+
+      if (updateError) throw updateError;
 
       // Best-effort edge function call — non-blocking
       supabase.functions.invoke('dispatch-job', {

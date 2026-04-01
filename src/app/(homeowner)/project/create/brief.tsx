@@ -5,6 +5,7 @@ import {
   ScrollView,
   StyleSheet,
   Text,
+  TouchableOpacity,
   View,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -77,6 +78,7 @@ export default function BriefStep() {
     address,
     province,
     photos,
+    materialOverrides,
   } = useProjectWizardStore();
 
   const [brief, setBrief] = useState<BriefData | null>(null);
@@ -282,22 +284,43 @@ Rules:
 
           {/* Materials */}
           <GlassCard style={styles.section}>
-            <Text style={styles.sectionTitle}>Materials</Text>
-            {brief.materials.map((mat, i) => (
-              <View key={i} style={styles.materialRow}>
-                <Text style={styles.materialItem}>{mat.item}</Text>
-                <View style={styles.materialRight}>
-                  <Text style={styles.materialQty}>
-                    {mat.quantity} {mat.unit}
-                  </Text>
-                  <StatusBadge
-                    label={mat.quality_tier}
-                    variant={TIER_BADGE_VARIANT[mat.quality_tier]}
-                    size="sm"
-                  />
-                </View>
-              </View>
-            ))}
+            <View style={styles.materialHeader}>
+              <Text style={styles.sectionTitle}>Materials</Text>
+              <Text style={styles.materialHint}>Tap to add details</Text>
+            </View>
+            {brief.materials.map((mat, i) => {
+              const override = materialOverrides[i];
+              const activeTier = override?.quality_tier ?? mat.quality_tier;
+              const hasDetails = override && (override.brand_preference || override.color_finish || override.specific_model || override.contractor_notes);
+              return (
+                <TouchableOpacity
+                  key={i}
+                  style={styles.materialRow}
+                  onPress={() => navigation.navigate('MaterialDetail', {
+                    materialIndex: i,
+                    materialName: mat.item,
+                    quantity: mat.quantity,
+                    unit: mat.unit,
+                  })}
+                  activeOpacity={0.7}
+                >
+                  <View style={styles.materialLeft}>
+                    <Text style={styles.materialItem}>{mat.item}</Text>
+                    {hasDetails && (
+                      <View style={styles.detailsRow}>
+                        {override.brand_preference ? <Text style={styles.detailChip}>{override.brand_preference}</Text> : null}
+                        {override.color_finish ? <Text style={styles.detailChip}>{override.color_finish}</Text> : null}
+                      </View>
+                    )}
+                  </View>
+                  <View style={styles.materialRight}>
+                    <Text style={styles.materialQty}>{mat.quantity} {mat.unit}</Text>
+                    <StatusBadge label={activeTier} variant={TIER_BADGE_VARIANT[activeTier]} size="sm" />
+                    <Ionicons name="chevron-forward" size={14} color={Colors.text.tertiary} />
+                  </View>
+                </TouchableOpacity>
+              );
+            })}
           </GlassCard>
 
           {/* Permits */}
@@ -381,7 +404,12 @@ const styles = StyleSheet.create({
     borderBottomWidth: 1,
     borderBottomColor: Colors.glass.border,
   },
-  materialItem: { ...Typography.body, flex: 1, marginRight: 8 },
+  materialHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12 },
+  materialHint: { fontSize: 12, color: Colors.text.tertiary, fontStyle: 'italic' },
+  materialLeft: { flex: 1, marginRight: 8 },
+  materialItem: { ...Typography.body },
+  detailsRow: { flexDirection: 'row', gap: 6, marginTop: 4, flexWrap: 'wrap' },
+  detailChip: { fontSize: 11, color: Colors.accent, backgroundColor: 'rgba(255,107,0,0.1)', borderRadius: 6, paddingHorizontal: 6, paddingVertical: 2 },
   materialRight: { flexDirection: 'row', alignItems: 'center', gap: 8 },
   materialQty: { ...Typography.caption },
   permitRow: { flexDirection: 'row', alignItems: 'center', gap: 10, paddingVertical: 8 },
