@@ -10,10 +10,14 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useNavigation } from '@react-navigation/native';
 import ReactNativeHapticFeedback from 'react-native-haptic-feedback';
+import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
+import Ionicons from 'react-native-vector-icons/Ionicons';
 import { supabase } from '@/lib/supabase/client';
+import { signOut } from '@/lib/supabase/auth';
 import { useAuthStore } from '@/stores/auth.store';
+import { formatCad } from '@/lib/formatters';
 import { Colors, Radius, Spacing, Typography } from '@/constants/theme';
-import { GlassCard, GradientBackground, ListItemSkeleton, StatusBadge } from '@/components/ui';
+import { AnimatedPressable, GlassCard, GradientBackground, ListItemSkeleton, StatusBadge } from '@/components/ui';
 
 interface DispatchedJob {
   project_id: string;
@@ -28,12 +32,6 @@ interface DispatchedJob {
     ai_cost_max: number | null;
     dispatch_expires_at: string | null;
   };
-}
-
-function formatCad(cents: number) {
-  return new Intl.NumberFormat('en-CA', {
-    style: 'currency', currency: 'CAD', maximumFractionDigits: 0,
-  }).format(cents / 100);
 }
 
 function timeRemaining(expiresAt: string | null): string {
@@ -117,27 +115,83 @@ export default function CompanyJobFeed() {
 
   // Company not verified — show onboarding CTA
   if (!loading && (!company || !company.verified)) {
+    const isPending = !!company;
     return (
       <GradientBackground glow="center">
         <SafeAreaView style={styles.safe}>
           <View style={styles.pendingContainer}>
-            <Text style={styles.pendingIcon}>⏳</Text>
+            {/* Icon block */}
+            <View style={styles.onboardIconWrap}>
+              <Icon name={isPending ? 'magnify' : 'domain'} size={36} color={isPending ? Colors.warning : Colors.success} />
+            </View>
+
             <Text style={styles.pendingTitle}>
-              {company ? 'Pending verification' : 'Set up your profile'}
+              {isPending ? 'Verification in progress' : 'Set up your profile'}
             </Text>
             <Text style={styles.pendingSubtitle}>
-              {company
-                ? 'Our team is reviewing your documents. Jobs will appear here once you\'re approved.'
-                : 'Complete your contractor profile to start receiving jobs.'}
+              {isPending
+                ? 'Our team is reviewing your documents. You\'ll be able to receive jobs once approved — usually within 24 hours.'
+                : 'Complete your contractor profile to start receiving jobs in your area.'}
             </Text>
-            {!company && (
-              <TouchableOpacity
-                style={styles.onboardCta}
-                onPress={() => navigation.navigate('BusinessOnboarding')}
-                activeOpacity={0.85}
-              >
-                <Text style={styles.onboardCtaText}>Start Onboarding →</Text>
-              </TouchableOpacity>
+
+            {isPending ? (
+              <View style={styles.pendingSteps}>
+                {[
+                  { label: 'Profile submitted', done: true },
+                  { label: 'Documents under review', done: false, active: true },
+                  { label: 'Verification complete', done: false },
+                ].map((step, i) => (
+                  <View key={i} style={styles.stepRow}>
+                    <View style={[
+                      styles.stepDot,
+                      step.done && styles.stepDotDone,
+                      step.active && styles.stepDotActive,
+                    ]}>
+                      {step.done && <Icon name="check" size={14} color="#fff" />}
+                    </View>
+                    <Text style={[
+                      styles.stepText,
+                      step.done && styles.stepTextDone,
+                      step.active && styles.stepTextActive,
+                    ]}>{step.label}</Text>
+                  </View>
+                ))}
+              </View>
+            ) : (
+              <>
+                {/* Quick feature bullets */}
+                <View style={styles.featureBullets}>
+                  {[
+                    { icon: 'map-marker-outline', text: 'Get jobs in your area' },
+                    { icon: 'currency-usd', text: 'Set your own quotes' },
+                    { icon: 'star-outline', text: 'Build your reputation' },
+                  ].map((item, i) => (
+                    <View key={i} style={styles.bulletRow}>
+                      <Icon name={item.icon} size={20} color={Colors.success} />
+                      <Text style={styles.bulletText}>{item.text}</Text>
+                    </View>
+                  ))}
+                </View>
+
+                <TouchableOpacity
+                  style={styles.onboardCta}
+                  onPress={() => navigation.navigate('BusinessOnboarding')}
+                  activeOpacity={0.85}
+                >
+                  <Text style={styles.onboardCtaText}>Get Started</Text>
+                </TouchableOpacity>
+                <Text style={styles.onboardTime}>Takes about 3 minutes</Text>
+
+                <TouchableOpacity
+                  style={styles.switchAccountBtn}
+                  onPress={() => signOut()}
+                  activeOpacity={0.7}
+                >
+                  <Text style={styles.switchAccountText}>
+                    Not a contractor? <Text style={{ color: Colors.accent }}>Sign out & switch</Text>
+                  </Text>
+                </TouchableOpacity>
+              </>
             )}
           </View>
         </SafeAreaView>
@@ -170,9 +224,10 @@ export default function CompanyJobFeed() {
                   <GlassCard padding={16} style={{ marginBottom: 0 }}>
                     <View style={styles.activeJobRow}>
                       <View style={{ flex: 1 }}>
-                        <Text style={styles.activeJobRoom}>
-                          {job.room_type === 'kitchen' ? '🍳' : '🚿'} {job.room_type}
-                        </Text>
+                        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+                          <Icon name={job.room_type === 'kitchen' ? 'countertop-outline' : 'shower'} size={18} color={Colors.text.primary} />
+                          <Text style={styles.activeJobRoom}>{job.room_type}</Text>
+                        </View>
                         <Text style={styles.activeJobCity}>{job.city}</Text>
                       </View>
                       <StatusBadge label={job.status} variant="active" dot />
@@ -195,23 +250,26 @@ export default function CompanyJobFeed() {
                   const timeLeft = timeRemaining(project.dispatch_expires_at);
 
                   return (
-                    <TouchableOpacity
+                    <AnimatedPressable
                       key={job.project_id}
                       onPress={() => navigation.navigate('JobDetail', { id: project.id })}
-                      activeOpacity={0.85}
+                      haptic
                     >
                       <GlassCard style={styles.jobCard}>
                         {/* Urgency indicator */}
                         <View style={styles.urgencyRow}>
                           <View style={styles.urgencyDot} />
-                          <Text style={styles.urgencyText}>⚡ {timeLeft}</Text>
+                          <Icon name="lightning-bolt" size={14} color={Colors.warning} />
+                          <Text style={styles.urgencyText}>{timeLeft}</Text>
                         </View>
 
                         <View style={styles.jobHeader}>
-                          <Text style={styles.jobRoomType}>
-                            {project.room_type === 'kitchen' ? '🍳' : '🚿'}{' '}
-                            {project.room_type.charAt(0).toUpperCase() + project.room_type.slice(1)} Renovation
-                          </Text>
+                          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+                            <Icon name={project.room_type === 'kitchen' ? 'countertop-outline' : 'shower'} size={18} color={Colors.text.primary} />
+                            <Text style={styles.jobRoomType}>
+                              {project.room_type.charAt(0).toUpperCase() + project.room_type.slice(1)} Renovation
+                            </Text>
+                          </View>
                           <Text style={styles.jobCity}>{project.city}</Text>
                         </View>
 
@@ -223,14 +281,14 @@ export default function CompanyJobFeed() {
 
                         <Text style={styles.tapToView}>Tap to view brief →</Text>
                       </GlassCard>
-                    </TouchableOpacity>
+                    </AnimatedPressable>
                   );
                 })}
               </>
             )
             : activeJobs.length === 0 && (
               <View style={styles.emptyState}>
-                <Text style={styles.emptyIcon}>📭</Text>
+                <Icon name="mailbox-open-outline" size={48} color={Colors.text.tertiary} />
                 <Text style={styles.emptyTitle}>No jobs yet</Text>
                 <Text style={styles.emptySub}>
                   New jobs in your area will appear here automatically. Pull to refresh.
@@ -247,14 +305,40 @@ const styles = StyleSheet.create({
   safe: { flex: 1 },
   scroll: { flexGrow: 1, paddingHorizontal: Spacing.sm, paddingTop: Spacing.sm, paddingBottom: Spacing.xl },
   pendingContainer: { flex: 1, alignItems: 'center', justifyContent: 'center', paddingHorizontal: Spacing.lg },
-  pendingIcon: { fontSize: 56, marginBottom: Spacing.md },
-  pendingTitle: { ...Typography.h2, textAlign: 'center', marginBottom: 12 },
-  pendingSubtitle: { ...Typography.bodySecondary, textAlign: 'center', lineHeight: 22 },
-  onboardCta: {
-    marginTop: Spacing.lg, backgroundColor: Colors.accent, borderRadius: Radius.button,
-    paddingHorizontal: 28, paddingVertical: 14,
+  onboardIconWrap: {
+    width: 80, height: 80, borderRadius: 40,
+    backgroundColor: Colors.surface.default,
+    borderWidth: 1, borderColor: Colors.surface.border,
+    alignItems: 'center', justifyContent: 'center',
+    marginBottom: Spacing.md,
   },
-  onboardCtaText: { color: '#fff', fontWeight: '700', fontSize: 16 },
+  onboardIcon: { fontSize: 36 },
+  pendingTitle: { ...Typography.h2, textAlign: 'center', marginBottom: 12 },
+  pendingSubtitle: { ...Typography.bodySecondary, textAlign: 'center', lineHeight: 22, maxWidth: 300 },
+  featureBullets: { marginTop: Spacing.lg, marginBottom: Spacing.lg, gap: 14, width: '100%', maxWidth: 260 },
+  bulletRow: { flexDirection: 'row', alignItems: 'center', gap: 12 },
+  bulletIcon: { fontSize: 20 },
+  bulletText: { ...Typography.body, color: Colors.text.secondary },
+  onboardCta: {
+    backgroundColor: Colors.accent, borderRadius: Radius.button,
+    paddingHorizontal: 36, paddingVertical: 16, width: '100%', maxWidth: 280, alignItems: 'center',
+  },
+  onboardCtaText: { color: Colors.accentFg, fontWeight: '700', fontSize: 16 },
+  onboardTime: { ...Typography.caption, color: Colors.text.tertiary, marginTop: 10 },
+  switchAccountBtn: { marginTop: Spacing.lg },
+  switchAccountText: { ...Typography.caption, color: Colors.text.tertiary, textAlign: 'center' },
+  pendingSteps: { marginTop: Spacing.lg, gap: 16, width: '100%', maxWidth: 260 },
+  stepRow: { flexDirection: 'row', alignItems: 'center', gap: 12 },
+  stepDot: {
+    width: 24, height: 24, borderRadius: 12, borderWidth: 2,
+    borderColor: Colors.surface.borderStrong, alignItems: 'center', justifyContent: 'center',
+  },
+  stepDotDone: { backgroundColor: Colors.success, borderColor: Colors.success },
+  stepDotActive: { borderColor: Colors.success },
+  stepCheck: { color: '#fff', fontSize: 12, fontWeight: '700' },
+  stepText: { ...Typography.body, color: Colors.text.tertiary },
+  stepTextDone: { color: Colors.text.secondary },
+  stepTextActive: { color: Colors.text.primary, fontWeight: '600' },
   greeting: { ...Typography.h1, marginBottom: 4 },
   companyName: { ...Typography.bodySecondary, marginBottom: Spacing.lg },
   sectionLabel: { ...Typography.label, color: Colors.accent, marginBottom: 12, marginTop: Spacing.sm },

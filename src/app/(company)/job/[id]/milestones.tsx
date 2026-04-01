@@ -12,8 +12,11 @@ import { useNavigation } from '@react-navigation/native'
 import { useRoute } from '@react-navigation/native';
 import ReactNativeHapticFeedback from 'react-native-haptic-feedback';
 import { launchImageLibrary } from 'react-native-image-picker';
+import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
+import Ionicons from 'react-native-vector-icons/Ionicons';
 import { supabase } from '@/lib/supabase/client';
 import { Colors, Radius, Spacing, Typography } from '@/constants/theme';
+import { formatStatusLabel } from '@/lib/formatters';
 import { GlassButton, GlassCard, GradientBackground, StatusBadge } from '@/components/ui';
 
 interface Milestone {
@@ -164,7 +167,7 @@ export default function CompanyMilestonesScreen() {
         <ScrollView contentContainerStyle={styles.scroll} showsVerticalScrollIndicator={false}>
           <View style={styles.header}>
             <TouchableOpacity onPress={() => navigation.goBack()}>
-              <Text style={styles.backText}>← Back</Text>
+              <Ionicons name="arrow-back" size={22} color={Colors.text.secondary} />
             </TouchableOpacity>
             <Text style={styles.title}>Milestones</Text>
             <View style={{ width: 48 }} />
@@ -204,19 +207,25 @@ export default function CompanyMilestonesScreen() {
                   </View>
                   <View style={styles.milestoneRight}>
                     <Text style={styles.milestoneAmount}>{formatCad(m.amount)}</Text>
-                    <StatusBadge label={m.status.replace('_', ' ')} variant={statusVariant(m.status)} size="sm" />
+                    <StatusBadge label={formatStatusLabel(m.status)} variant={statusVariant(m.status)} size="sm" />
                   </View>
                 </View>
 
                 {m.status === 'homeowner_approved' && (
                   <View style={styles.approvedBanner}>
-                    <Text style={styles.approvedText}>✓ Homeowner approved — payment processing</Text>
+                    <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+                      <Icon name="check-circle-outline" size={14} color={Colors.success} />
+                      <Text style={styles.approvedText}>Homeowner approved — payment processing</Text>
+                    </View>
                   </View>
                 )}
 
                 {m.status === 'paid' && (
                   <View style={styles.paidBanner}>
-                    <Text style={styles.paidText}>💰 Payment received</Text>
+                    <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+                      <Icon name="check-decagram" size={14} color={Colors.success} />
+                      <Text style={styles.paidText}>Payment received</Text>
+                    </View>
                   </View>
                 )}
 
@@ -231,7 +240,8 @@ export default function CompanyMilestonesScreen() {
                       style={styles.actionBtn}
                     />
                     <GlassButton
-                      label="📷 Photo"
+                      label="Photo"
+                      icon={<Icon name="camera-outline" size={16} color={Colors.text.primary} />}
                       onPress={() => handleUploadPhoto(m)}
                       variant="secondary"
                       size="sm"
@@ -255,7 +265,7 @@ export default function CompanyMilestonesScreen() {
 
           {!loading && milestones.length === 0 && (
             <View style={styles.center}>
-              <Text style={styles.emptyIcon}>📋</Text>
+              <Icon name="clipboard-text-outline" size={48} color={Colors.text.tertiary} />
               <Text style={Typography.h3}>No milestones yet</Text>
               <Text style={Typography.bodySecondary}>Submit a quote to create milestones.</Text>
             </View>

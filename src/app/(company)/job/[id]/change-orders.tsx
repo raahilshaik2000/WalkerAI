@@ -12,9 +12,12 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { useNavigation } from '@react-navigation/native'
 import { useRoute } from '@react-navigation/native';
 import ReactNativeHapticFeedback from 'react-native-haptic-feedback';
+import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
+import Ionicons from 'react-native-vector-icons/Ionicons';
 import { supabase } from '@/lib/supabase/client';
 import { useAuthStore } from '@/stores/auth.store';
 import { Colors, Radius, Spacing, Typography } from '@/constants/theme';
+import { formatStatusLabel } from '@/lib/formatters';
 import { GlassButton, GlassCard, GlassInput, GradientBackground, StatusBadge } from '@/components/ui';
 
 interface ChangeOrder {
@@ -135,7 +138,7 @@ export default function CompanyChangeOrdersScreen() {
         <ScrollView contentContainerStyle={styles.scroll} showsVerticalScrollIndicator={false}>
           <View style={styles.header}>
             <TouchableOpacity onPress={() => navigation.goBack()}>
-              <Text style={styles.backText}>← Back</Text>
+              <Ionicons name="arrow-back" size={22} color={Colors.text.secondary} />
             </TouchableOpacity>
             <Text style={styles.title}>Change Orders</Text>
             <TouchableOpacity onPress={() => setShowForm((v) => !v)}>
@@ -161,7 +164,7 @@ export default function CompanyChangeOrdersScreen() {
                 containerStyle={styles.inputGap}
               />
               <Text style={styles.signNote}>
-                ✏️ Submitting counts as your digital signature. Both parties must sign before work begins.
+                <Icon name="draw" size={14} color={Colors.text.secondary} /> Submitting counts as your digital signature. Both parties must sign before work begins.
               </Text>
               <GlassButton
                 label="Submit Change Order"
@@ -181,7 +184,7 @@ export default function CompanyChangeOrdersScreen() {
             </View>
           ) : changeOrders.length === 0 ? (
             <View style={styles.emptyState}>
-              <Text style={styles.emptyIcon}>📝</Text>
+              <Icon name="file-edit-outline" size={48} color={Colors.text.tertiary} />
               <Text style={styles.emptyTitle}>No change orders</Text>
               <Text style={styles.emptySub}>
                 Use change orders to document scope changes and get homeowner sign-off.
@@ -191,7 +194,7 @@ export default function CompanyChangeOrdersScreen() {
             changeOrders.map((co) => (
               <GlassCard key={co.id} style={styles.orderCard}>
                 <View style={styles.orderHeader}>
-                  <StatusBadge label={co.status} variant={statusVariant(co.status)} />
+                  <StatusBadge label={formatStatusLabel(co.status)} variant={statusVariant(co.status)} />
                   <Text style={styles.orderDate}>
                     {new Date(co.created_at).toLocaleDateString('en-CA', { month: 'short', day: 'numeric' })}
                   </Text>
@@ -210,14 +213,20 @@ export default function CompanyChangeOrdersScreen() {
 
                 <View style={styles.sigRow}>
                   <View style={[styles.sigBadge, co.signed_by_company && styles.sigBadgeSigned]}>
-                    <Text style={styles.sigText}>
-                      {co.signed_by_company ? '✓' : '○'} Your signature
-                    </Text>
+                    <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}>
+                      {co.signed_by_company
+                        ? <Icon name="check-circle" size={14} color={Colors.success} />
+                        : <Icon name="circle-outline" size={14} color={Colors.text.tertiary} />}
+                      <Text style={styles.sigText}>Your signature</Text>
+                    </View>
                   </View>
                   <View style={[styles.sigBadge, co.signed_by_homeowner && styles.sigBadgeSigned]}>
-                    <Text style={styles.sigText}>
-                      {co.signed_by_homeowner ? '✓' : '○'} Homeowner
-                    </Text>
+                    <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}>
+                      {co.signed_by_homeowner
+                        ? <Icon name="check-circle" size={14} color={Colors.success} />
+                        : <Icon name="circle-outline" size={14} color={Colors.text.tertiary} />}
+                      <Text style={styles.sigText}>Homeowner</Text>
+                    </View>
                   </View>
                 </View>
 
@@ -232,7 +241,10 @@ export default function CompanyChangeOrdersScreen() {
                 )}
 
                 {co.status === 'approved' && (
-                  <Text style={styles.approvedNote}>✓ Both parties signed — change is approved</Text>
+                  <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, marginTop: 10 }}>
+                  <Icon name="check-circle" size={14} color={Colors.success} />
+                  <Text style={styles.approvedNote}>Both parties signed — change is approved</Text>
+                </View>
                 )}
               </GlassCard>
             ))
@@ -274,7 +286,7 @@ const styles = StyleSheet.create({
     borderColor: 'rgba(16,185,129,0.4)',
   },
   sigText: { fontSize: 12, color: Colors.text.secondary, fontWeight: '600' },
-  approvedNote: { marginTop: 10, color: Colors.success, fontSize: 13, fontWeight: '600' },
+  approvedNote: { color: Colors.success, fontSize: 13, fontWeight: '600' },
   center: { paddingTop: 60, alignItems: 'center' },
   emptyState: { flex: 1, alignItems: 'center', justifyContent: 'center', paddingTop: 60, gap: 12 },
   emptyIcon: { fontSize: 48 },
