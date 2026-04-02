@@ -60,8 +60,7 @@ export default function PhotosStep() {
     }
 
     setAnalyzing(true);
-    useProjectWizardStore.getState().setStep(3);
-    navigation.navigate('Analyzing');
+    navigation.navigate('Measurements');
   };
 
   const uploadedCount = photos.filter((p) => p.status === 'done').length;
