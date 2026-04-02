@@ -25,6 +25,36 @@ export interface WizardCoordinates {
   lng: number;
 }
 
+export interface RoomMeasurements {
+  // Room
+  lengthFt: string;
+  widthFt: string;
+  ceilingHeightFt: string;
+  // Cabinets
+  upperCabHeight: string;
+  lowerCabHeight: string;
+  cabDepth: string;
+  upperLinearFt: string;
+  lowerLinearFt: string;
+  // Countertops
+  countertopLinearFt: string;
+  // Doors & Windows
+  numDoors: string;
+  doorWidth: string;
+  doorHeight: string;
+  numWindows: string;
+  windowWidth: string;
+  windowHeight: string;
+  // Appliances
+  fridgeWidth: string;
+  rangeWidth: string;
+  hasDishwasher: boolean;
+  // Island
+  hasIsland: boolean;
+  islandLength: string;
+  islandWidth: string;
+}
+
 interface ProjectWizardState {
   // Step 1
   address: string;
@@ -46,6 +76,9 @@ interface ProjectWizardState {
   // Step 5
   selectedRenderId: string | null;
 
+  // Step 3 – optional manual measurements
+  measurements: RoomMeasurements | null;
+
   // Step 6 – material detail overrides keyed by material index
   materialOverrides: Record<number, MaterialOverride>;
 
@@ -66,6 +99,7 @@ interface ProjectWizardState {
   /** Move to next question. Pass nextQuestionId to jump; null advances sequentially */
   nextQuestion: (nextQuestionId?: string | null) => void;
   setSelectedRender: (renderId: string | null) => void;
+  setMeasurements: (measurements: RoomMeasurements | null) => void;
   setMaterialOverride: (index: number, override: MaterialOverride) => void;
   setProjectId: (id: string) => void;
   setStep: (step: ProjectWizardState['step']) => void;
@@ -75,13 +109,14 @@ interface ProjectWizardState {
 const initialState: Omit<ProjectWizardState,
   | 'setAddress' | 'setRoomType' | 'addPhoto' | 'updatePhoto' | 'removePhoto'
   | 'setAnalysisResult' | 'setQuestions' | 'setAnswer' | 'nextQuestion'
-  | 'setSelectedRender' | 'setMaterialOverride' | 'setProjectId' | 'setStep' | 'reset'
+  | 'setSelectedRender' | 'setMeasurements' | 'setMaterialOverride' | 'setProjectId' | 'setStep' | 'reset'
 > = {
   address: '',
   coordinates: null,
   province: null,
   photos: [],
   roomType: null,
+  measurements: null,
   analysisResult: null,
   questions: [],
   answers: {},
@@ -133,6 +168,8 @@ export const useProjectWizardStore = create<ProjectWizardState>()((set, get) => 
   },
 
   setSelectedRender: (selectedRenderId) => set({ selectedRenderId }),
+
+  setMeasurements: (measurements) => set({ measurements }),
 
   setMaterialOverride: (index, override) =>
     set((state) => ({

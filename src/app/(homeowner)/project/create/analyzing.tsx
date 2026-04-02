@@ -14,12 +14,51 @@ import { uploadFile } from '@/lib/supabase/storage';
 
 import { useProjectWizardStore } from '@/stores/project-wizard.store';
 import { useAuthStore } from '@/stores/auth.store';
+import { getQuestionsForRoomType } from '@/data/fixed-questions';
 
 const OPENAI_KEY = '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';
 const OPENAI_URL = 'https://api.openai.com/v1/chat/completions';
 
-function buildPrompt(roomType: string): string {
-  return `Analyze these ${roomType} renovation photos and return a single valid JSON object with this exact structure — no markdown, no explanation, just the JSON:
+function buildMeasurementsNote(m: import('@/stores/project-wizard.store').RoomMeasurements | null): string {
+  if (!m) return '';
+  const lines: string[] = [];
+  if (m.lengthFt || m.widthFt || m.ceilingHeightFt) {
+    const room = [m.lengthFt && `length ${m.lengthFt} ft`, m.widthFt && `width ${m.widthFt} ft`, m.ceilingHeightFt && `ceiling ${m.ceilingHeightFt} ft`].filter(Boolean).join(', ');
+    lines.push(`Room: ${room}`);
+  }
+  if (m.upperCabHeight || m.lowerCabHeight || m.cabDepth || m.upperLinearFt || m.lowerLinearFt) {
+    const cab = [
+      m.upperCabHeight && `upper door height ${m.upperCabHeight} ft`,
+      m.lowerCabHeight && `lower cabinet height ${m.lowerCabHeight} ft`,
+      m.cabDepth && `depth ${m.cabDepth} ft`,
+      m.upperLinearFt && `${m.upperLinearFt} ft upper run`,
+      m.lowerLinearFt && `${m.lowerLinearFt} ft lower run`,
+    ].filter(Boolean).join(', ');
+    lines.push(`Cabinets: ${cab}`);
+  }
+  if (m.countertopLinearFt) lines.push(`Countertops: ${m.countertopLinearFt} ft total`);
+  if (m.numDoors || m.doorWidth || m.doorHeight) {
+    const doors = [m.numDoors && `${m.numDoors} door(s)`, m.doorWidth && `${m.doorWidth} ft wide`, m.doorHeight && `${m.doorHeight} ft tall`].filter(Boolean).join(', ');
+    lines.push(`Doors: ${doors}`);
+  }
+  if (m.numWindows || m.windowWidth || m.windowHeight) {
+    const wins = [m.numWindows && `${m.numWindows} window(s)`, m.windowWidth && `${m.windowWidth} ft wide`, m.windowHeight && `${m.windowHeight} ft tall`].filter(Boolean).join(', ');
+    lines.push(`Windows: ${wins}`);
+  }
+  if (m.fridgeWidth || m.rangeWidth || m.hasDishwasher) {
+    const app = [m.fridgeWidth && `fridge opening ${m.fridgeWidth} ft`, m.rangeWidth && `range ${m.rangeWidth} ft`, m.hasDishwasher && 'dishwasher slot'].filter(Boolean).join(', ');
+    lines.push(`Appliances: ${app}`);
+  }
+  if (m.hasIsland) {
+    const island = ['island present', m.islandLength && `${m.islandLength} ft long`, m.islandWidth && `${m.islandWidth} ft wide`].filter(Boolean).join(', ');
+    lines.push(`Island: ${island}`);
+  }
+  if (lines.length === 0) return '';
+  return `\n\nHomeowner-provided measurements (treat as authoritative — override photo estimates):\n${lines.map(l => `- ${l}`).join('\n')}`;
+}
+
+function buildPrompt(roomType: string, m: import('@/stores/project-wizard.store').RoomMeasurements | null): string {
+  return `Analyze these ${roomType} renovation photos and return a single valid JSON object with this exact structure — no markdown, no explanation, just the JSON:${buildMeasurementsNote(m)}
 
 {
   "analysis": {
@@ -38,29 +77,11 @@ function buildPrompt(roomType: string): string {
       "window_count": 0
     },
     "structural_concerns": ["string"],
-    "ai_observations": "2-3 sentence summary for the homeowner about what you see"
-  },
-  "questions": [
-    {
-      "id": "q1",
-      "text": "Question text here",
-      "type": "single_select",
-      "options": [
-        { "id": "q1_a", "label": "Option label", "next_question_id": "q2" },
-        { "id": "q1_b", "label": "Option label", "next_question_id": null }
-      ],
-      "context_note": "Why we're asking this"
-    }
-  ]
+    "ai_observations": "2-3 sentence summary for the homeowner about what you see in the photos"
+  }
 }
 
-Requirements for questions:
-- 6-8 questions maximum
-- Cover: design style (modern/traditional/transitional/contemporary), material quality tier (budget/mid-range/luxury), timeline urgency, specific pain points from what you observed, staying home during renovation
-- Use branching (next_question_id) to skip irrelevant follow-ups. Set next_question_id to null for terminal branches
-- Make questions feel personalized to what you actually see in the photos
-- All question IDs must be unique strings like "q1", "q2", etc.
-- All option IDs must be unique strings like "q1_a", "q1_b", etc.`;
+Return ONLY the JSON object above. Do not include any questions array.`;
 }
 import { Colors, Spacing, Typography } from '@/constants/theme';
 import { GradientBackground } from '@/components/ui';
@@ -78,7 +99,7 @@ const ANALYSIS_STEPS = [
 export default function AnalyzingScreen() {
   const navigation = useNavigation<any>();
   const { user } = useAuthStore();
-  const { projectId, photos, roomType, setAnalysisResult, setQuestions } = useProjectWizardStore();
+  const { projectId, photos, roomType, measurements, setAnalysisResult, setQuestions } = useProjectWizardStore();
 
   const [currentStep, setCurrentStep] = useState(0);
   const [error, setError] = useState<string | null>(null);
@@ -181,7 +202,7 @@ export default function AnalyzingScreen() {
               role: 'user',
               content: [
                 ...imageBlocks,
-                { type: 'text', text: buildPrompt(roomType || 'kitchen') },
+                { type: 'text', text: buildPrompt(roomType || 'kitchen', measurements) },
               ],
             }],
           }),
@@ -204,7 +225,6 @@ export default function AnalyzingScreen() {
 
         const parsed = JSON.parse(cleaned);
         const analysis = parsed.analysis;
-        const questions = parsed.questions;
 
         // Save analysis + detected room type to DB, and wait for photo uploads to finish
         const detectedRoomType = analysis.room_type === 'bathroom' ? 'bathroom' : 'kitchen';
@@ -218,7 +238,8 @@ export default function AnalyzingScreen() {
 
         useProjectWizardStore.getState().setRoomType(detectedRoomType as any);
         setAnalysisResult(analysis);
-        setQuestions(questions);
+        // Use fixed, standardized questions instead of AI-generated ones
+        setQuestions(getQuestionsForRoomType(detectedRoomType));
         useProjectWizardStore.getState().setStep(4);
         navigation.navigate('Questionnaire');
       } catch (err: any) {
