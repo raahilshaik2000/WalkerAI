@@ -54,6 +54,7 @@ import BriefStep from '@/app/(homeowner)/project/create/brief';
 import MaterialDetailScreen from '@/app/(homeowner)/project/create/material-detail';
 import ConfirmStep from '@/app/(homeowner)/project/create/confirm';
 import PhotosStep from '@/app/(homeowner)/project/create/photos';
+import MeasurementsStep from '@/app/(homeowner)/project/create/measurements';
 import QuestionnaireStep from '@/app/(homeowner)/project/create/questionnaire';
 import RendersStep from '@/app/(homeowner)/project/create/renders';
 
@@ -220,6 +221,7 @@ function ProjectCreateNavigator() {
     <ProjectCreateStack.Navigator screenOptions={{ headerShown: false }}>
       <ProjectCreateStack.Screen name="RoomType" component={RoomTypeStep} />
       <ProjectCreateStack.Screen name="Photos" component={PhotosStep} />
+      <ProjectCreateStack.Screen name="Measurements" component={MeasurementsStep} />
       <ProjectCreateStack.Screen name="Analyzing" component={AnalyzingStep} />
       <ProjectCreateStack.Screen name="Questionnaire" component={QuestionnaireStep} />
       <ProjectCreateStack.Screen name="Renders" component={RendersStep} />
