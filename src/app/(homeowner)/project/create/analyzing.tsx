@@ -168,8 +168,8 @@ export default function AnalyzingScreen() {
                 url: publicUrl,
                 storage_path: storagePath,
               });
-            } catch {
-              // Individual upload failure should not block analysis
+            } catch (uploadErr: any) {
+              console.warn('[Photo upload failed]', uploadErr?.message ?? uploadErr);
             }
           })
         );
@@ -198,6 +198,7 @@ export default function AnalyzingScreen() {
           body: JSON.stringify({
             model: 'gpt-4o',
             max_tokens: 4000,
+            response_format: { type: 'json_object' },
             messages: [{
               role: 'user',
               content: [
@@ -216,25 +217,32 @@ export default function AnalyzingScreen() {
         const aiResponse = await res.json();
         const rawText: string = aiResponse.choices[0].message.content;
 
-        // Strip markdown fences if Claude wrapped the JSON
-        const cleaned = rawText
+        // Strip markdown fences or any prose wrapping the JSON
+        let cleaned = rawText
           .replace(/^```json\s*/i, '')
           .replace(/^```\s*/i, '')
           .replace(/```\s*$/i, '')
           .trim();
 
+        // If model returned prose before JSON, extract the JSON object
+        const jsonStart = cleaned.indexOf('{');
+        const jsonEnd = cleaned.lastIndexOf('}');
+        if (jsonStart > 0 && jsonEnd > jsonStart) {
+          cleaned = cleaned.substring(jsonStart, jsonEnd + 1);
+        }
+
         const parsed = JSON.parse(cleaned);
         const analysis = parsed.analysis;
 
-        // Save analysis + detected room type to DB, and wait for photo uploads to finish
+        // Wait for photo uploads to finish regardless of analysis outcome
+        await uploadPromise;
+
+        // Save analysis + detected room type to DB
         const detectedRoomType = analysis.room_type === 'bathroom' ? 'bathroom' : 'kitchen';
-        await Promise.all([
-          supabase
-            .from('projects')
-            .update({ ai_analysis: analysis, room_type: detectedRoomType })
-            .eq('id', pid),
-          uploadPromise,
-        ]);
+        await supabase
+          .from('projects')
+          .update({ ai_analysis: analysis, room_type: detectedRoomType })
+          .eq('id', pid);
 
         useProjectWizardStore.getState().setRoomType(detectedRoomType as any);
         setAnalysisResult(analysis);
@@ -243,6 +251,8 @@ export default function AnalyzingScreen() {
         useProjectWizardStore.getState().setStep(4);
         navigation.navigate('Questionnaire');
       } catch (err: any) {
+        // Even if analysis fails, ensure photos are uploaded so project cards show images
+        try { await uploadPromise; } catch {}
         const msg = err?.message || err?.details || JSON.stringify(err);
         setError(msg);
       }
