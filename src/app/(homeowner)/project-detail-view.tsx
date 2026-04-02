@@ -1,5 +1,6 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import {
+  ActivityIndicator,
   Dimensions,
   FlatList,
   Image,
@@ -16,61 +17,221 @@ import Ionicons from 'react-native-vector-icons/Ionicons';
 import LinearGradient from 'react-native-linear-gradient';
 import { AnimatedPressable, GlassCard, GradientBackground } from '@/components/ui';
 import { Colors, Radius, Spacing } from '@/constants/theme';
-import { DashboardProject } from '@/components/dashboard/data';
-import { ProgressRing } from '@/components/dashboard/ProgressRing';
-import { MILESTONES } from '@/components/dashboard/projectDetailData';
-import { CHAT_THREADS } from '@/components/dashboard/messageData';
+import { supabase } from '@/lib/supabase/client';
 
 const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = Dimensions.get('window');
-const HERO_HEIGHT = SCREEN_HEIGHT * 0.42;
+const HERO_HEIGHT = SCREEN_HEIGHT * 0.38;
+
+// ─── Types ────────────────────────────────────────────────────────────────────
+
+interface RealProject {
+  id: string;
+  room_type: string;
+  status: string;
+  description: string | null;
+  address: string | null;
+  city: string | null;
+  ai_cost_min: number | null;
+  ai_cost_max: number | null;
+  created_at: string;
+  renders: Array<{ url: string }>;
+  project_photos: Array<{ url: string }>;
+}
+
+interface ProjectDetail {
+  ai_analysis: any | null;
+  questionnaire_answers: Record<string, string> | null;
+  ai_confidence_score: number | null;
+}
+
+interface ScopeItem {
+  phase: string;
+  description: string;
+  sort_order: number;
+}
+
+interface MaterialItem {
+  item: string;
+  quantity: number;
+  unit: string;
+  quality_tier: 'budget' | 'mid-range' | 'luxury';
+}
+
+interface PermitItem {
+  permit_type: string;
+  status: string;
+}
+
+// ─── Constants ────────────────────────────────────────────────────────────────
+
+const STATUS_META: Record<string, { label: string; color: string }> = {
+  draft:       { label: 'Draft',       color: '#6B7280' },
+  dispatching: { label: 'Dispatching', color: '#A78BFA' },
+  accepted:    { label: 'Accepted',    color: '#60A5FA' },
+  quoting:     { label: 'Quoting',     color: '#F59E0B' },
+  active:      { label: 'In Progress', color: '#22C55E' },
+  completed:   { label: 'Completed',   color: '#FF6B00' },
+};
+
+const TIER_COLOR: Record<string, string> = {
+  budget: '#9CA3AF',
+  'mid-range': '#60A5FA',
+  luxury: '#FF6B00',
+};
+
+const PHASE_ICON: Record<string, string> = {
+  demolition:   'hammer-outline',
+  'rough-in':   'construct-outline',
+  installation: 'build-outline',
+  finishing:    'color-palette-outline',
+};
 
 const ACTIONS = [
-  { key: 'DetailMilestones', icon: 'flag-outline', label: 'Milestones' },
-  { key: 'DetailMessages', icon: 'chatbubble-outline', label: 'Messages' },
-  { key: 'DetailQuote', icon: 'document-text-outline', label: 'Quote' },
-  { key: 'DetailPermits', icon: 'shield-checkmark-outline', label: 'Permits' },
-  { key: 'DetailChangeOrders', icon: 'swap-horizontal-outline', label: 'Changes' },
-  { key: 'DetailReview', icon: 'star-outline', label: 'Review' },
+  { key: 'DetailMilestones',   icon: 'flag-outline',               label: 'Milestones' },
+  { key: 'DetailMessages',     icon: 'chatbubble-outline',          label: 'Messages'   },
+  { key: 'DetailQuote',        icon: 'document-text-outline',       label: 'Quote'      },
+  { key: 'DetailPermits',      icon: 'shield-checkmark-outline',    label: 'Permits'    },
+  { key: 'DetailChangeOrders', icon: 'swap-horizontal-outline',     label: 'Changes'    },
+  { key: 'DetailReview',       icon: 'star-outline',                label: 'Review'     },
 ];
+
+// ─── Helpers ──────────────────────────────────────────────────────────────────
+
+function formatCad(cents: number) {
+  return new Intl.NumberFormat('en-CA', {
+    style: 'currency',
+    currency: 'CAD',
+    maximumFractionDigits: 0,
+  }).format(cents / 100);
+}
+
+function formatDate(iso: string) {
+  return new Date(iso).toLocaleDateString('en-CA', {
+    month: 'long', day: 'numeric', year: 'numeric',
+  });
+}
+
+function shortenAddress(addr: string | null, city: string | null): string {
+  if (!addr) return city ?? 'Address not set';
+  const parts = addr.split(',');
+  return parts.slice(0, 2).join(',').trim();
+}
+
+// ─── Screen ───────────────────────────────────────────────────────────────────
 
 export default function ProjectDetailViewScreen() {
   const navigation = useNavigation<any>();
   const route = useRoute<any>();
-  const project: DashboardProject = route.params?.project;
-  const milestones = MILESTONES[project.id] ?? [];
-  const [activeIndex, setActiveIndex] = useState(0);
+  const project: RealProject = route.params?.project;
 
-  const images = project.images?.length ? project.images : [project.coverImage];
+  const [detail, setDetail]       = useState<ProjectDetail | null>(null);
+  const [scope, setScope]         = useState<ScopeItem[]>([]);
+  const [materials, setMats]      = useState<MaterialItem[]>([]);
+  const [permits, setPermits]     = useState<PermitItem[]>([]);
+  const [loading, setLoading]     = useState(true);
+  const [activeIdx, setActiveIdx] = useState(0);
+  const [photoUrls, setPhotoUrls] = useState<string[]>([
+    ...(project.renders?.map(r => r.url) ?? []),
+    ...(project.project_photos?.map(p => p.url) ?? []),
+  ].filter(Boolean));
+
+  const statusMeta = STATUS_META[project.status] ?? { label: project.status, color: '#6B7280' };
+  const roomLabel  = project.room_type
+    ? project.room_type.charAt(0).toUpperCase() + project.room_type.slice(1)
+    : 'Home';
+  const title = `${roomLabel} Renovation`;
+
+  useEffect(() => {
+    const load = async () => {
+      try {
+        const [projRes, scopeRes, matsRes, permitsRes, rendersRes, photosRes] = await Promise.all([
+          supabase
+            .from('projects')
+            .select('ai_analysis, questionnaire_answers, ai_confidence_score')
+            .eq('id', project.id)
+            .single(),
+          supabase
+            .from('scope_of_work')
+            .select('phase, description, sort_order')
+            .eq('project_id', project.id)
+            .order('sort_order'),
+          supabase
+            .from('materials')
+            .select('item, quantity, unit, quality_tier')
+            .eq('project_id', project.id),
+          supabase
+            .from('permits')
+            .select('permit_type, status')
+            .eq('project_id', project.id),
+          supabase
+            .from('renders')
+            .select('url')
+            .eq('project_id', project.id),
+          supabase
+            .from('project_photos')
+            .select('url')
+            .eq('project_id', project.id),
+        ]);
+
+        if (projRes.data) setDetail(projRes.data as ProjectDetail);
+        if (scopeRes.data) setScope(scopeRes.data as ScopeItem[]);
+        if (matsRes.data)  setMats(matsRes.data as MaterialItem[]);
+        if (permitsRes.data) setPermits(permitsRes.data as PermitItem[]);
+
+        // Merge freshly-fetched photos with anything already in params
+        const freshUrls = [
+          ...(rendersRes.data?.map((r: any) => r.url) ?? []),
+          ...(photosRes.data?.map((p: any) => p.url) ?? []),
+        ].filter(Boolean);
+        if (freshUrls.length > 0) setPhotoUrls(freshUrls);
+      } finally {
+        setLoading(false);
+      }
+    };
+    load();
+  }, [project.id]);
 
   const onScroll = (e: NativeSyntheticEvent<NativeScrollEvent>) => {
-    const idx = Math.round(e.nativeEvent.contentOffset.x / SCREEN_WIDTH);
-    setActiveIndex(idx);
+    setActiveIdx(Math.round(e.nativeEvent.contentOffset.x / SCREEN_WIDTH));
   };
+
+  const analysis       = detail?.ai_analysis;
+  const observations   = analysis?.ai_observations ?? null;
+  const existingMats   = analysis?.existing_materials ?? null;
+  const layoutInfo     = analysis?.layout ?? null;
+  const confidence     = detail?.ai_confidence_score ?? null;
 
   return (
     <GradientBackground>
       <View style={styles.container}>
-        {/* Hero image carousel */}
+
+        {/* ── Hero ── */}
         <View style={styles.heroWrapper}>
-          <FlatList
-            data={images}
-            keyExtractor={(_, i) => `img-${i}`}
-            horizontal
-            pagingEnabled
-            showsHorizontalScrollIndicator={false}
-            onScroll={onScroll}
-            scrollEventThrottle={16}
-            renderItem={({ item: uri }) => (
-              <Image source={{ uri }} style={styles.heroImage} />
-            )}
-          />
+          {photoUrls.length > 0 ? (
+            <FlatList
+              data={photoUrls}
+              keyExtractor={(_, i) => `img-${i}`}
+              horizontal
+              pagingEnabled
+              showsHorizontalScrollIndicator={false}
+              onScroll={onScroll}
+              scrollEventThrottle={16}
+              renderItem={({ item: uri }) => (
+                <Image source={{ uri }} style={styles.heroImage} />
+              )}
+            />
+          ) : (
+            <View style={[styles.heroImage, styles.heroPlaceholder]}>
+              <Ionicons name="home-outline" size={64} color="rgba(255,255,255,0.08)" />
+            </View>
+          )}
+
           <LinearGradient
-            colors={['rgba(0,0,0,0.45)', 'transparent', 'rgba(0,0,0,0.85)']}
+            colors={['rgba(0,0,0,0.5)', 'transparent', 'rgba(0,0,0,0.88)']}
             style={styles.heroGradient}
             pointerEvents="none"
           />
 
-          {/* Top bar */}
           <SafeAreaView style={styles.topBar}>
             <AnimatedPressable style={styles.iconBtn} haptic onPress={() => navigation.goBack()}>
               <Ionicons name="arrow-back" size={20} color="#fff" />
@@ -80,188 +241,323 @@ export default function ProjectDetailViewScreen() {
             </AnimatedPressable>
           </SafeAreaView>
 
-          {/* Hero bottom content */}
           <View style={styles.heroBottom}>
-            <View style={[styles.statusBadge, { backgroundColor: project.statusColor + '22', borderColor: project.statusColor + '55' }]}>
-              <View style={[styles.statusDot, { backgroundColor: project.statusColor }]} />
-              <Text style={[styles.statusText, { color: project.statusColor }]}>{project.statusLabel}</Text>
+            <View style={[styles.statusBadge, {
+              backgroundColor: statusMeta.color + '25',
+              borderColor: statusMeta.color + '60',
+            }]}>
+              <View style={[styles.statusDot, { backgroundColor: statusMeta.color }]} />
+              <Text style={[styles.statusText, { color: statusMeta.color }]}>
+                {statusMeta.label}
+              </Text>
             </View>
-            <Text style={styles.heroTitle}>{project.title}</Text>
+            <Text style={styles.heroTitle}>{title}</Text>
             <View style={styles.addressRow}>
-              <Ionicons name="location-outline" size={13} color="rgba(255,255,255,0.6)" />
-              <Text style={styles.heroAddress}>{project.address}</Text>
+              <Ionicons name="location-outline" size={13} color="rgba(255,255,255,0.55)" />
+              <Text style={styles.heroAddress} numberOfLines={1}>
+                {shortenAddress(project.address, project.city)}
+              </Text>
             </View>
           </View>
 
-          {/* Page dots */}
-          {images.length > 1 && (
-            <View style={styles.dotsContainer}>
-              {images.map((_, i) => (
-                <View
-                  key={i}
-                  style={[styles.dot, i === activeIndex && styles.dotActive]}
-                />
+          {photoUrls.length > 1 && (
+            <View style={styles.dots}>
+              {photoUrls.map((_, i) => (
+                <View key={i} style={[styles.dot, i === activeIdx && styles.dotActive]} />
               ))}
             </View>
           )}
         </View>
 
+        {/* ── Body ── */}
         <ScrollView
           style={styles.body}
           contentContainerStyle={styles.bodyContent}
           showsVerticalScrollIndicator={false}
         >
-          {/* Progress card */}
-          <GlassCard style={styles.progressCard}>
-            <View style={styles.progressRow}>
-              <ProgressRing progress={project.progress} size={64} strokeWidth={4} color={project.statusColor} />
-              <View style={styles.progressInfo}>
-                <Text style={styles.progressLabel}>Project Progress</Text>
-                <Text style={styles.progressSub}>
-                  {project.milestonesCompleted} of {project.milestonesTotal} milestones completed
-                </Text>
-                <View style={styles.metaRow}>
-                  <View style={styles.metaItem}>
-                    <Ionicons name="cash-outline" size={13} color={Colors.text.tertiary} />
-                    <Text style={styles.metaText}>{project.budget}</Text>
-                  </View>
-                  <View style={styles.metaItem}>
-                    <Ionicons name="calendar-outline" size={13} color={Colors.text.tertiary} />
-                    <Text style={styles.metaText}>{project.dueDate}</Text>
-                  </View>
+
+          {/* Cost + Confidence */}
+          {(project.ai_cost_min || project.ai_cost_max) ? (
+            <GlassCard style={styles.section}>
+              <View style={styles.costRow}>
+                <View style={{ flex: 1 }}>
+                  <Text style={styles.sectionLabel}>ESTIMATED COST</Text>
+                  <Text style={styles.costRange}>
+                    {project.ai_cost_min ? formatCad(project.ai_cost_min) : '—'}
+                    {' – '}
+                    {project.ai_cost_max ? formatCad(project.ai_cost_max) : '—'}
+                  </Text>
+                  <Text style={styles.costNote}>AI estimate · final price set by contractor</Text>
                 </View>
+                {confidence != null && (
+                  <View style={[
+                    styles.confBadge,
+                    confidence >= 80 ? styles.confHigh
+                    : confidence >= 60 ? styles.confMid
+                    : styles.confLow,
+                  ]}>
+                    <Text style={styles.confScore}>{confidence}%</Text>
+                    <Text style={styles.confLabel}>confidence</Text>
+                  </View>
+                )}
+              </View>
+            </GlassCard>
+          ) : null}
+
+          {/* Contractor status */}
+          <GlassCard style={styles.section}>
+            <View style={styles.contractorRow}>
+              <View style={styles.pulseCircle}>
+                <Ionicons name="person-outline" size={22} color={Colors.text.tertiary} />
+              </View>
+              <View style={{ flex: 1 }}>
+                <Text style={styles.contractorTitle}>
+                  {project.status === 'quoting'
+                    ? 'Reviewing contractor bids'
+                    : project.status === 'accepted' || project.status === 'active'
+                    ? 'Contractor assigned'
+                    : 'Awaiting contractor match'}
+                </Text>
+                <Text style={styles.contractorSub}>
+                  {project.status === 'dispatching'
+                    ? 'Your project has been sent to nearby contractors'
+                    : project.status === 'quoting'
+                    ? 'Contractors in your area are preparing quotes'
+                    : project.status === 'active'
+                    ? 'Your renovation is underway'
+                    : 'We\'re finding the best match for your project'}
+                </Text>
               </View>
             </View>
           </GlassCard>
 
-          {/* Contractor card */}
-          <GlassCard style={styles.contractorCard}>
-            {project.contractorAvatar ? (
-              <View style={styles.contractorRow}>
-                <Image source={{ uri: project.contractorAvatar }} style={styles.contractorAvatar} />
-                <View style={styles.contractorInfo}>
-                  <View style={styles.contractorNameRow}>
-                    <Text style={styles.contractorName}>{project.contractor}</Text>
-                    <Ionicons name="checkmark-circle" size={14} color="#22C55E" />
-                  </View>
-                  <Text style={styles.contractorSub}>Assigned Contractor</Text>
-                </View>
-                <AnimatedPressable
-                  style={styles.messageBtn}
-                  haptic
-                  onPress={() => {
-                    const thread = CHAT_THREADS.find((t) => t.projectId === project.id);
-                    if (thread) navigation.navigate('Chat', { thread });
-                  }}
-                >
-                  <Ionicons name="chatbubble-outline" size={16} color="#fff" />
-                </AnimatedPressable>
-              </View>
-            ) : (
-              <View style={styles.noContractor}>
-                <View style={styles.pulseCircle}>
-                  <Ionicons name="person-outline" size={20} color={Colors.text.tertiary} />
-                </View>
-                <View>
-                  <Text style={styles.noContractorTitle}>
-                    {project.status === 'quoting' ? 'Reviewing bids' : 'Awaiting contractor match'}
-                  </Text>
-                  <Text style={styles.noContractorSub}>{project.contractor}</Text>
-                </View>
-              </View>
-            )}
-          </GlassCard>
+          {/* Loading spinner while fetching detail */}
+          {loading && (
+            <View style={styles.loadingRow}>
+              <ActivityIndicator size="small" color={Colors.accent} />
+              <Text style={styles.loadingText}>Loading project details…</Text>
+            </View>
+          )}
 
-          {/* Quick Actions */}
-          <Text style={styles.sectionTitle}>Project Actions</Text>
+          {/* AI Observations */}
+          {observations && (
+            <GlassCard style={styles.section}>
+              <View style={styles.sectionHeaderRow}>
+                <Ionicons name="sparkles" size={14} color="#FF6B00" />
+                <Text style={styles.sectionTitle}>AI Analysis</Text>
+              </View>
+              <Text style={styles.observationsText}>{observations}</Text>
+
+              {/* Detected conditions grid */}
+              {existingMats && (
+                <View style={styles.conditionsGrid}>
+                  {existingMats.cabinets?.type ? (
+                    <View style={styles.conditionChip}>
+                      <Text style={styles.conditionKey}>Cabinets</Text>
+                      <Text style={styles.conditionVal}>{existingMats.cabinets.type}</Text>
+                      {existingMats.cabinets.condition ? (
+                        <Text style={styles.conditionSub}>{existingMats.cabinets.condition}</Text>
+                      ) : null}
+                    </View>
+                  ) : null}
+                  {existingMats.countertops?.material ? (
+                    <View style={styles.conditionChip}>
+                      <Text style={styles.conditionKey}>Countertops</Text>
+                      <Text style={styles.conditionVal}>{existingMats.countertops.material}</Text>
+                    </View>
+                  ) : null}
+                  {existingMats.flooring?.material ? (
+                    <View style={styles.conditionChip}>
+                      <Text style={styles.conditionKey}>Flooring</Text>
+                      <Text style={styles.conditionVal}>{existingMats.flooring.material}</Text>
+                    </View>
+                  ) : null}
+                  {layoutInfo?.estimated_sqft > 0 ? (
+                    <View style={styles.conditionChip}>
+                      <Text style={styles.conditionKey}>Est. Size</Text>
+                      <Text style={styles.conditionVal}>{layoutInfo.estimated_sqft} sqft</Text>
+                    </View>
+                  ) : null}
+                  {layoutInfo?.window_count > 0 ? (
+                    <View style={styles.conditionChip}>
+                      <Text style={styles.conditionKey}>Windows</Text>
+                      <Text style={styles.conditionVal}>{layoutInfo.window_count}</Text>
+                    </View>
+                  ) : null}
+                  {layoutInfo?.has_island ? (
+                    <View style={styles.conditionChip}>
+                      <Text style={styles.conditionKey}>Island</Text>
+                      <Text style={styles.conditionVal}>Yes</Text>
+                    </View>
+                  ) : null}
+                </View>
+              )}
+
+              {/* Structural concerns */}
+              {analysis?.structural_concerns?.length > 0 && (
+                <View style={styles.concernsBox}>
+                  <View style={styles.concernsHeader}>
+                    <Ionicons name="warning-outline" size={13} color="#F59E0B" />
+                    <Text style={styles.concernsTitle}>Structural Concerns</Text>
+                  </View>
+                  {analysis.structural_concerns.map((c: string, i: number) => (
+                    <Text key={i} style={styles.concernItem}>· {c}</Text>
+                  ))}
+                </View>
+              )}
+            </GlassCard>
+          )}
+
+          {/* Scope of Work */}
+          {scope.length > 0 && (
+            <GlassCard style={styles.section}>
+              <View style={styles.sectionHeaderRow}>
+                <Ionicons name="list-outline" size={14} color="#FF6B00" />
+                <Text style={styles.sectionTitle}>Scope of Work</Text>
+              </View>
+              {scope.map((item, i) => (
+                <View key={i} style={[styles.scopeRow, i < scope.length - 1 && styles.scopeDivider]}>
+                  <View style={styles.scopeIcon}>
+                    <Ionicons
+                      name={(PHASE_ICON[item.phase.toLowerCase()] ?? 'ellipse-outline') as any}
+                      size={15}
+                      color="#FF6B00"
+                    />
+                  </View>
+                  <View style={{ flex: 1 }}>
+                    <Text style={styles.scopePhase}>
+                      {item.phase.charAt(0).toUpperCase() + item.phase.slice(1)}
+                    </Text>
+                    <Text style={styles.scopeDesc}>{item.description}</Text>
+                  </View>
+                </View>
+              ))}
+            </GlassCard>
+          )}
+
+          {/* Materials */}
+          {materials.length > 0 && (
+            <GlassCard style={styles.section}>
+              <View style={styles.sectionHeaderRow}>
+                <Ionicons name="layers-outline" size={14} color="#FF6B00" />
+                <Text style={styles.sectionTitle}>Materials</Text>
+                <Text style={styles.sectionCount}>{materials.length} items</Text>
+              </View>
+              {materials.map((mat, i) => (
+                <View key={i} style={[styles.matRow, i < materials.length - 1 && styles.matDivider]}>
+                  <Text style={styles.matName} numberOfLines={1}>{mat.item}</Text>
+                  <View style={styles.matRight}>
+                    <Text style={styles.matQty}>{mat.quantity} {mat.unit}</Text>
+                    <View style={[styles.tierPill, {
+                      borderColor: TIER_COLOR[mat.quality_tier] + '55',
+                      backgroundColor: TIER_COLOR[mat.quality_tier] + '18',
+                    }]}>
+                      <Text style={[styles.tierText, { color: TIER_COLOR[mat.quality_tier] }]}>
+                        {mat.quality_tier}
+                      </Text>
+                    </View>
+                  </View>
+                </View>
+              ))}
+            </GlassCard>
+          )}
+
+          {/* Permits */}
+          {permits.length > 0 && (
+            <GlassCard style={styles.section}>
+              <View style={styles.sectionHeaderRow}>
+                <Ionicons name="document-text-outline" size={14} color="#FF6B00" />
+                <Text style={styles.sectionTitle}>Permits</Text>
+              </View>
+              {permits.map((p, i) => (
+                <View key={i} style={[styles.permitRow, i < permits.length - 1 && styles.matDivider]}>
+                  <Ionicons name="shield-checkmark-outline" size={16} color={Colors.accent} />
+                  <Text style={styles.permitType}>{p.permit_type}</Text>
+                  <View style={styles.permitStatusBadge}>
+                    <Text style={styles.permitStatusText}>
+                      {p.status.replace(/_/g, ' ')}
+                    </Text>
+                  </View>
+                </View>
+              ))}
+            </GlassCard>
+          )}
+
+          {/* Project Actions */}
+          <Text style={styles.actionsHeading}>Project Actions</Text>
           <View style={styles.actionsGrid}>
             {ACTIONS.map((action) => (
               <AnimatedPressable
                 key={action.key}
                 style={styles.actionItem}
                 haptic
-                onPress={() => {
-                  if (action.key === 'DetailMessages') {
-                    const thread = CHAT_THREADS.find((t) => t.projectId === project.id);
-                    if (thread) navigation.navigate('Chat', { thread });
-                  } else {
-                    navigation.navigate(action.key, { projectId: project.id });
-                  }
-                }}
+                onPress={() => navigation.navigate(action.key, { projectId: project.id })}
               >
-                <View style={styles.actionIcon}>
-                  <Ionicons name={action.icon as any} size={20} color="#fff" />
+                <View style={styles.actionIconWrap}>
+                  <Ionicons name={action.icon as any} size={22} color="#fff" />
                 </View>
                 <Text style={styles.actionLabel}>{action.label}</Text>
               </AnimatedPressable>
             ))}
           </View>
 
-          {/* Milestones preview */}
-          {milestones.length > 0 && (
-            <>
-              <Text style={styles.sectionTitle}>Milestones</Text>
-              <GlassCard padding={0}>
-                {milestones.slice(0, 4).map((m, i) => (
-                  <View key={m.id}>
-                    <View style={styles.milestoneRow}>
-                      <View style={[styles.milestoneDot, { backgroundColor: m.statusColor }]} />
-                      <View style={styles.milestoneText}>
-                        <Text style={styles.milestoneTitle}>{m.title}</Text>
-                        <Text style={styles.milestoneMeta}>
-                          ${m.amount.toLocaleString()} · {m.dueDate}
-                        </Text>
-                      </View>
-                    </View>
-                    {i < Math.min(milestones.length, 4) - 1 && <View style={styles.divider} />}
-                  </View>
-                ))}
-                {milestones.length > 4 && (
-                  <AnimatedPressable
-                    style={styles.viewAllRow}
-                    haptic
-                    onPress={() => navigation.navigate('DetailMilestones', { projectId: project.id })}
-                  >
-                    <Text style={styles.viewAllText}>View all milestones</Text>
-                    <Ionicons name="arrow-forward" size={14} color={Colors.accent} />
-                  </AnimatedPressable>
-                )}
-              </GlassCard>
-            </>
-          )}
-
           {/* Project Info */}
-          <Text style={styles.sectionTitle}>Project Info</Text>
-          <GlassCard>
-            <View style={styles.infoRow}>
-              <Text style={styles.infoLabel}>Room Type</Text>
-              <Text style={styles.infoValue}>
-                {project.roomType === 'kitchen' ? 'Kitchen' : 'Bathroom'}
-              </Text>
+          <GlassCard style={styles.section}>
+            <View style={styles.sectionHeaderRow}>
+              <Ionicons name="information-circle-outline" size={14} color="#FF6B00" />
+              <Text style={styles.sectionTitle}>Project Info</Text>
             </View>
+            <InfoRow label="Room type" value={roomLabel} />
             <View style={styles.infoDivider} />
-            <View style={styles.infoRow}>
-              <Text style={styles.infoLabel}>Address</Text>
-              <Text style={styles.infoValue}>{project.address}</Text>
-            </View>
+            <InfoRow label="Status" value={statusMeta.label} valueStyle={{ color: statusMeta.color }} />
             <View style={styles.infoDivider} />
-            <View style={styles.infoRow}>
-              <Text style={styles.infoLabel}>Budget</Text>
-              <Text style={styles.infoValue}>{project.budget}</Text>
-            </View>
+            <InfoRow label="Address" value={project.address ?? 'Not set'} multiline />
+            <View style={styles.infoDivider} />
+            <InfoRow label="Created" value={formatDate(project.created_at)} />
           </GlassCard>
+
         </ScrollView>
       </View>
     </GradientBackground>
   );
 }
 
+// ─── Sub-component ────────────────────────────────────────────────────────────
+
+function InfoRow({ label, value, multiline, valueStyle }: {
+  label: string;
+  value: string;
+  multiline?: boolean;
+  valueStyle?: object;
+}) {
+  return (
+    <View style={[infoRowStyles.row, multiline && infoRowStyles.alignTop]}>
+      <Text style={infoRowStyles.label}>{label}</Text>
+      <Text style={[infoRowStyles.value, multiline && infoRowStyles.multilineValue, valueStyle]}
+        numberOfLines={multiline ? 3 : 1}>
+        {value}
+      </Text>
+    </View>
+  );
+}
+
+const infoRowStyles = StyleSheet.create({
+  row: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingVertical: 10 },
+  alignTop: { alignItems: 'flex-start' },
+  label: { fontSize: 13, color: Colors.text.tertiary, flex: 0.45 },
+  value: { fontSize: 13, fontWeight: '600', color: '#fff', flex: 0.55, textAlign: 'right' },
+  multilineValue: { textAlign: 'right' },
+});
+
+// ─── Styles ───────────────────────────────────────────────────────────────────
+
 const styles = StyleSheet.create({
   container: { flex: 1 },
 
-  // Hero carousel
+  // Hero
   heroWrapper: { height: HERO_HEIGHT, width: SCREEN_WIDTH },
   heroImage: { width: SCREEN_WIDTH, height: HERO_HEIGHT, resizeMode: 'cover' },
+  heroPlaceholder: { backgroundColor: '#111', alignItems: 'center', justifyContent: 'center' },
   heroGradient: { position: 'absolute', top: 0, left: 0, right: 0, bottom: 0 },
   topBar: {
     position: 'absolute', top: 0, left: 0, right: 0,
@@ -270,12 +566,10 @@ const styles = StyleSheet.create({
   },
   iconBtn: {
     width: 40, height: 40, borderRadius: 20,
-    backgroundColor: 'rgba(0,0,0,0.4)',
+    backgroundColor: 'rgba(0,0,0,0.45)',
     alignItems: 'center', justifyContent: 'center',
   },
-  heroBottom: {
-    position: 'absolute', bottom: 44, left: 16, right: 16,
-  },
+  heroBottom: { position: 'absolute', bottom: 44, left: 16, right: 16 },
   statusBadge: {
     alignSelf: 'flex-start', flexDirection: 'row', alignItems: 'center',
     gap: 5, paddingHorizontal: 10, paddingVertical: 4,
@@ -283,96 +577,125 @@ const styles = StyleSheet.create({
   },
   statusDot: { width: 6, height: 6, borderRadius: 3 },
   statusText: { fontSize: 11, fontWeight: '600' },
-  heroTitle: { fontSize: 28, fontWeight: '700', color: '#fff', letterSpacing: -0.3, marginBottom: 6 },
-  addressRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 4,
-  },
-  heroAddress: { fontSize: 13, color: 'rgba(255,255,255,0.7)' },
-
-  // Page dots
-  dotsContainer: {
-    position: 'absolute',
-    bottom: 28,
-    alignSelf: 'center',
-    flexDirection: 'row',
-    gap: 6,
-  },
-  dot: {
-    width: 6,
-    height: 6,
-    borderRadius: 3,
-    backgroundColor: 'rgba(255,255,255,0.4)',
-  },
-  dotActive: {
-    backgroundColor: '#fff',
-    width: 18,
-    borderRadius: 3,
-  },
+  heroTitle: { fontSize: 26, fontWeight: '800', color: '#fff', letterSpacing: -0.4, marginBottom: 6 },
+  addressRow: { flexDirection: 'row', alignItems: 'center', gap: 4 },
+  heroAddress: { fontSize: 13, color: 'rgba(255,255,255,0.65)', flex: 1 },
+  dots: { position: 'absolute', bottom: 26, alignSelf: 'center', flexDirection: 'row', gap: 6 },
+  dot: { width: 6, height: 6, borderRadius: 3, backgroundColor: 'rgba(255,255,255,0.35)' },
+  dotActive: { backgroundColor: '#fff', width: 18 },
 
   // Body
-  body: { flex: 1, marginTop: -20, borderTopLeftRadius: 24, borderTopRightRadius: 24, backgroundColor: Colors.bg.primary },
-  bodyContent: { padding: 16, paddingTop: 28, paddingBottom: 120 },
-
-  progressCard: { marginBottom: 12 },
-  progressRow: { flexDirection: 'row', alignItems: 'center', gap: 16 },
-  progressInfo: { flex: 1 },
-  progressLabel: { fontSize: 16, fontWeight: '700', color: '#fff', marginBottom: 3 },
-  progressSub: { fontSize: 12, color: Colors.text.secondary, marginBottom: 8 },
-  metaRow: { flexDirection: 'row', gap: 16 },
-  metaItem: { flexDirection: 'row', alignItems: 'center', gap: 4 },
-  metaText: { fontSize: 12, fontWeight: '600', color: Colors.text.secondary },
-
-  contractorCard: { marginBottom: Spacing.md },
-  contractorRow: { flexDirection: 'row', alignItems: 'center', gap: 12 },
-  contractorAvatar: { width: 44, height: 44, borderRadius: 22 },
-  contractorInfo: { flex: 1 },
-  contractorNameRow: { flexDirection: 'row', alignItems: 'center', gap: 6 },
-  contractorName: { fontSize: 15, fontWeight: '600', color: '#fff' },
-  contractorSub: { fontSize: 12, color: Colors.text.tertiary, marginTop: 2 },
-  messageBtn: {
-    width: 38, height: 38, borderRadius: 19,
-    backgroundColor: Colors.surface.hover, alignItems: 'center', justifyContent: 'center',
+  body: {
+    flex: 1, marginTop: -20,
+    borderTopLeftRadius: 24, borderTopRightRadius: 24,
+    backgroundColor: Colors.bg.primary,
   },
-  noContractor: { flexDirection: 'row', alignItems: 'center', gap: 12 },
+  bodyContent: { paddingHorizontal: 16, paddingTop: 28, paddingBottom: 120 },
+
+  section: { marginBottom: 12 },
+
+  // Loading
+  loadingRow: { flexDirection: 'row', alignItems: 'center', gap: 10, justifyContent: 'center', paddingVertical: 20 },
+  loadingText: { fontSize: 13, color: Colors.text.tertiary },
+
+  // Cost card
+  costRow: { flexDirection: 'row', alignItems: 'center', gap: 12 },
+  sectionLabel: { fontSize: 10, fontWeight: '700', color: Colors.text.tertiary, letterSpacing: 0.8, marginBottom: 4 },
+  costRange: { fontSize: 26, fontWeight: '800', color: '#34D399', letterSpacing: -0.5, marginBottom: 4 },
+  costNote: { fontSize: 11, color: Colors.text.tertiary },
+  confBadge: { borderRadius: 12, paddingHorizontal: 12, paddingVertical: 8, alignItems: 'center', minWidth: 70, borderWidth: 1 },
+  confHigh: { backgroundColor: 'rgba(52,211,153,0.12)', borderColor: 'rgba(52,211,153,0.3)' },
+  confMid:  { backgroundColor: 'rgba(245,158,11,0.12)', borderColor: 'rgba(245,158,11,0.3)' },
+  confLow:  { backgroundColor: 'rgba(239,68,68,0.12)',  borderColor: 'rgba(239,68,68,0.3)'  },
+  confScore: { fontSize: 20, fontWeight: '800', color: '#fff' },
+  confLabel: { fontSize: 9, color: Colors.text.tertiary, textTransform: 'uppercase', letterSpacing: 0.5, marginTop: 2 },
+
+  // Contractor card
+  contractorRow: { flexDirection: 'row', alignItems: 'center', gap: 14 },
   pulseCircle: {
-    width: 44, height: 44, borderRadius: 22,
-    backgroundColor: Colors.surface.hover, alignItems: 'center', justifyContent: 'center',
+    width: 48, height: 48, borderRadius: 24,
+    backgroundColor: 'rgba(255,255,255,0.05)',
+    borderWidth: 1, borderColor: 'rgba(255,255,255,0.1)',
+    alignItems: 'center', justifyContent: 'center', flexShrink: 0,
   },
-  noContractorTitle: { fontSize: 14, fontWeight: '600', color: '#fff' },
-  noContractorSub: { fontSize: 12, color: Colors.text.tertiary, marginTop: 2 },
+  contractorTitle: { fontSize: 14, fontWeight: '700', color: '#fff', marginBottom: 4 },
+  contractorSub: { fontSize: 12, color: Colors.text.tertiary, lineHeight: 18 },
 
-  sectionTitle: { fontSize: 16, fontWeight: '700', color: '#fff', marginBottom: 12, marginTop: 8 },
+  // Section headers
+  sectionHeaderRow: { flexDirection: 'row', alignItems: 'center', gap: 7, marginBottom: 14 },
+  sectionTitle: { fontSize: 14, fontWeight: '700', color: '#fff', flex: 1 },
+  sectionCount: { fontSize: 11, color: Colors.text.tertiary },
 
-  actionsGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 10, marginBottom: Spacing.md },
+  // Observations
+  observationsText: { fontSize: 14, color: Colors.text.secondary, lineHeight: 22, marginBottom: 14 },
+  conditionsGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginBottom: 4 },
+  conditionChip: {
+    backgroundColor: 'rgba(255,255,255,0.04)',
+    borderRadius: 10, borderWidth: 1, borderColor: 'rgba(255,255,255,0.08)',
+    paddingHorizontal: 12, paddingVertical: 8,
+  },
+  conditionKey: { fontSize: 10, color: Colors.text.tertiary, textTransform: 'uppercase', letterSpacing: 0.5, marginBottom: 2 },
+  conditionVal: { fontSize: 13, fontWeight: '600', color: '#fff' },
+  conditionSub: { fontSize: 11, color: Colors.text.tertiary, marginTop: 1 },
+
+  // Structural concerns
+  concernsBox: {
+    marginTop: 12, backgroundColor: 'rgba(245,158,11,0.08)',
+    borderRadius: 10, borderWidth: 1, borderColor: 'rgba(245,158,11,0.2)',
+    padding: 12,
+  },
+  concernsHeader: { flexDirection: 'row', alignItems: 'center', gap: 6, marginBottom: 8 },
+  concernsTitle: { fontSize: 12, fontWeight: '700', color: '#F59E0B' },
+  concernItem: { fontSize: 12, color: '#F59E0B', lineHeight: 20, opacity: 0.9 },
+
+  // Scope
+  scopeRow: { flexDirection: 'row', alignItems: 'flex-start', gap: 12, paddingVertical: 10 },
+  scopeDivider: { borderBottomWidth: 1, borderBottomColor: 'rgba(255,255,255,0.05)' },
+  scopeIcon: {
+    width: 30, height: 30, borderRadius: 9,
+    backgroundColor: 'rgba(255,107,0,0.1)',
+    alignItems: 'center', justifyContent: 'center', flexShrink: 0, marginTop: 1,
+  },
+  scopePhase: { fontSize: 13, fontWeight: '700', color: '#fff', marginBottom: 3, textTransform: 'capitalize' },
+  scopeDesc: { fontSize: 12, color: Colors.text.secondary, lineHeight: 18 },
+
+  // Materials
+  matRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingVertical: 10 },
+  matDivider: { borderBottomWidth: 1, borderBottomColor: 'rgba(255,255,255,0.05)' },
+  matName: { fontSize: 13, color: '#fff', fontWeight: '500', flex: 1, marginRight: 8 },
+  matRight: { flexDirection: 'row', alignItems: 'center', gap: 8 },
+  matQty: { fontSize: 12, color: Colors.text.tertiary },
+  tierPill: { borderRadius: 20, borderWidth: 1, paddingHorizontal: 8, paddingVertical: 3 },
+  tierText: { fontSize: 11, fontWeight: '600' },
+
+  // Permits
+  permitRow: { flexDirection: 'row', alignItems: 'center', gap: 10, paddingVertical: 10 },
+  permitType: { fontSize: 13, color: '#fff', flex: 1 },
+  permitStatusBadge: {
+    backgroundColor: 'rgba(255,107,0,0.1)', borderRadius: 8,
+    borderWidth: 1, borderColor: 'rgba(255,107,0,0.25)',
+    paddingHorizontal: 8, paddingVertical: 3,
+  },
+  permitStatusText: { fontSize: 11, fontWeight: '600', color: Colors.accent, textTransform: 'capitalize' },
+
+  // Actions
+  actionsHeading: { fontSize: 15, fontWeight: '700', color: '#fff', marginBottom: 12, marginTop: 4 },
+  actionsGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 10, marginBottom: 16 },
   actionItem: {
     width: (SCREEN_WIDTH - 32 - 20) / 3,
-    backgroundColor: Colors.surface.default, borderRadius: Radius.card,
-    borderWidth: 1, borderColor: Colors.surface.border,
-    alignItems: 'center', paddingVertical: 16, gap: 8,
+    backgroundColor: 'rgba(255,255,255,0.04)',
+    borderRadius: Radius.card,
+    borderWidth: 1, borderColor: 'rgba(255,255,255,0.08)',
+    alignItems: 'center', paddingVertical: 18, gap: 8,
   },
-  actionIcon: {
-    width: 40, height: 40, borderRadius: 12,
-    backgroundColor: 'rgba(255,255,255,0.08)', alignItems: 'center', justifyContent: 'center',
+  actionIconWrap: {
+    width: 44, height: 44, borderRadius: 14,
+    backgroundColor: 'rgba(255,107,0,0.12)',
+    borderWidth: 1, borderColor: 'rgba(255,107,0,0.25)',
+    alignItems: 'center', justifyContent: 'center',
   },
   actionLabel: { fontSize: 11, fontWeight: '600', color: Colors.text.secondary },
 
-  milestoneRow: { flexDirection: 'row', alignItems: 'center', gap: 12, padding: 14 },
-  milestoneDot: { width: 10, height: 10, borderRadius: 5 },
-  milestoneText: { flex: 1 },
-  milestoneTitle: { fontSize: 14, fontWeight: '600', color: '#fff', marginBottom: 2 },
-  milestoneMeta: { fontSize: 12, color: Colors.text.tertiary },
-  divider: { height: 1, backgroundColor: 'rgba(255,255,255,0.05)', marginLeft: 36 },
-  viewAllRow: {
-    flexDirection: 'row', alignItems: 'center', justifyContent: 'center',
-    gap: 6, paddingVertical: 12,
-    borderTopWidth: 1, borderTopColor: 'rgba(255,255,255,0.05)',
-  },
-  viewAllText: { fontSize: 13, fontWeight: '600', color: Colors.accent },
-
-  infoRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
-  infoLabel: { fontSize: 13, color: Colors.text.tertiary },
-  infoValue: { fontSize: 13, fontWeight: '600', color: '#fff' },
-  infoDivider: { height: 1, backgroundColor: 'rgba(255,255,255,0.05)', marginVertical: 10 },
+  // Info rows
+  infoDivider: { height: 1, backgroundColor: 'rgba(255,255,255,0.05)' },
 });

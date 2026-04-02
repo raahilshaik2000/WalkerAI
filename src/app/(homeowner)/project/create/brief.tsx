@@ -15,23 +15,11 @@ import { supabase } from '@/lib/supabase/client';
 import { useProjectWizardStore } from '@/stores/project-wizard.store';
 import { Colors, Spacing, Typography, Radius } from '@/constants/theme';
 import { GlassButton, GlassCard, GradientBackground, StatusBadge, WizardHeader } from '@/components/ui';
+import { buildPricingPromptSection, calculateQuantities, estimateProjectCost } from '@/data/pricing-reference';
+import { getQuestionsForRoomType, extractQualityTier, buildAnswerSummary } from '@/data/fixed-questions';
 
 const OPENAI_KEY = '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';
 const OPENAI_URL = 'https://api.openai.com/v1/chat/completions';
-
-const CANADIAN_COST_RANGES: Record<string, Record<string, { min: number; max: number }>> = {
-  ON: { kitchen: { min: 2500000, max: 7500000 }, bathroom: { min: 800000, max: 2500000 } },
-  BC: { kitchen: { min: 2800000, max: 8500000 }, bathroom: { min: 900000, max: 2800000 } },
-  AB: { kitchen: { min: 2200000, max: 6500000 }, bathroom: { min: 750000, max: 2200000 } },
-  QC: { kitchen: { min: 2000000, max: 6000000 }, bathroom: { min: 700000, max: 2000000 } },
-  MB: { kitchen: { min: 1800000, max: 5500000 }, bathroom: { min: 650000, max: 1800000 } },
-  SK: { kitchen: { min: 1800000, max: 5000000 }, bathroom: { min: 600000, max: 1700000 } },
-  NS: { kitchen: { min: 2000000, max: 5500000 }, bathroom: { min: 700000, max: 2000000 } },
-  NB: { kitchen: { min: 1900000, max: 5000000 }, bathroom: { min: 650000, max: 1800000 } },
-  NL: { kitchen: { min: 1900000, max: 5000000 }, bathroom: { min: 650000, max: 1800000 } },
-  PE: { kitchen: { min: 1800000, max: 4500000 }, bathroom: { min: 600000, max: 1600000 } },
-};
-const DEFAULT_COST = { min: 2000000, max: 6000000 };
 
 interface BriefData {
   materials: Array<{
@@ -52,6 +40,8 @@ interface BriefData {
     required: boolean;
   }>;
   ai_observations: string;
+  confidence_score?: number;
+  confidence_notes?: string;
 }
 
 function formatCad(cents: number) {
@@ -79,6 +69,7 @@ export default function BriefStep() {
     province,
     photos,
     materialOverrides,
+    measurements,
   } = useProjectWizardStore();
 
   const [brief, setBrief] = useState<BriefData | null>(null);
@@ -101,39 +92,98 @@ export default function BriefStep() {
 
       const roomType = (analysisResult as any)?.room_type ?? 'kitchen';
       const provinceCode = (province ?? 'ON').toUpperCase();
-      const costs = CANADIAN_COST_RANGES[provinceCode]?.[roomType] ??
-        (roomType === 'kitchen' ? DEFAULT_COST : { min: 700000, max: 2000000 });
 
-      const prompt = `Generate a detailed renovation project brief for a ${roomType} in ${provinceCode}, Canada.
+      // Resolve quality tier and human-readable answer summary from fixed questions
+      const qualityTier = extractQualityTier(answers);
+      const fixedQuestions = getQuestionsForRoomType(roomType);
+      const answerSummary = buildAnswerSummary(fixedQuestions, answers);
 
-Room Analysis: ${JSON.stringify(analysisResult)}
-Homeowner Preferences (questionnaire answers): ${JSON.stringify(answers)}
+      // Pre-calculate room quantities from homeowner measurements
+      const quantities = measurements ? calculateQuantities({
+        lengthFt: measurements.lengthFt,
+        widthFt: measurements.widthFt,
+        ceilingHeightFt: measurements.ceilingHeightFt,
+        numDoors: measurements.numDoors,
+        numWindows: measurements.numWindows,
+        upperLinearFt: measurements.upperLinearFt,
+        lowerLinearFt: measurements.lowerLinearFt,
+        countertopLinearFt: measurements.countertopLinearFt,
+      }) : null;
 
-Regional cost baseline (CAD cents): min=${costs.min}, max=${costs.max}
+      // Calculate cost directly from Walker AI pricing data — do NOT let AI guess this
+      const costEstimate = estimateProjectCost({
+        roomType: roomType as 'kitchen' | 'bathroom',
+        qualityTier,
+        answers,
+        quantities,
+      });
 
-Return a valid JSON object with this exact structure:
+      const quantitiesNote = quantities
+        ? `\nPre-calculated quantities from homeowner measurements (use these for line-item takeoffs):
+- Floor area: ${quantities.floor_area_sqf} sqf
+- Wall area (net): ${quantities.wall_area_net_sqf} sqf (gross: ${quantities.wall_area_gross_sqf} sqf)
+- Ceiling area: ${quantities.ceiling_area_sqf} sqf
+- Perimeter: ${quantities.perimeter_lf} LF
+- Baseboard: ${quantities.baseboard_lf} LF
+- Door/window casing: ${quantities.casing_lf} LF
+- Floor tile (with waste): ${quantities.floor_tile_sqf} sqf
+- Upper cabinet run: ${quantities.upper_cabinet_lf} LF
+- Lower cabinet run: ${quantities.lower_cabinet_lf} LF
+- Countertop: ${quantities.countertop_lf} LF\n`
+        : '';
+
+      const materialsTarget = roomType === 'kitchen' ? '18–25' : '12–18';
+      const costLinesSummary = costEstimate.lineItems
+        .map(l => `  - ${l.label}: $${l.avgCad.toLocaleString()}`)
+        .join('\n');
+
+      const prompt = `Generate a comprehensive renovation project brief for a ${roomType} renovation in ${provinceCode}, Canada.
+
+=== ROOM ANALYSIS (from AI photo scan) ===
+${JSON.stringify(analysisResult, null, 2)}
+
+=== HOMEOWNER SELECTIONS ===
+${answerSummary}
+
+=== QUALITY TIER: ${qualityTier.toUpperCase()} ===
+The homeowner selected "${qualityTier}" quality. ALL materials must be "${qualityTier}" grade.
+${quantitiesNote}
+=== PRE-CALCULATED COST (from Walker AI Pricing Engine — DO NOT CHANGE THESE NUMBERS) ===
+The Walker AI Pricing Engine has already computed the cost from the official pricing reference:
+${costLinesSummary}
+TOTAL AVERAGE: $${costEstimate.avgDollars.toLocaleString()} CAD
+ai_cost_min (use this exact value): ${costEstimate.min}
+ai_cost_max (use this exact value): ${costEstimate.max}
+
+You MUST use ai_cost_min: ${costEstimate.min} and ai_cost_max: ${costEstimate.max} in your response.
+Do NOT recalculate costs. Do NOT substitute your own numbers. The pricing engine is authoritative.
+
+Return a valid JSON object — no markdown, no explanation, just the JSON:
 {
   "materials": [
-    { "item": "string", "quantity": number, "unit": "string", "quality_tier": "budget|mid-range|luxury" }
+    { "item": "string", "quantity": number, "unit": "string", "quality_tier": "${qualityTier}" }
   ],
   "scope_of_work": [
     { "phase": "demolition|rough-in|installation|finishing", "description": "string", "sort_order": number }
   ],
-  "ai_cost_min": number,
-  "ai_cost_max": number,
+  "ai_cost_min": ${costEstimate.min},
+  "ai_cost_max": ${costEstimate.max},
   "permits": [
     { "permit_type": "string", "required": true }
   ],
-  "ai_observations": "2-3 sentence summary for the homeowner"
+  "ai_observations": "2-3 sentence summary for the homeowner",
+  "confidence_score": number,
+  "confidence_notes": "string"
 }
 
-Rules:
-- ai_cost_min and ai_cost_max must be in CAD cents and within ±30% of regional baseline
-- Adjust cost based on quality_tier preferences from questionnaire
-- Include realistic Canadian permit requirements
-- Materials should reflect the quality tier selected
-- scope_of_work must cover all phases in order
-- Return ONLY the JSON, no markdown`;
+RULES:
+1. ai_cost_min and ai_cost_max: copy the exact values above (${costEstimate.min} and ${costEstimate.max}). Do not change them.
+2. QUALITY TIER: All materials MUST use quality_tier: "${qualityTier}". For luxury: name premium brands (Thermador, Sub-Zero, Caesarstone, Kohler Artifacts, Wolf). For budget: name stock-grade products. For mid-range: semi-custom grades.
+3. MATERIALS LIST: Include ${materialsTarget} line items matching the cost breakdown above. Include cabinets (upper + lower), countertops, backsplash tile, flooring, drywall repair, paint (walls + ceiling), plumbing fixtures, electrical fixtures, hardware, trim/baseboard, disposal. Add appliances if homeowner selected replacement.
+4. SCOPE: Cover all phases in logical order (demolition → rough-in → installation → finishing).
+5. PERMITS: List realistic Ontario Building Code permit requirements.
+6. CONFIDENCE: Start at 90, deduct for structural changes (-15), drain relocation (-12), no measurements provided (-8), pre-1980 home (-10). Minimum 30.
+7. Return ONLY the JSON.`;
 
       const res = await fetch(OPENAI_URL, {
         method: 'POST',
@@ -143,7 +193,7 @@ Rules:
         },
         body: JSON.stringify({
           model: 'gpt-4o',
-          max_tokens: 4000,
+          max_tokens: 6000,
           messages: [{ role: 'user', content: prompt }],
         }),
       });
@@ -158,12 +208,17 @@ Rules:
       const cleaned = rawText.replace(/^```json\s*/i, '').replace(/^```\s*/i, '').replace(/```\s*$/i, '').trim();
       const briefData: BriefData = JSON.parse(cleaned);
 
+      // Always use the TypeScript-computed costs (authoritative) — don't trust AI-generated costs
+      briefData.ai_cost_min = costEstimate.min;
+      briefData.ai_cost_max = costEstimate.max;
+
       // Save to DB directly (bypasses edge function JWT issues)
       await Promise.all([
         supabase.from('projects').update({
           ai_cost_min: briefData.ai_cost_min,
           ai_cost_max: briefData.ai_cost_max,
           questionnaire_answers: answers,
+          ...(briefData.confidence_score != null ? { ai_confidence_score: briefData.confidence_score } : {}),
         }).eq('id', projectId),
         briefData.materials.length > 0
           ? supabase.from('materials').insert(briefData.materials.map((m) => ({ ...m, project_id: projectId })))
@@ -182,7 +237,7 @@ Rules:
     } finally {
       setLoading(false);
     }
-  }, [projectId, analysisResult, answers, selectedRenderId, address, province]);
+  }, [projectId, analysisResult, answers, selectedRenderId, address, province, measurements]);
 
   useEffect(() => {
     generateBrief();
@@ -265,8 +320,26 @@ Rules:
               {formatCad(brief.ai_cost_min)} – {formatCad(brief.ai_cost_max)}
             </Text>
             <Text style={styles.costNote}>
-              Final price set by your contractor's quote. This is an AI estimate.
+              AI estimate (±8%) · exact price confirmed by contractor quote
             </Text>
+            {brief.confidence_score != null && (
+              <View style={styles.confidenceRow}>
+                <View style={[
+                  styles.confidenceBadge,
+                  brief.confidence_score >= 80
+                    ? styles.confidenceHigh
+                    : brief.confidence_score >= 60
+                    ? styles.confidenceMid
+                    : styles.confidenceLow,
+                ]}>
+                  <Text style={styles.confidenceScore}>{brief.confidence_score}%</Text>
+                  <Text style={styles.confidenceLabel}>estimate confidence</Text>
+                </View>
+                {brief.confidence_notes ? (
+                  <Text style={styles.confidenceNotes}>{brief.confidence_notes}</Text>
+                ) : null}
+              </View>
+            )}
           </GlassCard>
 
           {/* Scope of Work */}
@@ -379,7 +452,21 @@ const styles = StyleSheet.create({
     letterSpacing: -0.5,
     marginBottom: 6,
   },
-  costNote: { ...Typography.caption, lineHeight: 18 },
+  costNote: { ...Typography.caption, lineHeight: 18, marginBottom: 10 },
+  confidenceRow: { flexDirection: 'row', alignItems: 'center', gap: 12, marginTop: 4 },
+  confidenceBadge: {
+    borderRadius: 8,
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    alignItems: 'center',
+    minWidth: 70,
+  },
+  confidenceHigh: { backgroundColor: 'rgba(52, 199, 89, 0.15)', borderWidth: 1, borderColor: 'rgba(52, 199, 89, 0.3)' },
+  confidenceMid:  { backgroundColor: 'rgba(255, 159, 10, 0.15)', borderWidth: 1, borderColor: 'rgba(255, 159, 10, 0.3)' },
+  confidenceLow:  { backgroundColor: 'rgba(255, 69, 58, 0.15)',  borderWidth: 1, borderColor: 'rgba(255, 69, 58, 0.3)'  },
+  confidenceScore: { fontSize: 18, fontWeight: '700', color: Colors.text.primary },
+  confidenceLabel: { fontSize: 10, color: Colors.text.tertiary, textTransform: 'uppercase', letterSpacing: 0.4 },
+  confidenceNotes: { ...Typography.caption, flex: 1, lineHeight: 18, color: Colors.text.secondary },
   scopeRow: { flexDirection: 'row', alignItems: 'flex-start', gap: 10, marginBottom: 12 },
   scopePhaseTag: {
     backgroundColor: 'rgba(255, 107, 0, 0.12)',
