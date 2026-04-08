@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from 'react';
 import {
   Alert,
+  Linking,
   RefreshControl,
   ScrollView,
   StyleSheet,
@@ -102,6 +103,23 @@ export default function CompanyProfileScreen() {
     fetchData();
   };
 
+  const [connectLoading, setConnectLoading] = useState(false);
+
+  const handleSetupPayouts = async () => {
+    setConnectLoading(true);
+    try {
+      const { data, error } = await supabase.functions.invoke('create-connect-account');
+      if (error) throw error;
+      if (data?.url) {
+        await Linking.openURL(data.url);
+      }
+    } catch (err) {
+      Alert.alert('Error', err instanceof Error ? err.message : 'Could not start payout setup. Please try again.');
+    } finally {
+      setConnectLoading(false);
+    }
+  };
+
   function formatCad(cents: number) {
     return new Intl.NumberFormat('en-CA', {
       style: 'currency', currency: 'CAD', maximumFractionDigits: 0,
@@ -197,12 +215,24 @@ export default function CompanyProfileScreen() {
                   <Text style={styles.infoVal}>{company.license_number}</Text>
                 </View>
               )}
-              <View style={[styles.infoRow, { borderBottomWidth: 0 }]}>
+              <View style={[styles.infoRow, { borderBottomWidth: company.stripe_account_id ? 0 : 1 }]}>
                 <Text style={styles.infoKey}>Stripe</Text>
                 <Text style={[styles.infoVal, company.stripe_account_id ? styles.connected : styles.notConnected]}>
-                  {company.stripe_account_id ? 'Connected' : 'Not connected'}
+                  {company.stripe_account_id ? 'Connected ✓' : 'Not connected'}
                 </Text>
               </View>
+              {!company.stripe_account_id && (
+                <View style={[styles.infoRow, { borderBottomWidth: 0 }]}>
+                  <GlassButton
+                    label={connectLoading ? 'Opening…' : 'Set up payouts'}
+                    onPress={handleSetupPayouts}
+                    loading={connectLoading}
+                    fullWidth
+                    size="sm"
+                    style={{ marginTop: 4 }}
+                  />
+                </View>
+              )}
             </GlassCard>
           )}
 
