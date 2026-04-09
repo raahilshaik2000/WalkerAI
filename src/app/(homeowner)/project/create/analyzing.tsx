@@ -156,37 +156,20 @@ export default function AnalyzingScreen() {
         const localPhotos = photos.filter((p) => p.status === 'done');
         if (localPhotos.length === 0) throw new Error('No photos found.');
 
-        // Upload photos to storage IN PARALLEL with AI call.
-        // Use base64 data (already in memory) instead of reading the local file URI,
-        // which is unreliable on iOS due to temporary file access restrictions.
+        // Upload photos to storage IN PARALLEL with AI call
         const uploadPromise = Promise.all(
           localPhotos.map(async (photo, i) => {
-            const b64 = photo.base64;
-            if (!b64) return;
+            if (!photo.uri) return;
             try {
               const path = `${pid}/${i}_${Date.now()}.jpg`;
-              // React Native doesn't support new Blob([ArrayBuffer]).
-              // Use fetch on a data URI — this is the supported RN approach.
-              const response = await fetch(`data:image/jpeg;base64,${b64}`);
-              const blob = await response.blob();
-
-              const { error: storageError } = await supabase.storage
-                .from('project-photos')
-                .upload(path, blob, { contentType: 'image/jpeg', upsert: true });
-
-              if (storageError) throw storageError;
-
-              const { data: { publicUrl } } = supabase.storage
-                .from('project-photos')
-                .getPublicUrl(path);
-
+              const { publicUrl, storagePath } = await uploadFile('project-photos', path, photo.uri, 'image/jpeg');
               await supabase.from('project_photos').insert({
                 project_id: pid,
                 url: publicUrl,
-                storage_path: path,
+                storage_path: storagePath,
               });
-            } catch (uploadErr) {
-              console.error(`[WalkerAI] Photo upload failed (photo ${i}):`, uploadErr);
+            } catch {
+              // Individual upload failure should not block analysis
             }
           })
         );
