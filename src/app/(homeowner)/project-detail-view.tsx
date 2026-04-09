@@ -87,12 +87,12 @@ const PHASE_ICON: Record<string, string> = {
 };
 
 const ACTIONS = [
-  { key: 'DetailMilestones',   icon: 'flag-outline',               label: 'Milestones' },
-  { key: 'DetailMessages',     icon: 'chatbubble-outline',          label: 'Messages'   },
-  { key: 'DetailQuote',        icon: 'document-text-outline',       label: 'Quote'      },
-  { key: 'DetailPermits',      icon: 'shield-checkmark-outline',    label: 'Permits'    },
-  { key: 'DetailChangeOrders', icon: 'swap-horizontal-outline',     label: 'Changes'    },
-  { key: 'DetailReview',       icon: 'star-outline',                label: 'Review'     },
+  { screen: 'Milestones',   icon: 'flag-outline',               label: 'Milestones' },
+  { screen: 'Messages',     icon: 'chatbubble-outline',          label: 'Messages'   },
+  { screen: 'Quote',        icon: 'document-text-outline',       label: 'Quote'      },
+  { screen: 'Permits',      icon: 'shield-checkmark-outline',    label: 'Permits'    },
+  { screen: 'ChangeOrders', icon: 'swap-horizontal-outline',     label: 'Changes'    },
+  { screen: 'Review',       icon: 'star-outline',                label: 'Review'     },
 ];
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
@@ -488,10 +488,10 @@ export default function ProjectDetailViewScreen() {
           <View style={styles.actionsGrid}>
             {ACTIONS.map((action) => (
               <AnimatedPressable
-                key={action.key}
+                key={action.screen}
                 style={styles.actionItem}
                 haptic
-                onPress={() => navigation.navigate(action.key, { projectId: project.id })}
+                onPress={() => navigation.navigate('ProjectDetail', { screen: action.screen, params: { id: project.id } })}
               >
                 <View style={styles.actionIconWrap}>
                   <Ionicons name={action.icon as any} size={22} color="#fff" />

@@ -208,17 +208,17 @@ export default function ProjectDetailScreen() {
           {/* Action buttons */}
           <View style={styles.actionsGrid}>
             {[
-              { label: 'Milestones', icon: '📋', route: `/(homeowner)/project/${id}/milestones` },
-              { label: 'Messages', icon: '💬', route: `/(homeowner)/project/${id}/messages` },
-              { label: 'Quote', icon: '📄', route: `/(homeowner)/project/${id}/quote` },
-              { label: 'Permits', icon: '🏛', route: `/(homeowner)/project/${id}/permits` },
-              { label: 'Changes', icon: '📝', route: `/(homeowner)/project/${id}/change-orders` },
-              { label: 'Review', icon: '⭐', route: `/(homeowner)/project/${id}/review` },
+              { label: 'Milestones', icon: '📋', screen: 'Milestones' },
+              { label: 'Messages',   icon: '💬', screen: 'Messages'   },
+              { label: 'Quote',      icon: '📄', screen: 'Quote'      },
+              { label: 'Permits',    icon: '🏛', screen: 'Permits'    },
+              { label: 'Changes',    icon: '📝', screen: 'ChangeOrders' },
+              { label: 'Review',     icon: '⭐', screen: 'Review'     },
             ].map((action) => (
               <TouchableOpacity
                 key={action.label}
                 style={styles.actionCard}
-                onPress={() => navigation.navigate(action.route as any)}
+                onPress={() => navigation.navigate(action.screen as any, { id })}
                 activeOpacity={0.8}
               >
                 <Text style={styles.actionIcon}>{action.icon}</Text>
