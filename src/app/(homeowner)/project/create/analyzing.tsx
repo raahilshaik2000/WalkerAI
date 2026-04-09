@@ -165,11 +165,10 @@ export default function AnalyzingScreen() {
             if (!b64) return;
             try {
               const path = `${pid}/${i}_${Date.now()}.jpg`;
-              // Decode base64 → Uint8Array → upload as binary
-              const binary = atob(b64);
-              const bytes = new Uint8Array(binary.length);
-              for (let j = 0; j < binary.length; j++) bytes[j] = binary.charCodeAt(j);
-              const blob = new Blob([bytes], { type: 'image/jpeg' });
+              // React Native doesn't support new Blob([ArrayBuffer]).
+              // Use fetch on a data URI — this is the supported RN approach.
+              const response = await fetch(`data:image/jpeg;base64,${b64}`);
+              const blob = await response.blob();
 
               const { error: storageError } = await supabase.storage
                 .from('project-photos')
