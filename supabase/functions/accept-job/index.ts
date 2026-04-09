@@ -83,13 +83,41 @@ Deno.serve(async (req) => {
       );
     }
 
-    // Job accepted successfully — send notifications
-    // Load project for homeowner details
+    // Job accepted successfully — load project details
     const { data: project } = await adminClient
       .from('projects')
-      .select('homeowner_id, address, city, room_type')
+      .select('homeowner_id, address, city, room_type, ai_cost_min, ai_cost_max')
       .eq('id', project_id)
       .single();
+
+    // Auto-create a quote at the AI price with standard milestones
+    if (project?.ai_cost_min && project?.ai_cost_max) {
+      const avgCost = Math.round((project.ai_cost_min + project.ai_cost_max) / 2);
+      const deposit    = Math.round(avgCost * 0.30);
+      const midpoint   = Math.round(avgCost * 0.30);
+      const completion = avgCost - deposit - midpoint;
+
+      const { data: quote } = await adminClient
+        .from('quotes')
+        .insert({
+          project_id,
+          company_id: company.id,
+          total_amount: avgCost,
+          status: 'pending',
+          commission_rate: 0.10,
+          submitted_at: new Date().toISOString(),
+        })
+        .select('id')
+        .single();
+
+      if (quote?.id) {
+        await adminClient.from('milestones').insert([
+          { quote_id: quote.id, title: 'Project Deposit',    amount: deposit,    sort_order: 1, status: 'pending' },
+          { quote_id: quote.id, title: 'Mid-Project',        amount: midpoint,   sort_order: 2, status: 'pending' },
+          { quote_id: quote.id, title: 'Final Completion',   amount: completion, sort_order: 3, status: 'pending' },
+        ]);
+      }
+    }
 
     if (project) {
       // Notify homeowner

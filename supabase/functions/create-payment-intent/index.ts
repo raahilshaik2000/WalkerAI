@@ -35,17 +35,14 @@ Deno.serve(async (req) => {
       });
     }
 
-    const { quote_id } = await req.json();
+    const { quote_id, project_id: pid } = await req.json();
 
-    // Load quote with project
-    const { data: quote, error: quoteError } = await adminClient
-      .from('quotes')
-      .select(`
-        id, total_amount, status, project_id,
-        project:projects ( id, homeowner_id )
-      `)
-      .eq('id', quote_id)
-      .single();
+    // Accept either a direct quote_id or a project_id (find the pending quote automatically)
+    const quoteQuery = quote_id
+      ? adminClient.from('quotes').select(`id, total_amount, status, project_id, project:projects ( id, homeowner_id )`).eq('id', quote_id).single()
+      : adminClient.from('quotes').select(`id, total_amount, status, project_id, project:projects ( id, homeowner_id )`).eq('project_id', pid).eq('status', 'pending').single();
+
+    const { data: quote, error: quoteError } = await quoteQuery;
 
     if (quoteError || !quote) {
       return new Response(JSON.stringify({ error: 'Quote not found' }), {
