@@ -13,6 +13,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { useNavigation, useRoute } from '@react-navigation/native';
 import Ionicons from 'react-native-vector-icons/Ionicons';
 import { useProjectWizardStore, type MaterialOverride } from '@/stores/project-wizard.store';
+import { lookupMaterialPrice } from '@/data/pricing-reference';
 import { GradientBackground } from '@/components/ui';
 import { Colors, Radius, Spacing, Typography } from '@/constants/theme';
 
@@ -45,6 +46,16 @@ const TIERS: { id: QualityTier; label: string; icon: string; color: string; desc
   },
 ];
 
+function formatCad(amount: number) {
+  return new Intl.NumberFormat('en-CA', { style: 'currency', currency: 'CAD', maximumFractionDigits: 0 }).format(amount);
+}
+
+const TIER_PRICE_KEY: Record<QualityTier, 'low' | 'avg' | 'high'> = {
+  budget: 'low',
+  'mid-range': 'avg',
+  luxury: 'high',
+};
+
 export default function MaterialDetailScreen() {
   const navigation = useNavigation<any>();
   const route = useRoute<any>();
@@ -59,6 +70,8 @@ export default function MaterialDetailScreen() {
   const existing = materialOverrides[materialIndex] ?? {};
 
   const [tier, setTier] = useState<QualityTier>(existing.quality_tier ?? 'mid-range');
+
+  const priceData = lookupMaterialPrice(materialName);
   const [brand, setBrand] = useState(existing.brand_preference ?? '');
   const [colorFinish, setColorFinish] = useState(existing.color_finish ?? '');
   const [model, setModel] = useState(existing.specific_model ?? '');
@@ -115,8 +128,20 @@ export default function MaterialDetailScreen() {
                         <Text style={[styles.tierLabel, selected && { color: t.color }]}>{t.label}</Text>
                         <Text style={styles.tierDesc}>{t.description}</Text>
                       </View>
-                      <View style={[styles.tierRadio, selected && { borderColor: t.color }]}>
-                        {selected && <View style={[styles.tierRadioInner, { backgroundColor: t.color }]} />}
+                      <View style={{ alignItems: 'flex-end', gap: 4 }}>
+                        {priceData && (
+                          <View style={[styles.tierPriceBadge, selected && { backgroundColor: t.color + '22', borderColor: t.color + '66' }]}>
+                            <Text style={[styles.tierPriceText, selected && { color: t.color }]}>
+                              {formatCad(priceData[TIER_PRICE_KEY[t.id]] * quantity)}
+                            </Text>
+                            <Text style={styles.tierPriceUnit}>
+                              {formatCad(priceData[TIER_PRICE_KEY[t.id]])}/{priceData.unit}
+                            </Text>
+                          </View>
+                        )}
+                        <View style={[styles.tierRadio, selected && { borderColor: t.color }]}>
+                          {selected && <View style={[styles.tierRadioInner, { backgroundColor: t.color }]} />}
+                        </View>
                       </View>
                     </View>
                     <Text style={styles.tierExample}>{t.example}</Text>
@@ -204,6 +229,9 @@ const styles = StyleSheet.create({
   tierRadio: { width: 22, height: 22, borderRadius: 11, borderWidth: 2, borderColor: Colors.glass.border, alignItems: 'center', justifyContent: 'center', flexShrink: 0, marginTop: 2 },
   tierRadioInner: { width: 10, height: 10, borderRadius: 5 },
   tierExample: { fontSize: 12, color: Colors.text.tertiary, fontStyle: 'italic', paddingLeft: 52 },
+  tierPriceBadge: { alignItems: 'flex-end', backgroundColor: Colors.glass.surface, borderWidth: 1, borderColor: Colors.glass.border, borderRadius: Radius.item, paddingHorizontal: 10, paddingVertical: 5 },
+  tierPriceText: { fontSize: 15, fontWeight: '700', color: '#fff' },
+  tierPriceUnit: { fontSize: 11, color: Colors.text.tertiary, marginTop: 1 },
 
   input: { backgroundColor: Colors.glass.surface, borderRadius: Radius.item, borderWidth: 1, borderColor: Colors.glass.border, paddingHorizontal: 16, paddingVertical: 14, fontSize: 15, color: '#fff' },
   inputMulti: { height: 110, paddingTop: 14 },
