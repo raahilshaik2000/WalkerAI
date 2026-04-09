@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import {
   ActivityIndicator,
+  Alert,
   Dimensions,
   FlatList,
   Image,
@@ -15,7 +16,8 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { useNavigation, useRoute } from '@react-navigation/native';
 import Ionicons from 'react-native-vector-icons/Ionicons';
 import LinearGradient from 'react-native-linear-gradient';
-import { AnimatedPressable, GlassCard, GradientBackground } from '@/components/ui';
+import { useStripe } from '@stripe/stripe-react-native';
+import { AnimatedPressable, GlassButton, GlassCard, GradientBackground } from '@/components/ui';
 import { Colors, Radius, Spacing } from '@/constants/theme';
 import { supabase } from '@/lib/supabase/client';
 
@@ -130,6 +132,41 @@ export default function ProjectDetailViewScreen() {
   const [permits, setPermits]     = useState<PermitItem[]>([]);
   const [loading, setLoading]     = useState(true);
   const [activeIdx, setActiveIdx] = useState(0);
+  const [paying, setPaying]       = useState(false);
+
+  const { initPaymentSheet, presentPaymentSheet } = useStripe();
+
+  const handlePay = async () => {
+    setPaying(true);
+    try {
+      const { data, error } = await supabase.functions.invoke('create-payment-intent', {
+        body: { project_id: project.id },
+      });
+      if (error) throw error;
+
+      const { error: initError } = await initPaymentSheet({
+        paymentIntentClientSecret: data.client_secret,
+        merchantDisplayName: 'WalkerAI',
+      });
+      if (initError) throw new Error(initError.message);
+
+      const { error: payError } = await presentPaymentSheet();
+      if (payError) {
+        if (payError.code !== 'Canceled') throw new Error(payError.message);
+        return;
+      }
+
+      Alert.alert(
+        'Payment received!',
+        'Your project is now active. Funds are held in escrow and released as milestones are approved.',
+        [{ text: 'OK' }]
+      );
+    } catch (err) {
+      Alert.alert('Payment failed', err instanceof Error ? err.message : 'Please try again.');
+    } finally {
+      setPaying(false);
+    }
+  };
   const [photoUrls, setPhotoUrls] = useState<string[]>([
     ...(project.renders?.map(r => r.url) ?? []),
     ...(project.project_photos?.map(p => p.url) ?? []),
@@ -287,7 +324,7 @@ export default function ProjectDetailViewScreen() {
                     {' – '}
                     {project.ai_cost_max ? formatCad(project.ai_cost_max) : '—'}
                   </Text>
-                  <Text style={styles.costNote}>AI estimate · final price set by contractor</Text>
+                  <Text style={styles.costNote}>Walker AI fixed price · confirmed by your contractor</Text>
                 </View>
                 {confidence != null && (
                   <View style={[
@@ -304,6 +341,27 @@ export default function ProjectDetailViewScreen() {
             </GlassCard>
           ) : null}
 
+          {/* Pay to Start button — shown when contractor has accepted */}
+          {project.status === 'accepted' && project.ai_cost_min && project.ai_cost_max && (
+            <GlassCard style={[styles.section, { borderColor: 'rgba(255,107,0,0.4)' }]}>
+              <Text style={styles.sectionLabel}>CONTRACTOR ACCEPTED</Text>
+              <Text style={{ color: Colors.text.primary, fontSize: 15, marginBottom: 4 }}>
+                Your contractor is ready to start. Pay to activate the project and place funds in escrow.
+              </Text>
+              <Text style={{ color: Colors.text.secondary, fontSize: 13, marginBottom: 16 }}>
+                You only release each payment after approving each milestone.
+              </Text>
+              <GlassButton
+                label={paying ? 'Processing…' : `Pay ${formatCad(Math.round((project.ai_cost_min + project.ai_cost_max) / 2))} & Start Project`}
+                onPress={handlePay}
+                loading={paying}
+                fullWidth
+                size="lg"
+                haptic
+              />
+            </GlassCard>
+          )}
+
           {/* Contractor status */}
           <GlassCard style={styles.section}>
             <View style={styles.contractorRow}>
@@ -312,11 +370,11 @@ export default function ProjectDetailViewScreen() {
               </View>
               <View style={{ flex: 1 }}>
                 <Text style={styles.contractorTitle}>
-                  {project.status === 'quoting'
-                    ? 'Reviewing contractor bids'
-                    : project.status === 'accepted' || project.status === 'active'
+                  {project.status === 'accepted'
+                    ? 'Contractor accepted your project'
+                    : project.status === 'active'
                     ? 'Contractor assigned'
-                    : 'Awaiting contractor match'}
+                    : 'Finding your contractor'}
                 </Text>
                 <Text style={styles.contractorSub}>
                   {project.status === 'dispatching'
