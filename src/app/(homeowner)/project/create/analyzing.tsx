@@ -168,8 +168,8 @@ export default function AnalyzingScreen() {
                 url: publicUrl,
                 storage_path: storagePath,
               });
-            } catch {
-              // Individual upload failure should not block analysis
+            } catch (uploadErr) {
+              console.error(`[WalkerAI] Photo upload failed (photo ${i}):`, uploadErr);
             }
           })
         );
