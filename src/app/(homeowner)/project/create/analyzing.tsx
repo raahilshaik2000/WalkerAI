@@ -156,17 +156,35 @@ export default function AnalyzingScreen() {
         const localPhotos = photos.filter((p) => p.status === 'done');
         if (localPhotos.length === 0) throw new Error('No photos found.');
 
-        // Upload photos to storage IN PARALLEL with AI call so they complete before we navigate
+        // Upload photos to storage IN PARALLEL with AI call.
+        // Use base64 data (already in memory) instead of reading the local file URI,
+        // which is unreliable on iOS due to temporary file access restrictions.
         const uploadPromise = Promise.all(
           localPhotos.map(async (photo, i) => {
-            if (!photo.uri) return;
+            const b64 = photo.base64;
+            if (!b64) return;
             try {
               const path = `${pid}/${i}_${Date.now()}.jpg`;
-              const { publicUrl, storagePath } = await uploadFile('project-photos', path, photo.uri, 'image/jpeg');
+              // Decode base64 → Uint8Array → upload as binary
+              const binary = atob(b64);
+              const bytes = new Uint8Array(binary.length);
+              for (let j = 0; j < binary.length; j++) bytes[j] = binary.charCodeAt(j);
+              const blob = new Blob([bytes], { type: 'image/jpeg' });
+
+              const { error: storageError } = await supabase.storage
+                .from('project-photos')
+                .upload(path, blob, { contentType: 'image/jpeg', upsert: true });
+
+              if (storageError) throw storageError;
+
+              const { data: { publicUrl } } = supabase.storage
+                .from('project-photos')
+                .getPublicUrl(path);
+
               await supabase.from('project_photos').insert({
                 project_id: pid,
                 url: publicUrl,
-                storage_path: storagePath,
+                storage_path: path,
               });
             } catch (uploadErr) {
               console.error(`[WalkerAI] Photo upload failed (photo ${i}):`, uploadErr);
