@@ -45,6 +45,9 @@ import ChatScreen from '@/app/(homeowner)/chat';
 import EditProfileScreen from '@/app/(homeowner)/edit-profile';
 import MyReviewsScreen from '@/app/(homeowner)/my-reviews';
 import SavedAddressesScreen from '@/app/(homeowner)/saved-addresses';
+import RoomScanScreen from '@/app/(homeowner)/room-scan';
+import RoomResultsScreen from '@/app/(homeowner)/room-results';
+import ManualMeasurementScreen from '@/app/(homeowner)/manual-measurement';
 
 // Homeowner project create screens
 import RoomTypeStep from '@/app/(homeowner)/project/create/room-type';
@@ -286,6 +289,9 @@ function HomeownerNavigator() {
       <HomeownerStack.Screen name="EditProfile" component={EditProfileScreen} />
       <HomeownerStack.Screen name="MyReviews" component={MyReviewsScreen} />
       <HomeownerStack.Screen name="SavedAddresses" component={SavedAddressesScreen} />
+      <HomeownerStack.Screen name="RoomScan" component={RoomScanScreen} />
+      <HomeownerStack.Screen name="RoomResults" component={RoomResultsScreen} />
+      <HomeownerStack.Screen name="ManualMeasurement" component={ManualMeasurementScreen} />
     </HomeownerStack.Navigator>
   );
 }
