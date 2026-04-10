@@ -3,7 +3,8 @@ import { requireNativeComponent, StyleSheet, Text, View, ViewStyle, StyleProp } 
 import { Colors, Typography } from '@/constants/theme';
 
 interface NativeUSDZViewerProps {
-  filePath: string;
+  filePath?: string;
+  measurementData?: string;
   style?: StyleProp<ViewStyle>;
 }
 
@@ -11,11 +12,16 @@ const NativeUSDZViewerView = requireNativeComponent<NativeUSDZViewerProps>('USDZ
 
 interface USDZViewerProps {
   filePath: string | null;
+  scanData?: any;
   style?: StyleProp<ViewStyle>;
 }
 
-export function USDZViewer({ filePath, style }: USDZViewerProps) {
-  if (!filePath) {
+export function USDZViewer({ filePath, scanData, style }: USDZViewerProps) {
+  // Always pass measurement data as JSON so the 3D view can render
+  // a generated model with labels even when no USDZ file exists
+  const measurementJSON = scanData ? JSON.stringify(scanData) : undefined;
+
+  if (!filePath && !scanData) {
     return (
       <View style={[styles.placeholder, style]}>
         <Text style={styles.placeholderText}>3D model not available</Text>
@@ -26,7 +32,13 @@ export function USDZViewer({ filePath, style }: USDZViewerProps) {
     );
   }
 
-  return <NativeUSDZViewerView filePath={filePath} style={[styles.viewer, style]} />;
+  return (
+    <NativeUSDZViewerView
+      filePath={filePath ?? ''}
+      measurementData={measurementJSON}
+      style={[styles.viewer, style]}
+    />
+  );
 }
 
 const styles = StyleSheet.create({

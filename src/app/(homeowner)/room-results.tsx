@@ -79,7 +79,7 @@ export default function RoomResultsScreen() {
               />
             ) : (
               <View style={{ width: PLAN_SIZE, height: PLAN_SIZE }}>
-                <USDZViewer filePath={usdzFilePath} style={{ flex: 1 }} />
+                <USDZViewer filePath={usdzFilePath} scanData={scanData} style={{ flex: 1 }} />
               </View>
             )}
           </View>
