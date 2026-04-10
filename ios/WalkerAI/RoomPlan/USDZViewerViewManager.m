@@ -19,6 +19,7 @@ RCT_EXPORT_MODULE(USDZViewerView)
 }
 
 RCT_EXPORT_VIEW_PROPERTY(filePath, NSString)
+RCT_EXPORT_VIEW_PROPERTY(measurementData, NSString)
 
 + (BOOL)requiresMainQueueSetup {
   return YES;
