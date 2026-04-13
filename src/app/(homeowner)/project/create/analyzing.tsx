@@ -156,7 +156,7 @@ export default function AnalyzingScreen() {
         const localPhotos = photos.filter((p) => p.status === 'done');
         if (localPhotos.length === 0) throw new Error('No photos found.');
 
-        // Upload photos to storage IN PARALLEL with AI call so they complete before we navigate
+        // Upload photos to storage IN PARALLEL with AI call
         const uploadPromise = Promise.all(
           localPhotos.map(async (photo, i) => {
             if (!photo.uri) return;

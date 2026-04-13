@@ -334,101 +334,107 @@ export function estimateProjectCost(params: {
     if (avgCad > 0) lines.push({ label, avgCad: Math.round(avgCad) });
   };
 
+  // Helper: pick the right column based on quality tier
+  const p = (entry: { low: number; avg: number; high: number }) =>
+    qualityTier === 'luxury' ? entry.high : qualityTier === 'mid-range' ? entry.avg : entry.low;
+
   if (roomType === 'kitchen') {
     // ── Quantities (use measurements or GTA typical defaults) ──
-    const cabinetLf  = (quantities?.upper_cabinet_lf ?? 0) + (quantities?.lower_cabinet_lf ?? 0) || 32; // 16 upper + 16 lower
-    const counterLf  = quantities?.countertop_lf || 22;
-    const floorSqf   = quantities?.floor_tile_sqf || 160; // ~12×13
-    const wallSqf    = quantities?.wall_area_net_sqf || 420;
-    const backsplashSqf = Math.min(counterLf * 1.5, 40); // ~1.5 sqf per LF counter
-    const baseboardLf = quantities?.baseboard_lf || 50;
+    const cabinetLf     = (quantities?.upper_cabinet_lf ?? 0) + (quantities?.lower_cabinet_lf ?? 0) || 32;
+    const counterLf     = quantities?.countertop_lf || 22;
+    const floorSqf      = quantities?.floor_tile_sqf || 160;
+    const wallSqf       = quantities?.wall_area_net_sqf || 420;
+    const backsplashSqf = Math.min(counterLf * 1.5, 40);
+    const baseboardLf   = quantities?.baseboard_lf || 50;
 
     // ── Demo ──
-    add('Cabinet demolition & removal', LABOR_PRICING.demolition.kitchen_cabinet_removal.avg * cabinetLf);
-    add('Floor removal', LABOR_PRICING.demolition.floor_removal.avg * floorSqf);
+    add('Cabinet demolition & removal', p(LABOR_PRICING.demolition.kitchen_cabinet_removal) * cabinetLf);
+    add('Floor removal', p(LABOR_PRICING.demolition.floor_removal) * floorSqf);
 
     // ── Cabinetry (material + install labor) ──
     const cabMat = qualityTier === 'luxury'
-      ? MATERIAL_PRICING.cabinetry.custom_cabinets.avg
+      ? MATERIAL_PRICING.cabinetry.custom_cabinets.high
       : qualityTier === 'mid-range'
       ? MATERIAL_PRICING.cabinetry.semi_custom_cabinets.avg
-      : MATERIAL_PRICING.cabinetry.stock_kitchen_cabinets.avg;
+      : MATERIAL_PRICING.cabinetry.stock_kitchen_cabinets.low;
     const cabInstallLabor = qualityTier === 'luxury'
-      ? LABOR_PRICING.cabinetry.custom_cabinet_install.avg
-      : LABOR_PRICING.cabinetry.kitchen_cabinet_install.avg;
+      ? LABOR_PRICING.cabinetry.custom_cabinet_install.high
+      : p(LABOR_PRICING.cabinetry.kitchen_cabinet_install);
     add(`${qualityTier === 'luxury' ? 'Custom' : qualityTier === 'mid-range' ? 'Semi-custom' : 'Stock'} cabinets (material)`, cabMat * cabinetLf);
     add('Cabinet installation (labour)', cabInstallLabor * cabinetLf);
 
-    // ── Countertops (supply + fab + install, priced per LF including install) ──
+    // ── Countertops ──
     const ctRate = qualityTier === 'luxury'
-      ? MATERIAL_PRICING.countertops.stone_premium.avg
+      ? MATERIAL_PRICING.countertops.stone_premium.high
       : qualityTier === 'mid-range'
       ? MATERIAL_PRICING.countertops.quartz.avg
-      : MATERIAL_PRICING.countertops.laminate.avg;
+      : MATERIAL_PRICING.countertops.laminate.low;
     add('Countertop (supply, fabricate & install)', ctRate * counterLf);
 
     // ── Backsplash ──
-    add('Backsplash tile (material)', MATERIAL_PRICING.tile_surface.backsplash_tile.avg * backsplashSqf);
-    add('Backsplash tile install (labour)', LABOR_PRICING.tile.backsplash_tile_install.avg * backsplashSqf);
+    add('Backsplash tile (material)', p(MATERIAL_PRICING.tile_surface.backsplash_tile) * backsplashSqf);
+    add('Backsplash tile install (labour)', p(LABOR_PRICING.tile.backsplash_tile_install) * backsplashSqf);
 
     // ── Flooring ──
     const floorMatRate = qualityTier === 'luxury'
-      ? MATERIAL_PRICING.flooring.engineered_hardwood.avg
+      ? MATERIAL_PRICING.flooring.engineered_hardwood.high
       : qualityTier === 'mid-range'
-      ? MATERIAL_PRICING.flooring.vinyl_plank.avg * 1.4 // premium vinyl
-      : MATERIAL_PRICING.flooring.vinyl_plank.avg;
+      ? MATERIAL_PRICING.flooring.vinyl_plank.avg
+      : MATERIAL_PRICING.flooring.vinyl_plank.low;
     const floorLaborRate = qualityTier === 'luxury'
-      ? LABOR_PRICING.flooring.engineered_hardwood.avg
-      : LABOR_PRICING.flooring.vinyl_plank_install.avg;
+      ? LABOR_PRICING.flooring.engineered_hardwood.high
+      : p(LABOR_PRICING.flooring.vinyl_plank_install);
     add('Flooring material', floorMatRate * floorSqf * (1 + WASTE_FACTORS.flooring_standard));
     add('Flooring installation (labour)', floorLaborRate * floorSqf);
 
     // ── Plumbing (kitchen sink + faucet + rough-in) ──
     const hasMajorPlumb = answers['k_layout']?.includes('major');
-    add('Kitchen sink & faucet', MATERIAL_PRICING.plumbing_fixtures.sink_basin.avg + MATERIAL_PRICING.plumbing_fixtures.sink_faucet.avg);
-    add('Sink installation (labour)', LABOR_PRICING.plumbing.vanity_install.avg);
+    add('Kitchen sink & faucet', p(MATERIAL_PRICING.plumbing_fixtures.sink_basin) + p(MATERIAL_PRICING.plumbing_fixtures.sink_faucet));
+    add('Sink installation (labour)', p(LABOR_PRICING.plumbing.vanity_install));
     if (hasMajorPlumb) {
-      add('Plumbing relocation', LABOR_PRICING.plumbing.minor_plumbing_reloc.avg);
+      add('Plumbing relocation', p(LABOR_PRICING.plumbing.minor_plumbing_reloc));
     }
 
     // ── Appliances ──
     const appAnswer = answers['k_appliances'] ?? '';
     if (appAnswer.includes('k_app_full')) {
-      const appCost = qualityTier === 'luxury' ? 22000 : qualityTier === 'mid-range' ? 9000 : 4500;
+      const appCost = qualityTier === 'luxury' ? 25000 : qualityTier === 'mid-range' ? 10000 : 5000;
       add('Appliance suite (supply)', appCost);
-      add('Appliance installation (labour)', 1200);
+      add('Appliance installation (labour)', qualityTier === 'luxury' ? 1800 : 1200);
     } else if (appAnswer.includes('k_app_some')) {
-      const appCost = qualityTier === 'luxury' ? 8000 : qualityTier === 'mid-range' ? 4000 : 2000;
+      const appCost = qualityTier === 'luxury' ? 9000 : qualityTier === 'mid-range' ? 4500 : 2200;
       add('Appliances (partial, supply)', appCost);
-      add('Appliance installation (labour)', 600);
+      add('Appliance installation (labour)', qualityTier === 'luxury' ? 800 : 500);
     }
 
     // ── Electrical ──
-    const potLights = 6;
-    add('Pot lights (material)', MATERIAL_PRICING.electrical_fixtures.pot_light.avg * potLights);
-    add('Pot light installation (labour)', LABOR_PRICING.electrical.pot_light_install.avg * potLights);
-    add('Under-cabinet lighting (labour)', LABOR_PRICING.electrical.under_cabinet_lighting.avg * Math.min(counterLf, 15));
-    add('GFI outlets (material + labour)', (MATERIAL_PRICING.electrical_fixtures.gfi_receptacle.avg + LABOR_PRICING.electrical.gfi_outlet_install.avg) * 2);
+    const potLights = qualityTier === 'luxury' ? 8 : 6;
+    add('Pot lights (material)', p(MATERIAL_PRICING.electrical_fixtures.pot_light) * potLights);
+    add('Pot light installation (labour)', p(LABOR_PRICING.electrical.pot_light_install) * potLights);
+    if (qualityTier !== 'budget') {
+      add('Under-cabinet lighting (labour)', p(LABOR_PRICING.electrical.under_cabinet_lighting) * Math.min(counterLf, 15));
+    }
+    add('GFI outlets (material + labour)', (p(MATERIAL_PRICING.electrical_fixtures.gfi_receptacle) + p(LABOR_PRICING.electrical.gfi_outlet_install)) * 2);
 
     // ── Painting ──
-    const paintGallons = Math.ceil(wallSqf / 350) + 1; // +1 for primer
-    add('Paint & primer (material)', MATERIAL_PRICING.paint.interior_wall_paint.avg * paintGallons);
-    add('Wall painting (labour)', LABOR_PRICING.painting.interior_wall_painting.avg * wallSqf);
-    add('Ceiling painting (labour)', LABOR_PRICING.painting.ceiling_painting.avg * (floorSqf * 1.05));
+    const paintGallons = Math.ceil(wallSqf / 350) + 1;
+    add('Paint & primer (material)', p(MATERIAL_PRICING.paint.interior_wall_paint) * paintGallons);
+    add('Wall painting (labour)', p(LABOR_PRICING.painting.interior_wall_painting) * wallSqf);
+    add('Ceiling painting (labour)', p(LABOR_PRICING.painting.ceiling_painting) * (floorSqf * 1.05));
 
     // ── Drywall repair ──
-    add('Drywall patch & repair', LABOR_PRICING.drywall.drywall_patch_repair.avg * 3);
+    add('Drywall patch & repair', p(LABOR_PRICING.drywall.drywall_patch_repair) * 2);
 
     // ── Trim & baseboard ──
-    add('Baseboard material', MATERIAL_PRICING.doors_trim.baseboard.avg * baseboardLf);
-    add('Baseboard installation (labour)', LABOR_PRICING.carpentry.baseboard_install.avg * baseboardLf);
+    add('Baseboard material', p(MATERIAL_PRICING.doors_trim.baseboard) * baseboardLf);
+    add('Baseboard installation (labour)', p(LABOR_PRICING.carpentry.baseboard_install) * baseboardLf);
 
     // ── Disposal ──
-    add('Disposal & dumpster', MATERIAL_PRICING.disposal.disposal_bin_rental.avg);
+    add('Disposal & dumpster', p(MATERIAL_PRICING.disposal.disposal_bin_rental));
 
     // ── Permits ──
     const hasStructural = answers['k_layout']?.includes('major');
-    add('Building permit', hasStructural ? LABOR_PRICING.permit.permit_allowance.avg * 1.5 : LABOR_PRICING.permit.permit_allowance.avg);
+    add('Building permit', hasStructural ? p(LABOR_PRICING.permit.permit_allowance) * 1.5 : p(LABOR_PRICING.permit.permit_allowance));
 
     // ── General contractor overhead (15%) ──
     const subtotal = lines.reduce((s, l) => s + l.avgCad, 0);
@@ -438,92 +444,82 @@ export function estimateProjectCost(params: {
     // ── BATHROOM ──
     const floorSqf  = quantities?.floor_tile_sqf || 65;
     const wallSqf   = quantities?.wall_area_net_sqf || 300;
-    const showerSqf = 45; // standard shower surround
+    const showerSqf = 45;
 
     // Demo
     const hasShowerChange = !answers['b_shower']?.includes('keep');
-    if (hasShowerChange) add('Full bathroom demolition', LABOR_PRICING.demolition.full_bathroom_demo.avg);
+    if (hasShowerChange) add('Full bathroom demolition', p(LABOR_PRICING.demolition.full_bathroom_demo));
     else {
-      add('Tile demolition (partial)', LABOR_PRICING.demolition.tile_demolition.avg * floorSqf);
-      add('Vanity & fixture removal', LABOR_PRICING.demolition.vanity_removal.avg + LABOR_PRICING.demolition.toilet_removal.avg);
+      add('Tile demolition (partial)', p(LABOR_PRICING.demolition.tile_demolition) * floorSqf);
+      add('Vanity & fixture removal', p(LABOR_PRICING.demolition.vanity_removal) + p(LABOR_PRICING.demolition.toilet_removal));
     }
 
     // Tile (floor)
     const tileAnswer = answers['b_tile'] ?? 'b_tile_full';
-    const tileMat = qualityTier === 'luxury'
-      ? MATERIAL_PRICING.tile_surface.floor_tile.high
-      : qualityTier === 'mid-range'
-      ? MATERIAL_PRICING.tile_surface.floor_tile.avg
-      : MATERIAL_PRICING.tile_surface.floor_tile.low;
+    const tileMat = p(MATERIAL_PRICING.tile_surface.floor_tile);
     if (!tileAnswer.includes('keep') && !tileAnswer.includes('shower')) {
       add('Floor tile (material)', tileMat * floorSqf * (1 + WASTE_FACTORS.tile_standard));
-      add('Floor tile installation (labour)', LABOR_PRICING.tile.floor_tile_install.avg * floorSqf);
+      add('Floor tile installation (labour)', p(LABOR_PRICING.tile.floor_tile_install) * floorSqf);
     }
 
     // Shower tile
     if (tileAnswer.includes('full') || tileAnswer.includes('shower')) {
-      const showerTileMat = qualityTier === 'luxury'
-        ? MATERIAL_PRICING.tile_surface.shower_tile.high
-        : MATERIAL_PRICING.tile_surface.shower_tile.avg;
-      add('Shower tile (material)', showerTileMat * showerSqf * (1 + WASTE_FACTORS.tile_complex));
-      add('Shower tile installation (labour)', LABOR_PRICING.tile.shower_tile_install.avg * showerSqf);
-      add('Shower waterproofing membrane (material)', MATERIAL_PRICING.waterproofing.waterproof_membrane.avg * showerSqf);
-      add('Shower waterproofing (labour)', LABOR_PRICING.waterproofing.shower_waterproof_membrane.avg * showerSqf);
+      add('Shower tile (material)', p(MATERIAL_PRICING.tile_surface.shower_tile) * showerSqf * (1 + WASTE_FACTORS.tile_complex));
+      add('Shower tile installation (labour)', p(LABOR_PRICING.tile.shower_tile_install) * showerSqf);
+      add('Shower waterproofing membrane (material)', p(MATERIAL_PRICING.waterproofing.waterproof_membrane) * showerSqf);
+      add('Shower waterproofing (labour)', p(LABOR_PRICING.waterproofing.shower_waterproof_membrane) * showerSqf);
     }
 
     // Vanity
-    const vanMat = qualityTier === 'luxury'
-      ? MATERIAL_PRICING.cabinetry.vanity_cabinet.high
-      : qualityTier === 'mid-range'
-      ? MATERIAL_PRICING.cabinetry.vanity_cabinet.avg
-      : MATERIAL_PRICING.cabinetry.vanity_cabinet.low;
     if (!answers['b_vanity']?.includes('keep')) {
-      add('Vanity cabinet (material)', vanMat);
-      add('Sink & faucet', MATERIAL_PRICING.plumbing_fixtures.sink_basin.avg + MATERIAL_PRICING.plumbing_fixtures.sink_faucet.avg);
-      add('Vanity installation (labour)', LABOR_PRICING.plumbing.vanity_install.avg);
+      add('Vanity cabinet (material)', p(MATERIAL_PRICING.cabinetry.vanity_cabinet));
+      add('Sink & faucet', p(MATERIAL_PRICING.plumbing_fixtures.sink_basin) + p(MATERIAL_PRICING.plumbing_fixtures.sink_faucet));
+      add('Vanity installation (labour)', p(LABOR_PRICING.plumbing.vanity_install));
     }
 
     // Toilet
     if (!answers['b_toilet']?.includes('keep')) {
-      add('Toilet (material)', qualityTier === 'luxury' ? MATERIAL_PRICING.plumbing_fixtures.toilet.high : MATERIAL_PRICING.plumbing_fixtures.toilet.avg);
-      add('Toilet installation (labour)', LABOR_PRICING.plumbing.toilet_install.avg);
+      add('Toilet (material)', p(MATERIAL_PRICING.plumbing_fixtures.toilet));
+      add('Toilet installation (labour)', p(LABOR_PRICING.plumbing.toilet_install));
     }
 
     // Shower/tub fixture
     const showerAns = answers['b_shower'] ?? '';
     if (showerAns.includes('walkin')) {
-      add('Shower valve & trim', MATERIAL_PRICING.plumbing_fixtures.shower_valve_trim.avg + MATERIAL_PRICING.plumbing_fixtures.shower_head_kit.avg);
-      add('Shower valve installation (labour)', LABOR_PRICING.plumbing.shower_valve_install.avg);
-      add('Drain installation (labour)', LABOR_PRICING.plumbing.drain_install.avg);
+      add('Shower valve & trim', p(MATERIAL_PRICING.plumbing_fixtures.shower_valve_trim) + p(MATERIAL_PRICING.plumbing_fixtures.shower_head_kit));
+      add('Shower base/pan (material)', p(MATERIAL_PRICING.plumbing_fixtures.shower_base_pan));
+      add('Shower valve installation (labour)', p(LABOR_PRICING.plumbing.shower_valve_install));
+      add('Drain installation (labour)', p(LABOR_PRICING.plumbing.drain_install));
     } else if (showerAns.includes('combo') || showerAns.includes('both')) {
-      add('Bathtub', qualityTier === 'luxury' ? MATERIAL_PRICING.plumbing_fixtures.bathtub.high : MATERIAL_PRICING.plumbing_fixtures.bathtub.avg);
-      add('Tub installation (labour)', LABOR_PRICING.plumbing.tub_install.avg);
-      add('Shower valve & trim', MATERIAL_PRICING.plumbing_fixtures.shower_valve_trim.avg);
-      add('Shower valve installation (labour)', LABOR_PRICING.plumbing.shower_valve_install.avg);
+      add('Bathtub (material)', p(MATERIAL_PRICING.plumbing_fixtures.bathtub));
+      add('Tub installation (labour)', p(LABOR_PRICING.plumbing.tub_install));
+      add('Shower valve & trim', p(MATERIAL_PRICING.plumbing_fixtures.shower_valve_trim));
+      add('Shower valve installation (labour)', p(LABOR_PRICING.plumbing.shower_valve_install));
     }
 
     // Plumbing relocation
     const plumbAns = answers['b_plumbing'] ?? '';
-    if (plumbAns.includes('major')) add('Drain relocation (wood floor)', LABOR_PRICING.plumbing.drain_reloc_wood_floor.avg);
-    else if (plumbAns.includes('minor')) add('Minor plumbing relocation', LABOR_PRICING.plumbing.minor_plumbing_reloc.avg);
+    if (plumbAns.includes('major')) add('Drain relocation (wood floor)', p(LABOR_PRICING.plumbing.drain_reloc_wood_floor));
+    else if (plumbAns.includes('minor')) add('Minor plumbing relocation', p(LABOR_PRICING.plumbing.minor_plumbing_reloc));
 
     // Electrical
-    add('Bathroom exhaust fan (material + labour)', MATERIAL_PRICING.electrical_fixtures.bathroom_fan.avg + LABOR_PRICING.electrical.bathroom_fan_install.avg);
-    add('Lighting fixture (material + labour)', MATERIAL_PRICING.electrical_fixtures.light_fixture.avg + LABOR_PRICING.electrical.light_fixture_install.avg);
-    add('GFI outlet (material + labour)', MATERIAL_PRICING.electrical_fixtures.gfi_receptacle.avg + LABOR_PRICING.electrical.gfi_outlet_install.avg);
+    add('Bathroom exhaust fan (material + labour)', p(MATERIAL_PRICING.electrical_fixtures.bathroom_fan) + p(LABOR_PRICING.electrical.bathroom_fan_install));
+    add('Lighting fixture (material + labour)', p(MATERIAL_PRICING.electrical_fixtures.light_fixture) + p(LABOR_PRICING.electrical.light_fixture_install));
+    add('GFI outlet (material + labour)', p(MATERIAL_PRICING.electrical_fixtures.gfi_receptacle) + p(LABOR_PRICING.electrical.gfi_outlet_install));
 
-    // Drywall
-    add('Moisture-resistant drywall (material)', MATERIAL_PRICING.drywall.moisture_resist_dw.avg * 8);
-    add('Drywall installation (labour)', LABOR_PRICING.drywall.moisture_resistant_dw.avg * (wallSqf * 0.3));
+    // Drywall (moisture-resistant, ~8 sheets for avg bathroom)
+    const dwSheets = qualityTier === 'luxury' ? 10 : 8;
+    add('Moisture-resistant drywall (material)', p(MATERIAL_PRICING.drywall.moisture_resist_dw) * dwSheets);
+    add('Drywall installation (labour)', p(LABOR_PRICING.drywall.moisture_resistant_dw) * (wallSqf * 0.3));
 
     // Paint
     const paintableWall = wallSqf - showerSqf;
-    add('Paint & primer (material)', MATERIAL_PRICING.paint.interior_wall_paint.avg * 2);
-    add('Wall painting (labour)', LABOR_PRICING.painting.interior_wall_painting.avg * paintableWall);
+    add('Paint & primer (material)', p(MATERIAL_PRICING.paint.interior_wall_paint) * 2);
+    add('Wall painting (labour)', p(LABOR_PRICING.painting.interior_wall_painting) * paintableWall);
 
     // Disposal + permit
-    add('Disposal & dumpster', MATERIAL_PRICING.disposal.disposal_bin_rental.avg);
-    add('Building permit', LABOR_PRICING.permit.permit_allowance.avg);
+    add('Disposal & dumpster', p(MATERIAL_PRICING.disposal.disposal_bin_rental));
+    add('Building permit', p(LABOR_PRICING.permit.permit_allowance));
 
     // GC overhead 15%
     const subtotal = lines.reduce((s, l) => s + l.avgCad, 0);
@@ -531,15 +527,99 @@ export function estimateProjectCost(params: {
   }
 
   const avgDollars = Math.round(lines.reduce((s, l) => s + l.avgCad, 0));
+
+  // Tight range: ±5% with measurements, ±10% without
+  const rangeMultiplier = quantities?.floor_area_sqf ? 0.05 : 0.10;
   return {
-    min: Math.round(avgDollars * 0.92) * 100,   // CAD cents
-    max: Math.round(avgDollars * 1.08) * 100,   // CAD cents
+    min: Math.round(avgDollars * (1 - rangeMultiplier)) * 100,
+    max: Math.round(avgDollars * (1 + rangeMultiplier)) * 100,
     avgDollars,
     lineItems: lines,
   };
 }
 
 // ─── Format pricing reference for AI prompt ───────────────────────────────────
+
+// ─── Material Price Lookup ─────────────────────────────────────────────────────
+// Fuzzy-match a material item name to its Low/Average/High unit cost from the
+// material pricing library. Returns null if no match found.
+
+export interface MaterialPriceLookup {
+  low: number;
+  avg: number;
+  high: number;
+  unit: string;
+}
+
+export function lookupMaterialPrice(itemName: string): MaterialPriceLookup | null {
+  const n = itemName.toLowerCase();
+
+  // Cabinetry
+  if (n.includes('custom cabinet') || n.includes('custom cab')) return { ...MATERIAL_PRICING.cabinetry.custom_cabinets, unit: 'LF' };
+  if (n.includes('semi-custom') || n.includes('semi custom')) return { ...MATERIAL_PRICING.cabinetry.semi_custom_cabinets, unit: 'LF' };
+  if (n.includes('kitchen cabinet') || (n.includes('cabinet') && !n.includes('vanity') && !n.includes('bathroom'))) return { ...MATERIAL_PRICING.cabinetry.stock_kitchen_cabinets, unit: 'LF' };
+  if (n.includes('vanity cabinet') || (n.includes('vanity') && n.includes('cabinet'))) return { ...MATERIAL_PRICING.cabinetry.vanity_cabinet, unit: 'EA' };
+
+  // Countertops
+  if (n.includes('stone') || n.includes('marble') || n.includes('granite') || n.includes('premium countertop')) return { ...MATERIAL_PRICING.countertops.stone_premium, unit: 'LF' };
+  if (n.includes('quartz')) return { ...MATERIAL_PRICING.countertops.quartz, unit: 'LF' };
+  if (n.includes('laminate countertop') || n.includes('countertop')) return { ...MATERIAL_PRICING.countertops.laminate, unit: 'LF' };
+
+  // Tile
+  if (n.includes('shower tile') || n.includes('tile shower')) return { ...MATERIAL_PRICING.tile_surface.shower_tile, unit: 'SQF' };
+  if (n.includes('backsplash tile') || n.includes('tile backsplash') || n.includes('backsplash')) return { ...MATERIAL_PRICING.tile_surface.backsplash_tile, unit: 'SQF' };
+  if (n.includes('wall tile') || n.includes('tile wall')) return { ...MATERIAL_PRICING.tile_surface.wall_tile, unit: 'SQF' };
+  if (n.includes('floor tile') || n.includes('tile floor') || n.includes('tile')) return { ...MATERIAL_PRICING.tile_surface.floor_tile, unit: 'SQF' };
+
+  // Flooring
+  if (n.includes('engineered hardwood') || n.includes('hardwood')) return { ...MATERIAL_PRICING.flooring.engineered_hardwood, unit: 'SQF' };
+  if (n.includes('vinyl plank') || n.includes('lvp') || n.includes('vinyl')) return { ...MATERIAL_PRICING.flooring.vinyl_plank, unit: 'SQF' };
+  if (n.includes('laminate floor') || n.includes('laminate')) return { ...MATERIAL_PRICING.flooring.laminate, unit: 'SQF' };
+  if (n.includes('heated floor mat') || n.includes('heated floor')) return { ...MATERIAL_PRICING.flooring.heated_floor_mat, unit: 'SQF' };
+
+  // Plumbing fixtures
+  if (n.includes('bathtub') || n.includes('bath tub') || n.includes('soaker tub') || n.includes('freestanding tub')) return { ...MATERIAL_PRICING.plumbing_fixtures.bathtub, unit: 'EA' };
+  if (n.includes('shower base') || n.includes('shower pan')) return { ...MATERIAL_PRICING.plumbing_fixtures.shower_base_pan, unit: 'EA' };
+  if (n.includes('shower valve') || n.includes('shower trim')) return { ...MATERIAL_PRICING.plumbing_fixtures.shower_valve_trim, unit: 'EA' };
+  if (n.includes('shower head') || n.includes('showerhead')) return { ...MATERIAL_PRICING.plumbing_fixtures.shower_head_kit, unit: 'EA' };
+  if (n.includes('tub filler') || n.includes('tub faucet')) return { ...MATERIAL_PRICING.plumbing_fixtures.tub_filler_faucet, unit: 'EA' };
+  if (n.includes('vanity') && !n.includes('cabinet')) return { ...MATERIAL_PRICING.plumbing_fixtures.vanity, unit: 'EA' };
+  if (n.includes('sink faucet') || n.includes('kitchen faucet') || n.includes('faucet')) return { ...MATERIAL_PRICING.plumbing_fixtures.sink_faucet, unit: 'EA' };
+  if (n.includes('sink') || n.includes('basin')) return { ...MATERIAL_PRICING.plumbing_fixtures.sink_basin, unit: 'EA' };
+  if (n.includes('toilet')) return { ...MATERIAL_PRICING.plumbing_fixtures.toilet, unit: 'EA' };
+
+  // Electrical fixtures
+  if (n.includes('bathroom fan') || n.includes('exhaust fan') || n.includes('ventilation fan')) return { ...MATERIAL_PRICING.electrical_fixtures.bathroom_fan, unit: 'EA' };
+  if (n.includes('pot light') || n.includes('recessed light') || n.includes('potlight')) return { ...MATERIAL_PRICING.electrical_fixtures.pot_light, unit: 'EA' };
+  if (n.includes('smart switch')) return { ...MATERIAL_PRICING.electrical_fixtures.smart_switch, unit: 'EA' };
+  if (n.includes('gfi') || n.includes('gfci') || n.includes('ground fault')) return { ...MATERIAL_PRICING.electrical_fixtures.gfi_receptacle, unit: 'EA' };
+  if (n.includes('light fixture') || n.includes('lighting fixture') || n.includes('light')) return { ...MATERIAL_PRICING.electrical_fixtures.light_fixture, unit: 'EA' };
+
+  // Waterproofing
+  if (n.includes('shower pan kit') || n.includes('shower kit')) return { ...MATERIAL_PRICING.waterproofing.shower_pan_kit, unit: 'EA' };
+  if (n.includes('waterproof membrane') || n.includes('waterproofing membrane')) return { ...MATERIAL_PRICING.waterproofing.waterproof_membrane, unit: 'SQF' };
+
+  // Paint
+  if (n.includes('ceiling paint')) return { ...MATERIAL_PRICING.paint.ceiling_paint, unit: 'Gallon' };
+  if (n.includes('primer')) return { ...MATERIAL_PRICING.paint.primer, unit: 'Gallon' };
+  if (n.includes('paint') || n.includes('painting')) return { ...MATERIAL_PRICING.paint.interior_wall_paint, unit: 'Gallon' };
+
+  // Drywall
+  if (n.includes('moisture resistant drywall') || n.includes('cement board')) return { ...MATERIAL_PRICING.drywall.moisture_resist_dw, unit: 'Sheet' };
+  if (n.includes('drywall')) return { ...MATERIAL_PRICING.drywall.drywall_board, unit: 'Sheet' };
+
+  // Trim / doors
+  if (n.includes('baseboard')) return { ...MATERIAL_PRICING.doors_trim.baseboard, unit: 'LF' };
+  if (n.includes('casing')) return { ...MATERIAL_PRICING.doors_trim.casing, unit: 'LF' };
+  if (n.includes('interior door') || n.includes('door slab')) return { ...MATERIAL_PRICING.doors_trim.interior_door, unit: 'EA' };
+  if (n.includes('door hardware')) return { ...MATERIAL_PRICING.doors_trim.door_hardware, unit: 'EA' };
+  if (n.includes('cabinet hardware') || n.includes('hardware')) return { ...MATERIAL_PRICING.cabinetry.cabinet_hardware, unit: 'EA' };
+
+  // Disposal
+  if (n.includes('disposal') || n.includes('dumpster') || n.includes('bin')) return { ...MATERIAL_PRICING.disposal.disposal_bin_rental, unit: 'EA' };
+
+  return null;
+}
 
 export function buildPricingPromptSection(): string {
   return `
