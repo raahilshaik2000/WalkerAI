@@ -1,4 +1,4 @@
-export type UserRole = 'homeowner' | 'company' | 'admin';
+export type UserRole = 'homeowner' | 'company' | 'supplier' | 'admin';
 
 export type ProjectStatus =
   | 'draft'
@@ -37,6 +37,35 @@ export type QualityTier = 'budget' | 'mid-range' | 'luxury';
 
 export type RoomType = 'kitchen' | 'bathroom';
 
+export type MaterialOrderStatus =
+  | 'open'
+  | 'accepted'
+  | 'processing'
+  | 'shipped'
+  | 'delivered'
+  | 'confirmed'
+  | 'paid'
+  | 'cancelled';
+
+export type BidStatus = 'pending' | 'selected' | 'rejected';
+
+export const SUPPLIER_CATEGORIES = [
+  'Cabinets & Storage',
+  'Countertops & Surfaces',
+  'Tile & Flooring',
+  'Plumbing Fixtures',
+  'Lighting & Electrical',
+  'Appliances',
+  'Hardware & Fixtures',
+  'Paint & Wall Coverings',
+  'Lumber & Structural',
+  'Windows & Doors',
+  'Insulation & Drywall',
+  'Other',
+] as const;
+
+export type SupplierCategory = typeof SUPPLIER_CATEGORIES[number];
+
 export type NotificationType =
   | 'job_dispatched'
   | 'job_filled'
@@ -48,4 +77,10 @@ export type NotificationType =
   | 'new_message'
   | 'dispute_raised'
   | 'dispatch_no_match'
-  | 'warranty_expiring';
+  | 'warranty_expiring'
+  | 'new_material_order'
+  | 'bid_selected'
+  | 'bid_rejected'
+  | 'order_shipped'
+  | 'order_delivered'
+  | 'supplier_paid';

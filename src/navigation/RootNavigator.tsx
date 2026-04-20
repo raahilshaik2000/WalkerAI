@@ -77,6 +77,9 @@ import ProjectPermits from '@/app/(homeowner)/project/[id]/permits';
 import ProjectQuote from '@/app/(homeowner)/project/[id]/quote';
 import ProjectReview from '@/app/(homeowner)/project/[id]/review';
 
+// Supplier navigator
+import { SupplierNavigator } from '@/navigation/SupplierNavigator';
+
 // Company screens
 import CompanyDashboard from '@/app/(company)/index';
 import CompanyCalendar from '@/app/(company)/calendar';
@@ -345,6 +348,8 @@ export function RootNavigator() {
           <Stack.Screen name="Auth" component={AuthNavigator} />
         ) : role === 'homeowner' ? (
           <Stack.Screen name="Homeowner" component={HomeownerNavigator} />
+        ) : role === 'supplier' ? (
+          <Stack.Screen name="Supplier" component={SupplierNavigator} />
         ) : (
           <Stack.Screen name="Company" component={CompanyNavigator} />
         )}
