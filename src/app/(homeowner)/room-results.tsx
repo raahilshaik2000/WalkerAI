@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import {
   Dimensions,
+  Platform,
   ScrollView,
   StyleSheet,
   Text,
@@ -46,22 +47,33 @@ export default function RoomResultsScreen() {
           />
         </View>
 
-        {/* View Mode Toggle */}
-        <View style={styles.toggleRow}>
-          <ToggleButton
-            label="Floor Plan"
-            icon="map-outline"
-            active={viewMode === 'floorplan'}
-            onPress={() => setViewMode('floorplan')}
-          />
-          <View style={{ width: 8 }} />
-          <ToggleButton
-            label="3D View"
-            icon="cube-outline"
-            active={viewMode === '3d'}
-            onPress={() => setViewMode('3d')}
-          />
-        </View>
+        {/* View Mode Toggle — 3D only available on iOS */}
+        {Platform.OS === 'ios' ? (
+          <View style={styles.toggleRow}>
+            <ToggleButton
+              label="Floor Plan"
+              icon="map-outline"
+              active={viewMode === 'floorplan'}
+              onPress={() => setViewMode('floorplan')}
+            />
+            <View style={{ width: 8 }} />
+            <ToggleButton
+              label="3D View"
+              icon="cube-outline"
+              active={viewMode === '3d'}
+              onPress={() => setViewMode('3d')}
+            />
+          </View>
+        ) : (
+          <View style={styles.toggleRow}>
+            <ToggleButton
+              label="Floor Plan"
+              icon="map-outline"
+              active={true}
+              onPress={() => {}}
+            />
+          </View>
+        )}
 
         <ScrollView
           style={styles.scroll}
@@ -168,6 +180,15 @@ export default function RoomResultsScreen() {
                 />
               ))}
             </>
+          )}
+
+          {Platform.OS === 'android' && !isMock && (
+            <View style={styles.mockBanner}>
+              <Ionicons name="information-circle-outline" size={16} color="#FF6B00" />
+              <Text style={styles.mockText}>
+                Measurements are approximate (±10-20cm). For precise measurements, use a tape measure or laser device.
+              </Text>
+            </View>
           )}
 
           {isMock && (

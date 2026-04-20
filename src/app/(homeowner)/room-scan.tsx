@@ -3,6 +3,7 @@ import {
   ActivityIndicator,
   NativeEventEmitter,
   NativeModules,
+  Platform,
   StyleSheet,
   Text,
   View,
@@ -14,8 +15,11 @@ import { GlassButton, GradientBackground } from '@/components/ui';
 import { UnsupportedDevice } from '@/components/room-scan';
 import { Colors, Typography, Spacing } from '@/constants/theme';
 
-const { RoomPlanModule } = NativeModules;
-const roomPlanEmitter = new NativeEventEmitter(RoomPlanModule);
+// Use platform-specific native module
+const ScanModule = Platform.OS === 'ios'
+  ? NativeModules.RoomPlanModule
+  : NativeModules.RoomScanModule;
+const scanEmitter = new NativeEventEmitter(ScanModule);
 
 type SupportStatus = 'checking' | 'supported' | 'unsupported';
 
@@ -29,18 +33,18 @@ export default function RoomScanScreen() {
   }, []);
 
   useEffect(() => {
-    const completedSub = roomPlanEmitter.addListener('onScanCompleted', (data) => {
+    const completedSub = scanEmitter.addListener('onScanCompleted', (data) => {
       setIsScanning(false);
       navigation.replace('RoomResults', { scanData: data });
     });
 
-    const errorSub = roomPlanEmitter.addListener('onScanError', (data) => {
+    const errorSub = scanEmitter.addListener('onScanError', (data) => {
       setIsScanning(false);
       // Could show an alert here, for now just go back
       navigation.goBack();
     });
 
-    const cancelSub = roomPlanEmitter.addListener('onScanCancelled', () => {
+    const cancelSub = scanEmitter.addListener('onScanCancelled', () => {
       setIsScanning(false);
     });
 
@@ -53,7 +57,7 @@ export default function RoomScanScreen() {
 
   async function checkSupport() {
     try {
-      const result = await RoomPlanModule.checkDeviceSupport();
+      const result = await ScanModule.checkDeviceSupport();
       setSupportStatus(result.supported ? 'supported' : 'unsupported');
     } catch {
       setSupportStatus('unsupported');
@@ -63,7 +67,7 @@ export default function RoomScanScreen() {
   async function handleStartScan() {
     try {
       setIsScanning(true);
-      await RoomPlanModule.startScan();
+      await ScanModule.startScan();
     } catch {
       setIsScanning(false);
     }
