@@ -80,6 +80,7 @@ export const QUICK_ACTIONS: QuickAction[] = [
   { id: 'diy', label: 'DIY Guide', icon: 'hammer-outline', route: 'DIYCreate', color: '#34D399' },
   { id: 'ideas', label: 'Browse Ideas', icon: 'images-outline', route: 'BrowseIdeas', color: '#A78BFA' },
   { id: 'schedule', label: 'My Schedule', icon: 'calendar-outline', route: 'Schedule', color: '#60A5FA' },
+  { id: 'measure', label: 'Measure Room', icon: 'scan-outline', route: 'RoomScan', color: '#06B6D4' },
 ];
 
 export const PROJECTS_LIST: DashboardProject[] = [

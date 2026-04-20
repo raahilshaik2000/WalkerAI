@@ -8,8 +8,13 @@
 
 /* Begin PBXBuildFile section */
 		13B07FBF1A68108700A75B9A /* Images.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = 13B07FB51A68108700A75B9A /* Images.xcassets */; };
+		27982A32E213DD908E8385EA /* USDZViewerViewManager.m in Sources */ = {isa = PBXBuildFile; fileRef = 3687F5256FB92D60DC9144CB /* USDZViewerViewManager.m */; };
+		439D43BBF5EB978B7976A1B9 /* USDZViewerViewController.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9D37C83398FD4FC55565E473 /* USDZViewerViewController.swift */; };
+		587A94283D276A292E3F76D9 /* RoomPlanModule.m in Sources */ = {isa = PBXBuildFile; fileRef = F1344072B3D6997D50F1F834 /* RoomPlanModule.m */; };
+		742BB6191B575E44870F79C9 /* RoomCaptureViewController.swift in Sources */ = {isa = PBXBuildFile; fileRef = AFD26C89B621E11EF0701975 /* RoomCaptureViewController.swift */; };
 		761780ED2CA45674006654EE /* AppDelegate.swift in Sources */ = {isa = PBXBuildFile; fileRef = 761780EC2CA45674006654EE /* AppDelegate.swift */; };
 		81AB9BB82411601600AC10FF /* LaunchScreen.storyboard in Resources */ = {isa = PBXBuildFile; fileRef = 81AB9BB72411601600AC10FF /* LaunchScreen.storyboard */; };
+		81C99F3E3DAC7C1FB314DEDF /* RoomPlanModule.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5EAFB39F6FB36050E7542342 /* RoomPlanModule.swift */; };
 		D5D5860BA8C9E3E630A2B8E3 /* PrivacyInfo.xcprivacy in Resources */ = {isa = PBXBuildFile; fileRef = 13B07FB81A68108700A75B9A /* PrivacyInfo.xcprivacy */; };
 		F01B4672E8E02E55594958B5 /* libPods-WalkerAI.a in Frameworks */ = {isa = PBXBuildFile; fileRef = A4A16C555B69FE185B47D831 /* libPods-WalkerAI.a */; };
 /* End PBXBuildFile section */
@@ -19,12 +24,17 @@
 		13B07FB51A68108700A75B9A /* Images.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; name = Images.xcassets; path = WalkerAI/Images.xcassets; sourceTree = "<group>"; };
 		13B07FB61A68108700A75B9A /* Info.plist */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = text.plist.xml; name = Info.plist; path = WalkerAI/Info.plist; sourceTree = "<group>"; };
 		13B07FB81A68108700A75B9A /* PrivacyInfo.xcprivacy */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = text.plist.xml; name = PrivacyInfo.xcprivacy; path = WalkerAI/PrivacyInfo.xcprivacy; sourceTree = "<group>"; };
+		3687F5256FB92D60DC9144CB /* USDZViewerViewManager.m */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.c.objc; path = USDZViewerViewManager.m; sourceTree = "<group>"; };
+		5EAFB39F6FB36050E7542342 /* RoomPlanModule.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = RoomPlanModule.swift; sourceTree = "<group>"; };
 		761780EC2CA45674006654EE /* AppDelegate.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = AppDelegate.swift; path = WalkerAI/AppDelegate.swift; sourceTree = "<group>"; };
 		81AB9BB72411601600AC10FF /* LaunchScreen.storyboard */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = file.storyboard; name = LaunchScreen.storyboard; path = WalkerAI/LaunchScreen.storyboard; sourceTree = "<group>"; };
 		9A601BF6FCA9931FAF0EAB16 /* Pods-WalkerAI.debug.xcconfig */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.xcconfig; name = "Pods-WalkerAI.debug.xcconfig"; path = "Target Support Files/Pods-WalkerAI/Pods-WalkerAI.debug.xcconfig"; sourceTree = "<group>"; };
+		9D37C83398FD4FC55565E473 /* USDZViewerViewController.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = USDZViewerViewController.swift; sourceTree = "<group>"; };
 		A4A16C555B69FE185B47D831 /* libPods-WalkerAI.a */ = {isa = PBXFileReference; explicitFileType = archive.ar; includeInIndex = 0; path = "libPods-WalkerAI.a"; sourceTree = BUILT_PRODUCTS_DIR; };
+		AFD26C89B621E11EF0701975 /* RoomCaptureViewController.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = RoomCaptureViewController.swift; sourceTree = "<group>"; };
 		B3D4F6CC5D3C781E6F926495 /* Pods-WalkerAI.release.xcconfig */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.xcconfig; name = "Pods-WalkerAI.release.xcconfig"; path = "Target Support Files/Pods-WalkerAI/Pods-WalkerAI.release.xcconfig"; sourceTree = "<group>"; };
 		ED297162215061F000B7C4FE /* JavaScriptCore.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = JavaScriptCore.framework; path = System/Library/Frameworks/JavaScriptCore.framework; sourceTree = SDKROOT; };
+		F1344072B3D6997D50F1F834 /* RoomPlanModule.m */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.c.objc; path = RoomPlanModule.m; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -54,6 +64,7 @@
 				13B07FB61A68108700A75B9A /* Info.plist */,
 				81AB9BB72411601600AC10FF /* LaunchScreen.storyboard */,
 				13B07FB81A68108700A75B9A /* PrivacyInfo.xcprivacy */,
+				9B1A40FE5358FF2D185839D6 /* RoomPlan */,
 			);
 			name = WalkerAI;
 			sourceTree = "<group>";
@@ -95,6 +106,19 @@
 				13B07F961A680F5B00A75B9A /* WalkerAI.app */,
 			);
 			name = Products;
+			sourceTree = "<group>";
+		};
+		9B1A40FE5358FF2D185839D6 /* RoomPlan */ = {
+			isa = PBXGroup;
+			children = (
+				5EAFB39F6FB36050E7542342 /* RoomPlanModule.swift */,
+				AFD26C89B621E11EF0701975 /* RoomCaptureViewController.swift */,
+				9D37C83398FD4FC55565E473 /* USDZViewerViewController.swift */,
+				F1344072B3D6997D50F1F834 /* RoomPlanModule.m */,
+				3687F5256FB92D60DC9144CB /* USDZViewerViewManager.m */,
+			);
+			name = RoomPlan;
+			path = WalkerAI/RoomPlan;
 			sourceTree = "<group>";
 		};
 		BBD78D7AC51CEA395F1C20DB /* Pods */ = {
@@ -255,6 +279,11 @@
 			buildActionMask = 2147483647;
 			files = (
 				761780ED2CA45674006654EE /* AppDelegate.swift in Sources */,
+				81C99F3E3DAC7C1FB314DEDF /* RoomPlanModule.swift in Sources */,
+				742BB6191B575E44870F79C9 /* RoomCaptureViewController.swift in Sources */,
+				439D43BBF5EB978B7976A1B9 /* USDZViewerViewController.swift in Sources */,
+				587A94283D276A292E3F76D9 /* RoomPlanModule.m in Sources */,
+				27982A32E213DD908E8385EA /* USDZViewerViewManager.m in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -275,7 +304,7 @@
 				INFOPLIST_FILE = WalkerAI/Info.plist;
 				INFOPLIST_KEY_CFBundleDisplayName = "Walker AI";
 				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.utilities";
-				IPHONEOS_DEPLOYMENT_TARGET = 15.1;
+				IPHONEOS_DEPLOYMENT_TARGET = 18.0;
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
 					"@executable_path/Frameworks",
@@ -309,7 +338,7 @@
 				INFOPLIST_FILE = WalkerAI/Info.plist;
 				INFOPLIST_KEY_CFBundleDisplayName = "Walker AI";
 				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.utilities";
-				IPHONEOS_DEPLOYMENT_TARGET = 15.1;
+				IPHONEOS_DEPLOYMENT_TARGET = 18.0;
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
 					"@executable_path/Frameworks",
@@ -378,7 +407,7 @@
 				GCC_WARN_UNINITIALIZED_AUTOS = YES_AGGRESSIVE;
 				GCC_WARN_UNUSED_FUNCTION = YES;
 				GCC_WARN_UNUSED_VARIABLE = YES;
-				IPHONEOS_DEPLOYMENT_TARGET = 15.1;
+				IPHONEOS_DEPLOYMENT_TARGET = 18.0;
 				LD_RUNPATH_SEARCH_PATHS = (
 					/usr/lib/swift,
 					"$(inherited)",
@@ -453,7 +482,7 @@
 				GCC_WARN_UNINITIALIZED_AUTOS = YES_AGGRESSIVE;
 				GCC_WARN_UNUSED_FUNCTION = YES;
 				GCC_WARN_UNUSED_VARIABLE = YES;
-				IPHONEOS_DEPLOYMENT_TARGET = 15.1;
+				IPHONEOS_DEPLOYMENT_TARGET = 18.0;
 				LD_RUNPATH_SEARCH_PATHS = (
 					/usr/lib/swift,
 					"$(inherited)",
