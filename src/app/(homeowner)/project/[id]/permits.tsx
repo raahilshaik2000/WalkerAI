@@ -8,6 +8,7 @@ import {
   TouchableOpacity,
   View,
 } from 'react-native';
+
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useNavigation } from '@react-navigation/native'
 import { useRoute } from '@react-navigation/native';
@@ -25,13 +26,6 @@ interface Permit {
 }
 
 const PERMIT_STATUS_ORDER = ['not_applied', 'applied', 'approved', 'inspection_scheduled', 'passed'];
-
-const NEXT_STATUS: Record<string, string> = {
-  not_applied: 'applied',
-  applied: 'approved',
-  approved: 'inspection_scheduled',
-  inspection_scheduled: 'passed',
-};
 
 const STATUS_VARIANT: Record<string, any> = {
   not_applied: 'neutral',
@@ -60,21 +54,7 @@ export default function PermitsScreen() {
     fetchPermits();
   }, [projectId]);
 
-  const handleAdvanceStatus = async (permit: Permit) => {
-    const next = NEXT_STATUS[permit.status];
-    if (!next) return;
-
-    const { error } = await supabase
-      .from('permits')
-      .update({ status: next, updated_at: new Date().toISOString() })
-      .eq('id', permit.id);
-
-    if (!error) {
-      setPermits((prev) => prev.map((p) => p.id === permit.id ? { ...p, status: next } : p));
-    }
-  };
-
-  const handleUploadDoc = async (permit: Permit) => {
+const handleUploadDoc = async (permit: Permit) => {
     const result = await launchImageLibrary({
       mediaType: 'photo',
       quality: 0.8,
@@ -120,7 +100,6 @@ export default function PermitsScreen() {
           {permits.map((permit) => {
             const stepIndex = PERMIT_STATUS_ORDER.indexOf(permit.status);
             const isPassed = permit.status === 'passed';
-            const nextStep = NEXT_STATUS[permit.status];
 
             return (
               <GlassCard key={permit.id} style={styles.permitCard}>
@@ -162,18 +141,6 @@ export default function PermitsScreen() {
                   </TouchableOpacity>
                 )}
 
-                {/* Advance status */}
-                {nextStep && (
-                  <TouchableOpacity
-                    style={styles.advanceBtn}
-                    onPress={() => handleAdvanceStatus(permit)}
-                    activeOpacity={0.8}
-                  >
-                    <Text style={styles.advanceBtnText}>
-                      Mark as {nextStep.replace('_', ' ')} →
-                    </Text>
-                  </TouchableOpacity>
-                )}
               </GlassCard>
             );
           })}

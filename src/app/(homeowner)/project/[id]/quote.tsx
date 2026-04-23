@@ -55,27 +55,28 @@ export default function CostBreakdownScreen() {
   const [loading, setLoading] = useState(true);
   const [paying, setPaying] = useState(false);
 
+  const fetchData = async () => {
+    const [{ data: proj }, { data: q }] = await Promise.all([
+      supabase
+        .from('projects')
+        .select('ai_cost_min, ai_cost_max, status, room_type, ai_analysis')
+        .eq('id', projectId)
+        .single(),
+      supabase
+        .from('quotes')
+        .select('id, total_amount, status, milestones ( title, amount, sort_order, status )')
+        .eq('project_id', projectId)
+        .order('submitted_at', { ascending: false })
+        .limit(1)
+        .maybeSingle(),
+    ]);
+    setProject(proj as any);
+    setQuote(q as any);
+    setLoading(false);
+  };
+
   useEffect(() => {
-    const load = async () => {
-      const [{ data: proj }, { data: q }] = await Promise.all([
-        supabase
-          .from('projects')
-          .select('ai_cost_min, ai_cost_max, status, room_type, ai_analysis')
-          .eq('id', projectId)
-          .single(),
-        supabase
-          .from('quotes')
-          .select('id, total_amount, status, milestones ( title, amount, sort_order, status )')
-          .eq('project_id', projectId)
-          .order('submitted_at', { ascending: false })
-          .limit(1)
-          .maybeSingle(),
-      ]);
-      setProject(proj as any);
-      setQuote(q as any);
-      setLoading(false);
-    };
-    load();
+    fetchData();
   }, [projectId]);
 
   const handlePay = async () => {
@@ -108,6 +109,7 @@ export default function CostBreakdownScreen() {
               }
 
               ReactNativeHapticFeedback.trigger('notificationSuccess');
+              setTimeout(() => fetchData(), 1500);
               Alert.alert(
                 'Payment received!',
                 'Your project is now active. Funds are held in escrow and released as milestones are completed.',

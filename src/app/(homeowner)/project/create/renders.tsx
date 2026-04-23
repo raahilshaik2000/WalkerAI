@@ -33,9 +33,22 @@ export default function RendersStep() {
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    // Render generation requires REimagineHome integration (coming soon).
-    // Skip the API call and go straight to the brief-ready state.
-    setLoading(false);
+    const generate = async () => {
+      try {
+        const { data, error } = await supabase.functions.invoke('generate-render', {
+          body: { project_id: projectId, analysis: analysisResult, questionnaire_answers: answers },
+        });
+        if (!error && Array.isArray(data?.renders) && data.renders.length > 0) {
+          setRenders(data.renders);
+        }
+        // fallback: data.renders === [] or error — show "coming soon" card
+      } catch {
+        // Silently fall through — renders are optional, brief generation works without them
+      } finally {
+        setLoading(false);
+      }
+    };
+    generate();
   }, []);
 
   const handleSelect = (renderId: string) => {

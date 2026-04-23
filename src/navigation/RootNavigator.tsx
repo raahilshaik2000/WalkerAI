@@ -76,6 +76,7 @@ import ProjectMilestones from '@/app/(homeowner)/project/[id]/milestones';
 import ProjectPermits from '@/app/(homeowner)/project/[id]/permits';
 import ProjectQuote from '@/app/(homeowner)/project/[id]/quote';
 import ProjectReview from '@/app/(homeowner)/project/[id]/review';
+import ProjectMaterials from '@/app/(homeowner)/project/[id]/materials';
 
 // Supplier navigator
 import { SupplierNavigator } from '@/navigation/SupplierNavigator';
@@ -261,6 +262,7 @@ function ProjectDetailNavigator() {
       <ProjectDetailStack.Screen name="Permits" component={ProjectPermits} />
       <ProjectDetailStack.Screen name="Quote" component={ProjectQuote} />
       <ProjectDetailStack.Screen name="Review" component={ProjectReview} />
+      <ProjectDetailStack.Screen name="Materials" component={ProjectMaterials} />
     </ProjectDetailStack.Navigator>
   );
 }

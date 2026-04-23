@@ -71,8 +71,24 @@ export default function QuoteBuilderScreen() {
     setLineItems((prev) => prev.filter((item) => item.id !== id));
   };
 
+  const addMilestone = () => {
+    setMilestones((prev) => [...prev, { id: Date.now().toString(), title: '', amount: '', due_date: '' }]);
+  };
+
+  const removeMilestone = (id: string) => {
+    if (milestones.length <= 1) return;
+    setMilestones((prev) => prev.filter((m) => m.id !== id));
+  };
+
   const updateMilestone = (id: string, field: keyof MilestoneInput, value: string) => {
     setMilestones((prev) => prev.map((m) => m.id === id ? { ...m, [field]: value } : m));
+  };
+
+  const isValidDate = (s: string) => {
+    if (!s) return true;
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(s)) return false;
+    const d = new Date(s);
+    return !isNaN(d.getTime());
   };
 
   const handleSubmit = async () => {
@@ -97,6 +113,10 @@ export default function QuoteBuilderScreen() {
         Alert.alert('Incomplete milestones', 'Please fill in all milestone titles and amounts.');
         return;
       }
+      if (!isValidDate(m.due_date)) {
+        Alert.alert('Invalid date', `Milestone "${m.title}" has an invalid due date. Use YYYY-MM-DD format.`);
+        return;
+      }
     }
 
     setSubmitting(true);
@@ -118,6 +138,7 @@ export default function QuoteBuilderScreen() {
           project_id: projectId,
           company_id: company.id,
           total_amount: totalCents,
+          notes: notes.trim() || null,
           status: 'pending',
           submitted_at: new Date().toISOString(),
         })
@@ -246,13 +267,20 @@ export default function QuoteBuilderScreen() {
                 <View key={m.id} style={styles.milestoneInput}>
                   <Text style={styles.milestoneNum}>{i + 1}</Text>
                   <View style={{ flex: 1, gap: 8 }}>
-                    <TextInput
-                      style={[styles.milestoneTitle, { color: Colors.text.primary }]}
-                      value={m.title}
-                      onChangeText={(v) => updateMilestone(m.id, 'title', v)}
-                      placeholder="Milestone title"
-                      placeholderTextColor={Colors.text.tertiary}
-                    />
+                    <View style={styles.milestoneTitleRow}>
+                      <TextInput
+                        style={[styles.milestoneTitle, { flex: 1, color: Colors.text.primary }]}
+                        value={m.title}
+                        onChangeText={(v) => updateMilestone(m.id, 'title', v)}
+                        placeholder="Milestone title"
+                        placeholderTextColor={Colors.text.tertiary}
+                      />
+                      {milestones.length > 1 && (
+                        <TouchableOpacity onPress={() => removeMilestone(m.id)} style={styles.removeBtn}>
+                          <Icon name="close-circle" size={18} color={Colors.error} />
+                        </TouchableOpacity>
+                      )}
+                    </View>
                     <View style={styles.milestoneAmountRow}>
                       <Text style={styles.dollarSign}>$</Text>
                       <TextInput
@@ -264,7 +292,7 @@ export default function QuoteBuilderScreen() {
                         placeholderTextColor={Colors.text.tertiary}
                       />
                       <TextInput
-                        style={[styles.dateInput, { color: Colors.text.primary }]}
+                        style={[styles.dateInput, { color: Colors.text.primary, borderBottomColor: m.due_date && !isValidDate(m.due_date) ? Colors.error : Colors.glass.border }]}
                         value={m.due_date}
                         onChangeText={(v) => updateMilestone(m.id, 'due_date', v)}
                         placeholder="YYYY-MM-DD"
@@ -274,6 +302,9 @@ export default function QuoteBuilderScreen() {
                   </View>
                 </View>
               ))}
+              <TouchableOpacity onPress={addMilestone} style={styles.addBtn}>
+                <Text style={styles.addBtnText}>+ Add milestone</Text>
+              </TouchableOpacity>
             </GlassCard>
 
             {/* Notes */}
@@ -367,6 +398,7 @@ const styles = StyleSheet.create({
     textAlign: 'center', lineHeight: 24,
     marginTop: 8,
   },
+  milestoneTitleRow: { flexDirection: 'row', alignItems: 'center', gap: 8 },
   milestoneTitle: { fontSize: 14, borderBottomWidth: 1, borderBottomColor: Colors.glass.border, paddingBottom: 4 },
   milestoneAmountRow: { flexDirection: 'row', alignItems: 'center', gap: 8 },
   dateInput: { fontSize: 13, borderBottomWidth: 1, borderBottomColor: Colors.glass.border, paddingBottom: 2, width: 110 },

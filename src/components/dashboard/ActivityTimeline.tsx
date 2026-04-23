@@ -1,61 +1,92 @@
-import React from 'react';
+import React, { useEffect, useState } from 'react';
 import { StyleSheet, Text, View } from 'react-native';
 import Animated from 'react-native-reanimated';
 import Ionicons from 'react-native-vector-icons/Ionicons';
 import { useNavigation } from '@react-navigation/native';
+import { supabase } from '@/lib/supabase/client';
+import { useAuthStore } from '@/stores/auth.store';
 import { AnimatedPressable } from '@/components/ui';
 import { Colors, Radius, Spacing } from '@/constants/theme';
-import { ActivityItem, FAKE_ACTIVITY } from './data';
 import { SectionHeader } from './SectionHeader';
 import { useStaggeredEntrance } from './useStaggeredEntrance';
+
+interface NotificationRow {
+  id: string;
+  type: string;
+  payload: Record<string, any>;
+  created_at: string;
+}
+
+const TYPE_META: Record<string, { icon: string; color: string; label: (p: any) => string }> = {
+  quote_submitted:   { icon: 'document-text-outline', color: '#F59E0B', label: () => 'New quote received from contractor' },
+  quote_approved:    { icon: 'checkmark-circle-outline', color: '#34D399', label: () => 'Quote approved — project is active' },
+  milestone_completed: { icon: 'flag-outline', color: '#60A5FA', label: (p) => `Milestone completed — approve to release payment` },
+  job_dispatched:    { icon: 'send-outline', color: '#A78BFA', label: () => 'Your job was dispatched to contractors' },
+  payment_released:  { icon: 'cash-outline', color: '#34D399', label: () => 'Payment released to contractor' },
+};
+
+function timeAgo(iso: string): string {
+  const diff = (Date.now() - new Date(iso).getTime()) / 1000;
+  if (diff < 60) return 'just now';
+  if (diff < 3600) return `${Math.floor(diff / 60)}m ago`;
+  if (diff < 86400) return `${Math.floor(diff / 3600)}h ago`;
+  return `${Math.floor(diff / 86400)}d ago`;
+}
 
 const MAX_ITEMS = 4;
 
 export function ActivityTimeline() {
   const navigation = useNavigation<any>();
+  const { user } = useAuthStore();
   const animatedStyle = useStaggeredEntrance(6);
-  const items = FAKE_ACTIVITY.slice(0, MAX_ITEMS);
+  const [items, setItems] = useState<NotificationRow[]>([]);
 
-  const handlePress = (actItem: ActivityItem) => {
-    if (actItem.route === 'Messages' && actItem.projectId) {
-      const { CHAT_THREADS } = require('./messageData');
-      const thread = CHAT_THREADS.find((t: any) => t.projectId === actItem.projectId);
-      if (thread) navigation.navigate('Chat', { thread });
-      else navigation.navigate('HomeownerTabs', { screen: 'Messages' });
-    } else if (actItem.route === 'ProjectDetail' && actItem.projectId) {
-      const { PROJECTS_LIST } = require('./data');
-      const project = PROJECTS_LIST.find((p: any) => p.id === actItem.projectId);
-      if (project) navigation.navigate('ProjectDetailView', { project });
+  useEffect(() => {
+    if (!user) return;
+    supabase
+      .from('notifications')
+      .select('id, type, payload, created_at')
+      .eq('user_id', user.id)
+      .order('created_at', { ascending: false })
+      .limit(MAX_ITEMS)
+      .then(({ data }) => setItems(data ?? []));
+  }, [user]);
+
+  const handlePress = (item: NotificationRow) => {
+    const projectId = item.payload?.project_id;
+    if (projectId) {
+      navigation.navigate('ProjectDetailView', { project: { id: projectId } });
     }
   };
+
+  if (items.length === 0) return null;
 
   return (
     <Animated.View style={[styles.container, animatedStyle]}>
       <SectionHeader title="Recent Activity" />
 
       <View style={styles.card}>
-        {/* Timeline line */}
-        {items.length > 1 && (
-          <View style={styles.timelineLine} />
-        )}
+        {items.length > 1 && <View style={styles.timelineLine} />}
 
-        {items.map((item, i) => (
-          <View key={item.id}>
-            <AnimatedPressable style={styles.row} haptic onPress={() => handlePress(item)}>
-              <View style={[styles.iconCircle, { backgroundColor: item.iconColor + '22' }]}>
-                <Ionicons name={item.icon as any} size={16} color={item.iconColor} />
-              </View>
-              <View style={styles.textCol}>
-                <Text style={styles.text} numberOfLines={1}>{item.text}</Text>
-                <Text style={styles.time}>{item.time}</Text>
-              </View>
-              <Ionicons name="chevron-forward" size={14} color={Colors.text.tertiary} />
-            </AnimatedPressable>
-            {i < items.length - 1 && <View style={styles.divider} />}
-          </View>
-        ))}
+        {items.map((item, i) => {
+          const meta = TYPE_META[item.type] ?? { icon: 'notifications-outline', color: Colors.accent, label: () => item.type };
+          return (
+            <View key={item.id}>
+              <AnimatedPressable style={styles.row} haptic onPress={() => handlePress(item)}>
+                <View style={[styles.iconCircle, { backgroundColor: meta.color + '22' }]}>
+                  <Ionicons name={meta.icon as any} size={16} color={meta.color} />
+                </View>
+                <View style={styles.textCol}>
+                  <Text style={styles.text} numberOfLines={1}>{meta.label(item.payload)}</Text>
+                  <Text style={styles.time}>{timeAgo(item.created_at)}</Text>
+                </View>
+                <Ionicons name="chevron-forward" size={14} color={Colors.text.tertiary} />
+              </AnimatedPressable>
+              {i < items.length - 1 && <View style={styles.divider} />}
+            </View>
+          );
+        })}
 
-        {/* View all link */}
         <AnimatedPressable style={styles.viewAll} haptic onPress={() => navigation.navigate('Notifications')}>
           <Text style={styles.viewAllText}>View all activity</Text>
           <Ionicons name="arrow-forward" size={14} color={Colors.accent} />

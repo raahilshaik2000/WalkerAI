@@ -38,6 +38,8 @@ export default function AddressStep() {
           city: addressResult.city,
           province: addressResult.province,
           postal_code: addressResult.postalCode || null,
+          lat: addressResult.lat ?? null,
+          lng: addressResult.lng ?? null,
         })
         .eq('id', projectId);
 

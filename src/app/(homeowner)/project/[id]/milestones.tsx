@@ -46,24 +46,32 @@ export default function MilestonesScreen() {
   const [loading, setLoading] = useState(true);
   const [releasing, setReleasing] = useState<string | null>(null);
 
-  const fetchMilestones = async () => {
-    const { data } = await supabase
-      .from('milestones')
-      .select('id, title, amount, status, sort_order, due_date, completed_at, stripe_transfer_id')
-      .eq('quote_id', await getQuoteId(projectId))
-      .order('sort_order');
-    setMilestones(data ?? []);
-    setLoading(false);
-  };
+  const [emptyMessage, setEmptyMessage] = useState<string | null>(null);
 
-  const getQuoteId = async (pId: string): Promise<string> => {
+  const getQuoteId = async (pId: string): Promise<string | null> => {
     const { data } = await supabase
       .from('quotes')
       .select('id')
       .eq('project_id', pId)
       .eq('status', 'approved')
-      .single();
-    return data?.id ?? '';
+      .maybeSingle();
+    return data?.id ?? null;
+  };
+
+  const fetchMilestones = async () => {
+    const quoteId = await getQuoteId(projectId);
+    if (!quoteId) {
+      setEmptyMessage('No approved quote yet. Milestones will appear after you approve a contractor quote.');
+      setLoading(false);
+      return;
+    }
+    const { data } = await supabase
+      .from('milestones')
+      .select('id, title, amount, status, sort_order, due_date, completed_at, stripe_transfer_id')
+      .eq('quote_id', quoteId)
+      .order('sort_order');
+    setMilestones(data ?? []);
+    setLoading(false);
   };
 
   useEffect(() => {
@@ -127,6 +135,12 @@ export default function MilestonesScreen() {
               <View style={[styles.progressFill, { width: `${progressPct}%` }]} />
             </View>
           </GlassCard>
+
+          {emptyMessage && !loading && (
+            <GlassCard style={{ marginBottom: Spacing.md }}>
+              <Text style={{ ...Typography.bodySecondary, lineHeight: 22 }}>{emptyMessage}</Text>
+            </GlassCard>
+          )}
 
           {loading
             ? Array.from({ length: 3 }).map((_, i) => <ListItemSkeleton key={i} style={{ marginBottom: 10 }} />)
