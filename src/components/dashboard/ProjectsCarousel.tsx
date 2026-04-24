@@ -1,4 +1,4 @@
-import React, { useCallback } from 'react';
+import React, { useCallback, useEffect, useState } from 'react';
 import {
   Dimensions,
   FlatList,
@@ -11,9 +11,10 @@ import Animated from 'react-native-reanimated';
 import Ionicons from 'react-native-vector-icons/Ionicons';
 import LinearGradient from 'react-native-linear-gradient';
 import { useNavigation } from '@react-navigation/native';
+import { supabase } from '@/lib/supabase/client';
+import { useAuthStore } from '@/stores/auth.store';
 import { AnimatedPressable, GlassButton } from '@/components/ui';
 import { Colors, Radius, Spacing } from '@/constants/theme';
-import { DashboardProject, FAKE_PROJECTS } from './data';
 import { SectionHeader } from './SectionHeader';
 import { ProgressRing } from './ProgressRing';
 import { useStaggeredEntrance } from './useStaggeredEntrance';
@@ -22,55 +23,105 @@ const { width: SCREEN_WIDTH } = Dimensions.get('window');
 const CARD_WIDTH = SCREEN_WIDTH - 64;
 const CARD_GAP = 12;
 
+const STATUS_META: Record<string, { label: string; color: string }> = {
+  draft:       { label: 'Setting up',          color: '#6B7280' },
+  dispatching: { label: 'Finding contractor',  color: '#A78BFA' },
+  quoting:     { label: 'Quote pending',        color: '#F59E0B' },
+  accepted:    { label: 'Contractor reviewing', color: '#60A5FA' },
+  active:      { label: 'In progress',          color: '#22C55E' },
+  completed:   { label: 'Completed',            color: '#FF6B00' },
+};
+
+interface Project {
+  id: string;
+  room_type: string;
+  status: string;
+  address: string | null;
+  city: string | null;
+  ai_cost_min: number | null;
+  ai_cost_max: number | null;
+  renders: Array<{ url: string }>;
+  project_photos: Array<{ url: string }>;
+}
+
 export function ProjectsCarousel() {
   const navigation = useNavigation<any>();
+  const { user } = useAuthStore();
   const animatedStyle = useStaggeredEntrance(3);
+  const [projects, setProjects] = useState<Project[]>([]);
+
+  useEffect(() => {
+    if (!user) return;
+    supabase
+      .from('projects')
+      .select('id, room_type, status, address, city, ai_cost_min, ai_cost_max, renders(url), project_photos(url)')
+      .eq('homeowner_id', user.id)
+      .not('status', 'eq', 'diy_saved')
+      .order('created_at', { ascending: false })
+      .limit(5)
+      .then(({ data }) => setProjects((data as Project[]) ?? []));
+  }, [user]);
 
   const renderProject = useCallback(
-    ({ item }: { item: DashboardProject }) => (
-      <AnimatedPressable
-        style={styles.card}
-        haptic
-        onPress={() => navigation.navigate('ProjectDetailView', { project: item })}
-      >
-        <Image source={{ uri: item.coverImage }} style={styles.cover} />
-        <LinearGradient
-          colors={['transparent', 'rgba(0,0,0,0.85)']}
-          style={styles.gradient}
-        />
+    ({ item }: { item: Project }) => {
+      const meta = STATUS_META[item.status] ?? { label: item.status, color: '#6B7280' };
+      const coverImage = item.renders?.[0]?.url ?? item.project_photos?.[0]?.url;
+      const title = item.room_type
+        ? item.room_type.charAt(0).toUpperCase() + item.room_type.slice(1) + ' Renovation'
+        : 'Project';
+      const location = [item.address, item.city].filter(Boolean).join(', ') || 'Address pending';
+      const budget = item.ai_cost_min && item.ai_cost_max
+        ? `$${Math.round(item.ai_cost_min / 100).toLocaleString()}–$${Math.round(item.ai_cost_max / 100).toLocaleString()}`
+        : 'TBD';
+      const progress = item.status === 'completed' ? 1 : item.status === 'active' ? 0.5 : 0.1;
 
-        {/* Status badge */}
-        <View style={[styles.badge, { backgroundColor: item.statusColor + '22', borderColor: item.statusColor + '55' }]}>
-          <View style={[styles.badgeDot, { backgroundColor: item.statusColor }]} />
-          <Text style={[styles.badgeText, { color: item.statusColor }]}>{item.statusLabel}</Text>
-        </View>
-
-        {/* Body */}
-        <View style={styles.body}>
-          <View style={styles.bodyTop}>
-            <View style={styles.bodyLeft}>
-              <Text style={styles.title} numberOfLines={1}>{item.title}</Text>
-              <Text style={styles.address} numberOfLines={1}>{item.address}</Text>
+      return (
+        <AnimatedPressable
+          style={styles.card}
+          haptic
+          onPress={() => navigation.navigate('ProjectDetailView', { project: item })}
+        >
+          {coverImage ? (
+            <Image source={{ uri: coverImage }} style={styles.cover} />
+          ) : (
+            <View style={[styles.cover, styles.coverPlaceholder]}>
+              <Ionicons name="home-outline" size={36} color="rgba(255,255,255,0.15)" />
             </View>
-            <ProgressRing progress={item.progress} color={item.statusColor} size={44} />
+          )}
+          <LinearGradient
+            colors={['transparent', 'rgba(0,0,0,0.85)']}
+            style={styles.gradient}
+          />
+
+          <View style={[styles.badge, { backgroundColor: meta.color + '22', borderColor: meta.color + '55' }]}>
+            <View style={[styles.badgeDot, { backgroundColor: meta.color }]} />
+            <Text style={[styles.badgeText, { color: meta.color }]}>{meta.label}</Text>
           </View>
 
-          <View style={styles.footer}>
-            <View style={styles.contractorRow}>
-              {item.contractorAvatar ? (
-                <Image source={{ uri: item.contractorAvatar }} style={styles.avatar} />
-              ) : (
+          <View style={styles.body}>
+            <View style={styles.bodyTop}>
+              <View style={styles.bodyLeft}>
+                <Text style={styles.title} numberOfLines={1}>{title}</Text>
+                <Text style={styles.address} numberOfLines={1}>{location}</Text>
+              </View>
+              <ProgressRing progress={progress} color={meta.color} size={44} />
+            </View>
+
+            <View style={styles.footer}>
+              <View style={styles.contractorRow}>
                 <View style={[styles.avatar, styles.avatarPlaceholder]}>
                   <Ionicons name="person" size={12} color="rgba(255,255,255,0.5)" />
                 </View>
-              )}
-              <Text style={styles.contractor} numberOfLines={1}>{item.contractor}</Text>
+                <Text style={styles.contractor} numberOfLines={1}>
+                  {item.status === 'active' || item.status === 'completed' ? 'Contractor assigned' : 'Finding contractor'}
+                </Text>
+              </View>
+              <Text style={styles.budget}>{budget}</Text>
             </View>
-            <Text style={styles.budget}>{item.budget}</Text>
           </View>
-        </View>
-      </AnimatedPressable>
-    ),
+        </AnimatedPressable>
+      );
+    },
     [],
   );
 
@@ -96,9 +147,9 @@ export function ProjectsCarousel() {
         title="My Projects"
         onPress={() => navigation.navigate('Projects')}
       />
-      {FAKE_PROJECTS.length > 0 ? (
+      {projects.length > 0 ? (
         <FlatList
-          data={FAKE_PROJECTS}
+          data={projects}
           keyExtractor={(item) => item.id}
           renderItem={renderProject}
           horizontal
@@ -128,6 +179,7 @@ const styles = StyleSheet.create({
     borderColor: Colors.surface.border,
   },
   cover: { width: '100%', height: 140, resizeMode: 'cover' },
+  coverPlaceholder: { backgroundColor: Colors.surface.default, alignItems: 'center', justifyContent: 'center' },
   gradient: {
     position: 'absolute',
     left: 0,
@@ -174,7 +226,6 @@ const styles = StyleSheet.create({
   contractor: { fontSize: 12, color: 'rgba(255,255,255,0.55)', fontWeight: '500' },
   budget: { fontSize: 13, fontWeight: '600', color: 'rgba(255,255,255,0.7)' },
 
-  // Empty state
   emptyCard: {
     alignItems: 'center',
     justifyContent: 'center',

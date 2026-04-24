@@ -9,7 +9,6 @@ import {
   QuickActions,
   ProjectsCarousel,
   InspirationCarousel,
-  NewsAndUpdates,
   ActivityTimeline,
 } from '@/components/dashboard';
 
@@ -35,7 +34,6 @@ export default function HomeownerDashboard() {
           <QuickActions />
           <ProjectsCarousel />
           <InspirationCarousel />
-          <NewsAndUpdates />
           <ActivityTimeline />
         </Animated.ScrollView>
       </SafeAreaView>
