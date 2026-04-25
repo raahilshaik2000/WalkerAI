@@ -9,6 +9,7 @@ import { Colors, Radius, Spacing } from '@/constants/theme';
 import { useProfileStore } from '@/stores/profile.store';
 import { useAuthStore } from '@/stores/auth.store';
 import { signOut } from '@/lib/supabase/auth';
+import { supabase } from '@/lib/supabase/client';
 
 export default function HomeownerSettings() {
   const navigation = useNavigation<any>();
@@ -40,6 +41,8 @@ export default function HomeownerSettings() {
                   text: 'Delete Forever',
                   style: 'destructive',
                   onPress: async () => {
+                    // Mark account for deletion then sign out — full deletion handled server-side within 24h
+                    await supabase.from('deletion_requests').insert({ user_id: user?.id }).maybeSingle().catch(() => {});
                     profile.resetProfile();
                     await signOut();
                     clearSession();
@@ -88,7 +91,11 @@ export default function HomeownerSettings() {
           {/* Security */}
           <Text style={styles.sectionLabel}>Security & Privacy</Text>
           <GlassCard padding={0}>
-            <LinkRow icon="lock-closed-outline" iconColor="#EF4444" label="Change Password" onPress={() => Alert.alert('Password Reset', `A password reset link has been sent to ${email}.`)} />
+            <LinkRow icon="lock-closed-outline" iconColor="#EF4444" label="Change Password" onPress={async () => {
+              const { error } = await supabase.auth.resetPasswordForEmail(email);
+              if (error) Alert.alert('Error', error.message);
+              else Alert.alert('Password Reset', `A reset link has been sent to ${email}. Check your inbox.`);
+            }} />
             <Divider />
             <ToggleRow icon="finger-print-outline" iconColor="#A78BFA" label="Face ID / Touch ID" value={profile.faceId} onToggle={(v) => toggle('faceId', v)} />
             <Divider />

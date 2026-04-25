@@ -325,6 +325,7 @@ export default function QuoteBuilderScreen() {
               label={`Submit Quote — $${totalDollars.toLocaleString('en-CA', { minimumFractionDigits: 2 })}`}
               onPress={handleSubmit}
               loading={submitting}
+              disabled={totalDollars <= 0}
               fullWidth
               size="lg"
               haptic

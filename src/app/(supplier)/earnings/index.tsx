@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from 'react';
-import { ActivityIndicator, FlatList, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { ActivityIndicator, Alert, FlatList, Linking, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import Ionicons from 'react-native-vector-icons/Ionicons';
 import { supabase } from '@/lib/supabase/client';
@@ -37,6 +37,17 @@ export default function SupplierEarnings() {
 
   const fmt = (cents: number) => `$${(cents / 100).toLocaleString('en-CA', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 
+  const handleStripeConnect = async () => {
+    const { data, error } = await supabase.functions.invoke('stripe-connect', {
+      body: { user_id: user?.id, role: 'supplier' },
+    });
+    if (error || !data?.url) {
+      Alert.alert('Error', 'Could not start Stripe onboarding. Please try again.');
+      return;
+    }
+    Linking.openURL(data.url);
+  };
+
   if (loading) return <View style={styles.center}><ActivityIndicator color={Colors.accent} size="large" /></View>;
 
   return (
@@ -73,7 +84,7 @@ export default function SupplierEarnings() {
               <Ionicons name="card-outline" size={28} color={Colors.accent} />
               <Text style={styles.stripeTitle}>Set up payouts</Text>
               <Text style={styles.stripeBody}>Connect your bank account via Stripe to receive payments when orders are confirmed.</Text>
-              <TouchableOpacity style={styles.stripeBtn} activeOpacity={0.8}>
+              <TouchableOpacity style={styles.stripeBtn} activeOpacity={0.8} onPress={handleStripeConnect}>
                 <Text style={styles.stripeBtnText}>Connect Bank Account</Text>
               </TouchableOpacity>
             </GlassCard>

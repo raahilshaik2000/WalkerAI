@@ -101,7 +101,7 @@ export default function HomeownerProfile() {
             </View>
             <View style={styles.statDivider} />
             <View style={styles.stat}>
-              <Text style={styles.statValue}>${Math.round(totalBudget / 100000)}k</Text>
+              <Text style={styles.statValue}>{totalBudget > 0 ? `$${Math.round(totalBudget / 100000)}k` : '–'}</Text>
               <Text style={styles.statLabel}>Budget</Text>
             </View>
           </View>

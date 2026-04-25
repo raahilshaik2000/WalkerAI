@@ -94,6 +94,27 @@ function uploadWithProgress(
   });
 }
 
+export async function uploadBase64(
+  bucket: StorageBucket,
+  path: string,
+  base64: string,
+  contentType: string = 'image/jpeg',
+): Promise<UploadResult> {
+  const cleanBase64 = base64.replace(/^data:\w+\/\w+;base64,/, '');
+  const binary = atob(cleanBase64);
+  const bytes = new Uint8Array(binary.length);
+  for (let i = 0; i < binary.length; i++) {
+    bytes[i] = binary.charCodeAt(i);
+  }
+  const { error } = await supabase.storage.from(bucket).upload(path, bytes, {
+    contentType,
+    upsert: true,
+  });
+  if (error) throw error;
+  const { data } = supabase.storage.from(bucket).getPublicUrl(path);
+  return { publicUrl: data.publicUrl, storagePath: path };
+}
+
 export function getPublicUrl(bucket: StorageBucket, path: string): string {
   const { data } = supabase.storage.from(bucket).getPublicUrl(path);
   return data.publicUrl;

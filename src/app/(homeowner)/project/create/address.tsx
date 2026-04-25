@@ -55,7 +55,7 @@ export default function AddressStep() {
       useProjectWizardStore.getState().setStep(8);
       navigation.navigate('Confirm');
     } catch (err: any) {
-      const msg = err?.message || err?.details || JSON.stringify(err);
+      const msg = err?.message || err?.details || err?.hint || 'Something went wrong. Please try again.';
       Alert.alert('Error', msg);
     } finally {
       setLoading(false);

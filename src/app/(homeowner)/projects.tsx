@@ -430,7 +430,7 @@ export default function HomeownerProjects() {
                   variant="primary"
                   size="sm"
                   haptic
-                  style={{ marginTop: 12 }}
+                  style={{ marginTop: 12, alignSelf: 'center' }}
                 />
               </View>
             }

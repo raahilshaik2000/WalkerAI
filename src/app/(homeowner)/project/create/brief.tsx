@@ -225,7 +225,7 @@ RULES:
 
   const handleConfirm = () => {
     useProjectWizardStore.getState().setStep(7);
-    navigation.navigate('Address');
+    navigation.navigate('Confirm');
   };
 
   if (loading) {

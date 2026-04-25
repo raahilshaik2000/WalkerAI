@@ -1,25 +1,25 @@
-import React from 'react';
+import React, { useEffect, useState } from 'react';
 import { ScrollView, StyleSheet, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useNavigation } from '@react-navigation/native';
 import Ionicons from 'react-native-vector-icons/Ionicons';
 import { AnimatedPressable, GlassCard, GradientBackground } from '@/components/ui';
 import { Colors, Radius } from '@/constants/theme';
+import { supabase } from '@/lib/supabase/client';
+import { useAuthStore } from '@/stores/auth.store';
 
-const REVIEWS = [
-  {
-    id: 'r1',
-    projectTitle: 'Guest Bathroom Refresh',
-    contractorName: 'AquaTile Bathrooms',
-    date: 'Mar 6, 2026',
-    overall: 4.8,
-    quality: 5,
-    communication: 5,
-    timeliness: 4,
-    cleanliness: 5,
-    comment: 'Excellent work on the guest bathroom. The tile work was flawless and they cleaned up perfectly every day. Would definitely hire again!',
-  },
-];
+interface Review {
+  id: string;
+  rating: number;
+  quality_rating: number | null;
+  communication_rating: number | null;
+  timeliness_rating: number | null;
+  cleanliness_rating: number | null;
+  comment: string | null;
+  created_at: string;
+  project: { room_type: string | null } | null;
+  company: { name: string } | null;
+}
 
 function Stars({ rating }: { rating: number }) {
   return (
@@ -31,8 +31,48 @@ function Stars({ rating }: { rating: number }) {
   );
 }
 
+function formatDate(iso: string): string {
+  return new Date(iso).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+}
+
+function getProjectTitle(roomType: string | null): string {
+  if (!roomType) return 'Project';
+  return roomType.charAt(0).toUpperCase() + roomType.slice(1) + ' Renovation';
+}
+
 export default function MyReviewsScreen() {
   const navigation = useNavigation<any>();
+  const { user } = useAuthStore();
+  const [reviews, setReviews] = useState<Review[]>([]);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    if (!user) return;
+    supabase
+      .from('reviews')
+      .select(`
+        id, rating, quality_rating, communication_rating, timeliness_rating, cleanliness_rating, comment, created_at,
+        project:projects!project_id(room_type, assigned_company_id, companies!assigned_company_id(name))
+      `)
+      .eq('reviewer_id', user.id)
+      .order('created_at', { ascending: false })
+      .then(({ data }) => {
+        const mapped: Review[] = (data ?? []).map((r: any) => ({
+          id: r.id,
+          rating: r.rating,
+          quality_rating: r.quality_rating,
+          communication_rating: r.communication_rating,
+          timeliness_rating: r.timeliness_rating,
+          cleanliness_rating: r.cleanliness_rating,
+          comment: r.comment,
+          created_at: r.created_at,
+          project: r.project ?? null,
+          company: r.project?.companies ?? null,
+        }));
+        setReviews(mapped);
+        setLoading(false);
+      });
+  }, [user]);
 
   return (
     <GradientBackground>
@@ -46,38 +86,38 @@ export default function MyReviewsScreen() {
         </View>
 
         <ScrollView contentContainerStyle={styles.scroll} showsVerticalScrollIndicator={false}>
-          {REVIEWS.map((r) => (
-            <GlassCard key={r.id}>
-              <View style={styles.topRow}>
-                <View>
-                  <Text style={styles.project}>{r.projectTitle}</Text>
-                  <Text style={styles.contractor}>{r.contractorName}</Text>
-                </View>
-                <View style={styles.overallBadge}>
-                  <Text style={styles.overallText}>{r.overall}</Text>
-                  <Ionicons name="star" size={12} color="#F59E0B" />
-                </View>
-              </View>
-
-              <View style={styles.ratingsGrid}>
-                <RatingItem label="Quality" rating={r.quality} />
-                <RatingItem label="Communication" rating={r.communication} />
-                <RatingItem label="Timeliness" rating={r.timeliness} />
-                <RatingItem label="Cleanliness" rating={r.cleanliness} />
-              </View>
-
-              {r.comment && <Text style={styles.comment}>"{r.comment}"</Text>}
-              <Text style={styles.date}>{r.date}</Text>
-            </GlassCard>
-          ))}
-
-          {REVIEWS.length === 0 && (
+          {!loading && reviews.length === 0 && (
             <View style={styles.empty}>
               <Ionicons name="star-outline" size={48} color={Colors.text.tertiary} />
               <Text style={styles.emptyTitle}>No reviews yet</Text>
               <Text style={styles.emptySub}>Complete a project to leave a review for your contractor.</Text>
             </View>
           )}
+
+          {reviews.map((r) => (
+            <GlassCard key={r.id} style={{ marginBottom: 12 }}>
+              <View style={styles.topRow}>
+                <View style={{ flex: 1 }}>
+                  <Text style={styles.project}>{getProjectTitle(r.project?.room_type ?? null)}</Text>
+                  <Text style={styles.contractor}>{r.company?.name ?? 'Contractor'}</Text>
+                </View>
+                <View style={styles.overallBadge}>
+                  <Text style={styles.overallText}>{r.rating}</Text>
+                  <Ionicons name="star" size={12} color="#F59E0B" />
+                </View>
+              </View>
+
+              <View style={styles.ratingsGrid}>
+                {r.quality_rating != null && <RatingItem label="Quality" rating={r.quality_rating} />}
+                {r.communication_rating != null && <RatingItem label="Communication" rating={r.communication_rating} />}
+                {r.timeliness_rating != null && <RatingItem label="Timeliness" rating={r.timeliness_rating} />}
+                {r.cleanliness_rating != null && <RatingItem label="Cleanliness" rating={r.cleanliness_rating} />}
+              </View>
+
+              {r.comment ? <Text style={styles.comment}>"{r.comment}"</Text> : null}
+              <Text style={styles.date}>{formatDate(r.created_at)}</Text>
+            </GlassCard>
+          ))}
         </ScrollView>
       </SafeAreaView>
     </GradientBackground>

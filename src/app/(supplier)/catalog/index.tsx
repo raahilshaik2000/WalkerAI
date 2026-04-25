@@ -32,8 +32,11 @@ export default function SupplierCatalog() {
   const onRefresh = async () => { setRefreshing(true); await fetchData(); setRefreshing(false); };
 
   const toggleStock = async (item: SupplierCatalogItem) => {
-    await supabase.from('supplier_catalog').update({ in_stock: !item.in_stock }).eq('id', item.id);
     setItems((prev) => prev.map((i) => i.id === item.id ? { ...i, in_stock: !i.in_stock } : i));
+    const { error } = await supabase.from('supplier_catalog').update({ in_stock: !item.in_stock }).eq('id', item.id);
+    if (error) {
+      setItems((prev) => prev.map((i) => i.id === item.id ? { ...i, in_stock: item.in_stock } : i));
+    }
   };
 
   if (loading) return <View style={styles.center}><ActivityIndicator color={Colors.accent} size="large" /></View>;

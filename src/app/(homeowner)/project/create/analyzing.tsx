@@ -10,7 +10,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { useNavigation } from '@react-navigation/native';
 import Ionicons from 'react-native-vector-icons/Ionicons';
 import { supabase } from '@/lib/supabase/client';
-import { uploadFile } from '@/lib/supabase/storage';
+import { uploadBase64 } from '@/lib/supabase/storage';
 
 import { useProjectWizardStore } from '@/stores/project-wizard.store';
 import { useAuthStore } from '@/stores/auth.store';
@@ -91,18 +91,14 @@ export default function AnalyzingScreen() {
         // Upload photos to storage IN PARALLEL with AI call
         const uploadPromise = Promise.all(
           localPhotos.map(async (photo, i) => {
-            if (!photo.uri) return;
-            try {
-              const path = `${pid}/${i}_${Date.now()}.jpg`;
-              const { publicUrl, storagePath } = await uploadFile('project-photos', path, photo.uri, 'image/jpeg');
-              await supabase.from('project_photos').insert({
-                project_id: pid,
-                url: publicUrl,
-                storage_path: storagePath,
-              });
-            } catch (uploadErr: any) {
-              console.warn('[Photo upload failed]', uploadErr?.message ?? uploadErr);
-            }
+            if (!photo.base64) return;
+            const path = `${pid}/${i}_${Date.now()}.jpg`;
+            const { publicUrl, storagePath } = await uploadBase64('project-photos', path, photo.base64);
+            await supabase.from('project_photos').insert({
+              project_id: pid,
+              url: publicUrl,
+              storage_path: storagePath,
+            });
           })
         );
 

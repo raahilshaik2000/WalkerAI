@@ -35,11 +35,12 @@ function timeAgo(iso: string): string {
 
 const MAX_ITEMS = 4;
 
-export function ActivityTimeline() {
+export function ActivityTimeline({ refreshKey = 0 }: { refreshKey?: number }) {
   const navigation = useNavigation<any>();
   const { user } = useAuthStore();
   const animatedStyle = useStaggeredEntrance(6);
   const [items, setItems] = useState<NotificationRow[]>([]);
+  const [loaded, setLoaded] = useState(false);
 
   useEffect(() => {
     if (!user) return;
@@ -49,8 +50,11 @@ export function ActivityTimeline() {
       .eq('user_id', user.id)
       .order('created_at', { ascending: false })
       .limit(MAX_ITEMS)
-      .then(({ data }) => setItems(data ?? []));
-  }, [user]);
+      .then(({ data }) => {
+        setItems(data ?? []);
+        setLoaded(true);
+      });
+  }, [user, refreshKey]);
 
   const handlePress = (item: NotificationRow) => {
     const projectId = item.payload?.project_id;
@@ -59,7 +63,16 @@ export function ActivityTimeline() {
     }
   };
 
-  if (items.length === 0) return null;
+  if (loaded && items.length === 0) {
+    return (
+      <Animated.View style={[styles.container, animatedStyle]}>
+        <SectionHeader title="Recent Activity" />
+        <Text style={styles.emptyText}>Activity will appear here once your project is underway.</Text>
+      </Animated.View>
+    );
+  }
+
+  if (!loaded) return null;
 
   return (
     <Animated.View style={[styles.container, animatedStyle]}>
@@ -158,5 +171,10 @@ const styles = StyleSheet.create({
     fontSize: 13,
     fontWeight: '600',
     color: Colors.accent,
+  },
+  emptyText: {
+    fontSize: 13,
+    color: Colors.text.tertiary,
+    paddingHorizontal: 4,
   },
 });

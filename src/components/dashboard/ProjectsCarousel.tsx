@@ -1,5 +1,6 @@
 import React, { useCallback, useEffect, useState } from 'react';
 import {
+  ActivityIndicator,
   Dimensions,
   FlatList,
   Image,
@@ -44,11 +45,12 @@ interface Project {
   project_photos: Array<{ url: string }>;
 }
 
-export function ProjectsCarousel() {
+export function ProjectsCarousel({ refreshKey = 0, onRefreshDone }: { refreshKey?: number; onRefreshDone?: () => void }) {
   const navigation = useNavigation<any>();
   const { user } = useAuthStore();
   const animatedStyle = useStaggeredEntrance(3);
   const [projects, setProjects] = useState<Project[]>([]);
+  const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     if (!user) return;
@@ -59,8 +61,12 @@ export function ProjectsCarousel() {
       .not('status', 'eq', 'diy_saved')
       .order('created_at', { ascending: false })
       .limit(5)
-      .then(({ data }) => setProjects((data as Project[]) ?? []));
-  }, [user]);
+      .then(({ data }) => {
+        setProjects((data as Project[]) ?? []);
+        setLoading(false);
+        onRefreshDone?.();
+      });
+  }, [user, refreshKey]);
 
   const renderProject = useCallback(
     ({ item }: { item: Project }) => {
@@ -136,7 +142,7 @@ export function ProjectsCarousel() {
         variant="primary"
         size="sm"
         haptic
-        style={{ marginTop: 12 }}
+        style={{ marginTop: 12, alignSelf: 'center' }}
       />
     </View>
   );
@@ -147,7 +153,11 @@ export function ProjectsCarousel() {
         title="My Projects"
         onPress={() => navigation.navigate('Projects')}
       />
-      {projects.length > 0 ? (
+      {loading ? (
+        <View style={styles.emptyCard}>
+          <ActivityIndicator color="rgba(255,255,255,0.3)" />
+        </View>
+      ) : projects.length > 0 ? (
         <FlatList
           data={projects}
           keyExtractor={(item) => item.id}
@@ -162,6 +172,7 @@ export function ProjectsCarousel() {
       ) : (
         renderEmpty()
       )}
+
     </Animated.View>
   );
 }
