@@ -28,7 +28,7 @@ export default function DIYPhotosScreen() {
     const result = await launchImageLibrary({
       mediaType: 'photo',
       selectionLimit: MAX_PHOTOS - photos.length,
-      quality: 0.85,
+      quality: 1,
       includeBase64: true,
     });
     if (!result.didCancel && result.assets) {

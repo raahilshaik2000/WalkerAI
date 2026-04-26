@@ -1,5 +1,5 @@
 import React, { useEffect } from 'react';
-import { View, Text, StyleSheet, Dimensions } from 'react-native';
+import { View, Text, StyleSheet, Dimensions, type StyleProp, type ViewStyle } from 'react-native';
 import { useNavigation } from '@react-navigation/native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import LinearGradient from 'react-native-linear-gradient';
@@ -31,7 +31,7 @@ function ValuePropRow({
   style,
 }: {
   text: string;
-  style: Animated.AnimateStyle<any>;
+  style: StyleProp<ViewStyle>;
 }) {
   return (
     <Animated.View style={[styles.valuePropRow, style]}>

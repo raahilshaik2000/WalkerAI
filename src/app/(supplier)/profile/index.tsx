@@ -61,20 +61,20 @@ export default function SupplierProfile() {
           {supplier?.verified && (
             <View style={styles.statsRow}>
               <GlassCard style={styles.statCard}>
-                <Text style={styles.statValue}>{supplier.rating?.toFixed(1) ?? '—'}</Text>
-                <Text style={styles.statLabel}>Rating</Text>
+                <Text style={styles.statValue} numberOfLines={1}>{supplier.rating?.toFixed(1) ?? '—'}</Text>
+                <Text style={styles.statLabel} numberOfLines={1}>Rating</Text>
               </GlassCard>
               <GlassCard style={styles.statCard}>
-                <Text style={styles.statValue}>{supplier.total_reviews}</Text>
-                <Text style={styles.statLabel}>Reviews</Text>
+                <Text style={styles.statValue} numberOfLines={1}>{supplier.total_reviews}</Text>
+                <Text style={styles.statLabel} numberOfLines={1}>Reviews</Text>
               </GlassCard>
               <GlassCard style={styles.statCard}>
-                <Text style={styles.statValue}>{supplier.fulfillment_rate ? `${supplier.fulfillment_rate.toFixed(0)}%` : '—'}</Text>
-                <Text style={styles.statLabel}>On-time</Text>
+                <Text style={styles.statValue} numberOfLines={1}>{supplier.fulfillment_rate ? `${supplier.fulfillment_rate.toFixed(0)}%` : '—'}</Text>
+                <Text style={styles.statLabel} numberOfLines={1}>On-time</Text>
               </GlassCard>
               <GlassCard style={styles.statCard}>
-                <Text style={styles.statValue}>{supplier.avg_delivery_days ?? '—'}</Text>
-                <Text style={styles.statLabel}>Avg days</Text>
+                <Text style={styles.statValue} numberOfLines={1}>{supplier.avg_delivery_days ?? '—'}</Text>
+                <Text style={styles.statLabel} numberOfLines={1}>Avg days</Text>
               </GlassCard>
             </View>
           )}
@@ -138,10 +138,10 @@ const styles = StyleSheet.create({
   verifiedText: { fontSize: 12, color: '#34D399', fontWeight: '600' },
   pendingBadge: { flexDirection: 'row', alignItems: 'center', gap: 4, marginTop: 6 },
   pendingText: { fontSize: 12, color: Colors.accent, fontWeight: '600' },
-  statsRow: { flexDirection: 'row', gap: 10 },
-  statCard: { flex: 1, padding: 12, alignItems: 'center', gap: 4 },
-  statValue: { fontSize: 18, fontWeight: '800', color: Colors.text.primary },
-  statLabel: { fontSize: 11, color: Colors.text.tertiary },
+  statsRow: { flexDirection: 'row', gap: 8 },
+  statCard: { flex: 1, padding: 8, alignItems: 'center', gap: 2 },
+  statValue: { fontSize: 14, fontWeight: '800', color: Colors.text.primary },
+  statLabel: { fontSize: 9, color: Colors.text.tertiary, textAlign: 'center' },
   infoCard: { padding: Spacing.md, gap: 2 },
   sectionTitle: { fontSize: 12, color: Colors.text.tertiary, textTransform: 'uppercase', letterSpacing: 1, marginBottom: 8 },
   catWrap: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginTop: 4 },

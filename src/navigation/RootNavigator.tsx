@@ -127,7 +127,6 @@ function HomeownerTabs() {
     <>
       <Tab.Navigator
         tabBar={(props) => <FloatingTabBar {...props} />}
-        sceneContainerStyle={{ backgroundColor: '#000000' }}
         screenOptions={{ headerShown: false, tabBarShowLabel: false }}
       >
         <Tab.Screen name="Dashboard" component={HomeownerDashboard} options={{ tabBarIcon: ({ color, focused }) => icon('home', focused, color) }} />
@@ -202,7 +201,6 @@ function CompanyTabs() {
   return (
     <Tab.Navigator
       tabBar={(props) => <FloatingTabBar {...props} />}
-      sceneContainerStyle={{ backgroundColor: '#000000' }}
       screenOptions={{ headerShown: false, tabBarShowLabel: false }}
     >
       <Tab.Screen name="Jobs" component={CompanyDashboard} options={{ tabBarIcon: ({ color, focused }) => icon('briefcase', focused, color) }} />
@@ -215,7 +213,7 @@ function CompanyTabs() {
 
 function AuthNavigator() {
   return (
-    <AuthStack.Navigator screenOptions={{ headerShown: false, animationEnabled: true }}>
+    <AuthStack.Navigator screenOptions={{ headerShown: false }}>
       <AuthStack.Screen name="Welcome" component={WelcomeScreen} />
       <AuthStack.Screen name="Login" component={LoginScreen} />
       <AuthStack.Screen name="Register" component={RegisterScreen} />

@@ -42,7 +42,7 @@ export default function HomeownerSettings() {
                   style: 'destructive',
                   onPress: async () => {
                     // Mark account for deletion then sign out — full deletion handled server-side within 24h
-                    await supabase.from('deletion_requests').insert({ user_id: user?.id }).maybeSingle().catch(() => {});
+                    await supabase.from('deletion_requests').insert({ user_id: user?.id });
                     profile.resetProfile();
                     await signOut();
                     clearSession();

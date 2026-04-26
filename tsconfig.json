@@ -2,11 +2,19 @@
   "extends": "@react-native/typescript-config",
   "compilerOptions": {
     "types": ["jest"],
+    "lib": ["ES2021", "dom"],
     "baseUrl": ".",
     "paths": {
       "@/*": ["src/*"]
     }
   },
   "include": ["**/*.ts", "**/*.tsx"],
-  "exclude": ["**/node_modules", "**/Pods"]
+  "exclude": [
+    "**/node_modules",
+    "**/Pods",
+    "supabase/functions/**",
+    "src/app/_layout.tsx",
+    "src/app/*/_layout.tsx",
+    "src/app/**/_layout.tsx"
+  ]
 }

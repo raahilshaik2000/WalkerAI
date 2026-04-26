@@ -136,7 +136,7 @@ const styles = StyleSheet.create({
   stripeCard: { padding: Spacing.lg, alignItems: 'center', gap: 10 },
   stripeTitle: { ...Typography.h3 },
   stripeBody: { ...Typography.bodySecondary, textAlign: 'center' },
-  stripeBtn: { backgroundColor: Colors.accent, paddingHorizontal: 24, paddingVertical: 12, borderRadius: 24, marginTop: 4 },
+  stripeBtn: { backgroundColor: Colors.success, paddingHorizontal: 24, paddingVertical: 12, borderRadius: 24, marginTop: 4 },
   stripeBtnText: { fontSize: 15, fontWeight: '700', color: '#fff' },
   sectionTitle: { fontSize: 15, fontWeight: '700', color: Colors.text.primary },
   emptyText: { fontSize: 14, color: Colors.text.tertiary, textAlign: 'center' },
