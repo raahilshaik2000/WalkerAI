@@ -64,7 +64,7 @@ Deno.serve(async (req) => {
       });
     }
 
-    const { project_id, analysis, questionnaire_answers, province } = await req.json();
+    const { project_id, analysis, questionnaire_answers, province, custom_prompt, forced_cost_min, forced_cost_max } = await req.json();
 
     const { data: project } = await adminClient
       .from('projects')
@@ -80,11 +80,17 @@ Deno.serve(async (req) => {
 
     const roomType = project.room_type ?? 'kitchen';
     const provinceCode = (province ?? project.province ?? 'ON').toUpperCase();
-    const regionalCosts =
-      CANADIAN_COST_RANGES[provinceCode]?.[roomType] ??
-      (roomType === 'kitchen' ? DEFAULT_COST : { min: 700000, max: 2000000 });
 
-    const rawText = await callOpenAI(`Generate a detailed renovation project brief for a ${roomType} in ${provinceCode}, Canada.
+    // Use caller-provided prompt if available (client has richer pricing logic),
+    // otherwise fall back to the server-side auto-generated prompt.
+    let promptToUse: string;
+    if (custom_prompt) {
+      promptToUse = custom_prompt;
+    } else {
+      const regionalCosts =
+        CANADIAN_COST_RANGES[provinceCode]?.[roomType] ??
+        (roomType === 'kitchen' ? DEFAULT_COST : { min: 700000, max: 2000000 });
+      promptToUse = `Generate a detailed renovation project brief for a ${roomType} in ${provinceCode}, Canada.
 
 Room Analysis: ${JSON.stringify(analysis)}
 Homeowner Preferences (questionnaire answers): ${JSON.stringify(questionnaire_answers)}
@@ -113,7 +119,10 @@ Rules:
 - Include realistic Canadian permit requirements (building permit, plumbing, electrical as needed)
 - Materials should reflect the quality tier selected
 - scope_of_work must cover all phases in order
-- Return ONLY the JSON, no markdown`, Deno.env.get('OPENAI_API_KEY')!);
+- Return ONLY the JSON, no markdown`;
+    }
+
+    const rawText = await callOpenAI(promptToUse, Deno.env.get('OPENAI_API_KEY')!);
 
     let brief: {
       materials: unknown[];
@@ -130,6 +139,10 @@ Rules:
       const stripped = rawText.replace(/```json\n?/g, '').replace(/```\n?/g, '').trim();
       brief = JSON.parse(stripped);
     }
+
+    // Caller may supply pre-calculated costs from a local pricing engine — trust those over AI-generated
+    if (forced_cost_min !== undefined) brief.ai_cost_min = forced_cost_min;
+    if (forced_cost_max !== undefined) brief.ai_cost_max = forced_cost_max;
 
     // Persist all generated data
     await Promise.all([

@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useEffect, useState } from 'react';
 import { Alert, Image, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useNavigation } from '@react-navigation/native';
@@ -8,7 +8,7 @@ import { Colors, Radius, Spacing } from '@/constants/theme';
 import { useAuthStore } from '@/stores/auth.store';
 import { useProfileStore } from '@/stores/profile.store';
 import { signOut } from '@/lib/supabase/auth';
-import { PROJECTS_LIST } from '@/components/dashboard/data';
+import { supabase } from '@/lib/supabase/client';
 
 export default function HomeownerProfile() {
   const navigation = useNavigation<any>();
@@ -19,13 +19,25 @@ export default function HomeownerProfile() {
   const email = user?.email || '';
   const initials = name.slice(0, 2).toUpperCase();
 
-  // Real stats from PROJECTS_LIST
-  const totalProjects = PROJECTS_LIST.length;
-  const completedProjects = PROJECTS_LIST.filter((p) => p.status === 'completed').length;
-  const totalBudget = PROJECTS_LIST.reduce((sum, p) => {
-    const match = p.budget.match(/\$([\d,]+)/);
-    return sum + (match ? parseInt(match[1].replace(',', ''), 10) : 0);
-  }, 0);
+  const [totalProjects, setTotalProjects] = useState(0);
+  const [completedProjects, setCompletedProjects] = useState(0);
+  const [totalBudget, setTotalBudget] = useState(0);
+
+  useEffect(() => {
+    if (!user) return;
+    const load = async () => {
+      const { data } = await supabase
+        .from('projects')
+        .select('status, ai_cost_max')
+        .eq('homeowner_id', user.id)
+        .not('status', 'eq', 'diy_saved');
+      if (!data) return;
+      setTotalProjects(data.length);
+      setCompletedProjects(data.filter((p) => p.status === 'completed').length);
+      setTotalBudget(data.reduce((s, p) => s + (p.ai_cost_max ?? 0), 0));
+    };
+    load();
+  }, [user]);
 
   const handleSignOut = () => {
     Alert.alert('Sign Out', 'Are you sure you want to sign out?', [
@@ -89,7 +101,7 @@ export default function HomeownerProfile() {
             </View>
             <View style={styles.statDivider} />
             <View style={styles.stat}>
-              <Text style={styles.statValue}>${Math.round(totalBudget / 1000)}k</Text>
+              <Text style={styles.statValue}>{totalBudget > 0 ? `$${Math.round(totalBudget / 100000)}k` : '–'}</Text>
               <Text style={styles.statLabel}>Budget</Text>
             </View>
           </View>
@@ -98,10 +110,6 @@ export default function HomeownerProfile() {
           <Text style={styles.sectionLabel}>Account</Text>
           <GlassCard padding={0}>
             <MenuRow icon="person-outline" label="Edit Profile" onPress={() => navigation.navigate('EditProfile')} />
-            <Divider />
-            <MenuRow icon="location-outline" label="Saved Addresses" onPress={() => navigation.navigate('SavedAddresses')} />
-            <Divider />
-            <MenuRow icon="card-outline" label="Payment Methods" onPress={() => Alert.alert('Coming Soon', 'Payment methods will be available in a future update.')} />
           </GlassCard>
 
           {/* Activity */}
@@ -110,18 +118,12 @@ export default function HomeownerProfile() {
             <MenuRow icon="folder-outline" label="My Projects" onPress={() => navigation.navigate('HomeownerTabs', { screen: 'Projects' })} />
             <Divider />
             <MenuRow icon="star-outline" label="My Reviews" onPress={() => navigation.navigate('MyReviews')} />
-            <Divider />
-            <MenuRow icon="heart-outline" label="Saved Ideas" onPress={() => navigation.navigate('BrowseIdeas')} />
           </GlassCard>
 
           {/* Support */}
           <Text style={styles.sectionLabel}>Support</Text>
           <GlassCard padding={0}>
-            <MenuRow icon="help-circle-outline" label="Help Center" onPress={() => Alert.alert('Help Center', 'Visit help.walkerai.com or email support@walkerai.com for assistance.')} />
-            <Divider />
-            <MenuRow icon="mail-outline" label="Contact Us" onPress={() => Alert.alert('Contact Us', 'Email: support@walkerai.com\nPhone: 1-888-WALKER-1')} />
-            <Divider />
-            <MenuRow icon="thumbs-up-outline" label="Rate the App" onPress={() => Alert.alert('Thank You!', 'We appreciate your support. Rating on the App Store coming soon.')} />
+            <MenuRow icon="mail-outline" label="Contact Us" onPress={() => Alert.alert('Contact Us', 'Email: support@walkerai.com')} />
           </GlassCard>
 
           {/* Sign Out */}

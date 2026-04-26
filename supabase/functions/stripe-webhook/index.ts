@@ -35,7 +35,7 @@ Deno.serve(async (req) => {
         if (project_id && quote_id) {
           await adminClient
             .from('quotes')
-            .update({ status: 'approved' })
+            .update({ status: 'approved', approved_at: new Date().toISOString() })
             .eq('stripe_payment_intent_id', pi.id);
           await adminClient
             .from('projects')

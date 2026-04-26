@@ -10,6 +10,7 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useNavigation } from '@react-navigation/native';
 import ReactNativeHapticFeedback from 'react-native-haptic-feedback';
+import { supabase } from '@/lib/supabase/client';
 import { useProjectWizardStore } from '@/stores/project-wizard.store';
 import { Colors, Radius, Spacing, Typography } from '@/constants/theme';
 import { GlassButton, GradientBackground, WizardHeader } from '@/components/ui';
@@ -22,6 +23,9 @@ export default function QuestionnaireStep() {
     currentQuestionIndex,
     setAnswer,
     nextQuestion,
+    projectId,
+    analysisResult,
+    setQuestions,
   } = useProjectWizardStore();
 
   const fadeAnim = useRef(new Animated.Value(1)).current;
@@ -65,6 +69,23 @@ export default function QuestionnaireStep() {
       }
     });
   };
+
+  useEffect(() => {
+    if (!projectId || !analysisResult) return;
+    const fetchDynamic = async () => {
+      try {
+        const { data } = await supabase.functions.invoke('generate-questionnaire', {
+          body: { project_id: projectId, analysis: analysisResult },
+        });
+        if (data?.questions?.length > 0) {
+          setQuestions(data.questions);
+        }
+      } catch {
+        // Static questions already set by analyzing.tsx — fall through
+      }
+    };
+    fetchDynamic();
+  }, [projectId]);
 
   useEffect(() => {
     if (!question) {

@@ -10,79 +10,11 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { useNavigation } from '@react-navigation/native';
 import Ionicons from 'react-native-vector-icons/Ionicons';
 import { supabase } from '@/lib/supabase/client';
-import { uploadFile } from '@/lib/supabase/storage';
+import { uploadBase64 } from '@/lib/supabase/storage';
 
 import { useProjectWizardStore } from '@/stores/project-wizard.store';
 import { useAuthStore } from '@/stores/auth.store';
 import { getQuestionsForRoomType } from '@/data/fixed-questions';
-
-const OPENAI_KEY = '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';
-const OPENAI_URL = 'https://api.openai.com/v1/chat/completions';
-
-function buildMeasurementsNote(m: import('@/stores/project-wizard.store').RoomMeasurements | null): string {
-  if (!m) return '';
-  const lines: string[] = [];
-  if (m.lengthFt || m.widthFt || m.ceilingHeightFt) {
-    const room = [m.lengthFt && `length ${m.lengthFt} ft`, m.widthFt && `width ${m.widthFt} ft`, m.ceilingHeightFt && `ceiling ${m.ceilingHeightFt} ft`].filter(Boolean).join(', ');
-    lines.push(`Room: ${room}`);
-  }
-  if (m.upperCabHeight || m.lowerCabHeight || m.cabDepth || m.upperLinearFt || m.lowerLinearFt) {
-    const cab = [
-      m.upperCabHeight && `upper door height ${m.upperCabHeight} ft`,
-      m.lowerCabHeight && `lower cabinet height ${m.lowerCabHeight} ft`,
-      m.cabDepth && `depth ${m.cabDepth} ft`,
-      m.upperLinearFt && `${m.upperLinearFt} ft upper run`,
-      m.lowerLinearFt && `${m.lowerLinearFt} ft lower run`,
-    ].filter(Boolean).join(', ');
-    lines.push(`Cabinets: ${cab}`);
-  }
-  if (m.countertopLinearFt) lines.push(`Countertops: ${m.countertopLinearFt} ft total`);
-  if (m.numDoors || m.doorWidth || m.doorHeight) {
-    const doors = [m.numDoors && `${m.numDoors} door(s)`, m.doorWidth && `${m.doorWidth} ft wide`, m.doorHeight && `${m.doorHeight} ft tall`].filter(Boolean).join(', ');
-    lines.push(`Doors: ${doors}`);
-  }
-  if (m.numWindows || m.windowWidth || m.windowHeight) {
-    const wins = [m.numWindows && `${m.numWindows} window(s)`, m.windowWidth && `${m.windowWidth} ft wide`, m.windowHeight && `${m.windowHeight} ft tall`].filter(Boolean).join(', ');
-    lines.push(`Windows: ${wins}`);
-  }
-  if (m.fridgeWidth || m.rangeWidth || m.hasDishwasher) {
-    const app = [m.fridgeWidth && `fridge opening ${m.fridgeWidth} ft`, m.rangeWidth && `range ${m.rangeWidth} ft`, m.hasDishwasher && 'dishwasher slot'].filter(Boolean).join(', ');
-    lines.push(`Appliances: ${app}`);
-  }
-  if (m.hasIsland) {
-    const island = ['island present', m.islandLength && `${m.islandLength} ft long`, m.islandWidth && `${m.islandWidth} ft wide`].filter(Boolean).join(', ');
-    lines.push(`Island: ${island}`);
-  }
-  if (lines.length === 0) return '';
-  return `\n\nHomeowner-provided measurements (treat as authoritative — override photo estimates):\n${lines.map(l => `- ${l}`).join('\n')}`;
-}
-
-function buildPrompt(roomType: string, m: import('@/stores/project-wizard.store').RoomMeasurements | null): string {
-  return `Analyze these ${roomType} renovation photos and return a single valid JSON object with this exact structure — no markdown, no explanation, just the JSON:${buildMeasurementsNote(m)}
-
-{
-  "analysis": {
-    "room_type": "${roomType}",
-    "existing_materials": {
-      "cabinets": { "type": "string", "condition": "poor|fair|good", "estimated_age_years": 0 },
-      "countertops": { "material": "string", "condition": "string" },
-      "flooring": { "material": "string", "condition": "string" },
-      "fixtures": ["string"],
-      "appliances": ["string"]
-    },
-    "layout": {
-      "estimated_sqft": 0,
-      "has_island": false,
-      "plumbing_wall_visible": false,
-      "window_count": 0
-    },
-    "structural_concerns": ["string"],
-    "ai_observations": "2-3 sentence summary for the homeowner about what you see in the photos"
-  }
-}
-
-Return ONLY the JSON object above. Do not include any questions array.`;
-}
 import { Colors, Spacing, Typography } from '@/constants/theme';
 import { GradientBackground } from '@/components/ui';
 
@@ -159,18 +91,14 @@ export default function AnalyzingScreen() {
         // Upload photos to storage IN PARALLEL with AI call
         const uploadPromise = Promise.all(
           localPhotos.map(async (photo, i) => {
-            if (!photo.uri) return;
-            try {
-              const path = `${pid}/${i}_${Date.now()}.jpg`;
-              const { publicUrl, storagePath } = await uploadFile('project-photos', path, photo.uri, 'image/jpeg');
-              await supabase.from('project_photos').insert({
-                project_id: pid,
-                url: publicUrl,
-                storage_path: storagePath,
-              });
-            } catch (uploadErr: any) {
-              console.warn('[Photo upload failed]', uploadErr?.message ?? uploadErr);
-            }
+            if (!photo.base64) return;
+            const path = `${pid}/${i}_${Date.now()}.jpg`;
+            const { publicUrl, storagePath } = await uploadBase64('project-photos', path, photo.base64);
+            await supabase.from('project_photos').insert({
+              project_id: pid,
+              url: publicUrl,
+              storage_path: storagePath,
+            });
           })
         );
 
@@ -182,66 +110,24 @@ export default function AnalyzingScreen() {
           throw new Error('No photo data found. Please go back and re-select your photos.');
         }
 
-        // Build image content blocks (OpenAI format)
-        const imageBlocks = photoBase64s.slice(0, 4).map((b64) => ({
-          type: 'image_url',
-          image_url: { url: `data:image/jpeg;base64,${b64}` },
-        }));
-
-        // Single OpenAI call — returns analysis + questions together
-        const res = await fetch(OPENAI_URL, {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            'Authorization': `Bearer ${OPENAI_KEY}`,
-          },
-          body: JSON.stringify({
-            model: 'gpt-4o',
-            max_tokens: 4000,
-            response_format: { type: 'json_object' },
-            messages: [{
-              role: 'user',
-              content: [
-                ...imageBlocks,
-                { type: 'text', text: buildPrompt(roomType || 'kitchen', measurements) },
-              ],
-            }],
-          }),
+        // Call the analyze-photos edge function (Claude-powered, key stays server-side)
+        const { data: analyzeData, error: analyzeError } = await supabase.functions.invoke('analyze-photos', {
+          body: { project_id: pid, photo_base64s: photoBase64s },
         });
 
-        if (!res.ok) {
-          const errText = await res.text();
-          throw new Error(`AI request failed (${res.status}): ${errText}`);
-        }
+        if (analyzeError) throw new Error(`Analysis failed: ${analyzeError.message}`);
+        if (!analyzeData?.analysis) throw new Error('No analysis returned from server.');
 
-        const aiResponse = await res.json();
-        const rawText: string = aiResponse.choices[0].message.content;
+        const analysis = analyzeData.analysis;
 
-        // Strip markdown fences or any prose wrapping the JSON
-        let cleaned = rawText
-          .replace(/^```json\s*/i, '')
-          .replace(/^```\s*/i, '')
-          .replace(/```\s*$/i, '')
-          .trim();
-
-        // If model returned prose before JSON, extract the JSON object
-        const jsonStart = cleaned.indexOf('{');
-        const jsonEnd = cleaned.lastIndexOf('}');
-        if (jsonStart > 0 && jsonEnd > jsonStart) {
-          cleaned = cleaned.substring(jsonStart, jsonEnd + 1);
-        }
-
-        const parsed = JSON.parse(cleaned);
-        const analysis = parsed.analysis;
-
-        // Wait for photo uploads to finish regardless of analysis outcome
+        // Wait for photo uploads to finish alongside the edge function call
         await uploadPromise;
 
-        // Save analysis + detected room type to DB
+        // Edge function already saves ai_analysis — just sync the detected room_type
         const detectedRoomType = analysis.room_type === 'bathroom' ? 'bathroom' : 'kitchen';
         await supabase
           .from('projects')
-          .update({ ai_analysis: analysis, room_type: detectedRoomType })
+          .update({ room_type: detectedRoomType })
           .eq('id', pid);
 
         useProjectWizardStore.getState().setRoomType(detectedRoomType as any);
@@ -251,8 +137,6 @@ export default function AnalyzingScreen() {
         useProjectWizardStore.getState().setStep(4);
         navigation.navigate('Questionnaire');
       } catch (err: any) {
-        // Even if analysis fails, ensure photos are uploaded so project cards show images
-        try { await uploadPromise; } catch {}
         const msg = err?.message || err?.details || JSON.stringify(err);
         setError(msg);
       }

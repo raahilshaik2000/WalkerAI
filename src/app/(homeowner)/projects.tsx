@@ -37,12 +37,21 @@ interface RealProject {
 }
 
 const STATUS_LABEL: Record<string, { label: string; color: string }> = {
-  draft:       { label: 'Draft',       color: '#6B7280' },
-  dispatching: { label: 'Dispatching', color: '#A78BFA' },
-  quoting:     { label: 'Quoting',     color: '#F59E0B' },
-  accepted:    { label: 'Accepted',    color: '#60A5FA' },
-  active:      { label: 'In Progress', color: '#22C55E' },
-  completed:   { label: 'Completed',   color: '#FF6B00' },
+  draft:       { label: 'Setting up',          color: '#6B7280' },
+  dispatching: { label: 'Finding contractor',  color: '#A78BFA' },
+  quoting:     { label: 'Quote pending',        color: '#F59E0B' },
+  accepted:    { label: 'Contractor reviewing', color: '#60A5FA' },
+  active:      { label: 'In progress',          color: '#22C55E' },
+  completed:   { label: 'Completed',            color: '#FF6B00' },
+};
+
+const CONTRACTOR_LABEL: Record<string, string> = {
+  draft:       'Setting up',
+  dispatching: 'Finding contractor',
+  quoting:     'Quote received',
+  accepted:    'Contractor reviewing',
+  active:      'Contractor assigned',
+  completed:   'Project complete',
 };
 
 const FILTERS = ['All', 'Active', 'Quoting', 'Completed', 'DIY'] as const;
@@ -162,6 +171,7 @@ export default function HomeownerProjects() {
   const [projectsLoading, setProjectsLoading] = useState(false);
   const [diyProjects, setDiyProjects] = useState<DIYProject[]>([]);
   const [diyLoading, setDiyLoading] = useState(false);
+  const [milestoneProgressMap, setMilestoneProgressMap] = useState<Record<string, number>>({});
 
   const filtered = useMemo(() => {
     if (filter === 'All') return projects;
@@ -184,7 +194,26 @@ export default function HomeownerProjects() {
         .eq('homeowner_id', user.id)
         .not('status', 'eq', 'diy_saved')
         .order('created_at', { ascending: false });
-      setProjects((data as RealProject[]) ?? []);
+      const projectList = (data as RealProject[]) ?? [];
+      setProjects(projectList);
+
+      // Fetch milestone-based progress for all projects
+      const ids = projectList.map((p) => p.id);
+      if (ids.length > 0) {
+        const { data: quoteData } = await supabase
+          .from('quotes')
+          .select('project_id, milestones(status)')
+          .in('project_id', ids)
+          .eq('status', 'approved');
+
+        const progressMap: Record<string, number> = {};
+        for (const q of quoteData ?? []) {
+          const ms = (q.milestones as Array<{ status: string }>) ?? [];
+          if (ms.length === 0) continue;
+          progressMap[q.project_id] = ms.filter((m) => m.status === 'paid').length / ms.length;
+        }
+        setMilestoneProgressMap(progressMap);
+      }
     } finally {
       setProjectsLoading(false);
     }
@@ -242,7 +271,8 @@ export default function HomeownerProjects() {
     const budgetText = item.ai_cost_min && item.ai_cost_max
       ? `$${Math.round(item.ai_cost_min / 100).toLocaleString()}–$${Math.round(item.ai_cost_max / 100).toLocaleString()}`
       : 'TBD';
-    const progress = item.status === 'completed' ? 1 : item.status === 'active' ? 0.5 : 0.1;
+    const progress = milestoneProgressMap[item.id]
+      ?? (item.status === 'completed' ? 1 : item.status === 'active' ? 0.5 : item.status === 'quoting' || item.status === 'accepted' ? 0.2 : 0.1);
 
     return (
       <AnimatedPressable
@@ -278,7 +308,7 @@ export default function HomeownerProjects() {
                 <Ionicons name="person" size={10} color="rgba(255,255,255,0.5)" />
               </View>
               <Text style={styles.contractorName}>
-                {item.status === 'draft' || item.status === 'dispatching' ? 'Awaiting contractor' : 'Contractor assigned'}
+                {CONTRACTOR_LABEL[item.status] ?? item.status}
               </Text>
             </View>
             <View style={styles.metaRow}>
@@ -400,7 +430,7 @@ export default function HomeownerProjects() {
                   variant="primary"
                   size="sm"
                   haptic
-                  style={{ marginTop: 12 }}
+                  style={{ marginTop: 12, alignSelf: 'center' }}
                 />
               </View>
             }

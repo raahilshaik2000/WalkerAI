@@ -86,8 +86,26 @@ export default function NotificationsScreen() {
       await supabase.from('notifications').update({ read: true }).eq('id', notification.id);
       setNotifications((prev) => prev.map((n) => n.id === notification.id ? { ...n, read: true } : n));
     }
-    const deepLink = notification.payload?.deep_link as string;
-    // deep link navigation - TODO
+
+    const projectId = notification.payload?.project_id as string | undefined;
+    if (!projectId) return;
+
+    switch (notification.type) {
+      case 'quote_submitted':
+        navigation.navigate('Quote', { id: projectId });
+        break;
+      case 'quote_approved':
+      case 'milestone_needs_approval':
+      case 'milestone_paid':
+      case 'milestone_completed':
+        navigation.navigate('Milestones', { id: projectId });
+        break;
+      case 'new_message':
+        navigation.navigate('Chat', { projectId, contractorName: 'Contractor', projectTitle: 'Your Project' });
+        break;
+      default:
+        navigation.navigate('ProjectDetailView', { project: { id: projectId } });
+    }
   };
 
   const markAllRead = async () => {

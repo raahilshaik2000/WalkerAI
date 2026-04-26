@@ -5,6 +5,7 @@ import Ionicons from 'react-native-vector-icons/Ionicons';
 import { useNavigation } from '@react-navigation/native';
 import { AnimatedPressable } from '@/components/ui';
 import { useAuthStore } from '@/stores/auth.store';
+import { useProfileStore } from '@/stores/profile.store';
 import { Colors, Spacing } from '@/constants/theme';
 import { getGreeting } from './data';
 import { useStaggeredEntrance } from './useStaggeredEntrance';
@@ -12,9 +13,11 @@ import { useStaggeredEntrance } from './useStaggeredEntrance';
 export function DashboardHeader() {
   const navigation = useNavigation<any>();
   const { user } = useAuthStore();
+  const { address, city } = useProfileStore();
   const animatedStyle = useStaggeredEntrance(0);
 
   const displayName = user?.email?.split('@')[0] ?? 'Homeowner';
+  const locationLabel = address || city || 'Canada';
 
   return (
     <Animated.View style={animatedStyle}>
@@ -25,7 +28,7 @@ export function DashboardHeader() {
           <Text style={styles.name}>{displayName}</Text>
           <Text style={styles.location}>
             <Ionicons name="location-outline" size={11} color={Colors.text.tertiary} />
-            {' '}142 Maple St, Toronto
+            {' '}{locationLabel}
           </Text>
         </View>
         <AnimatedPressable style={styles.notifBtn} haptic onPress={() => navigation.navigate('Notifications')}>

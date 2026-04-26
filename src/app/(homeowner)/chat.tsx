@@ -1,12 +1,8 @@
-import React, { useCallback, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
 import {
-  Alert,
-  Dimensions,
   FlatList,
-  Image,
   KeyboardAvoidingView,
   Platform,
-  ScrollView,
   StyleSheet,
   Text,
   TextInput,
@@ -17,18 +13,26 @@ import { useNavigation, useRoute } from '@react-navigation/native';
 import Ionicons from 'react-native-vector-icons/Ionicons';
 import { AnimatedPressable, GradientBackground } from '@/components/ui';
 import { Colors, Radius } from '@/constants/theme';
-import { ChatThread, ChatMessage, CHAT_MESSAGES } from '@/components/dashboard/messageData';
+import { supabase } from '@/lib/supabase/client';
+import { useAuthStore } from '@/stores/auth.store';
 
-const { width: SCREEN_WIDTH } = Dimensions.get('window');
+interface DBMessage {
+  id: string;
+  project_id: string;
+  sender_id: string;
+  body: string;
+  sent_at: string;
+}
 
-const QUICK_ACTIONS = [
-  { icon: 'camera-outline', label: 'Photo' },
-  { icon: 'attach-outline', label: 'File' },
-  { icon: 'cash-outline', label: 'Payment' },
-  { icon: 'calendar-outline', label: 'Schedule' },
-];
+type RenderItem =
+  | DBMessage
+  | { type: 'date_separator'; date: string; label: string };
 
-// ─── Date helpers ────────────────────────────────────────────────────────────
+// ─── Date helpers ─────────────────────────────────────────────────────────────
+
+function toDateStr(iso: string): string {
+  return iso.split('T')[0];
+}
 
 function formatDateLabel(dateStr: string): string {
   const today = new Date();
@@ -39,40 +43,53 @@ function formatDateLabel(dateStr: string): string {
   return date.toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' });
 }
 
-function getUniqueDates(messages: ChatMessage[]): Set<string> {
-  return new Set(messages.map((m) => m.date));
+function formatTime(iso: string): string {
+  return new Date(iso).toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' });
 }
 
-// ─── Component ───────────────────────────────────────────────────────────────
+// ─── Component ────────────────────────────────────────────────────────────────
 
 export default function ChatScreen() {
   const navigation = useNavigation<any>();
   const route = useRoute<any>();
-  const thread: ChatThread = route.params?.thread;
-  const [messages, setMessages] = useState<ChatMessage[]>(CHAT_MESSAGES[thread.id] ?? []);
+  const { projectId, contractorName, projectTitle } = route.params ?? {};
+
+  const { user } = useAuthStore();
+  const [messages, setMessages] = useState<DBMessage[]>([]);
   const [text, setText] = useState('');
   const [showScrollBtn, setShowScrollBtn] = useState(false);
   const listRef = useRef<FlatList>(null);
 
-  const handleSend = () => {
-    if (!text.trim()) return;
-    const newMsg: ChatMessage = {
-      id: `msg-${Date.now()}`,
-      sender: 'me',
-      senderName: 'You',
-      text: text.trim(),
-      time: new Date().toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' }),
-      date: new Date().toISOString().split('T')[0],
-      type: 'text',
-      status: 'sent',
-    };
-    setMessages((prev) => [...prev, newMsg]);
-    setText('');
-    setTimeout(() => listRef.current?.scrollToEnd({ animated: true }), 100);
-  };
+  useEffect(() => {
+    if (!projectId) return;
 
-  const handleQuickAction = (label: string) => {
-    Alert.alert(label, `${label} sharing coming soon.`);
+    supabase
+      .from('messages')
+      .select('id, project_id, sender_id, body, sent_at')
+      .eq('project_id', projectId)
+      .order('sent_at', { ascending: true })
+      .then(({ data }) => setMessages((data as DBMessage[]) ?? []));
+
+    const channel = supabase
+      .channel(`chat-${projectId}`)
+      .on(
+        'postgres_changes',
+        { event: 'INSERT', schema: 'public', table: 'messages', filter: `project_id=eq.${projectId}` },
+        (payload) => {
+          setMessages((prev) => [...prev, payload.new as DBMessage]);
+          setTimeout(() => listRef.current?.scrollToEnd({ animated: true }), 100);
+        },
+      )
+      .subscribe();
+
+    return () => { supabase.removeChannel(channel); };
+  }, [projectId]);
+
+  const handleSend = async () => {
+    if (!text.trim() || !user || !projectId) return;
+    const body = text.trim();
+    setText('');
+    await supabase.from('messages').insert({ project_id: projectId, sender_id: user.id, body });
   };
 
   const handleScroll = useCallback((e: any) => {
@@ -81,37 +98,36 @@ export default function ChatScreen() {
     setShowScrollBtn(distanceFromBottom > 200);
   }, []);
 
-  // Group messages by date for rendering
-  const renderData = React.useMemo(() => {
-    const result: (ChatMessage | { type: 'date_separator'; date: string; label: string })[] = [];
+  const renderData = React.useMemo<RenderItem[]>(() => {
+    const result: RenderItem[] = [];
     let lastDate = '';
     for (const msg of messages) {
-      if (msg.date !== lastDate) {
-        result.push({ type: 'date_separator', date: msg.date, label: formatDateLabel(msg.date) });
-        lastDate = msg.date;
+      const d = toDateStr(msg.sent_at);
+      if (d !== lastDate) {
+        result.push({ type: 'date_separator', date: d, label: formatDateLabel(d) });
+        lastDate = d;
       }
       result.push(msg);
     }
     return result;
   }, [messages]);
 
-  const isFirstInGroup = (index: number, item: ChatMessage) => {
+  const isFirstInGroup = (index: number, item: DBMessage) => {
     if (index === 0) return true;
     const prev = renderData[index - 1];
-    if (!('sender' in prev)) return true;
-    return prev.sender !== item.sender;
+    if (!('sender_id' in prev)) return true;
+    return prev.sender_id !== item.sender_id;
   };
 
-  const isLastInGroup = (index: number, item: ChatMessage) => {
+  const isLastInGroup = (index: number, item: DBMessage) => {
     if (index === renderData.length - 1) return true;
     const next = renderData[index + 1];
-    if (!('sender' in next)) return true;
-    return next.sender !== item.sender;
+    if (!('sender_id' in next)) return true;
+    return next.sender_id !== item.sender_id;
   };
 
-  const renderItem = useCallback(({ item, index }: { item: any; index: number }) => {
-    // Date separator
-    if (item.type === 'date_separator') {
+  const renderItem = useCallback(({ item, index }: { item: RenderItem; index: number }) => {
+    if ('type' in item && item.type === 'date_separator') {
       return (
         <View style={styles.dateSeparator}>
           <View style={styles.datePill}>
@@ -121,100 +137,64 @@ export default function ChatScreen() {
       );
     }
 
-    const msg = item as ChatMessage;
-
-    // System message
-    if (msg.type === 'system') {
-      return (
-        <View style={styles.systemRow}>
-          <Ionicons name="information-circle-outline" size={14} color={Colors.text.tertiary} />
-          <Text style={styles.systemText}>{msg.text}</Text>
-        </View>
-      );
-    }
-
-    const isMe = msg.sender === 'me';
+    const msg = item as DBMessage;
+    const isMe = msg.sender_id === user?.id;
     const first = isFirstInGroup(index, msg);
     const last = isLastInGroup(index, msg);
 
     return (
       <View style={[styles.msgRow, isMe ? styles.msgRowMe : styles.msgRowThem, !first && { marginTop: 2 }]}>
-        {/* Avatar (contractor only, first in group) */}
         {!isMe && (
           <View style={styles.avatarCol}>
-            {first && msg.senderAvatar ? (
-              <Image source={{ uri: msg.senderAvatar }} style={styles.msgAvatar} />
+            {first ? (
+              <View style={[styles.msgAvatar, styles.avatarPlaceholder]}>
+                <Ionicons name="person" size={12} color={Colors.text.tertiary} />
+              </View>
             ) : (
               <View style={styles.avatarSpacer} />
             )}
           </View>
         )}
 
-        <View style={[styles.bubble, isMe ? styles.bubbleMe : styles.bubbleThem,
+        <View style={[
+          styles.bubble,
+          isMe ? styles.bubbleMe : styles.bubbleThem,
           first && !isMe && styles.bubbleThemFirst,
           first && isMe && styles.bubbleMeFirst,
         ]}>
-          {/* Image message */}
-          {msg.type === 'image' && msg.imageUrl && (
-            <Image source={{ uri: msg.imageUrl }} style={styles.imageMsg} />
-          )}
-
-          {/* Text */}
-          {msg.text.length > 0 && (
-            <Text style={[styles.msgText, isMe && styles.msgTextMe]}>{msg.text}</Text>
-          )}
-
-          {/* Time + status (last in group only) */}
+          <Text style={[styles.msgText, isMe && styles.msgTextMe]}>{msg.body}</Text>
           {last && (
             <View style={styles.timeRow}>
-              <Text style={[styles.timeText, isMe && styles.timeTextMe]}>{msg.time}</Text>
-              {isMe && msg.status && (
-                <Ionicons
-                  name={msg.status === 'read' ? 'checkmark-done' : msg.status === 'delivered' ? 'checkmark-done' : 'checkmark'}
-                  size={14}
-                  color={msg.status === 'read' ? '#60A5FA' : isMe ? 'rgba(0,0,0,0.35)' : Colors.text.tertiary}
-                />
-              )}
+              <Text style={[styles.timeText, isMe && styles.timeTextMe]}>{formatTime(msg.sent_at)}</Text>
             </View>
           )}
         </View>
       </View>
     );
-  }, [renderData]);
+  }, [renderData, user]);
 
   return (
     <GradientBackground>
       <SafeAreaView style={styles.safe} edges={['top']}>
-        {/* Header */}
         <View style={styles.header}>
           <AnimatedPressable onPress={() => navigation.goBack()} haptic>
             <Ionicons name="arrow-back" size={22} color="#fff" />
           </AnimatedPressable>
 
           <View style={styles.headerCenter}>
-            {thread.contractorAvatar ? (
-              <View style={styles.headerAvatarWrap}>
-                <Image source={{ uri: thread.contractorAvatar }} style={styles.headerAvatar} />
-                {thread.isOnline && <View style={styles.headerOnline} />}
-              </View>
-            ) : (
-              <View style={[styles.headerAvatar, styles.headerAvatarSystem]}>
-                <Ionicons name="headset-outline" size={16} color="#fff" />
-              </View>
-            )}
+            <View style={[styles.headerAvatar, styles.headerAvatarSystem]}>
+              <Ionicons name="headset-outline" size={16} color="#fff" />
+            </View>
             <View>
-              <Text style={styles.headerName}>{thread.contractorName}</Text>
-              <Text style={styles.headerProject}>{thread.projectTitle}</Text>
+              <Text style={styles.headerName}>{contractorName ?? 'Contractor'}</Text>
+              <Text style={styles.headerProject}>{projectTitle ?? 'Project'}</Text>
             </View>
           </View>
 
-          <AnimatedPressable onPress={() => {}} haptic>
-            <Ionicons name="call-outline" size={20} color={Colors.text.tertiary} />
-          </AnimatedPressable>
+          <View style={{ width: 22 }} />
         </View>
 
         <KeyboardAvoidingView style={styles.flex} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
-          {/* Messages */}
           <FlatList
             ref={listRef}
             data={renderData}
@@ -225,9 +205,14 @@ export default function ChatScreen() {
             onContentSizeChange={() => listRef.current?.scrollToEnd({ animated: false })}
             onScroll={handleScroll}
             scrollEventThrottle={100}
+            ListEmptyComponent={
+              <View style={styles.empty}>
+                <Ionicons name="chatbubbles-outline" size={40} color={Colors.text.tertiary} />
+                <Text style={styles.emptyText}>No messages yet. Say hello!</Text>
+              </View>
+            }
           />
 
-          {/* Scroll to bottom FAB */}
           {showScrollBtn && (
             <AnimatedPressable
               style={styles.scrollFab}
@@ -238,19 +223,7 @@ export default function ChatScreen() {
             </AnimatedPressable>
           )}
 
-          {/* Composer */}
           <SafeAreaView edges={['bottom']} style={styles.composerSafe}>
-            {/* Quick actions */}
-            <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.quickRow}>
-              {QUICK_ACTIONS.map((a) => (
-                <AnimatedPressable key={a.label} style={styles.quickPill} haptic onPress={() => handleQuickAction(a.label)}>
-                  <Ionicons name={a.icon as any} size={14} color={Colors.text.secondary} />
-                  <Text style={styles.quickLabel}>{a.label}</Text>
-                </AnimatedPressable>
-              ))}
-            </ScrollView>
-
-            {/* Input */}
             <View style={styles.composer}>
               <TextInput
                 style={styles.input}
@@ -278,55 +251,38 @@ export default function ChatScreen() {
   );
 }
 
-// ─── Styles ──────────────────────────────────────────────────────────────────
+// ─── Styles ───────────────────────────────────────────────────────────────────
 
 const styles = StyleSheet.create({
   safe: { flex: 1 },
   flex: { flex: 1 },
 
-  // Header
   header: {
     flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
     paddingHorizontal: 16, paddingVertical: 10,
     borderBottomWidth: 1, borderBottomColor: Colors.surface.border,
   },
   headerCenter: { flex: 1, flexDirection: 'row', alignItems: 'center', gap: 10, marginLeft: 12 },
-  headerAvatarWrap: { position: 'relative' },
   headerAvatar: { width: 36, height: 36, borderRadius: 18 },
   headerAvatarSystem: { backgroundColor: Colors.surface.hover, alignItems: 'center', justifyContent: 'center' },
-  headerOnline: {
-    position: 'absolute', bottom: 0, right: 0,
-    width: 10, height: 10, borderRadius: 5,
-    backgroundColor: '#22C55E', borderWidth: 2, borderColor: Colors.bg.primary,
-  },
   headerName: { fontSize: 15, fontWeight: '600', color: '#fff' },
   headerProject: { fontSize: 11, color: Colors.text.tertiary },
 
-  // Messages
   list: { paddingHorizontal: 12, paddingVertical: 8, paddingBottom: 4 },
 
-  // Date separator
   dateSeparator: { alignItems: 'center', marginVertical: 12 },
   datePill: { backgroundColor: Colors.surface.default, paddingHorizontal: 12, paddingVertical: 4, borderRadius: Radius.pill },
   dateText: { fontSize: 11, fontWeight: '600', color: Colors.text.tertiary },
 
-  // System message
-  systemRow: {
-    flexDirection: 'row', alignItems: 'center', justifyContent: 'center',
-    gap: 6, marginVertical: 8, paddingHorizontal: 20,
-  },
-  systemText: { fontSize: 12, color: Colors.text.tertiary, textAlign: 'center' },
-
-  // Message row
   msgRow: { flexDirection: 'row', marginBottom: 2, paddingHorizontal: 4 },
   msgRowMe: { justifyContent: 'flex-end' },
   msgRowThem: { justifyContent: 'flex-start' },
 
   avatarCol: { width: 28, marginRight: 6 },
   msgAvatar: { width: 24, height: 24, borderRadius: 12, marginTop: 2 },
+  avatarPlaceholder: { backgroundColor: Colors.surface.hover, alignItems: 'center', justifyContent: 'center' },
   avatarSpacer: { width: 24 },
 
-  // Bubble
   bubble: { maxWidth: '75%', borderRadius: 18, padding: 10, paddingBottom: 6 },
   bubbleMe: { backgroundColor: '#FFFFFF', borderBottomRightRadius: 4 },
   bubbleThem: { backgroundColor: Colors.surface.default, borderBottomLeftRadius: 4 },
@@ -336,30 +292,18 @@ const styles = StyleSheet.create({
   msgText: { fontSize: 15, color: '#fff', lineHeight: 21 },
   msgTextMe: { color: '#000' },
 
-  imageMsg: { width: 200, height: 150, borderRadius: 12, marginBottom: 4 },
-
-  timeRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'flex-end', gap: 4, marginTop: 2 },
+  timeRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'flex-end', marginTop: 2 },
   timeText: { fontSize: 10, color: Colors.text.tertiary },
   timeTextMe: { color: 'rgba(0,0,0,0.35)' },
 
-  // Scroll FAB
   scrollFab: {
-    position: 'absolute', right: 16, bottom: 130,
+    position: 'absolute', right: 16, bottom: 90,
     width: 36, height: 36, borderRadius: 18,
     backgroundColor: Colors.surface.default, borderWidth: 1, borderColor: Colors.surface.border,
     alignItems: 'center', justifyContent: 'center',
   },
 
-  // Composer
   composerSafe: { backgroundColor: Colors.bg.primary },
-  quickRow: { gap: 8, paddingHorizontal: 16, paddingTop: 8, paddingBottom: 6 },
-  quickPill: {
-    flexDirection: 'row', alignItems: 'center', gap: 4,
-    backgroundColor: Colors.surface.default, borderRadius: Radius.pill,
-    borderWidth: 1, borderColor: Colors.surface.border,
-    paddingHorizontal: 10, paddingVertical: 6,
-  },
-  quickLabel: { fontSize: 11, fontWeight: '500', color: Colors.text.secondary },
   composer: {
     flexDirection: 'row', alignItems: 'flex-end', gap: 10,
     paddingHorizontal: 16, paddingVertical: 10,
@@ -373,4 +317,7 @@ const styles = StyleSheet.create({
   },
   sendBtn: { width: 38, height: 38, borderRadius: 19, backgroundColor: '#fff', alignItems: 'center', justifyContent: 'center' },
   sendBtnDisabled: { backgroundColor: Colors.surface.default },
+
+  empty: { alignItems: 'center', justifyContent: 'center', paddingTop: 60, gap: 10 },
+  emptyText: { fontSize: 14, color: Colors.text.tertiary },
 });

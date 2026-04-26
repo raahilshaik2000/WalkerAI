@@ -10,6 +10,9 @@ import type {
   QualityTier,
   RoomType,
   NotificationType,
+  MaterialOrderStatus,
+  BidStatus,
+  SupplierCategory,
 } from '@/constants/enums';
 
 export interface User {
@@ -76,6 +79,108 @@ export interface Material {
   quantity: number | null;
   unit: string | null;
   quality_tier: QualityTier;
+  order_status: MaterialOrderStatus | null;
+  material_order_id: string | null;
+  supplier_notes: string | null;
+}
+
+export interface Supplier {
+  id: string;
+  user_id: string;
+  business_name: string;
+  address: string | null;
+  city: string | null;
+  province: string | null;
+  postal_code: string | null;
+  location: unknown; // PostGIS geography
+  service_radius_km: number;
+  license_number: string | null;
+  license_doc_url: string | null;
+  categories: SupplierCategory[];
+  stripe_account_id: string | null;
+  verified: boolean;
+  rating: number | null;
+  total_reviews: number;
+  fulfillment_rate: number | null;
+  avg_delivery_days: number | null;
+  created_at: string;
+}
+
+export interface SupplierCatalogItem {
+  id: string;
+  supplier_id: string;
+  name: string;
+  description: string | null;
+  category: SupplierCategory;
+  sku: string | null;
+  unit: string;
+  price_per_unit: number; // CAD cents
+  quality_tier: QualityTier;
+  brand: string | null;
+  lead_time_days: number;
+  in_stock: boolean;
+  stock_quantity: number | null;
+  image_urls: string[];
+  created_at: string;
+}
+
+export interface MaterialOrder {
+  id: string;
+  project_id: string;
+  material_id: string;
+  status: MaterialOrderStatus;
+  accepted_supplier_id: string | null;
+  catalog_item_id: string | null;
+  quantity_needed: number;
+  unit: string;
+  quality_tier: QualityTier | null;
+  offered_price: number | null; // CAD cents
+  final_price: number | null; // CAD cents
+  delivery_address: string | null;
+  delivery_deadline: string | null;
+  tracking_number: string | null;
+  carrier: string | null;
+  shipped_at: string | null;
+  delivered_at: string | null;
+  confirmed_at: string | null;
+  delivery_photo_url: string | null;
+  stripe_payment_intent_id: string | null;
+  stripe_transfer_id: string | null;
+  platform_fee_pct: number;
+  notes: string | null;
+  created_at: string;
+  updated_at: string;
+  // joined fields
+  material?: Material;
+  supplier?: Supplier;
+}
+
+export interface MaterialOrderBid {
+  id: string;
+  order_id: string;
+  supplier_id: string;
+  catalog_item_id: string | null;
+  price_per_unit: number; // CAD cents
+  total_price: number; // CAD cents
+  lead_time_days: number | null;
+  notes: string | null;
+  status: BidStatus;
+  submitted_at: string;
+  // joined
+  supplier?: Supplier;
+  catalog_item?: SupplierCatalogItem;
+}
+
+export interface SupplierReview {
+  id: string;
+  order_id: string;
+  supplier_id: string;
+  reviewer_id: string;
+  rating: number;
+  comment: string | null;
+  on_time: boolean | null;
+  quality_match: boolean | null;
+  created_at: string;
 }
 
 export interface ScopeOfWork {

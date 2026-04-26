@@ -9,16 +9,16 @@ import {
   QuickActions,
   ProjectsCarousel,
   InspirationCarousel,
-  NewsAndUpdates,
   ActivityTimeline,
 } from '@/components/dashboard';
 
 export default function HomeownerDashboard() {
   const [refreshing, setRefreshing] = useState(false);
+  const [refreshKey, setRefreshKey] = useState(0);
 
   const onRefresh = () => {
     setRefreshing(true);
-    setTimeout(() => setRefreshing(false), 800);
+    setRefreshKey((k) => k + 1);
   };
 
   return (
@@ -33,10 +33,9 @@ export default function HomeownerDashboard() {
         >
           <DashboardHeader />
           <QuickActions />
-          <ProjectsCarousel />
+          <ProjectsCarousel refreshKey={refreshKey} onRefreshDone={() => setRefreshing(false)} />
           <InspirationCarousel />
-          <NewsAndUpdates />
-          <ActivityTimeline />
+          <ActivityTimeline refreshKey={refreshKey} />
         </Animated.ScrollView>
       </SafeAreaView>
     </GradientBackground>

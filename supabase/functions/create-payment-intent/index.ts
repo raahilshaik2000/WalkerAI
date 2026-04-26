@@ -100,22 +100,17 @@ Deno.serve(async (req) => {
       description: `WalkerAI — Renovation Project ${project.id}`,
     });
 
-    // Approve quote and link payment intent
+    // Store payment intent ID on quote so the stripe-webhook can look it up later.
+    // Do NOT set status='approved' or project status='active' here — that happens
+    // in stripe-webhook on payment_intent.succeeded, which is the authoritative event.
+    const quoteId = quote_id ?? quote.id;
     await adminClient
       .from('quotes')
       .update({
-        status: 'approved',
-        approved_at: new Date().toISOString(),
         stripe_payment_intent_id: paymentIntent.id,
         stripe_transfer_group: `project_${project.id}`,
       })
-      .eq('id', quote_id);
-
-    // Update project status to active
-    await adminClient
-      .from('projects')
-      .update({ status: 'active' })
-      .eq('id', project.id);
+      .eq('id', quoteId);
 
     return new Response(
       JSON.stringify({

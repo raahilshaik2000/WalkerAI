@@ -77,6 +77,7 @@ export default function RegisterScreen() {
               {([
                 { value: 'homeowner', icon: 'home-outline', label: 'Homeowner', sub: 'I want to renovate' },
                 { value: 'company', icon: 'hammer-wrench', label: 'Contractor', sub: 'I do renovations' },
+                { value: 'supplier', icon: 'truck-delivery-outline', label: 'Supplier', sub: 'I supply materials' },
               ] as const).map((opt) => (
                 <TouchableOpacity
                   key={opt.value}

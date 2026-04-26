@@ -1,7 +1,6 @@
-import React, { useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import {
   FlatList,
-  Image,
   StyleSheet,
   Text,
   TextInput,
@@ -9,102 +8,158 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useNavigation } from '@react-navigation/native';
+import { useFocusEffect } from '@react-navigation/native';
+import { useCallback } from 'react';
 import Ionicons from 'react-native-vector-icons/Ionicons';
+import { supabase } from '@/lib/supabase/client';
+import { useAuthStore } from '@/stores/auth.store';
 import { AnimatedPressable, GradientBackground } from '@/components/ui';
 import { Colors, Radius, Spacing } from '@/constants/theme';
-import { CHAT_THREADS, ChatThread } from '@/components/dashboard/messageData';
+
+interface Thread {
+  projectId: string;
+  projectTitle: string;
+  contractorName: string;
+  lastMessage: string;
+  lastMessageTime: string;
+  lastSentAt: string;
+}
+
+function timeAgo(iso: string): string {
+  const diff = Date.now() - new Date(iso).getTime();
+  const mins = Math.floor(diff / 60000);
+  if (mins < 1) return 'now';
+  if (mins < 60) return `${mins}m`;
+  const hrs = Math.floor(mins / 60);
+  if (hrs < 24) return `${hrs}h`;
+  return `${Math.floor(hrs / 24)}d`;
+}
 
 export default function HomeownerMessages() {
   const navigation = useNavigation<any>();
+  const { user } = useAuthStore();
+  const [threads, setThreads] = useState<Thread[]>([]);
   const [search, setSearch] = useState('');
   const [showSearch, setShowSearch] = useState(false);
 
-  const totalUnread = CHAT_THREADS.reduce((s, t) => s + t.unreadCount, 0);
+  const fetchThreads = useCallback(async () => {
+    if (!user) return;
 
-  const filtered = useMemo(
-    () => {
-      if (!search.trim()) return CHAT_THREADS;
-      const q = search.toLowerCase();
-      return CHAT_THREADS.filter(
-        (t) => t.contractorName.toLowerCase().includes(q) || t.projectTitle.toLowerCase().includes(q),
-      );
-    },
-    [search],
-  );
+    // Get homeowner's active projects with assigned companies
+    const { data: projects } = await supabase
+      .from('projects')
+      .select('id, room_type, companies!assigned_company_id(name)')
+      .eq('homeowner_id', user.id)
+      .not('assigned_company_id', 'is', null)
+      .order('created_at', { ascending: false });
 
-  const renderThread = ({ item }: { item: ChatThread }) => {
-    const hasUnread = item.unreadCount > 0;
+    if (!projects?.length) {
+      setThreads([]);
+      return;
+    }
 
-    return (
-      <AnimatedPressable
-        style={styles.thread}
-        haptic
-        onPress={() => navigation.navigate('Chat', { thread: item })}
-      >
-        {/* Avatar */}
-        <View style={styles.avatarWrap}>
-          {item.contractorAvatar ? (
-            <Image source={{ uri: item.contractorAvatar }} style={styles.avatar} />
-          ) : (
-            <View style={[styles.avatar, styles.avatarSystem]}>
-              <Ionicons name={item.isSystem ? 'headset-outline' : 'person'} size={18} color={Colors.text.tertiary} />
-            </View>
-          )}
-          {item.isOnline && <View style={styles.onlineDot} />}
-        </View>
+    const projectIds = projects.map((p) => p.id);
 
-        {/* Content */}
-        <View style={styles.threadContent}>
-          <View style={styles.nameRow}>
-            <Text style={[styles.name, hasUnread && styles.nameUnread]} numberOfLines={1}>
-              {item.contractorName}
-            </Text>
-            {!item.isSystem && (
-              <Ionicons name="checkmark-circle" size={12} color="#22C55E" style={{ marginLeft: 4 }} />
-            )}
-          </View>
-          <View style={[styles.projectPill, { backgroundColor: item.projectStatusColor + '18' }]}>
-            <Text style={[styles.projectPillText, { color: item.projectStatusColor }]}>
-              {item.projectTitle}
-            </Text>
-          </View>
-          <Text style={[styles.preview, hasUnread && styles.previewUnread]} numberOfLines={1}>
-            {item.lastMessage}
-          </Text>
-        </View>
+    // Get latest message per project
+    const { data: msgs } = await supabase
+      .from('messages')
+      .select('project_id, body, sent_at')
+      .in('project_id', projectIds)
+      .order('sent_at', { ascending: false })
+      .limit(500);
 
-        {/* Right column */}
-        <View style={styles.rightCol}>
-          <Text style={[styles.time, hasUnread && styles.timeUnread]}>{item.lastMessageTime}</Text>
-          {hasUnread && (
-            <View style={styles.unreadBadge}>
-              <Text style={styles.unreadText}>{item.unreadCount}</Text>
-            </View>
-          )}
-        </View>
-      </AnimatedPressable>
+    // Build latest-per-project map
+    const latestMsg: Record<string, { body: string; sent_at: string }> = {};
+    for (const m of msgs ?? []) {
+      if (!latestMsg[m.project_id]) {
+        latestMsg[m.project_id] = { body: m.body, sent_at: m.sent_at };
+      }
+    }
+
+    const result: Thread[] = projects.map((p) => {
+      const last = latestMsg[p.id];
+      const companyName = (p.companies as any)?.name ?? 'Contractor';
+      const title = p.room_type
+        ? p.room_type.charAt(0).toUpperCase() + p.room_type.slice(1) + ' Renovation'
+        : 'Project';
+      return {
+        projectId: p.id,
+        projectTitle: title,
+        contractorName: companyName,
+        lastMessage: last?.body ?? 'No messages yet',
+        lastMessageTime: last ? timeAgo(last.sent_at) : '',
+        lastSentAt: last?.sent_at ?? '',
+      };
+    });
+
+    // Sort: projects with messages first (most recent), then projects without
+    result.sort((a, b) => {
+      if (!a.lastSentAt && !b.lastSentAt) return 0;
+      if (!a.lastSentAt) return 1;
+      if (!b.lastSentAt) return -1;
+      return new Date(b.lastSentAt).getTime() - new Date(a.lastSentAt).getTime();
+    });
+
+    setThreads(result);
+  }, [user]);
+
+  useFocusEffect(useCallback(() => { fetchThreads(); }, [fetchThreads]));
+
+  useEffect(() => {
+    if (!user) return;
+    const channel = supabase
+      .channel('homeowner-messages-list')
+      .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'messages' }, () => fetchThreads())
+      .subscribe();
+    return () => { supabase.removeChannel(channel); };
+  }, [user]);
+
+  const filtered = useMemo(() => {
+    if (!search.trim()) return threads;
+    const q = search.toLowerCase();
+    return threads.filter(
+      (t) => t.contractorName.toLowerCase().includes(q) || t.projectTitle.toLowerCase().includes(q),
     );
-  };
+  }, [search, threads]);
+
+  const renderThread = ({ item }: { item: Thread }) => (
+    <AnimatedPressable
+      style={styles.thread}
+      haptic
+      onPress={() => navigation.navigate('Chat', {
+        projectId: item.projectId,
+        contractorName: item.contractorName,
+        projectTitle: item.projectTitle,
+      })}
+    >
+      <View style={[styles.avatar, styles.avatarSystem]}>
+        <Ionicons name="person" size={18} color={Colors.text.tertiary} />
+      </View>
+
+      <View style={styles.threadContent}>
+        <Text style={styles.name} numberOfLines={1}>{item.contractorName}</Text>
+        <View style={styles.projectPill}>
+          <Text style={styles.projectPillText} numberOfLines={1}>{item.projectTitle}</Text>
+        </View>
+        <Text style={styles.preview} numberOfLines={1}>{item.lastMessage}</Text>
+      </View>
+
+      <View style={styles.rightCol}>
+        {item.lastMessageTime ? <Text style={styles.time}>{item.lastMessageTime}</Text> : null}
+      </View>
+    </AnimatedPressable>
+  );
 
   return (
     <GradientBackground>
       <SafeAreaView style={styles.safe}>
-        {/* Header */}
         <View style={styles.header}>
-          <View style={styles.headerLeft}>
-            <Text style={styles.headerTitle}>Messages</Text>
-            {totalUnread > 0 && (
-              <View style={styles.headerBadge}>
-                <Text style={styles.headerBadgeText}>{totalUnread}</Text>
-              </View>
-            )}
-          </View>
+          <Text style={styles.headerTitle}>Messages</Text>
           <AnimatedPressable haptic onPress={() => setShowSearch(!showSearch)}>
             <Ionicons name={showSearch ? 'close' : 'search-outline'} size={20} color="#fff" />
           </AnimatedPressable>
         </View>
 
-        {/* Search */}
         {showSearch && (
           <View style={styles.searchWrap}>
             <Ionicons name="search" size={16} color={Colors.text.tertiary} />
@@ -117,18 +172,12 @@ export default function HomeownerMessages() {
               autoFocus
               selectionColor={Colors.accent}
             />
-            {search.length > 0 && (
-              <AnimatedPressable onPress={() => setSearch('')}>
-                <Ionicons name="close-circle" size={16} color={Colors.text.tertiary} />
-              </AnimatedPressable>
-            )}
           </View>
         )}
 
-        {/* Thread list */}
         <FlatList
           data={filtered}
-          keyExtractor={(item) => item.id}
+          keyExtractor={(item) => item.projectId}
           renderItem={renderThread}
           contentContainerStyle={styles.list}
           showsVerticalScrollIndicator={false}
@@ -137,7 +186,7 @@ export default function HomeownerMessages() {
             <View style={styles.empty}>
               <Ionicons name="chatbubbles-outline" size={48} color={Colors.text.tertiary} />
               <Text style={styles.emptyTitle}>No conversations</Text>
-              <Text style={styles.emptySub}>Start a project to connect with contractors</Text>
+              <Text style={styles.emptySub}>Messages with your contractors will appear here once a project is accepted</Text>
             </View>
           }
         />
@@ -148,22 +197,11 @@ export default function HomeownerMessages() {
 
 const styles = StyleSheet.create({
   safe: { flex: 1 },
-
-  // Header
   header: {
     flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
     paddingHorizontal: 16, paddingTop: 8, paddingBottom: 12,
   },
-  headerLeft: { flexDirection: 'row', alignItems: 'center', gap: 8 },
   headerTitle: { fontSize: 24, fontWeight: '700', color: '#fff' },
-  headerBadge: {
-    backgroundColor: '#EF4444', borderRadius: 10,
-    minWidth: 20, height: 20, alignItems: 'center', justifyContent: 'center',
-    paddingHorizontal: 6,
-  },
-  headerBadgeText: { fontSize: 11, fontWeight: '700', color: '#fff' },
-
-  // Search
   searchWrap: {
     flexDirection: 'row', alignItems: 'center', gap: 8,
     marginHorizontal: 16, marginBottom: 12,
@@ -172,49 +210,26 @@ const styles = StyleSheet.create({
     paddingHorizontal: 12, height: 40,
   },
   searchInput: { flex: 1, fontSize: 14, color: '#fff', padding: 0 },
-
-  // List
   list: { paddingBottom: 150 },
   separator: { height: 1, backgroundColor: 'rgba(255,255,255,0.05)', marginLeft: 80 },
-
-  // Thread
   thread: {
     flexDirection: 'row', alignItems: 'center',
     paddingHorizontal: 16, paddingVertical: 14, gap: 12,
   },
-  avatarWrap: { position: 'relative' },
   avatar: { width: 50, height: 50, borderRadius: 25 },
   avatarSystem: { backgroundColor: Colors.surface.hover, alignItems: 'center', justifyContent: 'center' },
-  onlineDot: {
-    position: 'absolute', bottom: 1, right: 1,
-    width: 12, height: 12, borderRadius: 6,
-    backgroundColor: '#22C55E', borderWidth: 2, borderColor: Colors.bg.primary,
-  },
-
   threadContent: { flex: 1 },
-  nameRow: { flexDirection: 'row', alignItems: 'center', marginBottom: 3 },
-  name: { fontSize: 15, fontWeight: '500', color: '#fff' },
-  nameUnread: { fontWeight: '700' },
+  name: { fontSize: 15, fontWeight: '600', color: '#fff', marginBottom: 3 },
   projectPill: {
     alignSelf: 'flex-start', paddingHorizontal: 6, paddingVertical: 1,
     borderRadius: Radius.pill, marginBottom: 3,
+    backgroundColor: 'rgba(255,107,0,0.15)',
   },
-  projectPillText: { fontSize: 10, fontWeight: '600' },
+  projectPillText: { fontSize: 10, fontWeight: '600', color: Colors.accent },
   preview: { fontSize: 13, color: Colors.text.tertiary, lineHeight: 18 },
-  previewUnread: { color: Colors.text.secondary },
-
-  rightCol: { alignItems: 'flex-end', gap: 6 },
+  rightCol: { alignItems: 'flex-end' },
   time: { fontSize: 11, color: Colors.text.tertiary },
-  timeUnread: { color: Colors.text.secondary, fontWeight: '600' },
-  unreadBadge: {
-    backgroundColor: '#EF4444', borderRadius: 10,
-    minWidth: 20, height: 20, alignItems: 'center', justifyContent: 'center',
-    paddingHorizontal: 6,
-  },
-  unreadText: { fontSize: 11, fontWeight: '700', color: '#fff' },
-
-  // Empty
-  empty: { alignItems: 'center', justifyContent: 'center', paddingTop: 80, gap: 8 },
+  empty: { alignItems: 'center', justifyContent: 'center', paddingTop: 80, paddingHorizontal: 32, gap: 8 },
   emptyTitle: { fontSize: 16, fontWeight: '600', color: '#fff' },
-  emptySub: { fontSize: 13, color: Colors.text.tertiary },
+  emptySub: { fontSize: 13, color: Colors.text.tertiary, textAlign: 'center', lineHeight: 20 },
 });

@@ -18,8 +18,6 @@ import { GlassButton, GlassCard, GradientBackground, StatusBadge, WizardHeader }
 import { buildPricingPromptSection, calculateQuantities, estimateProjectCost } from '@/data/pricing-reference';
 import { getQuestionsForRoomType, extractQualityTier, buildAnswerSummary } from '@/data/fixed-questions';
 
-const OPENAI_KEY = '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';
-const OPENAI_URL = 'https://api.openai.com/v1/chat/completions';
 
 interface BriefData {
   materials: Array<{
@@ -185,51 +183,33 @@ RULES:
 6. CONFIDENCE: Start at 90, deduct for structural changes (-15), drain relocation (-12), no measurements provided (-8), pre-1980 home (-10). Minimum 30.
 7. Return ONLY the JSON.`;
 
-      const res = await fetch(OPENAI_URL, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${OPENAI_KEY}`,
+      // Route through edge function — API key stays server-side, DB writes handled there
+      const { data: briefResponse, error: briefError } = await supabase.functions.invoke('generate-project-brief', {
+        body: {
+          project_id: projectId,
+          questionnaire_answers: answers,
+          province,
+          custom_prompt: prompt,
+          forced_cost_min: costEstimate.min,
+          forced_cost_max: costEstimate.max,
         },
-        body: JSON.stringify({
-          model: 'gpt-4o',
-          max_tokens: 6000,
-          messages: [{ role: 'user', content: prompt }],
-        }),
       });
 
-      if (!res.ok) {
-        const errText = await res.text();
-        throw new Error(`AI request failed (${res.status}): ${errText}`);
+      if (briefError) throw new Error(`Brief generation failed: ${briefError.message}`);
+      if (!briefResponse?.materials) throw new Error('Invalid response from brief generator.');
+
+      const briefData: BriefData = {
+        ...briefResponse,
+        ai_cost_min: costEstimate.min,
+        ai_cost_max: costEstimate.max,
+      };
+
+      // Persist confidence score if present (edge function doesn't handle this field)
+      if (briefData.confidence_score != null) {
+        await supabase.from('projects')
+          .update({ ai_confidence_score: briefData.confidence_score })
+          .eq('id', projectId);
       }
-
-      const aiResponse = await res.json();
-      const rawText: string = aiResponse.choices[0].message.content;
-      const cleaned = rawText.replace(/^```json\s*/i, '').replace(/^```\s*/i, '').replace(/```\s*$/i, '').trim();
-      const briefData: BriefData = JSON.parse(cleaned);
-
-      // Always use the TypeScript-computed costs (authoritative) — don't trust AI-generated costs
-      briefData.ai_cost_min = costEstimate.min;
-      briefData.ai_cost_max = costEstimate.max;
-
-      // Save to DB directly (bypasses edge function JWT issues)
-      await Promise.all([
-        supabase.from('projects').update({
-          ai_cost_min: briefData.ai_cost_min,
-          ai_cost_max: briefData.ai_cost_max,
-          questionnaire_answers: answers,
-          ...(briefData.confidence_score != null ? { ai_confidence_score: briefData.confidence_score } : {}),
-        }).eq('id', projectId),
-        briefData.materials.length > 0
-          ? supabase.from('materials').insert(briefData.materials.map((m) => ({ ...m, project_id: projectId })))
-          : Promise.resolve(),
-        briefData.scope_of_work.length > 0
-          ? supabase.from('scope_of_work').insert(briefData.scope_of_work.map((s) => ({ ...s, project_id: projectId })))
-          : Promise.resolve(),
-        briefData.permits.length > 0
-          ? supabase.from('permits').insert(briefData.permits.map((p) => ({ project_id: projectId, permit_type: p.permit_type, status: 'not_applied' })))
-          : Promise.resolve(),
-      ]);
 
       setBrief(briefData);
     } catch (err) {
@@ -245,7 +225,7 @@ RULES:
 
   const handleConfirm = () => {
     useProjectWizardStore.getState().setStep(7);
-    navigation.navigate('Address');
+    navigation.navigate('Confirm');
   };
 
   if (loading) {

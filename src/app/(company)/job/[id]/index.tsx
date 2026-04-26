@@ -83,7 +83,7 @@ export default function JobBriefScreen() {
 
       ReactNativeHapticFeedback.trigger('notificationSuccess');
       Alert.alert('Job accepted!', 'The homeowner has been notified. Head to the project to start your quote.', [
-        { text: 'View Project', onPress: () => navigation.navigate('QuoteBuilder') },
+        { text: 'View Project', onPress: () => navigation.navigate('QuoteBuilder', { projectId }) },
       ]);
     } catch (err) {
       const msg = err instanceof Error ? err.message : 'Failed to accept job.';

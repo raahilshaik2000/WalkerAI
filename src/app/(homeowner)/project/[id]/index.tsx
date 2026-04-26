@@ -211,6 +211,7 @@ export default function ProjectDetailScreen() {
               { label: 'Milestones', icon: '📋', screen: 'Milestones' },
               { label: 'Messages',   icon: '💬', screen: 'Messages'   },
               { label: 'Quote',      icon: '📄', screen: 'Quote'      },
+              { label: 'Materials',  icon: '📦', screen: 'Materials'  },
               { label: 'Permits',    icon: '🏛', screen: 'Permits'    },
               { label: 'Changes',    icon: '📝', screen: 'ChangeOrders' },
               { label: 'Review',     icon: '⭐', screen: 'Review'     },

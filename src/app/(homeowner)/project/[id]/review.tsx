@@ -64,6 +64,19 @@ export default function ReviewScreen() {
 
     setSubmitting(true);
     try {
+      // Duplicate guard
+      const { data: existing } = await supabase
+        .from('reviews')
+        .select('id')
+        .eq('project_id', projectId)
+        .eq('reviewer_id', user!.id)
+        .maybeSingle();
+
+      if (existing) {
+        Alert.alert('Already reviewed', 'You have already submitted a review for this project.');
+        return;
+      }
+
       // Get the company that did this project
       const { data: project } = await supabase
         .from('projects')
