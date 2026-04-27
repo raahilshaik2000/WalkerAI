@@ -50,8 +50,7 @@ export default function BusinessOnboardingScreen() {
         province: province.trim().toUpperCase(),
         postal_code: postalCode.trim() || null,
         service_radius_km: radiusKm,
-        verified: false,
-      });
+      }, { onConflict: 'user_id', ignoreDuplicates: false });
 
       if (error) throw error;
       navigation.navigate('LicenseOnboarding');
