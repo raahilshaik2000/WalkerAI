@@ -9,7 +9,7 @@ import {
   View,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { useNavigation } from '@react-navigation/native';
+import { useNavigation, useRoute } from '@react-navigation/native';
 import Ionicons from 'react-native-vector-icons/Ionicons';
 import { GlassButton, GradientBackground } from '@/components/ui';
 import { UnsupportedDevice } from '@/components/room-scan';
@@ -25,6 +25,8 @@ type SupportStatus = 'checking' | 'supported' | 'unsupported';
 
 export default function RoomScanScreen() {
   const navigation = useNavigation<any>();
+  const route = useRoute<any>();
+  const fromWizard = route.params?.fromWizard ?? false;
   const [supportStatus, setSupportStatus] = useState<SupportStatus>('checking');
   const [isScanning, setIsScanning] = useState(false);
 
@@ -35,7 +37,7 @@ export default function RoomScanScreen() {
   useEffect(() => {
     const completedSub = scanEmitter.addListener('onScanCompleted', (data) => {
       setIsScanning(false);
-      navigation.replace('RoomResults', { scanData: data });
+      navigation.replace('RoomResults', { scanData: data, fromWizard });
     });
 
     const errorSub = scanEmitter.addListener('onScanError', (data) => {

@@ -22,23 +22,19 @@ export default function ConfirmStep() {
   const handleDispatch = async () => {
     setLoading(true);
     try {
-      // Refresh session to ensure JWT is valid for edge function
       await supabase.auth.refreshSession();
 
-      // Mark project as dispatched in DB directly (service-side dispatch
-      // runs asynchronously — edge function will be called when JWT is stable)
-      const { error: updateError } = await supabase
-        .from('projects')
-        .update({ status: 'dispatching' })
-        .eq('id', projectId);
-
-      if (updateError) throw updateError;
-
-      // Best-effort edge function call — non-blocking
-      supabase.functions.invoke('dispatch-job', {
+      // Step 1 — AI generates required trade slots for this project
+      const { error: slotsError } = await supabase.functions.invoke('generate-trade-slots', {
         body: { project_id: projectId },
+      });
+      if (slotsError) throw new Error(`Slot generation failed: ${slotsError.message}`);
+
+      // Step 2 — Dispatch each slot to trade-matching companies nearby
+      supabase.functions.invoke('dispatch-slots', {
+        body: { project_id: projectId, round: 1 },
       }).catch(() => {
-        // Dispatch will be retried by the server — project is already marked dispatched
+        // Dispatch retried by server — slots + project already updated
       });
 
       ReactNativeHapticFeedback.trigger('notificationSuccess');
@@ -68,16 +64,16 @@ export default function ConfirmStep() {
             </View>
             <Text style={styles.title}>Ready to dispatch</Text>
             <Text style={styles.subtitle}>
-              Your project brief is ready. We'll notify the{' '}
-              <Text style={{ color: Colors.accent, fontWeight: '700' }}>10 nearest verified contractors</Text>{' '}
-              and the first to accept wins the job.
+              Your project brief is ready. Our AI will identify the{' '}
+              <Text style={{ color: Colors.accent, fontWeight: '700' }}>required trades</Text>{' '}
+              and notify verified specialists in your area for each one.
             </Text>
 
             <GlassCard style={styles.card}>
               {([
                 { icon: 'location-outline', label: 'LOCATION', value: address ?? 'Not set' },
                 { icon: 'time-outline', label: 'RESPONSE WINDOW', value: '2 hours' },
-                { icon: 'trophy-outline', label: 'HOW IT WORKS', value: 'First contractor to accept gets the job' },
+                { icon: 'trophy-outline', label: 'HOW IT WORKS', value: 'Each trade slot is filled independently — first qualified contractor per trade wins' },
                 { icon: 'card-outline', label: 'PAYMENT', value: "You'll be notified when to pay \u2014 only after a contractor is assigned" },
               ] as { icon: string; label: string; value: string }[]).map((item, i) => (
                 <View key={i} style={[styles.infoRow, i < 3 && styles.infoRowBorder]}>

@@ -20,6 +20,27 @@ import { Colors, Radius, Spacing, Typography } from '@/constants/theme';
 import { GlassButton, GlassCard, GradientBackground, StatusBadge, CardSkeleton } from '@/components/ui';
 import { formatStatusLabel, formatCad } from '@/lib/formatters';
 
+const TRADE_LABELS: Record<string, string> = {
+  general_contractor: 'General Contractor',
+  plumber: 'Plumber',
+  electrician: 'Electrician',
+  tile_installer: 'Tile Installer',
+  cabinet_installer: 'Cabinet Installer',
+  painter: 'Painter',
+  flooring_installer: 'Flooring Installer',
+  drywall: 'Drywall',
+  demolition: 'Demolition',
+};
+
+interface Slot {
+  id: string;
+  trade_type: string;
+  description: string;
+  estimated_cost_min: number | null;
+  estimated_cost_max: number | null;
+  status: string;
+}
+
 interface JobBrief {
   id: string;
   address: string;
@@ -39,56 +60,76 @@ interface JobBrief {
 export default function JobBriefScreen() {
   const route = useRoute<any>();
   const projectId = route.params?.id;
+  const slotId: string | undefined = route.params?.slot;
   const navigation = useNavigation<any>();
   const { user } = useAuthStore();
   const [job, setJob] = useState<JobBrief | null>(null);
+  const [slot, setSlot] = useState<Slot | null>(null);
   const [loading, setLoading] = useState(true);
   const [accepting, setAccepting] = useState(false);
   const [alreadyAccepted, setAlreadyAccepted] = useState(false);
 
   useEffect(() => {
     const fetchJob = async () => {
-      const { data } = await supabase
-        .from('projects')
-        .select(`
-          id, address, city, room_type, status, ai_cost_min, ai_cost_max,
-          ai_analysis, questionnaire_answers, dispatch_expires_at,
-          materials ( item, quantity, unit, quality_tier ),
-          scope_of_work ( phase, description, sort_order ),
-          renders ( url, selected )
-        `)
-        .eq('id', projectId)
-        .single();
+      const [{ data: projectData }, { data: slotData }] = await Promise.all([
+        supabase
+          .from('projects')
+          .select(`
+            id, address, city, room_type, status, ai_cost_min, ai_cost_max,
+            ai_analysis, questionnaire_answers, dispatch_expires_at,
+            materials ( item, quantity, unit, quality_tier ),
+            scope_of_work ( phase, description, sort_order ),
+            renders ( url, selected )
+          `)
+          .eq('id', projectId)
+          .single(),
+        slotId
+          ? supabase
+              .from('project_slots')
+              .select('id, trade_type, description, estimated_cost_min, estimated_cost_max, status')
+              .eq('id', slotId)
+              .single()
+          : Promise.resolve({ data: null }),
+      ]);
 
-      setJob(data as JobBrief);
-      setAlreadyAccepted(data?.status !== 'dispatching');
+      setJob(projectData as JobBrief);
+      if (slotData) setSlot(slotData as Slot);
+      // Already accepted if the slot is filled OR project is past dispatching
+      const slotFilled = slotData ? (slotData as Slot).status === 'filled' || (slotData as Slot).status === 'scheduled' : false;
+      setAlreadyAccepted(slotFilled || projectData?.status !== 'dispatching');
       setLoading(false);
     };
     fetchJob();
-  }, [projectId]);
+  }, [projectId, slotId]);
 
   const handleAccept = async () => {
     setAccepting(true);
     try {
-      const { data, error } = await supabase.functions.invoke('accept-job', {
-        body: { project_id: projectId },
-      });
+      const body = slotId
+        ? { slot_id: slotId }
+        : { project_id: projectId };
+
+      const { data, error } = await supabase.functions.invoke('accept-job', { body });
 
       if (error) throw error;
-      if (data?.code === 'JOB_FILLED') {
-        Alert.alert('Job taken', 'Another contractor accepted this job just before you. Keep an eye out for the next one!');
+
+      if (data?.code === 'SLOT_FILLED' || data?.code === 'JOB_FILLED') {
+        Alert.alert('Slot taken', 'Another contractor claimed this slot just before you. Keep an eye out for the next one!');
         setAlreadyAccepted(true);
         return;
       }
 
       ReactNativeHapticFeedback.trigger('notificationSuccess');
-      Alert.alert('Job accepted!', 'The homeowner has been notified. Head to the project to start your quote.', [
-        { text: 'View Project', onPress: () => navigation.navigate('QuoteBuilder', { projectId }) },
-      ]);
+      setAlreadyAccepted(true);
+      Alert.alert(
+        'Slot accepted!',
+        'The homeowner has been notified. Verify material quantities and await schedule confirmation.',
+        [{ text: 'Verify Materials', onPress: () => navigation.navigate('JobMaterials', { id: projectId }) }]
+      );
     } catch (err) {
       const msg = err instanceof Error ? err.message : 'Failed to accept job.';
       if (msg.includes('lock') || msg.includes('RACE')) {
-        Alert.alert('Try again', 'Another contractor is claiming this job right now. Try tapping Accept again.');
+        Alert.alert('Try again', 'Another contractor is claiming this slot right now. Try again.');
       } else {
         Alert.alert('Error', msg);
       }
@@ -134,6 +175,26 @@ export default function JobBriefScreen() {
             </TouchableOpacity>
             <StatusBadge label={formatStatusLabel(job.status)} variant={job.status === 'dispatching' ? 'dispatching' : 'active'} dot />
           </View>
+
+          {/* Slot banner — shown when dispatched to a specific trade */}
+          {slot && (
+            <View style={styles.slotBanner}>
+              <View style={styles.slotBannerIcon}>
+                <Ionicons name="construct-outline" size={18} color="#FF6B00" />
+              </View>
+              <View style={{ flex: 1 }}>
+                <Text style={styles.slotBannerTrade}>{TRADE_LABELS[slot.trade_type] ?? slot.trade_type} Slot</Text>
+                {slot.description ? (
+                  <Text style={styles.slotBannerDesc} numberOfLines={2}>{slot.description}</Text>
+                ) : null}
+              </View>
+              {slot.estimated_cost_min && slot.estimated_cost_max ? (
+                <Text style={styles.slotBannerCost}>
+                  {formatCad(slot.estimated_cost_min)}–{formatCad(slot.estimated_cost_max)}
+                </Text>
+              ) : null}
+            </View>
+          )}
 
           {/* Hero render */}
           {selectedRender ? (
@@ -235,15 +296,15 @@ export default function JobBriefScreen() {
               </GlassCard>
               <View style={styles.actionGrid}>
                 {[
-                  { label: 'Quote', iconName: 'file-document-outline', route: 'quote-builder' },
-                  { label: 'Milestones', iconName: 'flag-checkered', route: 'milestones' },
-                  { label: 'Messages', iconName: 'chat-outline', route: 'messages' },
-                  { label: 'Changes', iconName: 'pencil-outline', route: 'change-orders' },
+                  { label: 'Quote', iconName: 'file-document-outline', route: 'QuoteBuilder' },
+                  { label: 'Materials', iconName: 'cube-outline', route: 'JobMaterials' },
+                  { label: 'Messages', iconName: 'chat-outline', route: 'JobMessages' },
+                  { label: 'Changes', iconName: 'pencil-outline', route: 'JobChangeOrders' },
                 ].map((item) => (
                   <TouchableOpacity
                     key={item.route}
                     style={styles.actionTile}
-                    onPress={() => navigation.navigate(item.route as any)}
+                    onPress={() => navigation.navigate(item.route as any, { id: projectId })}
                     activeOpacity={0.85}
                   >
                     <Icon name={item.iconName} size={24} color={Colors.text.secondary} />
@@ -317,4 +378,18 @@ const styles = StyleSheet.create({
     paddingVertical: 20, alignItems: 'center', gap: 8,
   },
   actionTileLabel: { ...Typography.label, color: Colors.text.secondary },
+  slotBanner: {
+    flexDirection: 'row', alignItems: 'center', gap: 12,
+    backgroundColor: 'rgba(255,107,0,0.08)',
+    borderRadius: Radius.card, borderWidth: 1, borderColor: 'rgba(255,107,0,0.25)',
+    padding: 12, marginBottom: Spacing.sm,
+  },
+  slotBannerIcon: {
+    width: 36, height: 36, borderRadius: 18,
+    backgroundColor: 'rgba(255,107,0,0.12)',
+    alignItems: 'center', justifyContent: 'center', flexShrink: 0,
+  },
+  slotBannerTrade: { fontSize: 14, fontWeight: '700', color: '#FF6B00' },
+  slotBannerDesc: { fontSize: 12, color: Colors.text.secondary, marginTop: 2, lineHeight: 16 },
+  slotBannerCost: { fontSize: 13, fontWeight: '700', color: Colors.success, flexShrink: 0 },
 });

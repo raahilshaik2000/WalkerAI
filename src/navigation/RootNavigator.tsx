@@ -77,6 +77,7 @@ import ProjectPermits from '@/app/(homeowner)/project/[id]/permits';
 import ProjectQuote from '@/app/(homeowner)/project/[id]/quote';
 import ProjectReview from '@/app/(homeowner)/project/[id]/review';
 import ProjectMaterials from '@/app/(homeowner)/project/[id]/materials';
+import ProjectSchedule from '@/app/(homeowner)/project/[id]/schedule';
 
 // Supplier navigator
 import { SupplierNavigator } from '@/navigation/SupplierNavigator';
@@ -99,6 +100,7 @@ import JobChangeOrders from '@/app/(company)/job/[id]/change-orders';
 import JobMessages from '@/app/(company)/job/[id]/messages';
 import JobMilestones from '@/app/(company)/job/[id]/milestones';
 import JobQuoteBuilder from '@/app/(company)/job/[id]/quote-builder';
+import JobMaterials from '@/app/(company)/job/[id]/materials';
 
 const Stack = createStackNavigator();
 const Tab = createBottomTabNavigator();
@@ -261,6 +263,7 @@ function ProjectDetailNavigator() {
       <ProjectDetailStack.Screen name="Quote" component={ProjectQuote} />
       <ProjectDetailStack.Screen name="Review" component={ProjectReview} />
       <ProjectDetailStack.Screen name="Materials" component={ProjectMaterials} />
+      <ProjectDetailStack.Screen name="ProjectSchedule" component={ProjectSchedule} />
     </ProjectDetailStack.Navigator>
   );
 }
@@ -307,6 +310,7 @@ function JobDetailNavigator() {
       <JobDetailStack.Screen name="JobMessages" component={JobMessages} />
       <JobDetailStack.Screen name="JobMilestones" component={JobMilestones} />
       <JobDetailStack.Screen name="QuoteBuilder" component={JobQuoteBuilder} />
+      <JobDetailStack.Screen name="JobMaterials" component={JobMaterials} />
     </JobDetailStack.Navigator>
   );
 }

@@ -209,6 +209,28 @@ export default function MeasurementsStep() {
               The more detail you provide, the more accurate your cost estimate will be. All fields are optional.
             </Text>
 
+            {/* ── LiDAR Scan CTA ── */}
+            <TouchableOpacity
+              style={styles.lidarCard}
+              onPress={() => navigation.navigate('RoomScan', { fromWizard: true })}
+              activeOpacity={0.85}
+            >
+              <View style={styles.lidarIconWrap}>
+                <Ionicons name="scan-outline" size={28} color="#06B6D4" />
+              </View>
+              <View style={styles.lidarText}>
+                <Text style={styles.lidarTitle}>Scan with Camera</Text>
+                <Text style={styles.lidarSub}>Auto-measure walls, doors & windows (LiDAR devices)</Text>
+              </View>
+              <Ionicons name="chevron-forward" size={18} color={Colors.text.tertiary} />
+            </TouchableOpacity>
+
+            <View style={styles.orRow}>
+              <View style={styles.orLine} />
+              <Text style={styles.orLabel}>or enter manually</Text>
+              <View style={styles.orLine} />
+            </View>
+
             {/* ── Room ── */}
             <SectionHeader icon="resize-outline" title="Room" />
             <Card>
@@ -385,4 +407,38 @@ const styles = StyleSheet.create({
   cta: { marginBottom: 12 },
   skipBtn: { alignItems: 'center', paddingVertical: 8 },
   skipText: { fontSize: 14, color: Colors.text.tertiary, fontWeight: '500' },
+
+  lidarCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: 'rgba(6, 182, 212, 0.08)',
+    borderRadius: Radius.card,
+    borderWidth: 1,
+    borderColor: 'rgba(6, 182, 212, 0.3)',
+    paddingHorizontal: 16,
+    paddingVertical: 14,
+    gap: 14,
+    marginBottom: Spacing.md,
+  },
+  lidarIconWrap: {
+    width: 48,
+    height: 48,
+    borderRadius: 24,
+    backgroundColor: 'rgba(6, 182, 212, 0.12)',
+    alignItems: 'center',
+    justifyContent: 'center',
+    flexShrink: 0,
+  },
+  lidarText: { flex: 1 },
+  lidarTitle: { fontSize: 15, fontWeight: '700', color: '#fff', marginBottom: 3 },
+  lidarSub: { fontSize: 12, color: Colors.text.secondary, lineHeight: 16 },
+
+  orRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    marginBottom: Spacing.md,
+  },
+  orLine: { flex: 1, height: 1, backgroundColor: Colors.glass.border },
+  orLabel: { fontSize: 12, color: Colors.text.tertiary, fontWeight: '500' },
 });
