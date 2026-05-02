@@ -41,7 +41,8 @@ Deno.serve(async (req) => {
       });
     }
 
-    const { project_id } = await req.json();
+    const body = await req.json();
+    const { project_id, slot_id } = body as { project_id?: string; slot_id?: string };
 
     // Verify caller is a verified company
     const { data: company, error: companyError } = await adminClient
@@ -57,15 +58,90 @@ Deno.serve(async (req) => {
       );
     }
 
+    // ── Slot-based acceptance (new trade-slot flow) ──────────────
+    if (slot_id) {
+      const { data: accepted, error: acceptError } = await adminClient.rpc('atomic_accept_slot', {
+        p_slot_id: slot_id,
+        p_company_id: company.id,
+      });
+
+      if (acceptError) {
+        const isLockError = acceptError.message?.includes('lock');
+        return new Response(
+          JSON.stringify({
+            error: isLockError ? 'Slot is currently being claimed — please try again.' : acceptError.message,
+            code: 'RACE_CONDITION',
+          }),
+          { status: 409, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        );
+      }
+
+      if (!accepted) {
+        return new Response(
+          JSON.stringify({ error: 'Slot is no longer available', code: 'SLOT_FILLED' }),
+          { status: 409, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        );
+      }
+
+      // Load slot + project details
+      const { data: slot } = await adminClient
+        .from('project_slots')
+        .select('id, trade_type, project_id, projects(homeowner_id, status, scheduling_status, ai_cost_min, ai_cost_max)')
+        .eq('id', slot_id)
+        .single();
+
+      const proj = slot?.projects as { homeowner_id: string; status: string; scheduling_status: string; ai_cost_min: number; ai_cost_max: number } | undefined;
+
+      if (proj) {
+        // Notify homeowner about this slot being filled
+        await adminClient.from('notifications').insert({
+          user_id: proj.homeowner_id,
+          type: 'slot_accepted',
+          payload: {
+            slot_id,
+            project_id: slot?.project_id,
+            trade_type: slot?.trade_type,
+            company_id: company.id,
+            message: `A ${slot?.trade_type?.replace(/_/g, ' ')} contractor has joined your project.`,
+            deep_link: `/(homeowner)/project/${slot?.project_id}`,
+          },
+        });
+
+        // If ALL slots are now filled (project moved to 'scheduling'), notify homeowner to schedule
+        if (proj.status === 'scheduling' && proj.scheduling_status === 'pending_homeowner') {
+          await adminClient.from('notifications').insert({
+            user_id: proj.homeowner_id,
+            type: 'all_slots_filled',
+            payload: {
+              project_id: slot?.project_id,
+              message: 'All trades have been assigned! Review the schedule and confirm start dates.',
+              deep_link: `/(homeowner)/project/${slot?.project_id}/schedule`,
+            },
+          });
+        }
+      }
+
+      return new Response(
+        JSON.stringify({ success: true, slot_id, company_id: company.id }),
+        { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      );
+    }
+
+    // ── Legacy single-contractor acceptance ──────────────────────
+    if (!project_id) {
+      return new Response(
+        JSON.stringify({ error: 'project_id or slot_id required' }),
+        { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      );
+    }
+
     // Call the atomic_accept_job PostgreSQL function
-    // This function uses FOR UPDATE NOWAIT to prevent race conditions
     const { data: accepted, error: acceptError } = await adminClient.rpc('atomic_accept_job', {
       p_project_id: project_id,
       p_company_id: company.id,
     });
 
     if (acceptError) {
-      // If error mentions lock_not_available, another accept is in flight
       const isLockError = acceptError.message?.includes('lock');
       return new Response(
         JSON.stringify({
@@ -90,7 +166,7 @@ Deno.serve(async (req) => {
       .eq('id', project_id)
       .single();
 
-    // Auto-create a quote at the AI price with standard milestones
+    // Auto-create a quote at the AI price with standard milestones + line items
     if (project?.ai_cost_min && project?.ai_cost_max) {
       const avgCost = Math.round((project.ai_cost_min + project.ai_cost_max) / 2);
       const deposit    = Math.round(avgCost * 0.30);
@@ -116,11 +192,38 @@ Deno.serve(async (req) => {
           { quote_id: quote.id, title: 'Mid-Project',        amount: midpoint,   sort_order: 2, status: 'pending' },
           { quote_id: quote.id, title: 'Final Completion',   amount: completion, sort_order: 3, status: 'pending' },
         ]);
+
+        // Populate quote line items from scope (labour) and materials
+        const [{ data: scope }, { data: mats }] = await Promise.all([
+          adminClient.from('scope_of_work').select('phase, description').eq('project_id', project_id).order('sort_order'),
+          adminClient.from('materials').select('item, quantity, unit, quality_tier').eq('project_id', project_id),
+        ]);
+
+        const lineItems = [
+          ...(scope ?? []).map((s: { phase: string; description: string }, i: number) => ({
+            quote_id: quote.id,
+            type: 'labour',
+            description: `[${s.phase}] ${s.description}`,
+            quantity: 1,
+            sort_order: i + 1,
+          })),
+          ...(mats ?? []).map((m: { item: string; quantity: number; unit: string | null; quality_tier: string | null }, i: number) => ({
+            quote_id: quote.id,
+            type: 'material',
+            description: m.item,
+            quantity: m.quantity ?? 1,
+            unit: m.unit,
+            sort_order: (scope?.length ?? 0) + i + 1,
+          })),
+        ];
+
+        if (lineItems.length > 0) {
+          await adminClient.from('quote_line_items').insert(lineItems);
+        }
       }
     }
 
     if (project) {
-      // Notify homeowner
       await adminClient.from('notifications').insert({
         user_id: project.homeowner_id,
         type: 'job_accepted',
@@ -132,7 +235,6 @@ Deno.serve(async (req) => {
         },
       });
 
-      // Load other dispatched companies to notify them job is filled
       const { data: otherDispatches } = await adminClient
         .from('dispatch_logs')
         .select('companies(user_id)')

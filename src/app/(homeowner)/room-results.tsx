@@ -11,6 +11,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { useNavigation, useRoute } from '@react-navigation/native';
 import Ionicons from 'react-native-vector-icons/Ionicons';
 import { AnimatedPressable, GlassButton, GradientBackground } from '@/components/ui';
+import { useProjectWizardStore } from '@/stores/project-wizard.store';
 import {
   FloorPlanView,
   USDZViewer,
@@ -24,11 +25,27 @@ const PLAN_SIZE = SCREEN_WIDTH - Spacing.sm * 2;
 
 type ViewMode = 'floorplan' | '3d';
 
+const M_TO_FT = 3.28084;
+
 export default function RoomResultsScreen() {
   const navigation = useNavigation<any>();
   const route = useRoute<any>();
-  const { scanData } = route.params;
+  const { scanData, fromWizard } = route.params;
   const [viewMode, setViewMode] = useState<ViewMode>('floorplan');
+  const { setMeasurements } = useProjectWizardStore();
+
+  function handleUseMeasurements() {
+    const rd = scanData.roomDimensions ?? {};
+    setMeasurements({
+      lengthFt: rd.length ? (rd.length * M_TO_FT).toFixed(1) : '',
+      widthFt: rd.width ? (rd.width * M_TO_FT).toFixed(1) : '',
+      ceilingHeightFt: rd.height ? (rd.height * M_TO_FT).toFixed(1) : '',
+      numDoors: String(scanData.doors?.length ?? 0),
+      numWindows: String(scanData.windows?.length ?? 0),
+    });
+    useProjectWizardStore.getState().setStep(3);
+    navigation.navigate('Analyzing');
+  }
 
   const { walls = [], doors = [], windows = [], objects = [], roomDimensions, usdzFilePath, isMock } = scanData;
 
@@ -205,14 +222,25 @@ export default function RoomResultsScreen() {
 
         {/* Bottom CTA */}
         <View style={styles.bottom}>
-          <GlassButton
-            label="Done"
-            variant="primary"
-            size="lg"
-            fullWidth
-            onPress={() => navigation.reset({ index: 0, routes: [{ name: 'HomeownerTabs' }] })}
-            icon={<Ionicons name="checkmark" size={20} color="#000" />}
-          />
+          {fromWizard ? (
+            <GlassButton
+              label="Use These Measurements"
+              variant="primary"
+              size="lg"
+              fullWidth
+              onPress={handleUseMeasurements}
+              icon={<Ionicons name="checkmark-circle" size={20} color="#000" />}
+            />
+          ) : (
+            <GlassButton
+              label="Done"
+              variant="primary"
+              size="lg"
+              fullWidth
+              onPress={() => navigation.reset({ index: 0, routes: [{ name: 'HomeownerTabs' }] })}
+              icon={<Ionicons name="checkmark" size={20} color="#000" />}
+            />
+          )}
         </View>
       </SafeAreaView>
     </GradientBackground>

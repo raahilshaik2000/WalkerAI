@@ -6,7 +6,14 @@ import {
   Text,
   TouchableOpacity,
   View,
+  LayoutAnimation,
+  UIManager,
+  Platform,
 } from 'react-native';
+
+if (Platform.OS === 'android' && UIManager.setLayoutAnimationEnabledExperimental) {
+  UIManager.setLayoutAnimationEnabledExperimental(true);
+}
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useNavigation, useRoute } from '@react-navigation/native';
 import Ionicons from 'react-native-vector-icons/Ionicons';
@@ -31,6 +38,17 @@ interface Milestone {
   status: string;
 }
 
+interface LineItem {
+  id: string;
+  type: 'labour' | 'material' | 'other';
+  description: string;
+  quantity: number;
+  unit: string | null;
+  unit_cost: number | null;
+  total_cost: number | null;
+  sort_order: number | null;
+}
+
 interface Quote {
   id: string;
   total_amount: number;
@@ -52,6 +70,9 @@ export default function CostBreakdownScreen() {
 
   const [project, setProject] = useState<ProjectData | null>(null);
   const [quote, setQuote] = useState<Quote | null>(null);
+  const [lineItems, setLineItems] = useState<LineItem[]>([]);
+  const [labourExpanded, setLabourExpanded] = useState(false);
+  const [materialsExpanded, setMaterialsExpanded] = useState(false);
   const [loading, setLoading] = useState(true);
   const [paying, setPaying] = useState(false);
 
@@ -72,6 +93,17 @@ export default function CostBreakdownScreen() {
     ]);
     setProject(proj as any);
     setQuote(q as any);
+
+    // Fetch line items if quote exists
+    if (q?.id) {
+      const { data: items } = await supabase
+        .from('quote_line_items')
+        .select('id, type, description, quantity, unit, unit_cost, total_cost, sort_order')
+        .eq('quote_id', q.id)
+        .order('sort_order', { ascending: true });
+      setLineItems((items as LineItem[]) ?? []);
+    }
+
     setLoading(false);
   };
 
@@ -144,6 +176,20 @@ export default function CostBreakdownScreen() {
   const isPaid = quote?.status === 'approved' || project?.status === 'active';
   const scopeItems: Array<{ phase: string; description: string }> = project?.ai_analysis?.scope_of_work ?? [];
 
+  const labourItems = lineItems.filter((li) => li.type === 'labour');
+  const materialItems = lineItems.filter((li) => li.type === 'material');
+  const otherItems = lineItems.filter((li) => li.type === 'other');
+
+  function toggleLabour() {
+    LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
+    setLabourExpanded((v) => !v);
+  }
+
+  function toggleMaterials() {
+    LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
+    setMaterialsExpanded((v) => !v);
+  }
+
   return (
     <GradientBackground glow="top-right">
       <SafeAreaView style={styles.safe}>
@@ -187,6 +233,88 @@ export default function CostBreakdownScreen() {
               <Text style={styles.pendingText}>Waiting for a contractor to accept this project</Text>
             )}
           </GlassCard>
+
+          {/* Line Items — Labour & Materials */}
+          {lineItems.length > 0 && (
+            <GlassCard style={styles.card}>
+              <Text style={styles.sectionLabel}>Cost Breakdown</Text>
+
+              {/* Labour */}
+              {labourItems.length > 0 && (
+                <>
+                  <TouchableOpacity style={styles.lineSection} onPress={toggleLabour} activeOpacity={0.7}>
+                    <View style={styles.lineSectionLeft}>
+                      <Ionicons name="hammer-outline" size={16} color="#60A5FA" />
+                      <Text style={styles.lineSectionTitle}>Labour</Text>
+                      <View style={styles.lineCount}>
+                        <Text style={styles.lineCountText}>{labourItems.length}</Text>
+                      </View>
+                    </View>
+                    <View style={styles.lineSectionRight}>
+                      {labourItems.some((li) => li.total_cost) && (
+                        <Text style={styles.lineSectionTotal}>
+                          {formatCad(labourItems.reduce((s, li) => s + (li.total_cost ?? 0), 0))}
+                        </Text>
+                      )}
+                      <Ionicons name={labourExpanded ? 'chevron-up' : 'chevron-down'} size={16} color={Colors.text.tertiary} />
+                    </View>
+                  </TouchableOpacity>
+
+                  {labourExpanded && labourItems.map((li, i) => (
+                    <View key={li.id} style={[styles.lineRow, i < labourItems.length - 1 && styles.lineRowBorder]}>
+                      <Text style={styles.lineDesc}>{li.description}</Text>
+                      <View style={styles.lineRight}>
+                        {li.quantity !== 1 || li.unit ? (
+                          <Text style={styles.lineQty}>{li.quantity}{li.unit ? ` ${li.unit}` : ''}</Text>
+                        ) : null}
+                        {li.total_cost ? (
+                          <Text style={styles.lineTotal}>{formatCad(li.total_cost)}</Text>
+                        ) : null}
+                      </View>
+                    </View>
+                  ))}
+                </>
+              )}
+
+              {/* Materials */}
+              {materialItems.length > 0 && (
+                <>
+                  <View style={[styles.lineDivider, labourItems.length > 0 && { marginTop: 2 }]} />
+                  <TouchableOpacity style={styles.lineSection} onPress={toggleMaterials} activeOpacity={0.7}>
+                    <View style={styles.lineSectionLeft}>
+                      <Ionicons name="cube-outline" size={16} color="#A78BFA" />
+                      <Text style={styles.lineSectionTitle}>Materials</Text>
+                      <View style={[styles.lineCount, { backgroundColor: 'rgba(167,139,250,0.15)' }]}>
+                        <Text style={[styles.lineCountText, { color: '#A78BFA' }]}>{materialItems.length}</Text>
+                      </View>
+                    </View>
+                    <View style={styles.lineSectionRight}>
+                      {materialItems.some((li) => li.total_cost) && (
+                        <Text style={styles.lineSectionTotal}>
+                          {formatCad(materialItems.reduce((s, li) => s + (li.total_cost ?? 0), 0))}
+                        </Text>
+                      )}
+                      <Ionicons name={materialsExpanded ? 'chevron-up' : 'chevron-down'} size={16} color={Colors.text.tertiary} />
+                    </View>
+                  </TouchableOpacity>
+
+                  {materialsExpanded && materialItems.map((li, i) => (
+                    <View key={li.id} style={[styles.lineRow, i < materialItems.length - 1 && styles.lineRowBorder]}>
+                      <Text style={styles.lineDesc}>{li.description}</Text>
+                      <View style={styles.lineRight}>
+                        {li.quantity !== 1 || li.unit ? (
+                          <Text style={styles.lineQty}>{li.quantity}{li.unit ? ` ${li.unit}` : ''}</Text>
+                        ) : null}
+                        {li.total_cost ? (
+                          <Text style={styles.lineTotal}>{formatCad(li.total_cost)}</Text>
+                        ) : null}
+                      </View>
+                    </View>
+                  ))}
+                </>
+              )}
+            </GlassCard>
+          )}
 
           {/* Milestone Payment Schedule */}
           {milestones.length > 0 && (
@@ -371,4 +499,26 @@ const styles = StyleSheet.create({
     borderRadius: Radius.card, paddingVertical: 14, marginTop: 4,
   },
   paidBannerText: { fontSize: 14, fontWeight: '600', color: '#34D399' },
+
+  // Line items
+  lineSection: {
+    flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
+    paddingVertical: 10,
+  },
+  lineSectionLeft: { flexDirection: 'row', alignItems: 'center', gap: 8 },
+  lineSectionTitle: { fontSize: 14, fontWeight: '700', color: Colors.text.primary },
+  lineCount: {
+    backgroundColor: 'rgba(96,165,250,0.15)', borderRadius: 10,
+    paddingHorizontal: 7, paddingVertical: 2,
+  },
+  lineCountText: { fontSize: 11, fontWeight: '700', color: '#60A5FA' },
+  lineSectionRight: { flexDirection: 'row', alignItems: 'center', gap: 10 },
+  lineSectionTotal: { fontSize: 14, fontWeight: '700', color: Colors.text.primary },
+  lineDivider: { height: 1, backgroundColor: Colors.glass.border, marginVertical: 2 },
+  lineRow: { paddingVertical: 9, flexDirection: 'row', alignItems: 'flex-start', justifyContent: 'space-between', paddingLeft: 24 },
+  lineRowBorder: { borderBottomWidth: 1, borderBottomColor: Colors.glass.border },
+  lineDesc: { fontSize: 13, color: Colors.text.secondary, flex: 1, lineHeight: 18 },
+  lineRight: { alignItems: 'flex-end', marginLeft: 12 },
+  lineQty: { fontSize: 11, color: Colors.text.tertiary },
+  lineTotal: { fontSize: 13, fontWeight: '600', color: Colors.text.primary },
 });

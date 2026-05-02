@@ -1,4 +1,5 @@
 import { createClient } from 'jsr:@supabase/supabase-js@2';
+import OpenAI from 'npm:openai@4';
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -135,42 +136,92 @@ Deno.serve(async (req) => {
 
     const savedRenders: Array<{ id: string; url: string; style_params: StyleParams }> = [];
 
-    if (!apiKey) {
-      // No API key — return empty renders (graceful fallback)
-      return new Response(
-        JSON.stringify({ success: true, renders: [], fallback: true }),
-        { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-      );
-    }
+    if (apiKey) {
+      // REimagineHome path — best quality for room renders
+      for (const config of renderConfigs) {
+        let renderUrl: string | null = null;
+        for (let attempt = 0; attempt < 2; attempt++) {
+          try {
+            renderUrl = await callReimagineHome(primaryPhotoUrl, config, apiKey);
+            break;
+          } catch (e) {
+            console.warn(`REimagineHome attempt ${attempt + 1} failed:`, e);
+          }
+        }
+        if (!renderUrl) continue;
 
-    // Run renders with retry — fail gracefully
-    for (const config of renderConfigs) {
-      let renderUrl: string | null = null;
+        const { data: saved } = await adminClient
+          .from('renders')
+          .insert({ project_id, url: renderUrl, style_params: config, selected: false })
+          .select('id, url, style_params')
+          .single();
+        if (saved) savedRenders.push(saved);
+      }
+    } else {
+      // DALL-E 3 fallback — uses existing OpenAI key
+      const openai = new OpenAI({ apiKey: Deno.env.get('OPENAI_API_KEY')! });
+      const style = questionnaire_answers?.style ?? 'modern';
+      const qualityTier = questionnaire_answers?.quality_tier ?? 'mid-range';
+      const detectedMaterials = analysis?.detected_materials
+        ? Object.values(analysis.detected_materials).join(', ')
+        : 'standard finishes';
 
-      for (let attempt = 0; attempt < 2; attempt++) {
+      const dalleConfigs = [
+        { style, qualityTier, label: 'primary' },
+        { style: 'contemporary', qualityTier, label: 'contemporary' },
+      ];
+
+      for (const cfg of dalleConfigs) {
         try {
-          renderUrl = await callReimagineHome(primaryPhotoUrl, config, apiKey);
-          break;
+          const prompt = `A photorealistic ${cfg.style} ${project.room_type} renovation render. ` +
+            `Quality tier: ${cfg.qualityTier}. ` +
+            `Existing detected materials: ${detectedMaterials}. ` +
+            `Clean, professional interior design photo, bright lighting, sharp details. ` +
+            `Do not include people. 16:9 wide angle shot showing the full room.`;
+
+          const imgResponse = await openai.images.generate({
+            model: 'dall-e-3',
+            prompt,
+            n: 1,
+            size: '1792x1024',
+            quality: 'standard',
+          });
+
+          const imageUrl = imgResponse.data[0]?.url;
+          if (!imageUrl) continue;
+
+          // Download and upload to Supabase storage so URL is permanent
+          const imgBuffer = await fetch(imageUrl).then((r) => r.arrayBuffer());
+          const storagePath = `${project_id}/render_${cfg.label}_${Date.now()}.png`;
+
+          await adminClient.storage
+            .from('renders')
+            .upload(storagePath, imgBuffer, { contentType: 'image/png', upsert: true });
+
+          const { data: publicUrlData } = adminClient.storage
+            .from('renders')
+            .getPublicUrl(storagePath);
+
+          const publicUrl = publicUrlData?.publicUrl;
+          if (!publicUrl) continue;
+
+          const styleParams: StyleParams = {
+            design_style: cfg.style,
+            material_tier: cfg.qualityTier,
+            room_type: project.room_type,
+          };
+
+          const { data: saved } = await adminClient
+            .from('renders')
+            .insert({ project_id, url: publicUrl, style_params: styleParams, selected: false })
+            .select('id, url, style_params')
+            .single();
+
+          if (saved) savedRenders.push(saved);
         } catch (e) {
-          console.warn(`Render attempt ${attempt + 1} failed:`, e);
+          console.warn(`DALL-E render failed for ${cfg.label}:`, e);
         }
       }
-
-      if (!renderUrl) continue;
-
-      // Save to renders table
-      const { data: saved } = await adminClient
-        .from('renders')
-        .insert({
-          project_id,
-          url: renderUrl,
-          style_params: config,
-          selected: false,
-        })
-        .select('id, url, style_params')
-        .single();
-
-      if (saved) savedRenders.push(saved);
     }
 
     return new Response(

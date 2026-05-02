@@ -101,20 +101,14 @@ export default function RendersStep() {
           <WizardHeader currentStep={5} />
 
           <Text style={styles.stepLabel}>STEP 5 OF 8</Text>
-          <Text style={styles.title}>Your renovation renders</Text>
+          <Text style={styles.title}>AI Renovation Renders</Text>
           <Text style={styles.subtitle}>
-            AI-generated renders are coming soon. Proceed to generate your detailed project brief.
+            {renders.length > 0
+              ? 'Select your favourite style to include in your project brief.'
+              : 'Visualise your renovation before it begins. Select a style to continue.'}
           </Text>
 
-          <GlassCard style={styles.comingSoonCard}>
-            <Ionicons name="color-palette-outline" size={48} color={Colors.accent} style={{ alignSelf: 'center', marginBottom: 12 }} />
-            <Text style={styles.comingSoonTitle}>Renders coming soon</Text>
-            <Text style={styles.comingSoonNote}>
-              We're integrating AI render generation. Your contractor will visualize the renovation based on your brief and questionnaire answers.
-            </Text>
-          </GlassCard>
-
-          {!error && renders.length > 0 && (
+          {renders.length > 0 ? (
             <View style={styles.rendersGrid}>
               {renders.map((render) => {
                 const isSelected = selectedId === render.id;
@@ -148,12 +142,20 @@ export default function RendersStep() {
                 );
               })}
             </View>
+          ) : (
+            <GlassCard style={styles.emptyCard}>
+              <Ionicons name="color-palette-outline" size={40} color={Colors.text.tertiary} style={{ alignSelf: 'center', marginBottom: 10 }} />
+              <Text style={styles.emptyTitle}>Renders unavailable</Text>
+              <Text style={styles.emptyNote}>
+                Render generation requires a render API key. Your project brief will be generated without a visual preview.
+              </Text>
+            </GlassCard>
           )}
 
           <GlassButton
             label="Generate Project Brief"
             onPress={handleNext}
-            disabled={renders.length > 0 && !selectedId && !error}
+            disabled={renders.length > 0 && !selectedId}
             fullWidth
             size="lg"
           />
@@ -174,10 +176,9 @@ const styles = StyleSheet.create({
   stepLabel: { ...Typography.label, color: Colors.accent, marginBottom: 8 },
   title: { ...Typography.h1, marginBottom: 8 },
   subtitle: { ...Typography.bodySecondary, marginBottom: Spacing.lg, lineHeight: 22 },
-  comingSoonCard: { marginBottom: Spacing.lg, alignItems: 'center', paddingVertical: Spacing.lg },
-  comingSoonIcon: { fontSize: 40, marginBottom: 12 },
-  comingSoonTitle: { ...Typography.h3, marginBottom: 8, textAlign: 'center' },
-  comingSoonNote: { ...Typography.bodySecondary, textAlign: 'center', lineHeight: 20 },
+  emptyCard: { marginBottom: Spacing.lg, alignItems: 'center', paddingVertical: Spacing.lg },
+  emptyTitle: { ...Typography.h3, marginBottom: 8, textAlign: 'center' },
+  emptyNote: { ...Typography.bodySecondary, textAlign: 'center', lineHeight: 20 },
   rendersGrid: { gap: 16, marginBottom: Spacing.lg },
   renderCard: {
     borderRadius: Radius.card,

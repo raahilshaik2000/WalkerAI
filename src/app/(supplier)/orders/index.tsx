@@ -1,14 +1,11 @@
 import { useCallback, useEffect, useState } from 'react';
 import {
   ActivityIndicator,
+  Alert,
   FlatList,
-  Modal,
-  Pressable,
   RefreshControl,
-  ScrollView,
   StyleSheet,
   Text,
-  TextInput,
   TouchableOpacity,
   View,
 } from 'react-native';
@@ -18,7 +15,7 @@ import Ionicons from 'react-native-vector-icons/Ionicons';
 import { supabase } from '@/lib/supabase/client';
 import { useAuthStore } from '@/stores/auth.store';
 import { Colors, Radius, Spacing, Typography } from '@/constants/theme';
-import { GlassButton, GlassCard, GradientBackground } from '@/components/ui';
+import { GradientBackground } from '@/components/ui';
 import type { MaterialOrder, Supplier } from '@/types/database.types';
 
 export default function SupplierOrderFeed() {
@@ -28,11 +25,7 @@ export default function SupplierOrderFeed() {
   const [orders, setOrders] = useState<MaterialOrder[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
-  const [bidModal, setBidModal] = useState<MaterialOrder | null>(null);
-  const [bidPrice, setBidPrice] = useState('');
-  const [bidLeadTime, setBidLeadTime] = useState('');
-  const [bidNotes, setBidNotes] = useState('');
-  const [submitting, setSubmitting] = useState(false);
+  const [claiming, setClaiming] = useState<string | null>(null);
 
   const fetchData = useCallback(async () => {
     if (!user) return;
@@ -53,39 +46,24 @@ export default function SupplierOrderFeed() {
 
   const onRefresh = async () => { setRefreshing(true); await fetchData(); setRefreshing(false); };
 
-  const openBidModal = (order: MaterialOrder) => {
-    const estimatedTotal = order.final_price ?? 0;
-    setBidPrice(estimatedTotal > 0 ? String((estimatedTotal / 100).toFixed(2)) : '');
-    setBidLeadTime('3');
-    setBidNotes('');
-    setBidModal(order);
-  };
-
-  const submitBid = async () => {
-    if (!bidModal || !supplier) return;
-    const priceTotal = Math.round(parseFloat(bidPrice) * 100);
-    const pricePerUnit = bidModal.quantity_needed > 0 ? Math.round(priceTotal / bidModal.quantity_needed) : priceTotal;
-    if (isNaN(priceTotal) || priceTotal <= 0) {
-      return;
-    }
-    setSubmitting(true);
+  const claimOrder = async (order: MaterialOrder) => {
+    if (!supplier) return;
+    setClaiming(order.id);
     try {
-      const { error } = await supabase.from('material_order_bids').upsert({
-        order_id: bidModal.id,
-        supplier_id: supplier.id,
-        price_per_unit: pricePerUnit,
-        total_price: priceTotal,
-        lead_time_days: parseInt(bidLeadTime, 10) || 3,
-        notes: bidNotes.trim() || null,
-        status: 'pending',
-      }, { onConflict: 'order_id,supplier_id' });
-      if (error) throw error;
-      setBidModal(null);
+      const { error } = await supabase.functions.invoke('claim-material-order', {
+        body: { order_id: order.id },
+      });
+      if (error) throw new Error(error.message);
       await fetchData();
-    } catch (err) {
-      console.error(err);
+    } catch (err: any) {
+      const msg = err?.message ?? 'Failed to claim order';
+      if (msg.includes('ORDER_CLAIMED') || msg.includes('no longer available')) {
+        Alert.alert('Order taken', 'Another supplier just claimed this order.');
+      } else {
+        Alert.alert('Error', msg);
+      }
     } finally {
-      setSubmitting(false);
+      setClaiming(null);
     }
   };
 
@@ -151,8 +129,20 @@ export default function SupplierOrderFeed() {
                     <Ionicons name="time-outline" size={13} color={Colors.text.tertiary} />
                     <Text style={styles.deadlineText}>{deadlineLabel(item.delivery_deadline)}</Text>
                   </View>
-                  <TouchableOpacity style={styles.bidBtn} onPress={() => openBidModal(item)} activeOpacity={0.8}>
-                    <Text style={styles.bidBtnText}>Place Bid</Text>
+                  {item.offered_price || item.final_price ? (
+                    <Text style={styles.fixedPrice}>
+                      ${((item.final_price ?? item.offered_price ?? 0) / 100).toFixed(0)} CAD
+                    </Text>
+                  ) : null}
+                  <TouchableOpacity
+                    style={[styles.claimBtn, claiming === item.id && styles.claimBtnDisabled]}
+                    onPress={() => claimOrder(item)}
+                    disabled={claiming === item.id}
+                    activeOpacity={0.8}
+                  >
+                    <Text style={styles.claimBtnText}>
+                      {claiming === item.id ? 'Claiming…' : 'Claim Order'}
+                    </Text>
                   </TouchableOpacity>
                 </View>
               </TouchableOpacity>
@@ -160,49 +150,6 @@ export default function SupplierOrderFeed() {
           />
         )}
 
-        {/* Bid Modal */}
-        <Modal visible={!!bidModal} transparent animationType="slide" onRequestClose={() => setBidModal(null)}>
-          <Pressable style={styles.overlay} onPress={() => setBidModal(null)}>
-            <Pressable style={styles.sheet} onPress={(e) => e.stopPropagation()}>
-              <View style={styles.handle} />
-              <Text style={styles.sheetTitle}>Place a Bid</Text>
-              <Text style={styles.sheetSub}>{bidModal?.material?.item} — {bidModal?.quantity_needed} {bidModal?.unit}</Text>
-
-              <Text style={styles.fieldLabel}>Total Price (CAD $)</Text>
-              <TextInput
-                style={styles.fieldInput}
-                value={bidPrice}
-                onChangeText={setBidPrice}
-                keyboardType="decimal-pad"
-                placeholder="e.g. 1200.00"
-                placeholderTextColor={Colors.text.tertiary}
-              />
-
-              <Text style={styles.fieldLabel}>Lead Time (days)</Text>
-              <TextInput
-                style={styles.fieldInput}
-                value={bidLeadTime}
-                onChangeText={setBidLeadTime}
-                keyboardType="numeric"
-                placeholder="3"
-                placeholderTextColor={Colors.text.tertiary}
-              />
-
-              <Text style={styles.fieldLabel}>Notes (optional)</Text>
-              <TextInput
-                style={[styles.fieldInput, styles.fieldMulti]}
-                value={bidNotes}
-                onChangeText={setBidNotes}
-                multiline
-                numberOfLines={3}
-                placeholder="Brand, model, special notes..."
-                placeholderTextColor={Colors.text.tertiary}
-              />
-
-              <GlassButton label="Submit Bid" onPress={submitBid} loading={submitting} fullWidth size="lg" style={{ marginTop: Spacing.md }} />
-            </Pressable>
-          </Pressable>
-        </Modal>
       </SafeAreaView>
     </GradientBackground>
   );
@@ -234,22 +181,8 @@ const styles = StyleSheet.create({
   orderFooter: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginTop: 4 },
   deadlineBadge: { flexDirection: 'row', alignItems: 'center', gap: 4 },
   deadlineText: { fontSize: 13, color: Colors.text.tertiary },
-  bidBtn: { backgroundColor: Colors.accent, paddingHorizontal: 18, paddingVertical: 8, borderRadius: 20 },
-  bidBtnText: { fontSize: 13, fontWeight: '700', color: '#fff' },
-  overlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.6)', justifyContent: 'flex-end' },
-  sheet: { backgroundColor: '#1C1C1E', borderTopLeftRadius: 20, borderTopRightRadius: 20, padding: Spacing.lg, paddingBottom: 40 },
-  handle: { width: 36, height: 4, borderRadius: 2, backgroundColor: 'rgba(255,255,255,0.2)', alignSelf: 'center', marginBottom: Spacing.md },
-  sheetTitle: { ...Typography.h2, marginBottom: 4 },
-  sheetSub: { ...Typography.bodySecondary, marginBottom: Spacing.lg },
-  fieldLabel: { fontSize: 13, color: Colors.text.secondary, marginBottom: 6, marginTop: 12 },
-  fieldInput: {
-    backgroundColor: 'rgba(255,255,255,0.07)',
-    borderRadius: Radius.item,
-    borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.12)',
-    padding: 14,
-    color: Colors.text.primary,
-    fontSize: 15,
-  },
-  fieldMulti: { height: 80, textAlignVertical: 'top' },
+  fixedPrice: { fontSize: 14, fontWeight: '700', color: '#34D399' },
+  claimBtn: { backgroundColor: '#FF6B00', paddingHorizontal: 18, paddingVertical: 8, borderRadius: 20 },
+  claimBtnDisabled: { opacity: 0.5 },
+  claimBtnText: { fontSize: 13, fontWeight: '700', color: '#000' },
 });

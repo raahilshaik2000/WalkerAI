@@ -132,8 +132,21 @@ export default function AnalyzingScreen() {
 
         useProjectWizardStore.getState().setRoomType(detectedRoomType as any);
         setAnalysisResult(analysis);
-        // Use fixed, standardized questions instead of AI-generated ones
-        setQuestions(getQuestionsForRoomType(detectedRoomType));
+
+        // Try AI-conditional questions first, fall back to fixed set
+        let questions = null;
+        try {
+          const { data: qData, error: qError } = await supabase.functions.invoke('generate-questionnaire', {
+            body: { project_id: pid, analysis },
+          });
+          if (!qError && qData?.questions?.length > 0) {
+            questions = qData.questions;
+          }
+        } catch {
+          // fall through to fixed questions
+        }
+
+        setQuestions(questions ?? getQuestionsForRoomType(detectedRoomType));
         useProjectWizardStore.getState().setStep(4);
         navigation.navigate('Questionnaire');
       } catch (err: any) {
