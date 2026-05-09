@@ -11,14 +11,15 @@ export async function signUp(email: string, password: string, role: UserRole) {
   });
   if (error) throw error;
 
-  // Insert into our users table (trigger handles this in production,
-  // but we do it explicitly here for reliability)
-  if (data.user) {
-    const { error: insertError } = await supabase.from('users').upsert(
+  // Attempt to insert into public.users. The auth trigger (011_auth_user_trigger.sql)
+  // handles this automatically, but we also try here in case email confirmation is
+  // off and the session is immediately active. Errors are ignored — the trigger is
+  // the authoritative path.
+  if (data.user && data.session) {
+    await supabase.from('users').upsert(
       { id: data.user.id, email, role },
       { onConflict: 'id' },
     );
-    if (insertError) throw new Error(`Database error saving new user: ${insertError.message} (code: ${insertError.code})`);
   }
 
   return data;

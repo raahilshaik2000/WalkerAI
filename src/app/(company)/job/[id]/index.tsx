@@ -296,7 +296,7 @@ export default function JobBriefScreen() {
               </GlassCard>
               <View style={styles.actionGrid}>
                 {[
-                  { label: 'Quote', iconName: 'file-document-outline', route: 'QuoteBuilder' },
+                  { label: 'Payments', iconName: 'cash-multiple', route: 'JobMilestones' },
                   { label: 'Materials', iconName: 'cube-outline', route: 'JobMaterials' },
                   { label: 'Messages', iconName: 'chat-outline', route: 'JobMessages' },
                   { label: 'Changes', iconName: 'pencil-outline', route: 'JobChangeOrders' },

@@ -107,21 +107,22 @@ function Divider() {
 
 export default function MeasurementsStep() {
   const navigation = useNavigation<any>();
-  const { setMeasurements } = useProjectWizardStore();
+  const { setMeasurements, roomType } = useProjectWizardStore();
+  const isBathroom = roomType === 'bathroom';
 
   // Room
   const [roomLength, setRoomLength] = useState('');
   const [roomWidth, setRoomWidth] = useState('');
   const [ceilingHeight, setCeilingHeight] = useState('');
 
-  // Cabinets
+  // Cabinets (kitchen)
   const [upperCabHeight, setUpperCabHeight] = useState('');
   const [lowerCabHeight, setLowerCabHeight] = useState('');
   const [cabDepth, setCabDepth] = useState('');
   const [upperLinearFt, setUpperLinearFt] = useState('');
   const [lowerLinearFt, setLowerLinearFt] = useState('');
 
-  // Countertops
+  // Countertops (kitchen)
   const [countertopLinearFt, setCountertopLinearFt] = useState('');
 
   // Doors & Windows
@@ -132,24 +133,40 @@ export default function MeasurementsStep() {
   const [windowWidth, setWindowWidth] = useState('');
   const [windowHeight, setWindowHeight] = useState('');
 
-  // Appliances
+  // Appliances (kitchen)
   const [fridgeWidth, setFridgeWidth] = useState('');
   const [rangeWidth, setRangeWidth] = useState('');
   const [hasDishwasher, setHasDishwasher] = useState(false);
 
-  // Island
+  // Island (kitchen)
   const [hasIsland, setHasIsland] = useState(false);
   const [islandLength, setIslandLength] = useState('');
   const [islandWidth, setIslandWidth] = useState('');
 
+  // Shower / Tub (bathroom)
+  const [hasShowerTub, setHasShowerTub] = useState(false);
+  const [showerLength, setShowerLength] = useState('');
+  const [showerWidth, setShowerWidth] = useState('');
+
+  // Vanity (bathroom)
+  const [vanityWidth, setVanityWidth] = useState('');
+  const [numSinks, setNumSinks] = useState('');
+
+  // Tile (bathroom)
+  const [floorTileArea, setFloorTileArea] = useState('');
+  const [wallTileArea, setWallTileArea] = useState('');
+
+  const kitchenValues = [
+    upperCabHeight, lowerCabHeight, cabDepth, upperLinearFt, lowerLinearFt,
+    countertopLinearFt, fridgeWidth, rangeWidth, islandLength, islandWidth,
+  ];
+  const bathroomValues = [showerLength, showerWidth, vanityWidth, numSinks, floorTileArea, wallTileArea];
+
   const hasAnyValue = [
     roomLength, roomWidth, ceilingHeight,
-    upperCabHeight, lowerCabHeight, cabDepth, upperLinearFt, lowerLinearFt,
-    countertopLinearFt,
     numDoors, doorWidth, doorHeight, numWindows, windowWidth, windowHeight,
-    fridgeWidth, rangeWidth,
-    islandLength, islandWidth,
-  ].some(Boolean) || hasDishwasher || hasIsland;
+    ...(isBathroom ? bathroomValues : kitchenValues),
+  ].some(Boolean) || hasDishwasher || hasIsland || hasShowerTub;
 
   const handleContinue = () => {
     if (hasAnyValue) {
@@ -159,23 +176,30 @@ export default function MeasurementsStep() {
         ceilingHeightFt: ceilingHeight,
         numWindows,
         numDoors,
-        hasIsland,
-        // Extended fields stored in the same object via type extension
-        upperCabHeight,
-        lowerCabHeight,
-        cabDepth,
-        upperLinearFt,
-        lowerLinearFt,
-        countertopLinearFt,
+        hasIsland: isBathroom ? false : hasIsland,
+        upperCabHeight: isBathroom ? '' : upperCabHeight,
+        lowerCabHeight: isBathroom ? '' : lowerCabHeight,
+        cabDepth: isBathroom ? '' : cabDepth,
+        upperLinearFt: isBathroom ? '' : upperLinearFt,
+        lowerLinearFt: isBathroom ? '' : lowerLinearFt,
+        countertopLinearFt: isBathroom ? '' : countertopLinearFt,
         doorWidth,
         doorHeight,
         windowWidth,
         windowHeight,
-        fridgeWidth,
-        rangeWidth,
-        hasDishwasher,
-        islandLength,
-        islandWidth,
+        fridgeWidth: isBathroom ? '' : fridgeWidth,
+        rangeWidth: isBathroom ? '' : rangeWidth,
+        hasDishwasher: isBathroom ? false : hasDishwasher,
+        islandLength: isBathroom ? '' : islandLength,
+        islandWidth: isBathroom ? '' : islandWidth,
+        // Bathroom fields
+        hasShowerTub: isBathroom ? hasShowerTub : false,
+        showerLength: isBathroom ? showerLength : '',
+        showerWidth: isBathroom ? showerWidth : '',
+        vanityWidth: isBathroom ? vanityWidth : '',
+        numSinks: isBathroom ? numSinks : '',
+        floorTileArea: isBathroom ? floorTileArea : '',
+        wallTileArea: isBathroom ? wallTileArea : '',
       });
     }
     useProjectWizardStore.getState().setStep(3);
@@ -241,30 +265,66 @@ export default function MeasurementsStep() {
               <Field label="Ceiling height" value={ceilingHeight} onChangeText={setCeilingHeight} />
             </Card>
 
-            {/* ── Cabinets ── */}
-            <SectionHeader icon="grid-outline" title="Cabinets" />
-            <Card>
-              <Field label="Upper cabinet height" hint="Height of each door" value={upperCabHeight} onChangeText={setUpperCabHeight} />
-              <Divider />
-              <Field label="Lower cabinet height" hint="Base cabinet height" value={lowerCabHeight} onChangeText={setLowerCabHeight} />
-              <Divider />
-              <Field label="Cabinet depth" hint="How far they stick out" value={cabDepth} onChangeText={setCabDepth} />
-              <Divider />
-              <Field label="Upper cabinet run" hint="Total linear footage" value={upperLinearFt} onChangeText={setUpperLinearFt} />
-              <Divider />
-              <Field label="Lower cabinet run" hint="Total linear footage" value={lowerLinearFt} onChangeText={setLowerLinearFt} />
-            </Card>
+            {isBathroom ? (
+              <>
+                {/* ── Shower / Tub ── */}
+                <SectionHeader icon="water-outline" title="Shower / Tub" />
+                <Card>
+                  <ToggleRow label="Has shower or tub" hint="Walk-in, alcove, or freestanding" value={hasShowerTub} onValueChange={setHasShowerTub} />
+                  {hasShowerTub && (
+                    <>
+                      <Divider />
+                      <Field label="Shower/tub length" value={showerLength} onChangeText={setShowerLength} />
+                      <Divider />
+                      <Field label="Shower/tub width" value={showerWidth} onChangeText={setShowerWidth} />
+                    </>
+                  )}
+                </Card>
 
-            {/* ── Countertops ── */}
-            <SectionHeader icon="layers-outline" title="Countertops" />
-            <Card>
-              <Field label="Total countertop length" hint="All sections combined" value={countertopLinearFt} onChangeText={setCountertopLinearFt} />
-            </Card>
+                {/* ── Vanity ── */}
+                <SectionHeader icon="construct-outline" title="Vanity" />
+                <Card>
+                  <Field label="Vanity width" hint="Cabinet width" value={vanityWidth} onChangeText={setVanityWidth} />
+                  <Divider />
+                  <Field label="Number of sinks" hint="Single or double" value={numSinks} onChangeText={setNumSinks} unit="" keyboardType="number-pad" />
+                </Card>
+
+                {/* ── Tile ── */}
+                <SectionHeader icon="grid-outline" title="Tile" />
+                <Card>
+                  <Field label="Floor tile area" value={floorTileArea} onChangeText={setFloorTileArea} unit="sqft" />
+                  <Divider />
+                  <Field label="Wall tile area" hint="Shower/tub surround" value={wallTileArea} onChangeText={setWallTileArea} unit="sqft" />
+                </Card>
+              </>
+            ) : (
+              <>
+                {/* ── Cabinets ── */}
+                <SectionHeader icon="grid-outline" title="Cabinets" />
+                <Card>
+                  <Field label="Upper cabinet height" hint="Height of each door" value={upperCabHeight} onChangeText={setUpperCabHeight} />
+                  <Divider />
+                  <Field label="Lower cabinet height" hint="Base cabinet height" value={lowerCabHeight} onChangeText={setLowerCabHeight} />
+                  <Divider />
+                  <Field label="Cabinet depth" hint="How far they stick out" value={cabDepth} onChangeText={setCabDepth} />
+                  <Divider />
+                  <Field label="Upper cabinet run" hint="Total linear footage" value={upperLinearFt} onChangeText={setUpperLinearFt} />
+                  <Divider />
+                  <Field label="Lower cabinet run" hint="Total linear footage" value={lowerLinearFt} onChangeText={setLowerLinearFt} />
+                </Card>
+
+                {/* ── Countertops ── */}
+                <SectionHeader icon="layers-outline" title="Countertops" />
+                <Card>
+                  <Field label="Total countertop length" hint="All sections combined" value={countertopLinearFt} onChangeText={setCountertopLinearFt} />
+                </Card>
+              </>
+            )}
 
             {/* ── Doors & Windows ── */}
             <SectionHeader icon="albums-outline" title="Doors & Windows" />
             <Card>
-              <Field label="Number of doors" hint="Incl. pantry & entry" value={numDoors} onChangeText={setNumDoors} unit="" keyboardType="number-pad" />
+              <Field label="Number of doors" hint={isBathroom ? 'Incl. shower door' : 'Incl. pantry & entry'} value={numDoors} onChangeText={setNumDoors} unit="" keyboardType="number-pad" />
               <Divider />
               <Field label="Door width" value={doorWidth} onChangeText={setDoorWidth} />
               <Divider />
@@ -277,29 +337,33 @@ export default function MeasurementsStep() {
               <Field label="Window height" hint="Typical window" value={windowHeight} onChangeText={setWindowHeight} />
             </Card>
 
-            {/* ── Appliances ── */}
-            <SectionHeader icon="hardware-chip-outline" title="Appliances" />
-            <Card>
-              <Field label="Fridge opening width" hint="Width of the cutout" value={fridgeWidth} onChangeText={setFridgeWidth} />
-              <Divider />
-              <Field label="Range / cooktop width" hint="Stove cutout width" value={rangeWidth} onChangeText={setRangeWidth} />
-              <Divider />
-              <ToggleRow label="Dishwasher" hint='Standard 24" slot' value={hasDishwasher} onValueChange={setHasDishwasher} />
-            </Card>
+            {!isBathroom && (
+              <>
+                {/* ── Appliances ── */}
+                <SectionHeader icon="hardware-chip-outline" title="Appliances" />
+                <Card>
+                  <Field label="Fridge opening width" hint="Width of the cutout" value={fridgeWidth} onChangeText={setFridgeWidth} />
+                  <Divider />
+                  <Field label="Range / cooktop width" hint="Stove cutout width" value={rangeWidth} onChangeText={setRangeWidth} />
+                  <Divider />
+                  <ToggleRow label="Dishwasher" hint='Standard 24" slot' value={hasDishwasher} onValueChange={setHasDishwasher} />
+                </Card>
 
-            {/* ── Island ── */}
-            <SectionHeader icon="square-outline" title="Island" />
-            <Card>
-              <ToggleRow label="Has kitchen island" value={hasIsland} onValueChange={setHasIsland} />
-              {hasIsland && (
-                <>
-                  <Divider />
-                  <Field label="Island length" value={islandLength} onChangeText={setIslandLength} />
-                  <Divider />
-                  <Field label="Island width" value={islandWidth} onChangeText={setIslandWidth} />
-                </>
-              )}
-            </Card>
+                {/* ── Island ── */}
+                <SectionHeader icon="square-outline" title="Island" />
+                <Card>
+                  <ToggleRow label="Has kitchen island" value={hasIsland} onValueChange={setHasIsland} />
+                  {hasIsland && (
+                    <>
+                      <Divider />
+                      <Field label="Island length" value={islandLength} onChangeText={setIslandLength} />
+                      <Divider />
+                      <Field label="Island width" value={islandWidth} onChangeText={setIslandWidth} />
+                    </>
+                  )}
+                </Card>
+              </>
+            )}
 
             {/* Tip */}
             <View style={styles.tip}>
