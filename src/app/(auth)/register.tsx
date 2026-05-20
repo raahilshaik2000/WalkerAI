@@ -40,8 +40,16 @@ export default function RegisterScreen() {
     }
     setLoading(true);
     try {
-      await signUp(email, password, role);
-      // Root _layout auth listener handles redirect
+      const data = await signUp(email, password, role);
+      if (!data.session) {
+        // Email confirmation required — account created, awaiting verification
+        Alert.alert(
+          'Check your email',
+          `We sent a confirmation link to ${email}. Tap it to activate your account, then sign in.`,
+          [{ text: 'OK', onPress: () => navigation.navigate('Login') }]
+        );
+      }
+      // If session exists, root _layout auth listener handles redirect automatically
     } catch (error: unknown) {
       const msg = error instanceof Error
         ? error.message
