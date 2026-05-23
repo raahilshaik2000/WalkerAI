@@ -1,13 +1,12 @@
 import { useEffect } from 'react';
 import { Platform } from 'react-native';
-;
 import { StatusBar } from 'react-native';
 import * as SplashScreen from 'expo-splash-screen';
 import * as Notifications from 'expo-notifications';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { StripeProvider } from '@stripe/stripe-react-native';
-;
+import Config from 'react-native-config';
 
 const STRIPE_PUBLISHABLE_KEY = Config.STRIPE_PUBLISHABLE_KEY ?? '';
 
