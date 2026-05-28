@@ -68,10 +68,11 @@ export default function JobBriefScreen() {
   const [loading, setLoading] = useState(true);
   const [accepting, setAccepting] = useState(false);
   const [alreadyAccepted, setAlreadyAccepted] = useState(false);
+  const [hasStripe, setHasStripe] = useState(false);
 
   useEffect(() => {
     const fetchJob = async () => {
-      const [{ data: projectData }, { data: slotData }] = await Promise.all([
+      const [{ data: projectData }, { data: slotData }, { data: companyData }] = await Promise.all([
         supabase
           .from('projects')
           .select(`
@@ -90,10 +91,16 @@ export default function JobBriefScreen() {
               .eq('id', slotId)
               .single()
           : Promise.resolve({ data: null }),
+        supabase
+          .from('companies')
+          .select('stripe_account_id')
+          .eq('user_id', user?.id)
+          .single(),
       ]);
 
       setJob(projectData as JobBrief);
       if (slotData) setSlot(slotData as Slot);
+      setHasStripe(!!companyData?.stripe_account_id);
       // Already accepted if the slot is filled OR project is past dispatching
       const slotFilled = slotData ? (slotData as Slot).status === 'filled' || (slotData as Slot).status === 'scheduled' : false;
       setAlreadyAccepted(slotFilled || projectData?.status !== 'dispatching');
@@ -103,6 +110,17 @@ export default function JobBriefScreen() {
   }, [projectId, slotId]);
 
   const handleAccept = async () => {
+    if (!hasStripe) {
+      Alert.alert(
+        'Set up payouts first',
+        'You need to connect your bank account before accepting jobs. Set up Stripe payouts in your profile.',
+        [
+          { text: 'Not now', style: 'cancel' },
+          { text: 'Set up Payouts', onPress: () => navigation.navigate('CompanyTabs', { screen: 'Profile' }) },
+        ]
+      );
+      return;
+    }
     setAccepting(true);
     try {
       const body = slotId
@@ -296,7 +314,7 @@ export default function JobBriefScreen() {
               </GlassCard>
               <View style={styles.actionGrid}>
                 {[
-                  { label: 'Quote', iconName: 'file-document-outline', route: 'QuoteBuilder' },
+                  { label: 'Payments', iconName: 'cash-multiple', route: 'JobMilestones' },
                   { label: 'Materials', iconName: 'cube-outline', route: 'JobMaterials' },
                   { label: 'Messages', iconName: 'chat-outline', route: 'JobMessages' },
                   { label: 'Changes', iconName: 'pencil-outline', route: 'JobChangeOrders' },

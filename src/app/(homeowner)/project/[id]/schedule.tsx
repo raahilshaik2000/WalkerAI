@@ -2,16 +2,19 @@ import { useEffect, useState } from 'react';
 import {
   ActivityIndicator,
   Alert,
+  KeyboardAvoidingView,
+  Modal,
+  Platform,
   ScrollView,
   StyleSheet,
   Text,
+  TextInput,
   TouchableOpacity,
   View,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useNavigation, useRoute } from '@react-navigation/native';
 import Ionicons from 'react-native-vector-icons/Ionicons';
-import DateTimePicker from '@react-native-community/datetimepicker';
 import { supabase } from '@/lib/supabase/client';
 import { GlassButton, GradientBackground } from '@/components/ui';
 import { Colors, Radius, Spacing, Typography } from '@/constants/theme';
@@ -53,7 +56,8 @@ export default function ScheduleScreen() {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [pickerSlot, setPickerSlot] = useState<{ id: string; field: 'start' | 'end' } | null>(null);
-  const [dates, setDates] = useState<Record<string, { start: Date | null; end: Date | null }>>({});
+  const [inputValue, setInputValue] = useState('');
+  const [dates, setDates] = useState<Record<string, { start: string; end: string }>>({});
 
   useEffect(() => {
     loadSlots();
@@ -70,11 +74,11 @@ export default function ScheduleScreen() {
     if (!error && data) {
       setSlots(data);
       // Pre-fill dates from existing values
-      const initial: Record<string, { start: Date | null; end: Date | null }> = {};
+      const initial: Record<string, { start: string; end: string }> = {};
       for (const s of data) {
         initial[s.id] = {
-          start: s.scheduled_start_date ? new Date(s.scheduled_start_date) : null,
-          end: s.scheduled_end_date ? new Date(s.scheduled_end_date) : null,
+          start: s.scheduled_start_date ?? '',
+          end: s.scheduled_end_date ?? '',
         };
       }
       setDates(initial);
@@ -97,8 +101,8 @@ export default function ScheduleScreen() {
           supabase
             .from('project_slots')
             .update({
-              scheduled_start_date: dates[s.id]?.start?.toISOString().split('T')[0] ?? null,
-              scheduled_end_date: dates[s.id]?.end?.toISOString().split('T')[0] ?? null,
+              scheduled_start_date: dates[s.id]?.start || null,
+              scheduled_end_date: dates[s.id]?.end || null,
               status: 'scheduled',
             })
             .eq('id', s.id)
@@ -125,7 +129,7 @@ export default function ScheduleScreen() {
                 trade_type: s.trade_type,
                 start_date: dates[s.id]?.start?.toISOString().split('T')[0],
                 end_date: dates[s.id]?.end?.toISOString().split('T')[0],
-                message: `Your schedule has been confirmed. Start: ${formatDate(dates[s.id]?.start?.toISOString().split('T')[0] ?? null)}`,
+                message: `Your schedule has been confirmed. Start: ${formatDate(dates[s.id]?.start ?? null)}`,
                 deep_link: `/(company)/job/${projectId}`,
               },
             })
@@ -197,11 +201,11 @@ export default function ScheduleScreen() {
                 <View style={styles.dateRow}>
                   <TouchableOpacity
                     style={[styles.dateBtn, d.start && styles.dateBtnSet]}
-                    onPress={() => setPickerSlot({ id: slot.id, field: 'start' })}
+                    onPress={() => { setPickerSlot({ id: slot.id, field: 'start' }); setInputValue(d.start ?? ''); }}
                   >
                     <Ionicons name="calendar-outline" size={14} color={d.start ? '#FF6B00' : Colors.text.tertiary} />
                     <Text style={[styles.dateBtnText, d.start && styles.dateBtnTextSet]}>
-                      {d.start ? formatDate(d.start.toISOString()) : 'Set start date'}
+                      {d.start ? formatDate(d.start) : 'Set start date'}
                     </Text>
                   </TouchableOpacity>
 
@@ -209,11 +213,11 @@ export default function ScheduleScreen() {
 
                   <TouchableOpacity
                     style={[styles.dateBtn, d.end && styles.dateBtnSet]}
-                    onPress={() => setPickerSlot({ id: slot.id, field: 'end' })}
+                    onPress={() => { setPickerSlot({ id: slot.id, field: 'end' }); setInputValue(d.end ?? ''); }}
                   >
                     <Ionicons name="flag-outline" size={14} color={d.end ? '#06B6D4' : Colors.text.tertiary} />
                     <Text style={[styles.dateBtnText, d.end && { color: '#06B6D4' }]}>
-                      {d.end ? formatDate(d.end.toISOString()) : 'Set end date'}
+                      {d.end ? formatDate(d.end) : 'Set end date'}
                     </Text>
                   </TouchableOpacity>
                 </View>
@@ -224,37 +228,48 @@ export default function ScheduleScreen() {
           <View style={{ height: 120 }} />
         </ScrollView>
 
-        {/* Date Picker (iOS inline) */}
-        {pickerSlot && (
-          <View style={styles.pickerContainer}>
-            <View style={styles.pickerToolbar}>
-              <Text style={styles.pickerLabel}>
-                {pickerSlot.field === 'start' ? 'Start Date' : 'End Date'}
-              </Text>
-              <TouchableOpacity onPress={() => setPickerSlot(null)}>
-                <Text style={styles.pickerDone}>Done</Text>
-              </TouchableOpacity>
+        {/* Date input modal */}
+        <Modal visible={!!pickerSlot} transparent animationType="slide" onRequestClose={() => setPickerSlot(null)}>
+          <KeyboardAvoidingView
+            style={styles.modalOverlay}
+            behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+          >
+            <TouchableOpacity style={{ flex: 1 }} onPress={() => setPickerSlot(null)} />
+            <View style={styles.pickerContainer}>
+              <View style={styles.pickerToolbar}>
+                <Text style={styles.pickerLabel}>
+                  {pickerSlot?.field === 'start' ? 'Start Date' : 'End Date'}
+                </Text>
+                <TouchableOpacity onPress={() => {
+                  if (pickerSlot && inputValue.match(/^\d{4}-\d{2}-\d{2}$/)) {
+                    setDates((prev) => ({
+                      ...prev,
+                      [pickerSlot.id]: { ...prev[pickerSlot.id], [pickerSlot.field]: inputValue },
+                    }));
+                    setPickerSlot(null);
+                  } else if (pickerSlot && !inputValue) {
+                    setPickerSlot(null);
+                  } else {
+                    Alert.alert('Invalid date', 'Please enter a date in YYYY-MM-DD format (e.g. 2026-06-15).');
+                  }
+                }}>
+                  <Text style={styles.pickerDone}>Done</Text>
+                </TouchableOpacity>
+              </View>
+              <Text style={styles.pickerHint}>Enter date in YYYY-MM-DD format</Text>
+              <TextInput
+                style={styles.dateInput}
+                value={inputValue}
+                onChangeText={setInputValue}
+                placeholder="2026-06-15"
+                placeholderTextColor={Colors.text.tertiary}
+                keyboardType="numbers-and-punctuation"
+                autoFocus
+                maxLength={10}
+              />
             </View>
-            <DateTimePicker
-              value={dates[pickerSlot.id]?.[pickerSlot.field] ?? new Date()}
-              mode="date"
-              display="spinner"
-              minimumDate={new Date()}
-              textColor="#fff"
-              onChange={(_, date) => {
-                if (date) {
-                  setDates((prev) => ({
-                    ...prev,
-                    [pickerSlot.id]: {
-                      ...prev[pickerSlot.id],
-                      [pickerSlot.field]: date,
-                    },
-                  }));
-                }
-              }}
-            />
-          </View>
-        )}
+          </KeyboardAvoidingView>
+        </Modal>
 
         {/* Bottom CTA */}
         <View style={styles.bottom}>
@@ -327,24 +342,38 @@ const styles = StyleSheet.create({
   dateBtnText: { fontSize: 12, color: Colors.text.tertiary, flex: 1 },
   dateBtnTextSet: { color: '#FF6B00' },
 
+  modalOverlay: { flex: 1 },
   pickerContainer: {
-    position: 'absolute',
-    bottom: 0, left: 0, right: 0,
     backgroundColor: '#1A1A2E',
     borderTopWidth: 1,
     borderTopColor: Colors.glass.border,
+    paddingBottom: 32,
   },
   pickerToolbar: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
     paddingHorizontal: 20,
-    paddingVertical: 10,
+    paddingVertical: 12,
     borderBottomWidth: 1,
     borderBottomColor: Colors.glass.border,
   },
   pickerLabel: { fontSize: 15, fontWeight: '600', color: '#fff' },
   pickerDone: { fontSize: 15, color: '#FF6B00', fontWeight: '600' },
+  pickerHint: { fontSize: 12, color: Colors.text.tertiary, paddingHorizontal: 20, paddingTop: 12, marginBottom: 6 },
+  dateInput: {
+    marginHorizontal: 20,
+    backgroundColor: Colors.glass.surface,
+    borderWidth: 1,
+    borderColor: Colors.glass.border,
+    borderRadius: Radius.item,
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    fontSize: 18,
+    fontWeight: '600',
+    color: '#fff',
+    letterSpacing: 1,
+  },
 
   bottom: {
     position: 'absolute',

@@ -1,12 +1,14 @@
 import { useEffect, useState } from 'react';
-import { ActivityIndicator, FlatList, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { ActivityIndicator, Alert, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useNavigation, useRoute } from '@react-navigation/native';
 import Ionicons from 'react-native-vector-icons/Ionicons';
 import { supabase } from '@/lib/supabase/client';
 import { Colors, Radius, Spacing, Typography } from '@/constants/theme';
-import { GlassCard, GradientBackground } from '@/components/ui';
+import { GlassButton, GlassCard, GradientBackground } from '@/components/ui';
 import type { MaterialOrder, MaterialOrderBid } from '@/types/database.types';
+
+const DELIVERABLE_STATUSES = ['accepted', 'processing', 'shipped'];
 
 export default function SupplierOrderDetail() {
   const navigation = useNavigation<any>();
@@ -15,6 +17,7 @@ export default function SupplierOrderDetail() {
   const [order, setOrder] = useState<MaterialOrder | null>(null);
   const [bids, setBids] = useState<MaterialOrderBid[]>([]);
   const [loading, setLoading] = useState(true);
+  const [confirming, setConfirming] = useState(false);
 
   useEffect(() => {
     (async () => {
@@ -27,6 +30,34 @@ export default function SupplierOrderDetail() {
       setLoading(false);
     })();
   }, [orderId]);
+
+  const handleConfirmDelivery = async () => {
+    Alert.alert(
+      'Confirm Delivery',
+      'Confirm that this order has been delivered? This will trigger your payout.',
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Confirm Delivery',
+          onPress: async () => {
+            setConfirming(true);
+            try {
+              const { error } = await supabase.functions.invoke('supplier-payout', {
+                body: { order_id: orderId },
+              });
+              if (error) throw error;
+              setOrder((prev) => prev ? { ...prev, status: 'paid' } : prev);
+              Alert.alert('Delivery confirmed', 'Your payout has been initiated and will arrive within 2–3 business days.');
+            } catch (err) {
+              Alert.alert('Error', err instanceof Error ? err.message : 'Failed to confirm delivery.');
+            } finally {
+              setConfirming(false);
+            }
+          },
+        },
+      ]
+    );
+  };
 
   if (loading) return <View style={styles.center}><ActivityIndicator color={Colors.accent} size="large" /></View>;
   if (!order) return null;
@@ -77,6 +108,24 @@ export default function SupplierOrderDetail() {
               ))}
             </GlassCard>
           )}
+
+          {order.status === 'paid' && (
+            <GlassCard style={styles.paidBanner}>
+              <Ionicons name="checkmark-circle" size={20} color="#34D399" />
+              <Text style={styles.paidText}>Payout initiated — funds arriving within 2–3 business days</Text>
+            </GlassCard>
+          )}
+
+          {DELIVERABLE_STATUSES.includes(order.status) && (
+            <GlassButton
+              label="Confirm Delivery"
+              onPress={handleConfirmDelivery}
+              loading={confirming}
+              fullWidth
+              size="lg"
+              style={styles.deliverBtn}
+            />
+          )}
         </ScrollView>
       </SafeAreaView>
     </GradientBackground>
@@ -114,4 +163,7 @@ const styles = StyleSheet.create({
   bidMeta: { fontSize: 12, color: Colors.text.tertiary, marginTop: 2 },
   bidPrice: { fontSize: 16, fontWeight: '700', color: Colors.accent },
   selectedLabel: { fontSize: 11, color: '#34D399', fontWeight: '700', marginTop: 2 },
+  paidBanner: { flexDirection: 'row', alignItems: 'center', gap: 10, padding: Spacing.md },
+  paidText: { flex: 1, fontSize: 14, color: '#34D399', fontWeight: '500', lineHeight: 20 },
+  deliverBtn: { marginTop: 4 },
 });
