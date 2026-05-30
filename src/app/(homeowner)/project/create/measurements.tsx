@@ -155,6 +155,7 @@ export default function MeasurementsStep() {
   // Tile (bathroom)
   const [floorTileArea, setFloorTileArea] = useState('');
   const [wallTileArea, setWallTileArea] = useState('');
+  const [showAdvanced, setShowAdvanced] = useState(false);
 
   const kitchenValues = [
     upperCabHeight, lowerCabHeight, cabDepth, upperLinearFt, lowerLinearFt,
@@ -230,7 +231,7 @@ export default function MeasurementsStep() {
             <Text style={styles.stepLabel}>STEP 3 OF 8</Text>
             <Text style={styles.title}>Room measurements</Text>
             <Text style={styles.subtitle}>
-              The more detail you provide, the more accurate your cost estimate will be. All fields are optional.
+              Start with the room size. Contractor-level details are optional and can be added if you know them.
             </Text>
 
             {/* ── LiDAR Scan CTA ── */}
@@ -265,8 +266,40 @@ export default function MeasurementsStep() {
               <Field label="Ceiling height" value={ceilingHeight} onChangeText={setCeilingHeight} />
             </Card>
 
-            {isBathroom ? (
-              <>
+            {/* ── Doors & Windows ── */}
+            <SectionHeader icon="albums-outline" title="Openings" />
+            <Card>
+              <Field label="Number of doors" hint={isBathroom ? 'Entry or shower door' : 'Entry or pantry doors'} value={numDoors} onChangeText={setNumDoors} unit="" keyboardType="number-pad" />
+              <Divider />
+              <Field label="Number of windows" value={numWindows} onChangeText={setNumWindows} unit="" keyboardType="number-pad" />
+            </Card>
+
+            <TouchableOpacity
+              style={styles.advancedToggle}
+              onPress={() => setShowAdvanced((v) => !v)}
+              activeOpacity={0.82}
+            >
+              <View style={styles.advancedIconWrap}>
+                <Ionicons name="options-outline" size={20} color="#FF6B00" />
+              </View>
+              <View style={styles.advancedTextWrap}>
+                <Text style={styles.advancedTitle}>Advanced measurements</Text>
+                <Text style={styles.advancedSubtitle}>
+                  {isBathroom
+                    ? 'Vanity, shower/tub, tile, and exact opening sizes.'
+                    : 'Cabinets, countertops, appliances, island, and exact opening sizes.'}
+                </Text>
+              </View>
+              <Ionicons
+                name={showAdvanced ? 'chevron-up' : 'chevron-down'}
+                size={20}
+                color={Colors.text.tertiary}
+              />
+            </TouchableOpacity>
+
+            {showAdvanced && (
+              isBathroom ? (
+                <>
                 {/* ── Shower / Tub ── */}
                 <SectionHeader icon="water-outline" title="Shower / Tub" />
                 <Card>
@@ -296,9 +329,9 @@ export default function MeasurementsStep() {
                   <Divider />
                   <Field label="Wall tile area" hint="Shower/tub surround" value={wallTileArea} onChangeText={setWallTileArea} unit="sqft" />
                 </Card>
-              </>
-            ) : (
-              <>
+                </>
+              ) : (
+                <>
                 {/* ── Cabinets ── */}
                 <SectionHeader icon="grid-outline" title="Cabinets" />
                 <Card>
@@ -318,27 +351,7 @@ export default function MeasurementsStep() {
                 <Card>
                   <Field label="Total countertop length" hint="All sections combined" value={countertopLinearFt} onChangeText={setCountertopLinearFt} />
                 </Card>
-              </>
-            )}
 
-            {/* ── Doors & Windows ── */}
-            <SectionHeader icon="albums-outline" title="Doors & Windows" />
-            <Card>
-              <Field label="Number of doors" hint={isBathroom ? 'Incl. shower door' : 'Incl. pantry & entry'} value={numDoors} onChangeText={setNumDoors} unit="" keyboardType="number-pad" />
-              <Divider />
-              <Field label="Door width" value={doorWidth} onChangeText={setDoorWidth} />
-              <Divider />
-              <Field label="Door height" value={doorHeight} onChangeText={setDoorHeight} />
-              <Divider />
-              <Field label="Number of windows" value={numWindows} onChangeText={setNumWindows} unit="" keyboardType="number-pad" />
-              <Divider />
-              <Field label="Window width" hint="Typical window" value={windowWidth} onChangeText={setWindowWidth} />
-              <Divider />
-              <Field label="Window height" hint="Typical window" value={windowHeight} onChangeText={setWindowHeight} />
-            </Card>
-
-            {!isBathroom && (
-              <>
                 {/* ── Appliances ── */}
                 <SectionHeader icon="hardware-chip-outline" title="Appliances" />
                 <Card>
@@ -362,6 +375,22 @@ export default function MeasurementsStep() {
                     </>
                   )}
                 </Card>
+                </>
+              )
+            )}
+
+            {showAdvanced && (
+              <>
+                <SectionHeader icon="resize-outline" title="Exact opening sizes" />
+                <Card>
+                  <Field label="Door width" value={doorWidth} onChangeText={setDoorWidth} />
+                  <Divider />
+                  <Field label="Door height" value={doorHeight} onChangeText={setDoorHeight} />
+                  <Divider />
+                  <Field label="Window width" hint="Typical window" value={windowWidth} onChangeText={setWindowWidth} />
+                  <Divider />
+                  <Field label="Window height" hint="Typical window" value={windowHeight} onChangeText={setWindowHeight} />
+                </Card>
               </>
             )}
 
@@ -369,7 +398,7 @@ export default function MeasurementsStep() {
             <View style={styles.tip}>
               <Ionicons name="information-circle-outline" size={15} color={Colors.text.tertiary} />
               <Text style={styles.tipText}>
-                Not sure about some fields? Leave them blank — our AI estimates what it can from your photos.
+                Leave anything blank if you are unsure. Photos and the pricing engine will use standard defaults.
               </Text>
             </View>
 
@@ -496,6 +525,29 @@ const styles = StyleSheet.create({
   lidarText: { flex: 1 },
   lidarTitle: { fontSize: 15, fontWeight: '700', color: '#fff', marginBottom: 3 },
   lidarSub: { fontSize: 12, color: Colors.text.secondary, lineHeight: 16 },
+
+  advancedToggle: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+    marginTop: Spacing.md,
+    padding: 14,
+    borderRadius: Radius.card,
+    borderWidth: 1,
+    borderColor: Colors.surface.borderStrong,
+    backgroundColor: Colors.surface.default,
+  },
+  advancedIconWrap: {
+    width: 38,
+    height: 38,
+    borderRadius: 19,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: 'rgba(255, 107, 0, 0.12)',
+  },
+  advancedTextWrap: { flex: 1 },
+  advancedTitle: { fontSize: 15, fontWeight: '700', color: Colors.text.primary, marginBottom: 2 },
+  advancedSubtitle: { fontSize: 12, color: Colors.text.secondary, lineHeight: 16 },
 
   orRow: {
     flexDirection: 'row',

@@ -92,21 +92,9 @@ class USDZViewerViewController: UIViewController {
               let center = wall["center"] as? [String: Double],
               let cx = center["x"], let cy = center["y"], let cz = center["z"] else { continue }
 
-        // Determine orientation: horizontal walls have more X extent
-        let isHorizontal = abs(cx) > abs(cz) || walls.filter({ w in
-          guard let wc = w["center"] as? [String: Double], let wz = wc["z"] else { return false }
-          return abs(wz - cz) < 0.3
-        }).count >= walls.filter({ w in
-          guard let wc = w["center"] as? [String: Double], let wx = wc["x"] else { return false }
-          return abs(wx - cx) < 0.3
-        }).count
-
-        let wallGeo: SCNBox
-        if isHorizontal {
-          wallGeo = SCNBox(width: CGFloat(width), height: CGFloat(height), length: CGFloat(wallThickness), chamferRadius: 0)
-        } else {
-          wallGeo = SCNBox(width: CGFloat(wallThickness), height: CGFloat(height), length: CGFloat(width), chamferRadius: 0)
-        }
+        let angle = angleFrom(wall)
+        let isHorizontal = abs(cos(angle)) >= abs(sin(angle))
+        let wallGeo = SCNBox(width: CGFloat(width), height: CGFloat(height), length: CGFloat(wallThickness), chamferRadius: 0)
 
         let material = SCNMaterial()
         material.diffuse.contents = wallColor
@@ -115,6 +103,7 @@ class USDZViewerViewController: UIViewController {
 
         let wallNode = SCNNode(geometry: wallGeo)
         wallNode.position = SCNVector3(Float(cx), Float(cy), Float(cz))
+        wallNode.eulerAngles.y = -angle
         scene.rootNode.addChildNode(wallNode)
 
         // Add dimension label on the wall
@@ -156,6 +145,7 @@ class USDZViewerViewController: UIViewController {
 
         let doorNode = SCNNode(geometry: doorGeo)
         doorNode.position = SCNVector3(Float(cx), Float(cy), Float(cz))
+        doorNode.eulerAngles.y = -angleFrom(door)
         scene.rootNode.addChildNode(doorNode)
 
         let labelText = String(format: "Door %.1fm", width)
@@ -181,6 +171,7 @@ class USDZViewerViewController: UIViewController {
 
         let winNode = SCNNode(geometry: winGeo)
         winNode.position = SCNVector3(Float(cx), Float(cy), Float(cz))
+        winNode.eulerAngles.y = -angleFrom(window)
         scene.rootNode.addChildNode(winNode)
 
         let labelText = String(format: "Window %.1fm", width)
@@ -262,15 +253,47 @@ class USDZViewerViewController: UIViewController {
     return textNode
   }
 
+  private func angleFrom(_ item: [String: Any]) -> Float {
+    if let angle = item["angle"] as? Double {
+      return Float(angle)
+    }
+    if let angle = item["angle"] as? Float {
+      return angle
+    }
+    return 0
+  }
+
   private func setupCamera(for scene: SCNScene) {
     let cameraNode = SCNNode()
     let camera = SCNCamera()
     camera.automaticallyAdjustsZRange = true
-    camera.fieldOfView = 50
+    camera.usesOrthographicProjection = true
+    camera.zNear = 0.01
+    camera.zFar = 100
+
+    let bounds = scene.rootNode.boundingBox
+    let minBox = bounds.min
+    let maxBox = bounds.max
+    let spanX = maxBox.x - minBox.x
+    let spanY = maxBox.y - minBox.y
+    let spanZ = maxBox.z - minBox.z
+    let maxSpan = Swift.max(3.0, Swift.max(spanX, spanZ))
+    let center = SCNVector3(
+      x: (minBox.x + maxBox.x) / 2,
+      y: Swift.max(0.8, spanY * 0.35),
+      z: (minBox.z + maxBox.z) / 2
+    )
+
+    camera.orthographicScale = Double(Swift.max(maxSpan * 1.45, spanY * 1.25))
     cameraNode.camera = camera
-    cameraNode.position = SCNVector3(x: 0, y: 6, z: 6)
-    cameraNode.look(at: SCNVector3(x: 0, y: 1, z: 0))
+    cameraNode.position = SCNVector3(
+      x: center.x + maxSpan * 0.75,
+      y: maxBox.y + maxSpan * 0.85,
+      z: center.z + maxSpan * 0.75
+    )
+    cameraNode.look(at: center)
     scene.rootNode.addChildNode(cameraNode)
+    sceneView.pointOfView = cameraNode
   }
 
   private func setupLighting(for scene: SCNScene) {

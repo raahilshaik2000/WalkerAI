@@ -135,12 +135,12 @@ class RoomPlanModule: RCTEventEmitter {
   private func generateMockScanData() -> [String: Any] {
     // Realistic L-shaped living room mock
     let walls: [[String: Any]] = [
-      ["id": "wall_1", "width": 4.2, "height": 2.7, "center": ["x": 0.0, "y": 1.35, "z": -2.1]],
-      ["id": "wall_2", "width": 3.5, "height": 2.7, "center": ["x": 2.1, "y": 1.35, "z": 0.0]],
-      ["id": "wall_3", "width": 2.0, "height": 2.7, "center": ["x": 1.1, "y": 1.35, "z": 1.75]],
-      ["id": "wall_4", "width": 1.5, "height": 2.7, "center": ["x": 0.1, "y": 1.35, "z": 1.0]],
-      ["id": "wall_5", "width": 2.5, "height": 2.7, "center": ["x": -1.15, "y": 1.35, "z": 1.75]],
-      ["id": "wall_6", "width": 3.5, "height": 2.7, "center": ["x": -2.1, "y": 1.35, "z": 0.0]]
+      ["id": "wall_1", "width": 4.2, "height": 2.7, "angle": 0.0, "center": ["x": 0.0, "y": 1.35, "z": -2.1]],
+      ["id": "wall_2", "width": 3.5, "height": 2.7, "angle": Double.pi / 2, "center": ["x": 2.1, "y": 1.35, "z": 0.0]],
+      ["id": "wall_3", "width": 2.0, "height": 2.7, "angle": 0.0, "center": ["x": 1.1, "y": 1.35, "z": 1.75]],
+      ["id": "wall_4", "width": 1.5, "height": 2.7, "angle": Double.pi / 2, "center": ["x": 0.1, "y": 1.35, "z": 1.0]],
+      ["id": "wall_5", "width": 2.5, "height": 2.7, "angle": 0.0, "center": ["x": -1.15, "y": 1.35, "z": 1.75]],
+      ["id": "wall_6", "width": 3.5, "height": 2.7, "angle": Double.pi / 2, "center": ["x": -2.1, "y": 1.35, "z": 0.0]]
     ]
 
     let doors: [[String: Any]] = [

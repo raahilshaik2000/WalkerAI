@@ -9,13 +9,15 @@ import {
   View,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { useNavigation } from '@react-navigation/native';
+import { useNavigation, useRoute } from '@react-navigation/native';
 import Ionicons from 'react-native-vector-icons/Ionicons';
 import { GlassButton, GlassInput, GradientBackground } from '@/components/ui';
 import { Colors, Typography, Spacing } from '@/constants/theme';
 
 export default function ManualMeasurementScreen() {
   const navigation = useNavigation<any>();
+  const route = useRoute<any>();
+  const fromWizard = route.params?.fromWizard ?? false;
   const [length, setLength] = useState('');
   const [width, setWidth] = useState('');
   const [height, setHeight] = useState('2.7');
@@ -23,9 +25,9 @@ export default function ManualMeasurementScreen() {
   const [windowCount, setWindowCount] = useState('1');
 
   function handleGenerate() {
-    const l = parseFloat(length);
-    const w = parseFloat(width);
-    const h = parseFloat(height) || 2.7;
+    const l = parseDimension(length);
+    const w = parseDimension(width);
+    const h = parseDimension(height) || 2.7;
     const doors = parseInt(doorCount) || 0;
     const windows = parseInt(windowCount) || 0;
 
@@ -39,10 +41,10 @@ export default function ManualMeasurementScreen() {
     const halfW = w / 2;
 
     const walls = [
-      { id: 'wall_1', width: l, height: h, center: { x: 0, y: h / 2, z: -halfW } },
-      { id: 'wall_2', width: w, height: h, center: { x: halfL, y: h / 2, z: 0 } },
-      { id: 'wall_3', width: l, height: h, center: { x: 0, y: h / 2, z: halfW } },
-      { id: 'wall_4', width: w, height: h, center: { x: -halfL, y: h / 2, z: 0 } },
+      { id: 'wall_1', width: l, height: h, angle: 0, center: { x: 0, y: h / 2, z: -halfW } },
+      { id: 'wall_2', width: w, height: h, angle: Math.PI / 2, center: { x: halfL, y: h / 2, z: 0 } },
+      { id: 'wall_3', width: l, height: h, angle: 0, center: { x: 0, y: h / 2, z: halfW } },
+      { id: 'wall_4', width: w, height: h, angle: Math.PI / 2, center: { x: -halfL, y: h / 2, z: 0 } },
     ];
 
     // Place doors evenly along wall 1
@@ -50,6 +52,7 @@ export default function ManualMeasurementScreen() {
       id: `door_${i}`,
       width: 0.9,
       height: 2.1,
+      angle: 0,
       center: {
         x: -halfL + ((i + 1) * l) / (doors + 1),
         y: 1.05,
@@ -62,6 +65,7 @@ export default function ManualMeasurementScreen() {
       id: `window_${i}`,
       width: 1.2,
       height: 1.0,
+      angle: Math.PI / 2,
       center: {
         x: halfL,
         y: 1.8,
@@ -84,7 +88,7 @@ export default function ManualMeasurementScreen() {
       isMock: false,
     };
 
-    navigation.replace('RoomResults', { scanData });
+    navigation.replace('RoomResults', { scanData, fromWizard });
   }
 
   return (
@@ -189,6 +193,14 @@ export default function ManualMeasurementScreen() {
       </SafeAreaView>
     </GradientBackground>
   );
+}
+
+function parseDimension(value: string) {
+  const normalized = value
+    .replace(/[٫٬,·•]/g, '.')
+    .replace(/[^\d.-]/g, '');
+
+  return parseFloat(normalized);
 }
 
 const styles = StyleSheet.create({

@@ -11,11 +11,13 @@ import Svg, {
   Marker,
 } from 'react-native-svg';
 import { Colors } from '@/constants/theme';
+import { normalizeFloorPlan, type NormalizedSegment } from '@/lib/room-scan/normalizeFloorPlan';
 
 interface WallData {
   id: string;
   width: number;
   height: number;
+  angle?: number;
   center: { x: number; y: number; z: number };
 }
 
@@ -23,6 +25,7 @@ interface DoorData {
   id: string;
   width: number;
   height: number;
+  angle?: number;
   center: { x: number; y: number; z: number };
 }
 
@@ -30,6 +33,7 @@ interface WindowData {
   id: string;
   width: number;
   height: number;
+  angle?: number;
   center: { x: number; y: number; z: number };
 }
 
@@ -40,15 +44,7 @@ interface FloorPlanViewProps {
   size: number;
 }
 
-interface WallSegment {
-  x1: number;
-  y1: number;
-  x2: number;
-  y2: number;
-  length: number;
-  isHorizontal: boolean;
-  id: string;
-}
+type WallSegment = NormalizedSegment;
 
 const WALL_THICKNESS = 0.18;
 const WALL_COLOR = '#FFFFFF';
@@ -62,56 +58,24 @@ const FLOOR_FILL = '#0D0D0D';
 
 export function FloorPlanView({ walls, doors, windows, size }: FloorPlanViewProps) {
   const plan = useMemo(() => {
-    if (walls.length === 0) return null;
+    const normalized = normalizeFloorPlan(walls);
+    if (normalized.quality === 'empty') return null;
 
-    // Sort walls into horizontal and vertical based on neighbor analysis
-    const segments: WallSegment[] = walls.map((wall) => {
-      const cx = wall.center.x;
-      const cz = wall.center.z;
-      const halfW = wall.width / 2;
-
-      // Count neighbors sharing same Z (horizontal) vs same X (vertical)
-      const hNeighbors = walls.filter(w => w.id !== wall.id && Math.abs(w.center.z - cz) < 0.5).length;
-      const vNeighbors = walls.filter(w => w.id !== wall.id && Math.abs(w.center.x - cx) < 0.5).length;
-      const isHorizontal = hNeighbors >= vNeighbors;
-
-      return {
-        id: wall.id,
-        x1: isHorizontal ? cx - halfW : cx,
-        y1: isHorizontal ? cz : cz - halfW,
-        x2: isHorizontal ? cx + halfW : cx,
-        y2: isHorizontal ? cz : cz + halfW,
-        length: wall.width,
-        isHorizontal,
-      };
-    });
-
-    // Build connected room polygon by sorting wall endpoints
-    const corners = buildRoomPolygon(segments);
-
-    // Compute bounds
-    const allX = corners.map(c => c.x);
-    const allY = corners.map(c => c.y);
-    const minX = Math.min(...allX);
-    const maxX = Math.max(...allX);
-    const minY = Math.min(...allY);
-    const maxY = Math.max(...allY);
-    const roomW = maxX - minX;
-    const roomH = maxY - minY;
+    const { segments, corners, bounds } = normalized;
 
     // Add generous padding for dimension lines
-    const pad = Math.max(roomW, roomH) * 0.35;
-    const vbX = minX - pad;
-    const vbY = minY - pad;
-    const vbW = roomW + pad * 2;
-    const vbH = roomH + pad * 2;
+    const pad = Math.max(bounds.roomW, bounds.roomH) * 0.35;
+    const vbX = bounds.minX - pad;
+    const vbY = bounds.minY - pad;
+    const vbW = bounds.roomW + pad * 2;
+    const vbH = bounds.roomH + pad * 2;
 
     return {
       segments,
       corners,
       viewBox: `${vbX} ${vbY} ${vbW} ${vbH}`,
-      bounds: { minX, maxX, minY, maxY, roomW, roomH },
-      scale: Math.max(roomW, roomH),
+      bounds,
+      scale: Math.max(bounds.roomW, bounds.roomH),
     };
   }, [walls]);
 
@@ -293,7 +257,7 @@ export function FloorPlanView({ walls, doors, windows, size }: FloorPlanViewProp
 
         {/* Dimension lines outside the room */}
         {segments.map((seg, i) => {
-          const label = `${seg.length.toFixed(1)}m`;
+          const label = `${(seg.length * 3.28084).toFixed(1)}ft`;
           if (seg.isHorizontal) {
             // Position dimension below or above wall
             const isTop = seg.y1 <= (bounds.minY + bounds.maxY) / 2;
@@ -385,7 +349,7 @@ export function FloorPlanView({ walls, doors, windows, size }: FloorPlanViewProp
               fontWeight="600"
               textAnchor="middle"
             >
-              {`${door.width.toFixed(1)}m`}
+              {`${(door.width * 3.28084).toFixed(1)}ft`}
             </SvgText>
           );
         })}
@@ -404,7 +368,7 @@ export function FloorPlanView({ walls, doors, windows, size }: FloorPlanViewProp
               fontWeight="600"
               textAnchor="middle"
             >
-              {`${win.width.toFixed(1)}m`}
+              {`${(win.width * 3.28084).toFixed(1)}ft`}
             </SvgText>
           );
         })}

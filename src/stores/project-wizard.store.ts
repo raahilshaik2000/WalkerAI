@@ -53,6 +53,14 @@ export interface RoomMeasurements {
   hasIsland: boolean;
   islandLength: string;
   islandWidth: string;
+  // Bathroom-specific fields
+  hasShowerTub?: boolean;
+  showerLength?: string;
+  showerWidth?: string;
+  vanityWidth?: string;
+  numSinks?: string;
+  floorTileArea?: string;
+  wallTileArea?: string;
 }
 
 interface ProjectWizardState {

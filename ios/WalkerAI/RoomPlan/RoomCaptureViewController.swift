@@ -122,6 +122,7 @@ class RoomCaptureViewController: UIViewController {
         "id": "wall_\(i)",
         "width": Double(wall.dimensions.x),
         "height": Double(wall.dimensions.y),
+        "angle": Double(atan2(wall.transform.columns.0.z, wall.transform.columns.0.x)),
         "center": [
           "x": Double(wall.transform.columns.3.x),
           "y": Double(wall.transform.columns.3.y),
@@ -136,6 +137,7 @@ class RoomCaptureViewController: UIViewController {
         "id": "door_\(i)",
         "width": Double(door.dimensions.x),
         "height": Double(door.dimensions.y),
+        "angle": Double(atan2(door.transform.columns.0.z, door.transform.columns.0.x)),
         "center": [
           "x": Double(door.transform.columns.3.x),
           "y": Double(door.transform.columns.3.y),
@@ -150,6 +152,7 @@ class RoomCaptureViewController: UIViewController {
         "id": "window_\(i)",
         "width": Double(window.dimensions.x),
         "height": Double(window.dimensions.y),
+        "angle": Double(atan2(window.transform.columns.0.z, window.transform.columns.0.x)),
         "center": [
           "x": Double(window.transform.columns.3.x),
           "y": Double(window.transform.columns.3.y),

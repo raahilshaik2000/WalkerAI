@@ -1,10 +1,15 @@
 import React, { useState } from 'react';
 import {
   Dimensions,
+  KeyboardAvoidingView,
+  Modal,
   Platform,
   ScrollView,
   StyleSheet,
   Text,
+  TextInput,
+  TouchableOpacity,
+  ViewStyle,
   View,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -30,24 +35,62 @@ const M_TO_FT = 3.28084;
 export default function RoomResultsScreen() {
   const navigation = useNavigation<any>();
   const route = useRoute<any>();
-  const { scanData, fromWizard } = route.params;
+  const { scanData, fromWizard } = route.params ?? {};
   const [viewMode, setViewMode] = useState<ViewMode>('floorplan');
+  const [editOpen, setEditOpen] = useState(false);
+  const [roomDimensions, setRoomDimensions] = useState(() => scanData.roomDimensions ?? {});
+  const [draftDimensions, setDraftDimensions] = useState({
+    length: String(scanData.roomDimensions?.length ?? ''),
+    width: String(scanData.roomDimensions?.width ?? ''),
+    height: String(scanData.roomDimensions?.height ?? ''),
+  });
   const { setMeasurements } = useProjectWizardStore();
 
   function handleUseMeasurements() {
-    const rd = scanData.roomDimensions ?? {};
+    const rd = roomDimensions ?? {};
     setMeasurements({
       lengthFt: rd.length ? (rd.length * M_TO_FT).toFixed(1) : '',
       widthFt: rd.width ? (rd.width * M_TO_FT).toFixed(1) : '',
       ceilingHeightFt: rd.height ? (rd.height * M_TO_FT).toFixed(1) : '',
       numDoors: String(scanData.doors?.length ?? 0),
       numWindows: String(scanData.windows?.length ?? 0),
+      upperCabHeight: '',
+      lowerCabHeight: '',
+      cabDepth: '',
+      upperLinearFt: '',
+      lowerLinearFt: '',
+      countertopLinearFt: '',
+      doorWidth: '',
+      doorHeight: '',
+      windowWidth: '',
+      windowHeight: '',
+      fridgeWidth: '',
+      rangeWidth: '',
+      hasDishwasher: false,
+      hasIsland: false,
+      islandLength: '',
+      islandWidth: '',
     });
     useProjectWizardStore.getState().setStep(3);
-    navigation.navigate('Analyzing');
+    navigation.navigate('ProjectCreate', { screen: 'Analyzing' });
   }
 
-  const { walls = [], doors = [], windows = [], objects = [], roomDimensions, usdzFilePath, isMock } = scanData;
+  function saveCorrections() {
+    const length = parseDimension(draftDimensions.length);
+    const width = parseDimension(draftDimensions.width);
+    const height = parseDimension(draftDimensions.height);
+    setRoomDimensions({
+      length: Number.isFinite(length) && length > 0 ? length : roomDimensions.length,
+      width: Number.isFinite(width) && width > 0 ? width : roomDimensions.width,
+      height: Number.isFinite(height) && height > 0 ? height : roomDimensions.height,
+      area: Number.isFinite(length) && Number.isFinite(width) && length > 0 && width > 0
+        ? length * width
+        : roomDimensions.area,
+    });
+    setEditOpen(false);
+  }
+
+  const { walls = [], doors = [], windows = [], objects = [], usdzFilePath, isMock } = scanData;
 
   return (
     <GradientBackground>
@@ -133,6 +176,17 @@ export default function RoomResultsScreen() {
             doorCount={doors.length}
             windowCount={windows.length}
           />
+
+          <TouchableOpacity style={styles.adjustCard} activeOpacity={0.8} onPress={() => setEditOpen(true)}>
+            <View style={styles.adjustIcon}>
+              <Ionicons name="create-outline" size={18} color="#06B6D4" />
+            </View>
+            <View style={{ flex: 1 }}>
+              <Text style={styles.adjustTitle}>Adjust measurements</Text>
+              <Text style={styles.adjustBody}>Correct the scan before using it for estimates.</Text>
+            </View>
+            <Ionicons name="chevron-forward" size={18} color={Colors.text.tertiary} />
+          </TouchableOpacity>
 
           {/* Wall Measurements */}
           {walls.length > 0 && (
@@ -242,8 +296,69 @@ export default function RoomResultsScreen() {
             />
           )}
         </View>
+
+        <Modal visible={editOpen} transparent animationType="fade" onRequestClose={() => setEditOpen(false)}>
+          <KeyboardAvoidingView
+            style={styles.modalOverlay}
+            behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+          >
+            <View style={styles.modalCard}>
+              <Text style={styles.modalTitle}>Adjust Measurements</Text>
+              <Text style={styles.modalBody}>Values are stored in meters and converted to feet for the estimate.</Text>
+
+              <View style={styles.inputRow}>
+                <DimensionInput style={styles.rowField} label="Length" value={draftDimensions.length} onChangeText={(length) => setDraftDimensions((d) => ({ ...d, length }))} />
+                <DimensionInput style={styles.rowField} label="Width" value={draftDimensions.width} onChangeText={(width) => setDraftDimensions((d) => ({ ...d, width }))} />
+              </View>
+              <DimensionInput label="Ceiling Height" value={draftDimensions.height} onChangeText={(height) => setDraftDimensions((d) => ({ ...d, height }))} />
+
+              <View style={styles.modalActions}>
+                <TouchableOpacity style={styles.modalSecondary} onPress={() => setEditOpen(false)}>
+                  <Text style={styles.modalSecondaryText}>Cancel</Text>
+                </TouchableOpacity>
+                <TouchableOpacity style={styles.modalPrimary} onPress={saveCorrections}>
+                  <Text style={styles.modalPrimaryText}>Save</Text>
+                </TouchableOpacity>
+              </View>
+            </View>
+          </KeyboardAvoidingView>
+        </Modal>
       </SafeAreaView>
     </GradientBackground>
+  );
+}
+
+function parseDimension(value: string) {
+  const normalized = value
+    .replace(/[٫٬,·•]/g, '.')
+    .replace(/[^\d.-]/g, '');
+
+  return Number.parseFloat(normalized);
+}
+
+function DimensionInput({
+  label,
+  value,
+  onChangeText,
+  style,
+}: {
+  label: string;
+  value: string;
+  onChangeText: (value: string) => void;
+  style?: ViewStyle;
+}) {
+  return (
+    <View style={[styles.dimensionField, style]}>
+      <Text style={styles.dimensionLabel}>{label}</Text>
+      <TextInput
+        style={styles.dimensionInput}
+        value={value}
+        onChangeText={onChangeText}
+        keyboardType="decimal-pad"
+        placeholder="0.0"
+        placeholderTextColor={Colors.text.tertiary}
+      />
+    </View>
   );
 }
 
@@ -335,6 +450,27 @@ const styles = StyleSheet.create({
   legendItem: { flexDirection: 'row', alignItems: 'center' },
   legendDot: { width: 8, height: 8, borderRadius: 4, marginRight: 4 },
   legendLabel: { ...Typography.caption, fontSize: 11 },
+  adjustCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+    backgroundColor: Colors.surface.default,
+    borderRadius: Radius.item,
+    borderWidth: 1,
+    borderColor: Colors.surface.border,
+    padding: 14,
+    marginBottom: Spacing.sm,
+  },
+  adjustIcon: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    backgroundColor: 'rgba(6, 182, 212, 0.12)',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  adjustTitle: { ...Typography.h3, fontSize: 15, marginBottom: 2 },
+  adjustBody: { ...Typography.caption, color: Colors.text.tertiary },
   sectionTitle: {
     ...Typography.h3,
     marginTop: Spacing.sm,
@@ -364,4 +500,50 @@ const styles = StyleSheet.create({
     paddingTop: Spacing.sm,
     backgroundColor: 'rgba(0,0,0,0.9)',
   },
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.72)',
+    justifyContent: 'center',
+    paddingHorizontal: Spacing.md,
+  },
+  modalCard: {
+    backgroundColor: '#1C1C1E',
+    borderRadius: Radius.card,
+    borderWidth: 1,
+    borderColor: Colors.surface.border,
+    padding: Spacing.md,
+  },
+  modalTitle: { ...Typography.h2, marginBottom: 6 },
+  modalBody: { ...Typography.bodySecondary, marginBottom: Spacing.md },
+  inputRow: { flexDirection: 'row', gap: 10 },
+  rowField: { flex: 1 },
+  dimensionField: { marginBottom: 12 },
+  dimensionLabel: { ...Typography.label, marginBottom: 6 },
+  dimensionInput: {
+    backgroundColor: Colors.glass.surface,
+    borderRadius: Radius.item,
+    borderWidth: 1,
+    borderColor: Colors.glass.border,
+    color: Colors.text.primary,
+    paddingHorizontal: 12,
+    paddingVertical: 12,
+    fontSize: 16,
+  },
+  modalActions: { flexDirection: 'row', gap: 10, marginTop: 4 },
+  modalSecondary: {
+    flex: 1,
+    alignItems: 'center',
+    paddingVertical: 13,
+    borderRadius: Radius.item,
+    backgroundColor: Colors.glass.surface,
+  },
+  modalSecondaryText: { color: Colors.text.secondary, fontWeight: '700' },
+  modalPrimary: {
+    flex: 1,
+    alignItems: 'center',
+    paddingVertical: 13,
+    borderRadius: Radius.item,
+    backgroundColor: Colors.accent,
+  },
+  modalPrimaryText: { color: '#000', fontWeight: '800' },
 });

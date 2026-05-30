@@ -91,7 +91,7 @@ export default function RoomScanScreen() {
       <GradientBackground>
         <SafeAreaView style={styles.container}>
           <UnsupportedDevice
-            onManualMeasurement={() => navigation.replace('ManualMeasurement')}
+            onManualMeasurement={() => navigation.replace('ManualMeasurement', { fromWizard })}
             onGoBack={() => navigation.goBack()}
           />
         </SafeAreaView>
