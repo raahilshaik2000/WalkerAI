@@ -18,6 +18,7 @@ import { supabase } from '@/lib/supabase/client';
 import { useAuthStore } from '@/stores/auth.store';
 import { GlassButton, GradientBackground } from '@/components/ui';
 import { Colors, Radius, Spacing, Typography } from '@/constants/theme';
+import { TradeMetricStrip, TradePanel } from '@/components/company/TradeUI';
 
 interface Material {
   id: string;
@@ -52,7 +53,9 @@ export default function ContractorMaterialsScreen() {
       .eq('project_id', projectId)
       .order('item');
 
-    if (!error && data) {
+    if (error) {
+      Alert.alert('Error', error.message);
+    } else if (data) {
       setMaterials(data);
       // Pre-fill with verified qty if exists, else AI quantity
       const initial: Record<string, string> = {};
@@ -65,29 +68,46 @@ export default function ContractorMaterialsScreen() {
   }
 
   async function handleConfirm() {
+    if (!user?.id) {
+      Alert.alert('Error', 'You need to be signed in to verify materials.');
+      return;
+    }
+
     setSaving(true);
     try {
+      const verifiedAt = new Date().toISOString();
+
       // Update each material's verified quantity
       await Promise.all(
-        materials.map((m) => {
-          const qty = parseFloat(quantities[m.id] ?? '');
-          if (isNaN(qty)) return Promise.resolve();
-          return supabase
+        materials.map(async (m) => {
+          const rawQty = (quantities[m.id] ?? '').trim();
+          const qty = Number(rawQty);
+
+          if (!rawQty || !Number.isFinite(qty) || qty < 0) {
+            throw new Error(`Enter a valid quantity for ${m.item}.`);
+          }
+
+          const { error } = await supabase
             .from('materials')
             .update({
               verified_quantity: qty,
-              verified_by: user?.id,
-              verified_at: new Date().toISOString(),
+              verified_by: user.id,
+              verified_at: verifiedAt,
             })
-            .eq('id', m.id);
+            .eq('id', m.id)
+            .select('id')
+            .single();
+
+          if (error) {
+            throw new Error(`Failed to save ${m.item}: ${error.message}`);
+          }
         })
       );
 
       // Sync verified quantities to any existing material orders
       await Promise.all(
         materials.map(async (m) => {
-          const qty = parseFloat(quantities[m.id] ?? '');
-          if (isNaN(qty)) return;
+          const qty = Number((quantities[m.id] ?? '').trim());
           const { data: order } = await supabase
             .from('material_orders')
             .select('id, status')
@@ -96,10 +116,14 @@ export default function ContractorMaterialsScreen() {
             .maybeSingle();
 
           if (order) {
-            await supabase
+            const { error } = await supabase
               .from('material_orders')
               .update({ quantity_needed: qty })
               .eq('id', order.id);
+
+            if (error) {
+              throw new Error(`Failed to sync ${m.item} order: ${error.message}`);
+            }
           }
         })
       );
@@ -122,6 +146,8 @@ export default function ContractorMaterialsScreen() {
       </GradientBackground>
     );
   }
+
+  const verifiedCount = materials.filter((m) => !!m.verified_by).length;
 
   return (
     <GradientBackground>
@@ -148,6 +174,17 @@ export default function ContractorMaterialsScreen() {
               Review the AI-estimated quantities below. Update any items where your field assessment differs from the estimate.
             </Text>
 
+            <TradeMetricStrip
+              items={[
+                { label: 'Items', value: materials.length, tone: 'muted' },
+                { label: 'Verified', value: verifiedCount, tone: verifiedCount === materials.length && materials.length > 0 ? 'success' : 'warning' },
+                { label: 'Changed', value: Object.entries(quantities).filter(([id, qty]) => {
+                  const material = materials.find((m) => m.id === id);
+                  return material && qty !== String(material.quantity ?? '');
+                }).length, tone: 'muted' },
+              ]}
+            />
+
             {materials.length === 0 ? (
               <View style={styles.emptyState}>
                 <Ionicons name="cube-outline" size={40} color={Colors.text.tertiary} />
@@ -161,7 +198,7 @@ export default function ContractorMaterialsScreen() {
                 const changed = currentQty !== originalQty && currentQty !== '';
 
                 return (
-                  <View key={m.id} style={[styles.materialCard, isVerified && styles.materialCardVerified]}>
+                  <TradePanel key={m.id} style={[styles.materialCard, isVerified && styles.materialCardVerified]}>
                     <View style={styles.materialTop}>
                       <View style={styles.materialInfo}>
                         <Text style={styles.materialName}>{m.item}</Text>
@@ -204,7 +241,7 @@ export default function ContractorMaterialsScreen() {
                         AI estimated: {originalQty} {m.unit}
                       </Text>
                     )}
-                  </View>
+                  </TradePanel>
                 );
               })
             )}

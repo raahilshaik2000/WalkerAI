@@ -13,6 +13,7 @@ import { useAuthStore } from '@/stores/auth.store';
 import { formatCad } from '@/lib/formatters';
 import { Colors, Radius, Spacing, Typography } from '@/constants/theme';
 import { GlassCard, GradientBackground, ListItemSkeleton, StatusBadge } from '@/components/ui';
+import { TradeMetricStrip, TradeScreenHeader } from '@/components/company/TradeUI';
 
 interface Milestone {
   id: string;
@@ -118,6 +119,7 @@ export default function CalendarScreen() {
   };
 
   const groups = groupByDate(milestones);
+  const openValue = milestones.reduce((sum, milestone) => sum + milestone.amount, 0);
 
   const statusVariant = (s: string) => {
     if (s === 'pending') return 'pending';
@@ -134,8 +136,14 @@ export default function CalendarScreen() {
           showsVerticalScrollIndicator={false}
           refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={Colors.accent} />}
         >
-          <Text style={styles.title}>Calendar</Text>
-          <Text style={styles.subtitle}>Upcoming milestones & deadlines</Text>
+          <TradeScreenHeader title="Calendar" subtitle="Upcoming milestones and deadlines" />
+          <TradeMetricStrip
+            items={[
+              { label: 'Open items', value: milestones.length, tone: milestones.length ? 'warning' : 'muted' },
+              { label: 'Open value', value: openValue ? formatCad(openValue) : '$0', tone: openValue ? 'success' : 'muted' },
+              { label: 'Today', value: groups.find((g) => g.label === 'TODAY')?.items.length ?? 0, tone: 'muted' },
+            ]}
+          />
 
           {loading ? (
             <>

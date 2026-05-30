@@ -19,6 +19,12 @@ import { useAuthStore } from '@/stores/auth.store';
 import { Colors, Radius, Spacing, Typography } from '@/constants/theme';
 import { GlassButton, GlassCard, GradientBackground, StatusBadge, CardSkeleton } from '@/components/ui';
 import { formatStatusLabel, formatCad } from '@/lib/formatters';
+import {
+  TradeActionTile,
+  TradeMetricStrip,
+  TradePanel,
+  TradeSection,
+} from '@/components/company/TradeUI';
 
 const TRADE_LABELS: Record<string, string> = {
   general_contractor: 'General Contractor',
@@ -31,6 +37,11 @@ const TRADE_LABELS: Record<string, string> = {
   drywall: 'Drywall',
   demolition: 'Demolition',
 };
+
+function formatLocation(address?: string | null, city?: string | null) {
+  if (address && city) return `${address}, ${city}`;
+  return address || city || 'Location pending';
+}
 
 interface Slot {
   id: string;
@@ -140,7 +151,7 @@ export default function JobBriefScreen() {
       ReactNativeHapticFeedback.trigger('notificationSuccess');
       setAlreadyAccepted(true);
       Alert.alert(
-        'Slot accepted!',
+        slotId ? 'Slot accepted!' : 'Job accepted!',
         'The homeowner has been notified. Verify material quantities and await schedule confirmation.',
         [{ text: 'Verify Materials', onPress: () => navigation.navigate('JobMaterials', { id: projectId }) }]
       );
@@ -237,31 +248,39 @@ export default function JobBriefScreen() {
               {job.room_type.charAt(0).toUpperCase() + job.room_type.slice(1)} Renovation
             </Text>
           </View>
-          <Text style={styles.address}>{job.address}</Text>
+          <Text style={styles.address}>{formatLocation(job.address, job.city)}</Text>
+
+          <TradeMetricStrip
+            items={[
+              { label: 'Scope items', value: job.scope_of_work?.length ?? 0, tone: 'muted' },
+              { label: 'Materials', value: job.materials?.length ?? 0, tone: 'muted' },
+              { label: 'Status', value: formatStatusLabel(job.status), tone: job.status === 'dispatching' ? 'warning' : 'success' },
+            ]}
+          />
 
           {/* Cost estimate */}
           {job.ai_cost_min && job.ai_cost_max && (
-            <GlassCard style={styles.card}>
+            <TradePanel style={styles.card}>
               <Text style={styles.sectionLabel}>AI Cost Estimate</Text>
               <Text style={styles.costRange}>
                 {formatCad(job.ai_cost_min)} – {formatCad(job.ai_cost_max)}
               </Text>
               <Text style={styles.costNote}>Use as guidance for your quote</Text>
-            </GlassCard>
+            </TradePanel>
           )}
 
           {/* AI Analysis summary */}
           {!!job.ai_analysis?.ai_observations && (
-            <GlassCard style={styles.card}>
+            <TradePanel style={styles.card}>
               <Text style={styles.sectionLabel}>AI Analysis</Text>
               <Text style={styles.analysisText}>{String(job.ai_analysis.ai_observations)}</Text>
-            </GlassCard>
+            </TradePanel>
           )}
 
           {/* Scope of work */}
           {job.scope_of_work && job.scope_of_work.length > 0 && (
-            <GlassCard style={styles.card}>
-              <Text style={styles.sectionLabel}>Scope of Work</Text>
+            <TradeSection title="Scope of work">
+            <TradePanel style={styles.card}>
               {[...job.scope_of_work]
                 .sort((a, b) => a.sort_order - b.sort_order)
                 .map((item, i) => (
@@ -272,20 +291,22 @@ export default function JobBriefScreen() {
                     <Text style={styles.scopeDesc}>{item.description}</Text>
                   </View>
                 ))}
-            </GlassCard>
+            </TradePanel>
+            </TradeSection>
           )}
 
           {/* Materials */}
           {job.materials && job.materials.length > 0 && (
-            <GlassCard style={styles.card}>
-              <Text style={styles.sectionLabel}>Materials</Text>
+            <TradeSection title="Materials">
+            <TradePanel style={styles.card}>
               {job.materials.map((mat, i) => (
                 <View key={i} style={styles.matRow}>
                   <Text style={styles.matItem}>{mat.item}</Text>
                   <Text style={styles.matQty}>{mat.quantity} {mat.unit}</Text>
                 </View>
               ))}
-            </GlassCard>
+            </TradePanel>
+            </TradeSection>
           )}
 
           {/* Accept CTA */}
@@ -314,20 +335,18 @@ export default function JobBriefScreen() {
               </GlassCard>
               <View style={styles.actionGrid}>
                 {[
-                  { label: 'Payments', iconName: 'cash-multiple', route: 'JobMilestones' },
-                  { label: 'Materials', iconName: 'cube-outline', route: 'JobMaterials' },
-                  { label: 'Messages', iconName: 'chat-outline', route: 'JobMessages' },
-                  { label: 'Changes', iconName: 'pencil-outline', route: 'JobChangeOrders' },
+                  { label: 'Payments', iconName: 'cash-multiple', route: 'JobMilestones', meta: 'Milestones' },
+                  { label: 'Materials', iconName: 'cube-outline', route: 'JobMaterials', meta: 'Verify counts' },
+                  { label: 'Messages', iconName: 'chat-outline', route: 'JobMessages', meta: 'Project thread' },
+                  { label: 'Changes', iconName: 'pencil-outline', route: 'JobChangeOrders', meta: 'Change orders' },
                 ].map((item) => (
-                  <TouchableOpacity
+                  <TradeActionTile
                     key={item.route}
-                    style={styles.actionTile}
+                    label={item.label}
+                    icon={item.iconName}
+                    meta={item.meta}
                     onPress={() => navigation.navigate(item.route as any, { id: projectId })}
-                    activeOpacity={0.85}
-                  >
-                    <Icon name={item.iconName} size={24} color={Colors.text.secondary} />
-                    <Text style={styles.actionTileLabel}>{item.label}</Text>
-                  </TouchableOpacity>
+                  />
                 ))}
               </View>
             </>

@@ -17,7 +17,8 @@ import Ionicons from 'react-native-vector-icons/Ionicons';
 import { supabase } from '@/lib/supabase/client';
 import { Colors, Radius, Spacing, Typography } from '@/constants/theme';
 import { formatStatusLabel } from '@/lib/formatters';
-import { GlassButton, GlassCard, GradientBackground, StatusBadge } from '@/components/ui';
+import { GlassButton, GradientBackground, StatusBadge } from '@/components/ui';
+import { TradeEmptyState, TradeMetricStrip, TradePanel } from '@/components/company/TradeUI';
 
 interface Milestone {
   id: string;
@@ -27,6 +28,12 @@ interface Milestone {
   due_date: string | null;
   completed_at: string | null;
   sort_order: number;
+}
+
+interface QuoteSummary {
+  id: string;
+  status: string | null;
+  submitted_at: string | null;
 }
 
 const STATUS_ORDER = ['pending', 'started', 'in_progress', 'completed', 'homeowner_approved', 'paid'];
@@ -66,23 +73,38 @@ export default function CompanyMilestonesScreen() {
   const [updating, setUpdating] = useState<string | null>(null);
 
   const fetchMilestones = async () => {
-    const { data: quoteData } = await supabase
+    const { data: quotes, error: quoteError } = await supabase
       .from('quotes')
-      .select('id')
+      .select('id, status, submitted_at')
       .eq('project_id', projectId)
-      .eq('status', 'approved')
-      .single();
+      .order('submitted_at', { ascending: false });
 
-    if (!quoteData) {
+    if (quoteError) {
+      Alert.alert('Error', quoteError.message);
       setLoading(false);
       return;
     }
 
-    const { data } = await supabase
+    const quoteData = ((quotes ?? []) as QuoteSummary[]).find((q) => q.status === 'approved')
+      ?? (quotes?.[0] as QuoteSummary | undefined);
+
+    if (!quoteData) {
+      setMilestones([]);
+      setLoading(false);
+      return;
+    }
+
+    const { data, error } = await supabase
       .from('milestones')
       .select('id, title, amount, status, due_date, completed_at, sort_order')
       .eq('quote_id', quoteData.id)
       .order('sort_order');
+
+    if (error) {
+      Alert.alert('Error', error.message);
+      setLoading(false);
+      return;
+    }
 
     setMilestones((data ?? []) as Milestone[]);
     setLoading(false);
@@ -119,7 +141,13 @@ export default function CompanyMilestonesScreen() {
           const updates: Record<string, unknown> = { status: nextStatus };
           if (isComplete) updates.completed_at = new Date().toISOString();
 
-          await supabase.from('milestones').update(updates).eq('id', milestone.id);
+          const { error } = await supabase.from('milestones').update(updates).eq('id', milestone.id);
+          if (error) {
+            Alert.alert('Error', error.message);
+            setUpdating(null);
+            return;
+          }
+
           ReactNativeHapticFeedback.trigger('notificationSuccess');
           setMilestones((prev) =>
             prev.map((m) => m.id === milestone.id ? { ...m, ...updates } as Milestone : m)
@@ -173,9 +201,17 @@ export default function CompanyMilestonesScreen() {
             <View style={{ width: 48 }} />
           </View>
 
+          <TradeMetricStrip
+            items={[
+              { label: 'Milestones', value: milestones.length, tone: 'muted' },
+              { label: 'Total', value: totalAmount ? formatCad(totalAmount) : '$0', tone: totalAmount ? 'success' : 'muted' },
+              { label: 'Paid', value: formatCad(totalPaid), tone: totalPaid ? 'success' : 'muted' },
+            ]}
+          />
+
           {/* Escrow progress */}
           {totalAmount > 0 && (
-            <GlassCard style={styles.card}>
+            <TradePanel style={styles.card}>
               <Text style={styles.sectionLabel}>Payments Received</Text>
               <Text style={styles.escrowAmount}>
                 {formatCad(totalPaid)} <Text style={styles.escrowTotal}>of {formatCad(totalAmount)}</Text>
@@ -183,7 +219,7 @@ export default function CompanyMilestonesScreen() {
               <View style={styles.progressTrack}>
                 <View style={[styles.progressFill, { width: `${progressPct * 100}%` }]} />
               </View>
-            </GlassCard>
+            </TradePanel>
           )}
 
           {/* Milestone list */}
@@ -192,7 +228,7 @@ export default function CompanyMilestonesScreen() {
             const isUpdating = updating === m.id;
 
             return (
-              <GlassCard key={m.id} style={styles.milestoneCard}>
+              <TradePanel key={m.id} style={styles.milestoneCard}>
                 <View style={styles.milestoneHeader}>
                   <View style={styles.stepDot}>
                     <Text style={styles.stepNum}>{i + 1}</Text>
@@ -253,7 +289,7 @@ export default function CompanyMilestonesScreen() {
                 {m.status === 'completed' && (
                   <Text style={styles.waitingText}>Waiting for homeowner approval…</Text>
                 )}
-              </GlassCard>
+              </TradePanel>
             );
           })}
 
@@ -264,11 +300,11 @@ export default function CompanyMilestonesScreen() {
           )}
 
           {!loading && milestones.length === 0 && (
-            <View style={styles.center}>
-              <Icon name="clipboard-text-outline" size={48} color={Colors.text.tertiary} />
-              <Text style={Typography.h3}>No milestones yet</Text>
-              <Text style={Typography.bodySecondary}>Submit a quote to create milestones.</Text>
-            </View>
+            <TradeEmptyState
+              icon="clipboard-text-outline"
+              title="No milestones yet"
+              body="Submit or accept a quote to create project milestones."
+            />
           )}
         </ScrollView>
       </SafeAreaView>

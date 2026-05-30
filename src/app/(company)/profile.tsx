@@ -16,6 +16,7 @@ import { supabase } from '@/lib/supabase/client';
 import { useAuthStore } from '@/stores/auth.store';
 import { Colors, Radius, Spacing, Typography } from '@/constants/theme';
 import { GlassButton, GlassCard, GradientBackground, StatusBadge } from '@/components/ui';
+import { TradeMetricStrip, TradeScreenHeader } from '@/components/company/TradeUI';
 
 interface Company {
   id: string;
@@ -46,13 +47,26 @@ export default function CompanyProfileScreen() {
   const [refreshing, setRefreshing] = useState(false);
 
   const fetchData = useCallback(async () => {
-    if (!user) return;
+    const currentUser = user ?? (await supabase.auth.getUser()).data.user;
+    if (!currentUser) {
+      setLoading(false);
+      setRefreshing(false);
+      return;
+    }
 
-    const { data: co } = await supabase
+    const { data: co, error: companyError } = await supabase
       .from('companies')
       .select('id, name, address, city, province, service_radius_km, verified, rating, total_reviews, license_number, stripe_account_id')
-      .eq('user_id', user.id)
+      .eq('user_id', currentUser.id)
       .single();
+
+    if (companyError) {
+      setCompany(null);
+      setEarnings({ total_paid: 0, active_count: 0, completed_count: 0 });
+      setLoading(false);
+      setRefreshing(false);
+      return;
+    }
 
     setCompany(co as Company | null);
 
@@ -134,7 +148,7 @@ export default function CompanyProfileScreen() {
           showsVerticalScrollIndicator={false}
           refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={Colors.accent} />}
         >
-          <Text style={styles.pageTitle}>Profile</Text>
+          <TradeScreenHeader title="Profile" subtitle="Business status, payouts, and account controls" />
 
           {/* Identity card */}
           <GlassCard style={styles.card}>
@@ -174,20 +188,13 @@ export default function CompanyProfileScreen() {
           </GlassCard>
 
           {/* Stats */}
-          <View style={styles.statsRow}>
-            <GlassCard style={styles.statCard}>
-              <Text style={styles.statValue}>{earnings.active_count}</Text>
-              <Text style={styles.statLabel}>Active</Text>
-            </GlassCard>
-            <GlassCard style={styles.statCard}>
-              <Text style={styles.statValue}>{earnings.completed_count}</Text>
-              <Text style={styles.statLabel}>Completed</Text>
-            </GlassCard>
-            <GlassCard style={styles.statCard}>
-              <Text style={styles.statValue}>{formatCad(earnings.total_paid)}</Text>
-              <Text style={styles.statLabel}>Earned</Text>
-            </GlassCard>
-          </View>
+          <TradeMetricStrip
+            items={[
+              { label: 'Active', value: earnings.active_count, tone: earnings.active_count ? 'success' : 'muted' },
+              { label: 'Completed', value: earnings.completed_count, tone: earnings.completed_count ? 'success' : 'muted' },
+              { label: 'Earned', value: formatCad(earnings.total_paid), tone: earnings.total_paid ? 'success' : 'muted' },
+            ]}
+          />
 
           {/* Business info */}
           {company && (

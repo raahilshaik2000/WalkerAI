@@ -18,6 +18,13 @@ import { useAuthStore } from '@/stores/auth.store';
 import { formatCad } from '@/lib/formatters';
 import { Colors, Radius, Spacing, Typography } from '@/constants/theme';
 import { AnimatedPressable, GlassCard, GradientBackground, ListItemSkeleton, StatusBadge } from '@/components/ui';
+import {
+  TradeEmptyState,
+  TradeMetricStrip,
+  TradePanel,
+  TradeScreenHeader,
+  TradeSection,
+} from '@/components/company/TradeUI';
 
 interface DispatchedJob {
   project_id: string;
@@ -41,6 +48,14 @@ function timeRemaining(expiresAt: string | null): string {
   const hrs = Math.floor(diff / 3600000);
   const mins = Math.floor((diff % 3600000) / 60000);
   return hrs > 0 ? `${hrs}h ${mins}m left` : `${mins}m left`;
+}
+
+function formatRoom(roomType: string) {
+  return `${roomType.charAt(0).toUpperCase()}${roomType.slice(1)} Renovation`;
+}
+
+function formatLocation(city?: string | null, address?: string | null) {
+  return city || address || 'Location pending';
 }
 
 export default function CompanyJobFeed() {
@@ -112,6 +127,8 @@ export default function CompanyJobFeed() {
     setRefreshing(true);
     fetchData();
   };
+
+  const pendingEstimate = jobs.reduce((sum, job) => sum + (job.project.ai_cost_max ?? job.project.ai_cost_min ?? 0), 0);
 
   // Company not verified — show onboarding CTA
   if (!loading && (!company || !company.verified)) {
@@ -207,35 +224,47 @@ export default function CompanyJobFeed() {
           showsVerticalScrollIndicator={false}
           refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={Colors.accent} />}
         >
-          <Text style={styles.greeting}>Jobs</Text>
-          {company?.name && <Text style={styles.companyName}>{company.name}</Text>}
+          <TradeScreenHeader
+            title="Trade Desk"
+            subtitle={company?.name ? `${company.name} · Live work queue` : 'Live work queue'}
+          />
+
+          <TradeMetricStrip
+            items={[
+              { label: 'Active', value: activeJobs.length, tone: activeJobs.length ? 'success' : 'muted' },
+              { label: 'Invites', value: jobs.length, tone: jobs.length ? 'warning' : 'muted' },
+              { label: 'Potential', value: pendingEstimate ? formatCad(pendingEstimate) : '$0', tone: pendingEstimate ? 'success' : 'muted' },
+            ]}
+          />
 
           {/* Active jobs section */}
           {activeJobs.length > 0 && (
-            <>
-              <Text style={styles.sectionLabel}>ACTIVE PROJECTS</Text>
+            <TradeSection title="Active projects">
               {activeJobs.map((job) => (
                 <TouchableOpacity
                   key={job.id}
                   style={styles.activeJobCard}
-                  onPress={() => navigation.navigate('JobDetail', { id: job.id })}
+                  onPress={() => navigation.navigate('JobDetail', { screen: 'JobDetailMain', params: { id: job.id } })}
                   activeOpacity={0.85}
                 >
-                  <GlassCard padding={16} style={{ marginBottom: 0 }}>
+                  <TradePanel>
                     <View style={styles.activeJobRow}>
-                      <View style={{ flex: 1 }}>
-                        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
-                          <Icon name={job.room_type === 'kitchen' ? 'countertop-outline' : 'shower'} size={18} color={Colors.text.primary} />
-                          <Text style={styles.activeJobRoom}>{job.room_type}</Text>
-                        </View>
-                        <Text style={styles.activeJobCity}>{job.city}</Text>
+                      <View style={styles.jobIcon}>
+                        <Icon name={job.room_type === 'kitchen' ? 'countertop-outline' : 'shower'} size={20} color={Colors.success} />
                       </View>
-                      <StatusBadge label={job.status} variant="active" dot />
+                      <View style={{ flex: 1 }}>
+                        <Text style={styles.activeJobRoom}>{formatRoom(job.room_type)}</Text>
+                        <Text style={styles.activeJobCity}>{formatLocation(job.city, job.address)}</Text>
+                      </View>
+                      <View style={styles.rowRight}>
+                        <StatusBadge label={job.status} variant="active" dot />
+                        <Icon name="chevron-right" size={18} color={Colors.text.tertiary} />
+                      </View>
                     </View>
-                  </GlassCard>
+                  </TradePanel>
                 </TouchableOpacity>
               ))}
-            </>
+            </TradeSection>
           )}
 
           {/* Dispatched pending jobs */}
@@ -243,8 +272,7 @@ export default function CompanyJobFeed() {
             ? Array.from({ length: 3 }).map((_, i) => <ListItemSkeleton key={i} style={{ marginBottom: 12 }} />)
             : jobs.length > 0
             ? (
-              <>
-                <Text style={styles.sectionLabel}>NEW JOBS — FIRST TO ACCEPT WINS</Text>
+              <TradeSection title="New job invites">
                 {jobs.map((job) => {
                   const project = job.project as DispatchedJob['project'];
                   const timeLeft = timeRemaining(project.dispatch_expires_at);
@@ -252,48 +280,45 @@ export default function CompanyJobFeed() {
                   return (
                     <AnimatedPressable
                       key={job.project_id}
-                      onPress={() => navigation.navigate('JobDetail', { id: project.id })}
+                      onPress={() => navigation.navigate('JobDetail', { screen: 'JobDetailMain', params: { id: project.id } })}
                       haptic
                     >
-                      <GlassCard style={styles.jobCard}>
-                        {/* Urgency indicator */}
-                        <View style={styles.urgencyRow}>
-                          <View style={styles.urgencyDot} />
-                          <Icon name="lightning-bolt" size={14} color={Colors.warning} />
-                          <Text style={styles.urgencyText}>{timeLeft}</Text>
-                        </View>
-
+                      <TradePanel style={styles.jobCard}>
                         <View style={styles.jobHeader}>
-                          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
-                            <Icon name={project.room_type === 'kitchen' ? 'countertop-outline' : 'shower'} size={18} color={Colors.text.primary} />
-                            <Text style={styles.jobRoomType}>
-                              {project.room_type.charAt(0).toUpperCase() + project.room_type.slice(1)} Renovation
-                            </Text>
+                          <View style={styles.jobIcon}>
+                            <Icon name={project.room_type === 'kitchen' ? 'countertop-outline' : 'shower'} size={20} color={Colors.warning} />
                           </View>
-                          <Text style={styles.jobCity}>{project.city}</Text>
+                          <View style={{ flex: 1 }}>
+                            <View style={styles.urgencyRow}>
+                              <Icon name="timer-sand" size={13} color={Colors.warning} />
+                              <Text style={styles.urgencyText}>{timeLeft}</Text>
+                            </View>
+                            <Text style={styles.jobRoomType}>{formatRoom(project.room_type)}</Text>
+                            <Text style={styles.jobCity}>{formatLocation(project.city, project.address)}</Text>
+                          </View>
+                          <Icon name="chevron-right" size={20} color={Colors.text.tertiary} />
                         </View>
 
                         {project.ai_cost_min && project.ai_cost_max && (
-                          <Text style={styles.estimatedCost}>
-                            {formatCad(project.ai_cost_min)} – {formatCad(project.ai_cost_max)} estimated
-                          </Text>
+                          <View style={styles.estimateRow}>
+                            <Text style={styles.estimateLabel}>Estimated range</Text>
+                            <Text style={styles.estimatedCost}>
+                              {formatCad(project.ai_cost_min)} – {formatCad(project.ai_cost_max)}
+                            </Text>
+                          </View>
                         )}
-
-                        <Text style={styles.tapToView}>Tap to view brief →</Text>
-                      </GlassCard>
+                      </TradePanel>
                     </AnimatedPressable>
                   );
                 })}
-              </>
+              </TradeSection>
             )
             : activeJobs.length === 0 && (
-              <View style={styles.emptyState}>
-                <Icon name="mailbox-open-outline" size={48} color={Colors.text.tertiary} />
-                <Text style={styles.emptyTitle}>No jobs yet</Text>
-                <Text style={styles.emptySub}>
-                  New jobs in your area will appear here automatically. Pull to refresh.
-                </Text>
-              </View>
+              <TradeEmptyState
+                icon="briefcase-search-outline"
+                title="No jobs yet"
+                body="New jobs in your area will appear here automatically. Pull to refresh."
+              />
             )}
         </ScrollView>
       </SafeAreaView>
@@ -303,7 +328,7 @@ export default function CompanyJobFeed() {
 
 const styles = StyleSheet.create({
   safe: { flex: 1 },
-  scroll: { flexGrow: 1, paddingHorizontal: Spacing.sm, paddingTop: Spacing.sm, paddingBottom: Spacing.xl },
+  scroll: { flexGrow: 1, paddingHorizontal: Spacing.sm, paddingTop: Spacing.sm, paddingBottom: 120 },
   pendingContainer: { flex: 1, alignItems: 'center', justifyContent: 'center', paddingHorizontal: Spacing.lg },
   onboardIconWrap: {
     width: 80, height: 80, borderRadius: 40,
@@ -341,19 +366,38 @@ const styles = StyleSheet.create({
   stepTextActive: { color: Colors.text.primary, fontWeight: '600' },
   greeting: { ...Typography.h1, marginBottom: 4 },
   companyName: { ...Typography.bodySecondary, marginBottom: Spacing.lg },
-  sectionLabel: { ...Typography.label, color: Colors.accent, marginBottom: 12, marginTop: Spacing.sm },
   activeJobCard: { marginBottom: 10 },
-  activeJobRow: { flexDirection: 'row', alignItems: 'center' },
-  activeJobRoom: { ...Typography.h3, textTransform: 'capitalize', marginBottom: 4 },
-  activeJobCity: { ...Typography.caption },
+  activeJobRow: { flexDirection: 'row', alignItems: 'center', gap: 12 },
+  activeJobRoom: { ...Typography.h3, marginBottom: 4 },
+  activeJobCity: { ...Typography.caption, color: Colors.text.tertiary },
+  rowRight: { alignItems: 'flex-end', gap: 8 },
+  jobIcon: {
+    width: 42,
+    height: 42,
+    borderRadius: 21,
+    backgroundColor: 'rgba(255, 107, 0, 0.12)',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
   jobCard: { marginBottom: 12 },
-  urgencyRow: { flexDirection: 'row', alignItems: 'center', gap: 6, marginBottom: 10 },
+  urgencyRow: { flexDirection: 'row', alignItems: 'center', gap: 5, marginBottom: 4 },
   urgencyDot: { width: 8, height: 8, borderRadius: 4, backgroundColor: Colors.warning },
   urgencyText: { color: Colors.warning, fontSize: 12, fontWeight: '700' },
-  jobHeader: { marginBottom: 8 },
-  jobRoomType: { ...Typography.h3, textTransform: 'capitalize', marginBottom: 4 },
-  jobCity: { ...Typography.bodySecondary },
-  estimatedCost: { color: Colors.success, fontWeight: '600', fontSize: 15, marginBottom: 10 },
+  jobHeader: { flexDirection: 'row', alignItems: 'center', gap: 12 },
+  jobRoomType: { ...Typography.h3, marginBottom: 4 },
+  jobCity: { ...Typography.caption, color: Colors.text.tertiary },
+  estimateRow: {
+    marginTop: 14,
+    paddingTop: 12,
+    borderTopWidth: 1,
+    borderTopColor: Colors.surface.border,
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    gap: 12,
+  },
+  estimateLabel: { ...Typography.caption, color: Colors.text.tertiary },
+  estimatedCost: { color: Colors.success, fontWeight: '800', fontSize: 15 },
   tapToView: { color: Colors.accent, fontSize: 13, fontWeight: '600' },
   emptyState: { flex: 1, alignItems: 'center', justifyContent: 'center', paddingTop: 60 },
   emptyIcon: { fontSize: 48, marginBottom: Spacing.md },

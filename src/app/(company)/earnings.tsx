@@ -13,6 +13,7 @@ import { useAuthStore } from '@/stores/auth.store';
 import { formatCad } from '@/lib/formatters';
 import { Colors, Spacing, Typography } from '@/constants/theme';
 import { CardSkeleton, GlassCard, GradientBackground, ListItemSkeleton, StatusBadge } from '@/components/ui';
+import { TradeMetricStrip, TradeScreenHeader } from '@/components/company/TradeUI';
 
 interface PaidMilestone {
   id: string;
@@ -80,7 +81,14 @@ export default function EarningsScreen() {
           showsVerticalScrollIndicator={false}
           refreshControl={<RefreshControl refreshing={refreshing} onRefresh={() => { setRefreshing(true); fetchData(); }} tintColor={Colors.accent} />}
         >
-          <Text style={styles.pageTitle}>Earnings</Text>
+          <TradeScreenHeader title="Earnings" subtitle="Paid milestones and payout totals" />
+          <TradeMetricStrip
+            items={[
+              { label: 'Received', value: formatCad(netEarned), tone: netEarned ? 'success' : 'muted' },
+              { label: 'Gross', value: formatCad(totalEarned), tone: totalEarned ? 'success' : 'muted' },
+              { label: 'Paid items', value: milestones.length, tone: milestones.length ? 'success' : 'muted' },
+            ]}
+          />
 
           {/* Summary */}
           <GlassCard style={styles.summaryCard}>
