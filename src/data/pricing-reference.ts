@@ -275,7 +275,7 @@ export const CONFIDENCE_MODEL = {
 export function calculateQuantities(m: {
   lengthFt: string; widthFt: string; ceilingHeightFt: string;
   numDoors: string; numWindows: string; upperLinearFt?: string; lowerLinearFt?: string;
-  countertopLinearFt?: string;
+  countertopLinearFt?: string; showerLengthFt?: string; showerWidthFt?: string;
 }) {
   const L = parseFloat(m.lengthFt) || 0;
   const W = parseFloat(m.widthFt) || 0;
@@ -292,6 +292,10 @@ export function calculateQuantities(m: {
   const baseboardLf   = perimeter - (doors * 3);
   const casingLf      = (doors * 16) + (windows * 14);
 
+  const showerL = parseFloat(m.showerLengthFt || '0') || 0;
+  const showerW = parseFloat(m.showerWidthFt || '0') || 0;
+  const shower_sqf = showerL > 0 && showerW > 0 ? Math.round(showerL * showerW) : 0;
+
   return {
     floor_area_sqf:      Math.round(floorArea),
     wall_area_gross_sqf: Math.round(grossWallArea),
@@ -304,6 +308,7 @@ export function calculateQuantities(m: {
     upper_cabinet_lf:    parseFloat(m.upperLinearFt || '0') || 0,
     lower_cabinet_lf:    parseFloat(m.lowerLinearFt || '0') || 0,
     countertop_lf:       parseFloat(m.countertopLinearFt || '0') || 0,
+    shower_sqf,
   };
 }
 
@@ -444,7 +449,8 @@ export function estimateProjectCost(params: {
     // ── BATHROOM ──
     const floorSqf  = quantities?.floor_tile_sqf || 65;
     const wallSqf   = quantities?.wall_area_net_sqf || 300;
-    const showerSqf = 45;
+    // Use measured shower dimensions when available; fallback to standard 3×5 = 45 sqf
+    const showerSqf = quantities?.shower_sqf || 45;
 
     // Demo
     const hasShowerChange = !answers['b_shower']?.includes('keep');
@@ -468,6 +474,12 @@ export function estimateProjectCost(params: {
       add('Shower tile installation (labour)', p(LABOR_PRICING.tile.shower_tile_install) * showerSqf);
       add('Shower waterproofing membrane (material)', p(MATERIAL_PRICING.waterproofing.waterproof_membrane) * showerSqf);
       add('Shower waterproofing (labour)', p(LABOR_PRICING.waterproofing.shower_waterproof_membrane) * showerSqf);
+    }
+
+    // Tile consumables (grout, thinset, caulking) — per PDF implementation rules
+    if (!tileAnswer.includes('keep')) {
+      add('Grout & thinset (material)', p(MATERIAL_PRICING.tile_surface.grout) * 4 + p(MATERIAL_PRICING.tile_surface.thinset_mortar) * 3);
+      add('Caulking & sealant (material)', p(MATERIAL_PRICING.tile_surface.silicone_sealant) * 3 + p(MATERIAL_PRICING.tile_surface.interior_caulking) * 2);
     }
 
     // Vanity
@@ -510,12 +522,19 @@ export function estimateProjectCost(params: {
     // Drywall (moisture-resistant, ~8 sheets for avg bathroom)
     const dwSheets = qualityTier === 'luxury' ? 10 : 8;
     add('Moisture-resistant drywall (material)', p(MATERIAL_PRICING.drywall.moisture_resist_dw) * dwSheets);
-    add('Drywall installation (labour)', p(LABOR_PRICING.drywall.moisture_resistant_dw) * (wallSqf * 0.3));
+    add('Drywall installation (labour)', p(LABOR_PRICING.drywall.moisture_resistant_dw) * (wallSqf * 0.65));
 
     // Paint
     const paintableWall = wallSqf - showerSqf;
     add('Paint & primer (material)', p(MATERIAL_PRICING.paint.interior_wall_paint) * 2);
     add('Wall painting (labour)', p(LABOR_PRICING.painting.interior_wall_painting) * paintableWall);
+    add('Ceiling painting (labour)', p(LABOR_PRICING.painting.ceiling_painting) * floorSqf);
+    add('Ceiling paint (material)', p(MATERIAL_PRICING.paint.ceiling_paint) * Math.ceil(floorSqf / 350 + 1));
+
+    // Baseboard
+    const baseboardLf = quantities?.baseboard_lf || 22;
+    add('Baseboard (material)', p(MATERIAL_PRICING.doors_trim.baseboard) * baseboardLf);
+    add('Baseboard installation (labour)', p(LABOR_PRICING.carpentry.baseboard_install) * baseboardLf);
 
     // Disposal + permit
     add('Disposal & dumpster', p(MATERIAL_PRICING.disposal.disposal_bin_rental));
@@ -524,12 +543,16 @@ export function estimateProjectCost(params: {
     // GC overhead 15%
     const subtotal = lines.reduce((s, l) => s + l.avgCad, 0);
     add('General contractor overhead (15%)', subtotal * 0.15);
+
+    // 10% contingency for bathroom (hidden moisture, rot, aged plumbing)
+    const postGcSubtotal = lines.reduce((s, l) => s + l.avgCad, 0);
+    add('Contingency allowance (10%)', postGcSubtotal * 0.10);
   }
 
   const avgDollars = Math.round(lines.reduce((s, l) => s + l.avgCad, 0));
 
-  // Tight range: ±5% with measurements, ±10% without
-  const rangeMultiplier = quantities?.floor_area_sqf ? 0.05 : 0.10;
+  // ±1% with measurements (yields ~$200–$500 spread on typical job), ±5% without
+  const rangeMultiplier = quantities?.floor_area_sqf ? 0.01 : 0.05;
   return {
     min: Math.round(avgDollars * (1 - rangeMultiplier)) * 100,
     max: Math.round(avgDollars * (1 + rangeMultiplier)) * 100,

@@ -1,9 +1,10 @@
 import { useEffect, useRef, useState } from 'react';
-import { Animated, Easing, StyleSheet, Text, View } from 'react-native';
+import { Animated, Easing, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useNavigation } from '@react-navigation/native';
 import Ionicons from 'react-native-vector-icons/Ionicons';
 import { supabase } from '@/lib/supabase/client';
+import { uploadBase64 } from '@/lib/supabase/storage';
 import { useDIYWizardStore } from '@/stores/diy-wizard.store';
 import { useAuthStore } from '@/stores/auth.store';
 import { GradientBackground } from '@/components/ui';
@@ -52,6 +53,7 @@ export default function DIYGeneratingScreen() {
   useEffect(() => {
     const run = async () => {
       try {
+        await supabase.auth.refreshSession();
         // 1. Create project in DB
         const { data: project, error: createErr } = await supabase
           .from('projects')
@@ -72,22 +74,16 @@ export default function DIYGeneratingScreen() {
         for (const photo of store.photos.filter((p) => p.status === 'done')) {
           const base64 = store.photoBase64s[photo.id];
           if (!base64) continue;
-          const storagePath = `diy/${pid}/${photo.id}.jpg`;
-          // Decode base64 to Uint8Array
-          const binaryStr = atob(base64);
-          const bytes = new Uint8Array(binaryStr.length);
-          for (let i = 0; i < binaryStr.length; i++) bytes[i] = binaryStr.charCodeAt(i);
-          const { error: upErr } = await supabase.storage
-            .from('project-photos')
-            .upload(storagePath, bytes, { contentType: 'image/jpeg', upsert: true });
-          if (upErr) throw new Error(`Photo upload failed: ${upErr.message}`);
-          const { data } = supabase.storage.from('project-photos').getPublicUrl(storagePath);
-          photoUrls.push(data.publicUrl);
-          // Insert into project_photos table so cover images work on the projects screen
-          await supabase.from('project_photos').insert({
+          const storagePath = `${pid}/diy_${photo.id}.jpg`;
+          const { publicUrl } = await uploadBase64('project-photos', storagePath, base64);
+          photoUrls.push(publicUrl);
+          // Silently track photo — non-fatal if this fails
+          supabase.from('project_photos').insert({
             project_id: pid,
-            url: data.publicUrl,
+            url: publicUrl,
             storage_path: storagePath,
+          }).then(({ error }) => {
+            if (error) console.warn('project_photos insert failed (non-fatal):', error.message);
           });
         }
         if (photoUrls.length === 0) throw new Error('No photos could be uploaded.');
@@ -144,6 +140,12 @@ export default function DIYGeneratingScreen() {
             </View>
             <Text style={styles.errorTitle}>Guide generation failed</Text>
             <Text style={styles.errorBody}>{error}</Text>
+            <TouchableOpacity
+              style={styles.errorBackBtn}
+              onPress={() => navigation.goBack()}
+            >
+              <Text style={styles.errorBackText}>← Go Back</Text>
+            </TouchableOpacity>
           </View>
         </SafeAreaView>
       </GradientBackground>
@@ -195,4 +197,6 @@ const styles = StyleSheet.create({
   errorCircle: { width: 80, height: 80, borderRadius: 40, backgroundColor: 'rgba(255,107,0,0.1)', alignItems: 'center', justifyContent: 'center', marginBottom: Spacing.md },
   errorTitle: { ...Typography.h2, marginBottom: 10, textAlign: 'center' },
   errorBody: { ...Typography.bodySecondary, textAlign: 'center', lineHeight: 22 },
+  errorBackBtn: { marginTop: 24, paddingVertical: 12, paddingHorizontal: 28, borderRadius: 12, borderWidth: 1, borderColor: 'rgba(255,107,0,0.4)', backgroundColor: 'rgba(255,107,0,0.08)' },
+  errorBackText: { color: '#FF6B00', fontSize: 15, fontWeight: '600' },
 });

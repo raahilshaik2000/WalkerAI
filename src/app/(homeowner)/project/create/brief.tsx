@@ -106,6 +106,8 @@ export default function BriefStep() {
         upperLinearFt: measurements.upperLinearFt,
         lowerLinearFt: measurements.lowerLinearFt,
         countertopLinearFt: measurements.countertopLinearFt,
+        showerLengthFt: measurements.showerLength,
+        showerWidthFt: measurements.showerWidth,
       }) : null;
 
       // Calculate cost directly from Walker AI pricing data — do NOT let AI guess this

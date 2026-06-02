@@ -347,25 +347,14 @@ export default function CostBreakdownScreen() {
           {milestones.length === 0 && (
             <GlassCard style={styles.card}>
               <Text style={styles.sectionLabel}>Payment Schedule</Text>
-              <View style={styles.placeholderRow}>
-                {[
-                  { label: 'Project Deposit', pct: '30%' },
-                  { label: 'Mid-Project', pct: '30%' },
-                  { label: 'Final Completion', pct: '40%' },
-                ].map((item, i) => (
-                  <View key={i} style={[styles.milestoneRow, i < 2 && styles.milestoneRowBorder]}>
-                    <View style={[styles.milestoneNum, { backgroundColor: MILESTONE_COLORS[i] + '18', borderColor: MILESTONE_COLORS[i] + '60' }]}>
-                      <Text style={[styles.milestoneNumText, { color: MILESTONE_COLORS[i] }]}>{i + 1}</Text>
-                    </View>
-                    <View style={{ flex: 1 }}>
-                      <Text style={styles.milestoneTitle}>{item.label}</Text>
-                      <Text style={styles.milestonePct}>{item.pct} of total</Text>
-                    </View>
-                    <Text style={styles.milestoneAmountDim}>—</Text>
-                  </View>
-                ))}
+              <Text style={styles.sectionSub}>
+                Milestones are assigned per trade — payment is released from escrow only when each trade completes their work and you approve it.
+              </Text>
+              <View style={styles.tradeModelRow}>
+                <Ionicons name="construct-outline" size={15} color={Colors.text.tertiary} />
+                <Text style={styles.tradeModelText}>e.g. Plumber → Electrician → Tiler → Carpenter — each paid separately</Text>
               </View>
-              <Text style={styles.pendingNote}>Exact amounts confirmed once a contractor accepts</Text>
+              <Text style={styles.pendingNote}>Exact milestones and amounts are set once a contractor accepts</Text>
             </GlassCard>
           )}
 
@@ -389,7 +378,7 @@ export default function CostBreakdownScreen() {
             <Text style={styles.sectionLabel}>How Escrow Works</Text>
             {[
               { icon: 'lock-closed-outline', text: "You pay the full amount upfront — it's held securely, not released to the contractor yet." },
-              { icon: 'hammer-outline', text: 'As each milestone is completed, you review and approve releasing that payment.' },
+              { icon: 'hammer-outline', text: 'Each trade gets their own milestone. When a trade finishes their work, you review and approve releasing only their payment — not the full amount.' },
               { icon: 'shield-checkmark-outline', text: 'You\'re always in control. No milestone gets paid without your approval.' },
             ].map((item, i) => (
               <View key={i} style={[styles.escrowRow, i < 2 && { marginBottom: 14 }]}>
@@ -463,7 +452,8 @@ const styles = StyleSheet.create({
   milestoneAmount: { fontSize: 16, fontWeight: '700', color: Colors.text.primary },
   milestoneAmountDim: { fontSize: 16, fontWeight: '600', color: Colors.text.tertiary },
   releasedBadge: { fontSize: 11, color: '#34D399', fontWeight: '600', marginTop: 2 },
-  placeholderRow: {},
+  tradeModelRow: { flexDirection: 'row', alignItems: 'center', gap: 8, marginTop: 10, marginBottom: 4 },
+  tradeModelText: { fontSize: 12, color: Colors.text.tertiary, flex: 1, lineHeight: 17 },
   pendingNote: { fontSize: 12, color: Colors.text.tertiary, fontStyle: 'italic', marginTop: 10, textAlign: 'center' },
 
   // Scope

@@ -73,8 +73,26 @@ Deno.serve(async (req) => {
       ? '$1,000+'
       : `$${budget_min}–$${budget_max}`;
 
-    const prompt = `You are an expert home improvement guide creator. Analyze the photos provided and create a detailed, practical DIY guide.
+    const isHazardous = category === 'plumbing' || category === 'electrical';
+    const isRoomReno = ['kitchen', 'bathroom', 'bedroom', 'living room', 'basement', 'general'].includes((category ?? '').toLowerCase());
 
+    const hazardPreamble = isHazardous ? `
+IMPORTANT — SAFETY AND LICENSING NOTICE:
+This task involves ${category} work. You MUST:
+1. Include a prominent safety warning in "safety_warnings" that reads: "We strongly recommend hiring a licensed ${category === 'plumbing' ? 'plumber' : 'electrician'} for this work. Improper ${category} work can cause serious injury, property damage, flooding, fires, or death."
+2. Set "when_to_call_pro" to strongly advise hiring a licensed trade for anything beyond minor maintenance.
+3. Make the VERY FIRST step a safety shut-off step:
+   ${category === 'plumbing' ? '- Step 1: Turn off the water supply at the main shutoff valve or the local isolation valve. Open the lowest tap in the house to drain the lines.' : '- Step 1: Turn off the circuit breaker at the main panel. Use a non-contact voltage tester to confirm the power is off before touching any wires.'}
+4. If the homeowner proceeds despite the warning, provide accurate and safe DIY steps.
+` : '';
+
+    const roomDesignNote = isRoomReno ? `
+DESIGN GUIDANCE:
+For room renovation tasks, include design recommendations in the overview and relevant steps. Suggest colour palettes, fixture styles, layout improvements, and material combinations that would work well based on what you see in the photos.
+` : '';
+
+    const prompt = `You are an expert home improvement guide creator. Analyze the photos provided and create a detailed, practical DIY guide.
+${hazardPreamble}${roomDesignNote}
 Project details:
 - Task: ${description}
 - Category: ${category}
@@ -86,9 +104,10 @@ Project details:
 Return a valid JSON object with EXACTLY this structure:
 {
   "title": "Concise action-oriented title (max 8 words)",
-  "overview": "2-3 sentence overview of what this guide covers and the approach",
+  "overview": "2-3 sentence overview of what this guide covers and the approach${isRoomReno ? '. Include a design recommendation if applicable.' : ''}",
   "estimated_time": "e.g. 2–3 hours",
   "difficulty": "Beginner | Intermediate | Advanced",
+  "recommend_pro": ${isHazardous ? 'true' : 'false'},
   "safety_warnings": ["string", "string"],
   "steps": [
     {
@@ -118,6 +137,8 @@ Requirements:
 - Tailor complexity and language to ${skill_level} skill level
 - Respect the ${budgetLabel} budget — suggest affordable alternatives where possible
 - Base steps on what you actually see in the photos
+${isHazardous ? `- First step MUST be the safety shut-off procedure described above
+- safety_warnings MUST include the professional recommendation` : ''}
 - Return ONLY the JSON, no markdown.`;
 
     const response = await anthropic.messages.create({
