@@ -8,7 +8,7 @@ import {
   View,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { useNavigation } from '@react-navigation/native';
+import { useNavigation, useRoute } from '@react-navigation/native';
 import Ionicons from 'react-native-vector-icons/Ionicons';
 import { supabase } from '@/lib/supabase/client';
 import { useDIYWizardStore } from '@/stores/diy-wizard.store';
@@ -19,12 +19,13 @@ type Tab = 'steps' | 'materials';
 
 export default function DIYGuideScreen() {
   const navigation = useNavigation<any>();
+  const route = useRoute<any>();
+  const isSavedView = route.params?.saved === true;
   const store = useDIYWizardStore();
   const guide = store.guide;
   const [tab, setTab] = useState<Tab>('steps');
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
-
   const [converting, setConverting] = useState(false);
 
   if (!guide) return null;
@@ -270,23 +271,30 @@ export default function DIYGuideScreen() {
             </View>
           </View>
 
-          {/* Big Save Button */}
+          {/* Bottom action */}
           <View style={styles.saveBtnSection}>
-            <TouchableOpacity
-              style={[styles.bigSaveBtn, saved && styles.bigSaveBtnDone]}
-              onPress={handleSave}
-              disabled={saving || saved}
-              activeOpacity={0.8}
-            >
-              <Ionicons
-                name={saved ? 'checkmark-circle' : 'bookmark'}
-                size={22}
-                color={saved ? '#000' : '#000'}
-              />
-              <Text style={styles.bigSaveBtnText}>
-                {saving ? 'Saving…' : saved ? 'Saved!' : 'Save to My Projects'}
-              </Text>
-            </TouchableOpacity>
+            {isSavedView ? (
+              <TouchableOpacity
+                style={styles.bigDoneBtn}
+                onPress={() => navigation.goBack()}
+                activeOpacity={0.8}
+              >
+                <Ionicons name="checkmark-circle" size={22} color="#000" />
+                <Text style={styles.bigSaveBtnText}>Done</Text>
+              </TouchableOpacity>
+            ) : (
+              <TouchableOpacity
+                style={[styles.bigSaveBtn, saved && styles.bigSaveBtnDone]}
+                onPress={handleSave}
+                disabled={saving || saved}
+                activeOpacity={0.8}
+              >
+                <Ionicons name={saved ? 'checkmark-circle' : 'bookmark'} size={22} color="#000" />
+                <Text style={styles.bigSaveBtnText}>
+                  {saving ? 'Saving…' : saved ? 'Saved!' : 'Save to My Projects'}
+                </Text>
+              </TouchableOpacity>
+            )}
           </View>
         </ScrollView>
       </SafeAreaView>
@@ -370,5 +378,6 @@ const styles = StyleSheet.create({
   saveBtnSection: { paddingHorizontal: Spacing.md, paddingTop: Spacing.lg, paddingBottom: 20 },
   bigSaveBtn: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 10, backgroundColor: '#FF6B00', borderRadius: Radius.card, paddingVertical: 18 },
   bigSaveBtnDone: { backgroundColor: '#34D399' },
+  bigDoneBtn: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 10, backgroundColor: '#34D399', borderRadius: Radius.card, paddingVertical: 18 },
   bigSaveBtnText: { fontSize: 17, fontWeight: '700', color: '#000' },
 });

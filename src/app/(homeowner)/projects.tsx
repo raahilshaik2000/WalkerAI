@@ -258,7 +258,7 @@ export default function HomeownerProjects() {
   const openDIYGuide = (item: DIYProject) => {
     diyStore.setGuide(item.diy_guide);
     diyStore.setProjectId(item.id);
-    navigation.navigate('DIYGuide');
+    navigation.navigate('DIYGuide', { saved: true });
   };
 
   const renderProject = ({ item }: { item: RealProject }) => {
