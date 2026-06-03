@@ -8,7 +8,7 @@ import {
   View,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { useNavigation } from '@react-navigation/native';
+import { useNavigation, useRoute } from '@react-navigation/native';
 import Ionicons from 'react-native-vector-icons/Ionicons';
 import { supabase } from '@/lib/supabase/client';
 import { useDIYWizardStore } from '@/stores/diy-wizard.store';
@@ -19,12 +19,13 @@ type Tab = 'steps' | 'materials';
 
 export default function DIYGuideScreen() {
   const navigation = useNavigation<any>();
+  const route = useRoute<any>();
+  const isSavedView = route.params?.saved === true;
   const store = useDIYWizardStore();
   const guide = store.guide;
   const [tab, setTab] = useState<Tab>('steps');
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
-
   const [converting, setConverting] = useState(false);
 
   if (!guide) return null;
@@ -86,7 +87,11 @@ export default function DIYGuideScreen() {
       <SafeAreaView style={styles.safe}>
         {/* Header */}
         <View style={styles.header}>
+          <TouchableOpacity style={styles.headerBack} onPress={() => navigation.goBack()}>
+            <Ionicons name="chevron-back" size={22} color="#fff" />
+          </TouchableOpacity>
           <Text style={styles.headerTitle} numberOfLines={1}>DIY Guide</Text>
+          <View style={{ width: 36 }} />
         </View>
 
         <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.scroll}>
@@ -112,6 +117,17 @@ export default function DIYGuideScreen() {
               </View>
             </View>
           </View>
+
+          {/* Professional recommendation banner for plumbing/electrical */}
+          {(guide as any).recommend_pro && (
+            <View style={styles.proBanner}>
+              <Ionicons name="warning" size={20} color="#F59E0B" />
+              <View style={{ flex: 1 }}>
+                <Text style={styles.proBannerTitle}>Licensed Professional Recommended</Text>
+                <Text style={styles.proBannerText}>This type of work carries safety risks. We strongly recommend hiring a licensed trade for this job.</Text>
+              </View>
+            </View>
+          )}
 
           {/* Safety warnings */}
           {guide.safety_warnings.length > 0 && (
@@ -255,23 +271,30 @@ export default function DIYGuideScreen() {
             </View>
           </View>
 
-          {/* Big Save Button */}
+          {/* Bottom action */}
           <View style={styles.saveBtnSection}>
-            <TouchableOpacity
-              style={[styles.bigSaveBtn, saved && styles.bigSaveBtnDone]}
-              onPress={handleSave}
-              disabled={saving || saved}
-              activeOpacity={0.8}
-            >
-              <Ionicons
-                name={saved ? 'checkmark-circle' : 'bookmark'}
-                size={22}
-                color={saved ? '#000' : '#000'}
-              />
-              <Text style={styles.bigSaveBtnText}>
-                {saving ? 'Saving…' : saved ? 'Saved!' : 'Save to My Projects'}
-              </Text>
-            </TouchableOpacity>
+            {isSavedView ? (
+              <TouchableOpacity
+                style={styles.bigDoneBtn}
+                onPress={() => navigation.goBack()}
+                activeOpacity={0.8}
+              >
+                <Ionicons name="checkmark-circle" size={22} color="#000" />
+                <Text style={styles.bigSaveBtnText}>Done</Text>
+              </TouchableOpacity>
+            ) : (
+              <TouchableOpacity
+                style={[styles.bigSaveBtn, saved && styles.bigSaveBtnDone]}
+                onPress={handleSave}
+                disabled={saving || saved}
+                activeOpacity={0.8}
+              >
+                <Ionicons name={saved ? 'checkmark-circle' : 'bookmark'} size={22} color="#000" />
+                <Text style={styles.bigSaveBtnText}>
+                  {saving ? 'Saving…' : saved ? 'Saved!' : 'Save to My Projects'}
+                </Text>
+              </TouchableOpacity>
+            )}
           </View>
         </ScrollView>
       </SafeAreaView>
@@ -281,9 +304,14 @@ export default function DIYGuideScreen() {
 
 const styles = StyleSheet.create({
   safe: { flex: 1 },
-  header: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', paddingHorizontal: 16, paddingVertical: 12 },
+  header: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 16, paddingVertical: 12 },
+  headerBack: { width: 36, height: 36, borderRadius: 18, backgroundColor: 'rgba(255,255,255,0.08)', alignItems: 'center', justifyContent: 'center' },
   headerTitle: { fontSize: 17, fontWeight: '700', color: '#fff' },
   scroll: { paddingBottom: 120 },
+
+  proBanner: { marginHorizontal: Spacing.md, marginBottom: Spacing.md, flexDirection: 'row', gap: 12, alignItems: 'flex-start', backgroundColor: 'rgba(245,158,11,0.1)', borderRadius: Radius.card, borderWidth: 1, borderColor: 'rgba(245,158,11,0.3)', padding: 16 },
+  proBannerTitle: { fontSize: 14, fontWeight: '700', color: '#F59E0B', marginBottom: 4 },
+  proBannerText: { fontSize: 13, color: 'rgba(245,158,11,0.85)', lineHeight: 19 },
 
   hero: { margin: Spacing.md, backgroundColor: Colors.glass.surface, borderRadius: Radius.card, borderWidth: 1, borderColor: Colors.glass.border, padding: 20, alignItems: 'center' },
   heroIcon: { width: 64, height: 64, borderRadius: 32, backgroundColor: 'rgba(255,107,0,0.1)', borderWidth: 1, borderColor: 'rgba(255,107,0,0.3)', alignItems: 'center', justifyContent: 'center', marginBottom: 12 },
@@ -350,5 +378,6 @@ const styles = StyleSheet.create({
   saveBtnSection: { paddingHorizontal: Spacing.md, paddingTop: Spacing.lg, paddingBottom: 20 },
   bigSaveBtn: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 10, backgroundColor: '#FF6B00', borderRadius: Radius.card, paddingVertical: 18 },
   bigSaveBtnDone: { backgroundColor: '#34D399' },
+  bigDoneBtn: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 10, backgroundColor: '#34D399', borderRadius: Radius.card, paddingVertical: 18 },
   bigSaveBtnText: { fontSize: 17, fontWeight: '700', color: '#000' },
 });
