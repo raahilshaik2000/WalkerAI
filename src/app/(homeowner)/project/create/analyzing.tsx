@@ -128,9 +128,21 @@ export default function AnalyzingScreen() {
           throw new Error('No photo data found. Please go back and re-select your photos.');
         }
 
-        // Call the analyze-photos edge function (Claude-powered, key stays server-side)
+        // Flatten to plain base64 strings so the request body works against both
+        // the legacy deployed analyze-photos function (expects string[]) and the
+        // newer local function (handles strings via normalizePhotoPayload).
+        // Once the new function is deployed, revert to sending the rich payload
+        // so HEIC/PNG media-type metadata reaches Claude.
+        const photoBase64sFlat = photoBase64s
+          .map((p) => p.data)
+          .filter((data): data is string => typeof data === 'string' && data.length > 0);
+
+        if (photoBase64sFlat.length === 0) {
+          throw new Error('No photo data found. Please go back and re-select your photos.');
+        }
+
         const { data: analyzeData, error: analyzeError } = await supabase.functions.invoke('analyze-photos', {
-          body: { project_id: pid, photo_base64s: photoBase64s },
+          body: { project_id: pid, photo_base64s: photoBase64sFlat },
         });
 
         // Wait for photo uploads to finish alongside the edge function call.
