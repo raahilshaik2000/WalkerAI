@@ -1,13 +1,19 @@
 import { useState } from 'react';
-import { Alert, Platform, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { Alert, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useNavigation } from '@react-navigation/native';
 import Ionicons from 'react-native-vector-icons/Ionicons';
 import { launchImageLibrary } from 'react-native-image-picker';
 import { supabase } from '@/lib/supabase/client';
+import { getUploadMetadata, uploadFile } from '@/lib/supabase/storage';
 import { useAuthStore } from '@/stores/auth.store';
 import { Colors, Radius, Spacing, Typography } from '@/constants/theme';
 import { GlassButton, GlassCard, GlassInput, GradientBackground } from '@/components/ui';
+import { buildSupplierLicenseUpdatePayload } from '@/lib/supplier-onboarding';
+
+function isMissingColumnError(error: { message?: string } | null | undefined) {
+  return !!error?.message && /column .* does not exist/i.test(error.message);
+}
 
 export default function SupplierLicenseOnboarding() {
   const navigation = useNavigation<any>();
@@ -15,13 +21,19 @@ export default function SupplierLicenseOnboarding() {
   const [licenseNumber, setLicenseNumber] = useState('');
   const [docUri, setDocUri] = useState<string | null>(null);
   const [docName, setDocName] = useState<string | null>(null);
+  const [docType, setDocType] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
 
   const pickDoc = async () => {
-    const result = await launchImageLibrary({ mediaType: 'photo', quality: 0.8 });
+    const result = await launchImageLibrary({
+      mediaType: 'photo',
+      quality: 0.8,
+      assetRepresentationMode: 'compatible',
+    });
     if (result.assets?.[0]) {
       setDocUri(result.assets[0].uri ?? null);
       setDocName(result.assets[0].fileName ?? 'license.jpg');
+      setDocType(result.assets[0].type ?? null);
     }
   };
 
@@ -32,23 +44,46 @@ export default function SupplierLicenseOnboarding() {
     }
     setLoading(true);
     try {
-      let docUrl: string | null = null;
+      if (!user?.id) throw new Error('Please sign in again before continuing supplier onboarding.');
+
+      let docPath: string | null = null;
       if (docUri) {
-        const ext = docName?.split('.').pop() ?? 'jpg';
-        const path = `supplier-licenses/${user!.id}/license.${ext}`;
-        const response = await fetch(docUri);
-        const blob = await response.blob();
-        const { error: uploadError } = await supabase.storage.from('company-docs').upload(path, blob, { upsert: true });
-        if (uploadError) throw uploadError;
-        const { data: urlData } = supabase.storage.from('company-docs').getPublicUrl(path);
-        docUrl = urlData.publicUrl;
+        const upload = getUploadMetadata({ uri: docUri, fileName: docName, type: docType });
+        const path = `supplier-licenses/${user.id}/license.${upload.extension}`;
+        const { storagePath } = await uploadFile('company-docs', path, upload.uri, upload.contentType);
+        docPath = storagePath;
       }
 
-      const { error } = await supabase
+      const { data: supplier, error: supplierError } = await supabase
         .from('suppliers')
-        .update({ license_number: licenseNumber.trim(), license_doc_url: docUrl })
-        .eq('user_id', user!.id);
-      if (error) throw error;
+        .select('id')
+        .eq('user_id', user.id)
+        .order('created_at', { ascending: false })
+        .limit(1)
+        .maybeSingle();
+
+      if (supplierError) throw supplierError;
+      if (!supplier) throw new Error('Supplier profile not found. Complete business details first.');
+
+      let updateResult = await supabase
+        .from('suppliers')
+        .update(buildSupplierLicenseUpdatePayload(licenseNumber, docPath))
+        .eq('id', supplier.id)
+        .select('id')
+        .maybeSingle();
+
+      if (isMissingColumnError(updateResult.error) && docPath) {
+        console.warn('suppliers.license_doc_url missing; saving license number without document path.');
+        updateResult = await supabase
+          .from('suppliers')
+          .update(buildSupplierLicenseUpdatePayload(licenseNumber, null))
+          .eq('id', supplier.id)
+          .select('id')
+          .maybeSingle();
+      }
+
+      if (updateResult.error) throw updateResult.error;
+      if (!updateResult.data) throw new Error('Supplier license was not saved.');
       navigation.navigate('SupplierCategoriesOnboarding');
     } catch (err) {
       Alert.alert('Error', err instanceof Error ? err.message : 'Failed to save. Try again.');

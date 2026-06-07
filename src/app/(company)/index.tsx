@@ -8,16 +8,15 @@ import {
   View,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { useNavigation } from '@react-navigation/native';
-import ReactNativeHapticFeedback from 'react-native-haptic-feedback';
+import { useFocusEffect, useNavigation } from '@react-navigation/native';
 import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
-import Ionicons from 'react-native-vector-icons/Ionicons';
 import { supabase } from '@/lib/supabase/client';
 import { signOut } from '@/lib/supabase/auth';
 import { useAuthStore } from '@/stores/auth.store';
-import { formatCad } from '@/lib/formatters';
+import { formatCad, formatStatusLabel } from '@/lib/formatters';
 import { Colors, Radius, Spacing, Typography } from '@/constants/theme';
-import { AnimatedPressable, GlassCard, GradientBackground, ListItemSkeleton, StatusBadge } from '@/components/ui';
+import { AnimatedPressable, GradientBackground, ListItemSkeleton, StatusBadge } from '@/components/ui';
+import { NotificationButton } from '@/components/notifications/NotificationButton';
 import {
   TradeEmptyState,
   TradeMetricStrip,
@@ -28,6 +27,7 @@ import {
 
 interface DispatchedJob {
   project_id: string;
+  slot_id: string | null;
   dispatched_at: string;
   response: string;
   project: {
@@ -35,10 +35,32 @@ interface DispatchedJob {
     address: string;
     city: string;
     room_type: string;
+    status: string;
     ai_cost_min: number | null;
     ai_cost_max: number | null;
     dispatch_expires_at: string | null;
   };
+  slot?: {
+    id: string;
+    trade_type: string;
+    estimated_cost_min: number | null;
+    estimated_cost_max: number | null;
+  } | Array<{
+    id: string;
+    trade_type: string;
+    estimated_cost_min: number | null;
+    estimated_cost_max: number | null;
+  }> | null;
+}
+
+interface ActiveJob {
+  id: string;
+  slotId?: string | null;
+  address: string | null;
+  city: string | null;
+  room_type: string;
+  status: string;
+  trade_type?: string | null;
 }
 
 function timeRemaining(expiresAt: string | null): string {
@@ -58,100 +80,235 @@ function formatLocation(city?: string | null, address?: string | null) {
   return city || address || 'Location pending';
 }
 
+function formatTrade(tradeType?: string | null) {
+  if (!tradeType) return null;
+  return tradeType
+    .split('_')
+    .map((part) => `${part.charAt(0).toUpperCase()}${part.slice(1)}`)
+    .join(' ');
+}
+
+function projectStatusVariant(status: string): 'active' | 'completed' | 'pending' | 'dispatching' | 'neutral' {
+  if (status === 'completed') return 'completed';
+  if (status === 'scheduling' || status === 'quoting') return 'pending';
+  if (status === 'dispatching') return 'dispatching';
+  if (status === 'accepted' || status === 'active') return 'active';
+  return 'neutral';
+}
+
 export default function CompanyJobFeed() {
   const navigation = useNavigation<any>();
   const { user } = useAuthStore();
   const [jobs, setJobs] = useState<DispatchedJob[]>([]);
-  const [activeJobs, setActiveJobs] = useState<any[]>([]);
+  const [activeJobs, setActiveJobs] = useState<ActiveJob[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
-  const [company, setCompany] = useState<{ id: string; verified: boolean; name: string } | null>(null);
+  const [company, setCompany] = useState<{
+    id: string;
+    verified: boolean;
+    name: string;
+    license_number: string | null;
+    insurance_doc_url: string | null;
+  } | null>(null);
+  const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
   const fetchData = useCallback(async () => {
-    if (!user) return;
-
-    // Get company
-    const { data: co } = await supabase
-      .from('companies')
-      .select('id, verified, name')
-      .eq('user_id', user.id)
-      .single();
-
-    setCompany(co);
-
-    if (!co?.verified) {
+    if (!user) {
       setLoading(false);
+      setRefreshing(false);
       return;
     }
 
-    // Get dispatched pending jobs
-    const { data: dispatches } = await supabase
-      .from('dispatch_logs')
-      .select(`
-        project_id, dispatched_at, response,
-        project:projects ( id, address, city, room_type, ai_cost_min, ai_cost_max, dispatch_expires_at, status )
-      `)
-      .eq('company_id', co.id)
-      .eq('response', 'pending')
-      .order('dispatched_at', { ascending: false });
+    try {
+      setErrorMessage(null);
 
-    // Get active jobs (accepted)
-    const { data: active } = await supabase
-      .from('projects')
-      .select('id, address, city, room_type, status')
-      .eq('assigned_company_id', co.id)
-      .in('status', ['accepted', 'quoting', 'active']);
+      const { data: co, error: companyError } = await supabase
+        .from('companies')
+        .select('id, verified, name, license_number, insurance_doc_url')
+        .eq('user_id', user.id)
+        .order('created_at', { ascending: false })
+        .limit(1)
+        .maybeSingle();
 
-    setJobs((dispatches ?? []) as unknown as DispatchedJob[]);
-    setActiveJobs(active ?? []);
-    setLoading(false);
-    setRefreshing(false);
+      if (companyError) throw companyError;
+      setCompany(co);
+
+      if (!co?.verified) {
+        setJobs([]);
+        setActiveJobs([]);
+        return;
+      }
+
+      const [dispatchResult, acceptedDispatchResult, legacyActiveResult, slotActiveResult] = await Promise.all([
+        supabase
+          .from('dispatch_logs')
+          .select(`
+            project_id, slot_id, dispatched_at, response,
+            project:projects ( id, address, city, room_type, ai_cost_min, ai_cost_max, dispatch_expires_at, status ),
+            slot:project_slots ( id, trade_type, estimated_cost_min, estimated_cost_max )
+          `)
+          .eq('company_id', co.id)
+          .eq('response', 'pending')
+          .order('dispatched_at', { ascending: false }),
+        supabase
+          .from('dispatch_logs')
+          .select(`
+            project_id, slot_id, dispatched_at, response,
+            project:projects ( id, address, city, room_type, status )
+          `)
+          .eq('company_id', co.id)
+          .eq('response', 'accepted')
+          .order('dispatched_at', { ascending: false }),
+        supabase
+          .from('projects')
+          .select('id, address, city, room_type, status')
+          .eq('assigned_company_id', co.id)
+          .in('status', ['accepted', 'quoting', 'active', 'scheduling', 'completed']),
+        supabase
+          .from('project_slots')
+          .select(`
+            id, trade_type, status,
+            project:projects ( id, address, city, room_type, status )
+          `)
+          .eq('assigned_company_id', co.id)
+          .in('status', ['filled', 'scheduled']),
+      ]);
+
+      if (dispatchResult.error) throw dispatchResult.error;
+      if (acceptedDispatchResult.error) throw acceptedDispatchResult.error;
+      if (legacyActiveResult.error) throw legacyActiveResult.error;
+      if (slotActiveResult.error) throw slotActiveResult.error;
+
+      const acceptedDispatchActive = ((acceptedDispatchResult.data ?? []) as unknown as DispatchedJob[])
+        .map((dispatch): ActiveJob | null => {
+          const project = Array.isArray(dispatch.project) ? dispatch.project[0] : dispatch.project;
+          if (!project) return null;
+          return {
+            id: project.id,
+            slotId: dispatch.slot_id,
+            address: project.address,
+            city: project.city,
+            room_type: project.room_type,
+            status: project.status,
+          };
+        })
+        .filter((job): job is ActiveJob => !!job);
+
+      const legacyActive = ((legacyActiveResult.data ?? []) as ActiveJob[]).map((job) => ({
+        ...job,
+        slotId: null,
+      }));
+
+      const slotActive = ((slotActiveResult.data ?? []) as any[])
+        .map((slot): ActiveJob | null => {
+          const project = Array.isArray(slot.project) ? slot.project[0] : slot.project;
+          if (!project) return null;
+          return {
+            id: project.id,
+            slotId: slot.id,
+            address: project.address,
+            city: project.city,
+            room_type: project.room_type,
+            status: project.status ?? slot.status,
+            trade_type: slot.trade_type,
+          };
+        })
+        .filter((job): job is ActiveJob => !!job);
+
+      const byKey = new Map<string, ActiveJob>();
+      [...legacyActive, ...slotActive, ...acceptedDispatchActive].forEach((job) => {
+        byKey.set(`${job.id}:${job.slotId ?? 'legacy'}`, job);
+      });
+
+      setJobs((dispatchResult.data ?? []) as unknown as DispatchedJob[]);
+      setActiveJobs(Array.from(byKey.values()));
+    } catch (err) {
+      setErrorMessage(err instanceof Error ? err.message : 'Could not load jobs.');
+      setJobs([]);
+      setActiveJobs([]);
+    } finally {
+      setLoading(false);
+      setRefreshing(false);
+    }
   }, [user]);
 
-  useEffect(() => {
-    fetchData();
+  useFocusEffect(
+    useCallback(() => {
+      fetchData();
+    }, [fetchData])
+  );
 
-    // Realtime: new dispatch notifications
+  useEffect(() => {
+    if (!company?.id || !company.verified) return;
+
     const channel = supabase
-      .channel('company-dispatches')
+      .channel(`company-dispatches-${company.id}`)
       .on('postgres_changes', {
         event: 'INSERT', schema: 'public', table: 'dispatch_logs',
-        filter: company ? `company_id=eq.${company.id}` : undefined,
+        filter: `company_id=eq.${company.id}`,
       }, () => fetchData())
-      .subscribe();
+      .subscribe((status) => {
+        if (status === 'CHANNEL_ERROR') {
+          setErrorMessage('Live updates are unavailable. Pull to refresh jobs.');
+        }
+      });
 
     return () => { supabase.removeChannel(channel); };
-  }, [fetchData]);
+  }, [company?.id, company?.verified, fetchData]);
 
   const onRefresh = () => {
     setRefreshing(true);
     fetchData();
   };
 
-  const pendingEstimate = jobs.reduce((sum, job) => sum + (job.project.ai_cost_max ?? job.project.ai_cost_min ?? 0), 0);
+  const pendingEstimate = jobs.reduce((sum, job) => {
+    const slot = Array.isArray(job.slot) ? job.slot[0] : job.slot;
+    return sum + (
+      slot?.estimated_cost_max
+      ?? slot?.estimated_cost_min
+      ?? job.project.ai_cost_max
+      ?? job.project.ai_cost_min
+      ?? 0
+    );
+  }, 0);
 
   // Company not verified — show onboarding CTA
   if (!loading && (!company || !company.verified)) {
     const isPending = !!company;
+    const nextOnboardingRoute = !company
+      ? 'BusinessOnboarding'
+      : !company.license_number
+      ? 'LicenseOnboarding'
+      : !company.insurance_doc_url
+      ? 'InsuranceOnboarding'
+      : null;
+    const setupIncomplete = !!company && !!nextOnboardingRoute;
+
     return (
       <GradientBackground glow="center">
         <SafeAreaView style={styles.safe}>
           <View style={styles.pendingContainer}>
             {/* Icon block */}
             <View style={styles.onboardIconWrap}>
-              <Icon name={isPending ? 'magnify' : 'domain'} size={36} color={isPending ? Colors.warning : Colors.success} />
+              <Icon
+                name={setupIncomplete ? 'clipboard-text-outline' : isPending ? 'magnify' : 'domain'}
+                size={36}
+                color={setupIncomplete || isPending ? Colors.warning : Colors.success}
+              />
             </View>
 
             <Text style={styles.pendingTitle}>
-              {isPending ? 'Verification in progress' : 'Set up your profile'}
+              {setupIncomplete ? 'Finish contractor setup' : isPending ? 'Verification in progress' : 'Set up your profile'}
             </Text>
             <Text style={styles.pendingSubtitle}>
-              {isPending
+              {setupIncomplete
+                ? 'Complete your license and insurance steps before WalkerAI can review your contractor profile.'
+                : isPending
                 ? 'Our team is reviewing your documents. You\'ll be able to receive jobs once approved — usually within 24 hours.'
                 : 'Complete your contractor profile to start receiving jobs in your area.'}
             </Text>
 
-            {isPending ? (
+            {isPending && !setupIncomplete ? (
               <View style={styles.pendingSteps}>
                 {[
                   { label: 'Profile submitted', done: true },
@@ -177,7 +334,7 @@ export default function CompanyJobFeed() {
             ) : (
               <>
                 {/* Quick feature bullets */}
-                <View style={styles.featureBullets}>
+                {!setupIncomplete && <View style={styles.featureBullets}>
                   {[
                     { icon: 'map-marker-outline', text: 'Get jobs in your area' },
                     { icon: 'currency-usd', text: 'Set your own quotes' },
@@ -188,16 +345,18 @@ export default function CompanyJobFeed() {
                       <Text style={styles.bulletText}>{item.text}</Text>
                     </View>
                   ))}
-                </View>
+                </View>}
 
                 <TouchableOpacity
                   style={styles.onboardCta}
-                  onPress={() => navigation.navigate('BusinessOnboarding')}
+                  onPress={() => navigation.navigate(nextOnboardingRoute ?? 'BusinessOnboarding')}
                   activeOpacity={0.85}
                 >
-                  <Text style={styles.onboardCtaText}>Get Started</Text>
+                  <Text style={styles.onboardCtaText}>{setupIncomplete ? 'Continue Setup' : 'Get Started'}</Text>
                 </TouchableOpacity>
-                <Text style={styles.onboardTime}>Takes about 3 minutes</Text>
+                <Text style={styles.onboardTime}>
+                  {setupIncomplete ? 'You can finish where you left off.' : 'Takes about 3 minutes'}
+                </Text>
 
                 <TouchableOpacity
                   style={styles.switchAccountBtn}
@@ -227,24 +386,25 @@ export default function CompanyJobFeed() {
           <TradeScreenHeader
             title="Trade Desk"
             subtitle={company?.name ? `${company.name} · Live work queue` : 'Live work queue'}
+            right={<NotificationButton />}
           />
 
           <TradeMetricStrip
             items={[
-              { label: 'Active', value: activeJobs.length, tone: activeJobs.length ? 'success' : 'muted' },
+              { label: 'Projects', value: activeJobs.length, tone: activeJobs.length ? 'success' : 'muted' },
               { label: 'Invites', value: jobs.length, tone: jobs.length ? 'warning' : 'muted' },
               { label: 'Potential', value: pendingEstimate ? formatCad(pendingEstimate) : '$0', tone: pendingEstimate ? 'success' : 'muted' },
             ]}
           />
 
-          {/* Active jobs section */}
+          {/* Project section */}
           {activeJobs.length > 0 && (
-            <TradeSection title="Active projects">
+            <TradeSection title="Projects">
               {activeJobs.map((job) => (
                 <TouchableOpacity
                   key={job.id}
                   style={styles.activeJobCard}
-                  onPress={() => navigation.navigate('JobDetail', { screen: 'JobDetailMain', params: { id: job.id } })}
+                  onPress={() => navigation.navigate('JobDetail', { screen: 'JobDetailMain', params: { id: job.id, slot: job.slotId } })}
                   activeOpacity={0.85}
                 >
                   <TradePanel>
@@ -252,12 +412,15 @@ export default function CompanyJobFeed() {
                       <View style={styles.jobIcon}>
                         <Icon name={job.room_type === 'kitchen' ? 'countertop-outline' : 'shower'} size={20} color={Colors.success} />
                       </View>
-                      <View style={{ flex: 1 }}>
+                      <View style={styles.activeJobContent}>
                         <Text style={styles.activeJobRoom}>{formatRoom(job.room_type)}</Text>
                         <Text style={styles.activeJobCity}>{formatLocation(job.city, job.address)}</Text>
+                        {job.trade_type ? (
+                          <Text style={styles.activeJobTrade}>{job.trade_type.replace(/_/g, ' ')}</Text>
+                        ) : null}
                       </View>
                       <View style={styles.rowRight}>
-                        <StatusBadge label={job.status} variant="active" dot />
+                        <StatusBadge label={formatStatusLabel(job.status)} variant={projectStatusVariant(job.status)} dot />
                         <Icon name="chevron-right" size={18} color={Colors.text.tertiary} />
                       </View>
                     </View>
@@ -268,19 +431,29 @@ export default function CompanyJobFeed() {
           )}
 
           {/* Dispatched pending jobs */}
-          {loading
-            ? Array.from({ length: 3 }).map((_, i) => <ListItemSkeleton key={i} style={{ marginBottom: 12 }} />)
+          {errorMessage ? (
+            <TradeEmptyState
+              icon="wifi-off"
+              title="Could not load jobs"
+              body={errorMessage}
+            />
+          ) : loading
+            ? Array.from({ length: 3 }).map((_, i) => <ListItemSkeleton key={i} style={styles.skeletonSpacing} />)
             : jobs.length > 0
             ? (
               <TradeSection title="New job invites">
                 {jobs.map((job) => {
                   const project = job.project as DispatchedJob['project'];
+                  const slot = Array.isArray(job.slot) ? job.slot[0] : job.slot;
+                  const tradeLabel = formatTrade(slot?.trade_type);
                   const timeLeft = timeRemaining(project.dispatch_expires_at);
+                  const estimateMin = slot?.estimated_cost_min ?? project.ai_cost_min;
+                  const estimateMax = slot?.estimated_cost_max ?? project.ai_cost_max;
 
                   return (
                     <AnimatedPressable
-                      key={job.project_id}
-                      onPress={() => navigation.navigate('JobDetail', { screen: 'JobDetailMain', params: { id: project.id } })}
+                      key={`${job.project_id}:${job.slot_id ?? 'legacy'}`}
+                      onPress={() => navigation.navigate('JobDetail', { screen: 'JobDetailMain', params: { id: project.id, slot: job.slot_id } })}
                       haptic
                     >
                       <TradePanel style={styles.jobCard}>
@@ -288,22 +461,23 @@ export default function CompanyJobFeed() {
                           <View style={styles.jobIcon}>
                             <Icon name={project.room_type === 'kitchen' ? 'countertop-outline' : 'shower'} size={20} color={Colors.warning} />
                           </View>
-                          <View style={{ flex: 1 }}>
+                          <View style={styles.pendingJobContent}>
                             <View style={styles.urgencyRow}>
                               <Icon name="timer-sand" size={13} color={Colors.warning} />
                               <Text style={styles.urgencyText}>{timeLeft}</Text>
                             </View>
                             <Text style={styles.jobRoomType}>{formatRoom(project.room_type)}</Text>
+                            {tradeLabel ? <Text style={styles.jobTrade}>{tradeLabel}</Text> : null}
                             <Text style={styles.jobCity}>{formatLocation(project.city, project.address)}</Text>
                           </View>
                           <Icon name="chevron-right" size={20} color={Colors.text.tertiary} />
                         </View>
 
-                        {project.ai_cost_min && project.ai_cost_max && (
+                        {estimateMin && estimateMax && (
                           <View style={styles.estimateRow}>
                             <Text style={styles.estimateLabel}>Estimated range</Text>
                             <Text style={styles.estimatedCost}>
-                              {formatCad(project.ai_cost_min)} – {formatCad(project.ai_cost_max)}
+                              {formatCad(estimateMin)} – {formatCad(estimateMax)}
                             </Text>
                           </View>
                         )}
@@ -368,8 +542,10 @@ const styles = StyleSheet.create({
   companyName: { ...Typography.bodySecondary, marginBottom: Spacing.lg },
   activeJobCard: { marginBottom: 10 },
   activeJobRow: { flexDirection: 'row', alignItems: 'center', gap: 12 },
+  activeJobContent: { flex: 1 },
   activeJobRoom: { ...Typography.h3, marginBottom: 4 },
   activeJobCity: { ...Typography.caption, color: Colors.text.tertiary },
+  activeJobTrade: { ...Typography.caption, color: Colors.text.secondary, textTransform: 'capitalize', marginTop: 2 },
   rowRight: { alignItems: 'flex-end', gap: 8 },
   jobIcon: {
     width: 42,
@@ -380,11 +556,14 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   jobCard: { marginBottom: 12 },
+  skeletonSpacing: { marginBottom: 12 },
+  pendingJobContent: { flex: 1 },
   urgencyRow: { flexDirection: 'row', alignItems: 'center', gap: 5, marginBottom: 4 },
   urgencyDot: { width: 8, height: 8, borderRadius: 4, backgroundColor: Colors.warning },
   urgencyText: { color: Colors.warning, fontSize: 12, fontWeight: '700' },
   jobHeader: { flexDirection: 'row', alignItems: 'center', gap: 12 },
   jobRoomType: { ...Typography.h3, marginBottom: 4 },
+  jobTrade: { ...Typography.caption, color: Colors.warning, textTransform: 'capitalize', marginBottom: 3 },
   jobCity: { ...Typography.caption, color: Colors.text.tertiary },
   estimateRow: {
     marginTop: 14,

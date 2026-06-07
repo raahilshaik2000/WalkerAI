@@ -25,7 +25,7 @@ export function useStaggeredEntrance(sectionIndex: number) {
       delay,
       withTiming(0, { duration: DURATION, easing: Easing.out(Easing.cubic) }),
     );
-  }, []);
+  }, [opacity, sectionIndex, translateY]);
 
   const animatedStyle = useAnimatedStyle(() => ({
     opacity: opacity.value,

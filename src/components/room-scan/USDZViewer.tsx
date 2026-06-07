@@ -1,5 +1,5 @@
 import React from 'react';
-import { requireNativeComponent, StyleSheet, Text, View, ViewStyle, StyleProp } from 'react-native';
+import { Platform, requireNativeComponent, StyleSheet, Text, View, ViewStyle, StyleProp } from 'react-native';
 import { Colors, Typography } from '@/constants/theme';
 
 interface NativeUSDZViewerProps {
@@ -8,7 +8,9 @@ interface NativeUSDZViewerProps {
   style?: StyleProp<ViewStyle>;
 }
 
-const NativeUSDZViewerView = requireNativeComponent<NativeUSDZViewerProps>('USDZViewerView');
+const NativeUSDZViewerView = Platform.OS === 'ios'
+  ? requireNativeComponent<NativeUSDZViewerProps>('USDZViewerView')
+  : null;
 
 interface USDZViewerProps {
   filePath: string | null;
@@ -21,23 +23,29 @@ export function USDZViewer({ filePath, scanData, style }: USDZViewerProps) {
   // a generated model with labels even when no USDZ file exists
   const measurementJSON = scanData ? JSON.stringify(scanData) : undefined;
 
-  if (!filePath && !scanData) {
+  if (Platform.OS !== 'ios' || (!filePath && !scanData)) {
     return (
       <View style={[styles.placeholder, style]}>
         <Text style={styles.placeholderText}>3D model not available</Text>
         <Text style={styles.placeholderSubtext}>
-          Scan a room on a LiDAR-equipped device to generate a 3D model
+          {Platform.OS === 'ios'
+            ? 'Scan a room on a LiDAR-equipped device to generate a 3D model'
+            : '3D room models are currently available on iOS devices with room scanning'}
         </Text>
       </View>
     );
   }
 
   return (
-    <NativeUSDZViewerView
-      filePath={filePath ?? ''}
-      measurementData={measurementJSON}
-      style={[styles.viewer, style]}
-    />
+    NativeUSDZViewerView
+      ? (
+        <NativeUSDZViewerView
+          filePath={filePath ?? ''}
+          measurementData={measurementJSON}
+          style={[styles.viewer, style]}
+        />
+      )
+      : null
   );
 }
 

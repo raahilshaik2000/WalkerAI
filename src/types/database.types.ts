@@ -20,6 +20,13 @@ export interface User {
   email: string;
   role: UserRole;
   push_token: string | null;
+  full_name: string | null;
+  phone: string | null;
+  avatar_url: string | null;
+  address: string | null;
+  city: string | null;
+  province: string | null;
+  postal_code: string | null;
   created_at: string;
 }
 
@@ -29,11 +36,18 @@ export interface Company {
   name: string;
   address: string | null;
   location: unknown; // PostGIS geography
+  lat: number | null;
+  lng: number | null;
   service_radius_km: number;
   license_number: string | null;
+  license_doc_url: string | null;
   insurance_doc_url: string | null;
   wc_doc_url: string | null;
   stripe_account_id: string | null;
+  stripe_details_submitted: boolean;
+  stripe_payouts_enabled: boolean;
+  stripe_transfers_active: boolean;
+  stripe_onboarding_checked_at: string | null;
   verified: boolean;
   rating: number | null;
   total_reviews: number;
@@ -43,15 +57,19 @@ export interface Company {
 export interface Project {
   id: string;
   homeowner_id: string;
-  address: string;
+  description: string | null;
+  address: string | null;
   location: unknown; // PostGIS geography
-  room_type: RoomType;
+  room_type: RoomType | null;
   status: ProjectStatus;
   ai_analysis: AIAnalysis | null;
   questionnaire_answers: Record<string, unknown> | null;
   selected_render_id: string | null;
   ai_cost_min: number | null; // CAD cents
   ai_cost_max: number | null; // CAD cents
+  ai_confidence_score: number | null;
+  diy_category: string | null;
+  diy_guide: Record<string, unknown> | null;
   created_at: string;
 }
 
@@ -79,6 +97,11 @@ export interface Material {
   quantity: number | null;
   unit: string | null;
   quality_tier: QualityTier;
+  sort_order: number | null;
+  brand_preference: string | null;
+  color_finish: string | null;
+  specific_model: string | null;
+  contractor_notes: string | null;
   order_status: MaterialOrderStatus | null;
   material_order_id: string | null;
   supplier_notes: string | null;
@@ -93,11 +116,17 @@ export interface Supplier {
   province: string | null;
   postal_code: string | null;
   location: unknown; // PostGIS geography
+  lat: number | null;
+  lng: number | null;
   service_radius_km: number;
   license_number: string | null;
   license_doc_url: string | null;
   categories: SupplierCategory[];
   stripe_account_id: string | null;
+  stripe_details_submitted: boolean;
+  stripe_payouts_enabled: boolean;
+  stripe_transfers_active: boolean;
+  stripe_onboarding_checked_at: string | null;
   verified: boolean;
   rating: number | null;
   total_reviews: number;
@@ -131,6 +160,7 @@ export interface MaterialOrder {
   status: MaterialOrderStatus;
   accepted_supplier_id: string | null;
   catalog_item_id: string | null;
+  category: SupplierCategory;
   quantity_needed: number;
   unit: string;
   quality_tier: QualityTier | null;
@@ -203,6 +233,7 @@ export interface Permit {
 export interface Quote {
   id: string;
   project_id: string;
+  slot_id: string | null;
   company_id: string;
   total_amount: number; // CAD cents
   stripe_payment_intent_id: string | null;
@@ -220,6 +251,8 @@ export interface Milestone {
   status: MilestoneStatus;
   due_date: string | null;
   completed_at: string | null;
+  approved_at: string | null;
+  approved_by: string | null;
   stripe_transfer_id: string | null;
   sort_order: number;
 }
@@ -258,6 +291,7 @@ export interface Warranty {
 export interface ChangeOrder {
   id: string;
   project_id: string;
+  company_id: string | null;
   description: string;
   cost_delta: number | null; // CAD cents, can be negative
   status: ChangeOrderStatus;
@@ -282,6 +316,9 @@ export interface Notification {
   type: NotificationType;
   payload: Record<string, unknown> | null;
   read: boolean;
+  push_sent: boolean;
+  push_sent_at: string | null;
+  push_error: string | null;
   created_at: string;
 }
 

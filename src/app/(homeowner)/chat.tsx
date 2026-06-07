@@ -1,7 +1,11 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import {
+  ActivityIndicator,
+  Alert,
   FlatList,
+  Image,
   KeyboardAvoidingView,
+  Linking,
   Platform,
   StyleSheet,
   Text,
@@ -11,10 +15,11 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useNavigation, useRoute } from '@react-navigation/native';
 import Ionicons from 'react-native-vector-icons/Ionicons';
-import { AnimatedPressable, GradientBackground } from '@/components/ui';
+import { AnimatedPressable, GlassButton, GradientBackground } from '@/components/ui';
 import { Colors, Radius } from '@/constants/theme';
 import { supabase } from '@/lib/supabase/client';
 import { useAuthStore } from '@/stores/auth.store';
+import { getRequiredStringParam } from '@/lib/navigation-params';
 
 interface DBMessage {
   id: string;
@@ -22,6 +27,7 @@ interface DBMessage {
   sender_id: string;
   body: string;
   sent_at: string;
+  attachment_url: string | null;
 }
 
 type RenderItem =
@@ -52,23 +58,49 @@ function formatTime(iso: string): string {
 export default function ChatScreen() {
   const navigation = useNavigation<any>();
   const route = useRoute<any>();
-  const { projectId, contractorName, projectTitle } = route.params ?? {};
+  const projectId = getRequiredStringParam(route.params, 'projectId');
+  const { contractorName, projectTitle } = route.params ?? {};
 
   const { user } = useAuthStore();
   const [messages, setMessages] = useState<DBMessage[]>([]);
   const [text, setText] = useState('');
+  const [loading, setLoading] = useState(true);
+  const [sending, setSending] = useState(false);
+  const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [showScrollBtn, setShowScrollBtn] = useState(false);
   const listRef = useRef<FlatList>(null);
 
-  useEffect(() => {
-    if (!projectId) return;
+  const loadMessages = useCallback(async () => {
+    if (!projectId) {
+      setMessages([]);
+      setErrorMessage('Project is missing. Reopen this chat from Messages.');
+      setLoading(false);
+      return;
+    }
 
-    supabase
+    setLoading(true);
+    setErrorMessage(null);
+    const { data, error } = await supabase
       .from('messages')
-      .select('id, project_id, sender_id, body, sent_at')
+      .select('id, project_id, sender_id, body, sent_at, attachment_url')
       .eq('project_id', projectId)
-      .order('sent_at', { ascending: true })
-      .then(({ data }) => setMessages((data as DBMessage[]) ?? []));
+      .order('sent_at', { ascending: true });
+
+    if (error) {
+      setMessages([]);
+      setErrorMessage(`Could not load messages: ${error.message}`);
+      setLoading(false);
+      return;
+    }
+
+    setMessages((data as DBMessage[]) ?? []);
+    setLoading(false);
+  }, [projectId]);
+
+  useEffect(() => {
+    loadMessages();
+
+    if (!projectId) return;
 
     const channel = supabase
       .channel(`chat-${projectId}`)
@@ -83,14 +115,33 @@ export default function ChatScreen() {
       .subscribe();
 
     return () => { supabase.removeChannel(channel); };
-  }, [projectId]);
+  }, [loadMessages, projectId]);
 
   const handleSend = async () => {
-    if (!text.trim() || !user || !projectId) return;
+    if (!text.trim() || sending) return;
+    if (!user || !projectId) {
+      Alert.alert('Unable to send', 'Please reopen this chat and try again.');
+      return;
+    }
     const body = text.trim();
     setText('');
-    await supabase.from('messages').insert({ project_id: projectId, sender_id: user.id, body });
+    setSending(true);
+
+    const { error } = await supabase.from('messages').insert({ project_id: projectId, sender_id: user.id, body });
+    if (error) {
+      setText(body);
+      Alert.alert('Message not sent', error.message);
+    }
+    setSending(false);
   };
+
+  const openAttachment = useCallback(async (url: string) => {
+    try {
+      await Linking.openURL(url);
+    } catch {
+      Alert.alert('Unable to open attachment', 'Please try again in a moment.');
+    }
+  }, []);
 
   const handleScroll = useCallback((e: any) => {
     const { contentOffset, contentSize, layoutMeasurement } = e.nativeEvent;
@@ -112,19 +163,19 @@ export default function ChatScreen() {
     return result;
   }, [messages]);
 
-  const isFirstInGroup = (index: number, item: DBMessage) => {
+  const isFirstInGroup = useCallback((index: number, item: DBMessage) => {
     if (index === 0) return true;
     const prev = renderData[index - 1];
     if (!('sender_id' in prev)) return true;
     return prev.sender_id !== item.sender_id;
-  };
+  }, [renderData]);
 
-  const isLastInGroup = (index: number, item: DBMessage) => {
+  const isLastInGroup = useCallback((index: number, item: DBMessage) => {
     if (index === renderData.length - 1) return true;
     const next = renderData[index + 1];
     if (!('sender_id' in next)) return true;
     return next.sender_id !== item.sender_id;
-  };
+  }, [renderData]);
 
   const renderItem = useCallback(({ item, index }: { item: RenderItem; index: number }) => {
     if ('type' in item && item.type === 'date_separator') {
@@ -162,7 +213,26 @@ export default function ChatScreen() {
           first && !isMe && styles.bubbleThemFirst,
           first && isMe && styles.bubbleMeFirst,
         ]}>
-          <Text style={[styles.msgText, isMe && styles.msgTextMe]}>{msg.body}</Text>
+          {!!msg.body && <Text style={[styles.msgText, isMe && styles.msgTextMe]}>{msg.body}</Text>}
+          {!!msg.attachment_url && (
+            <AnimatedPressable
+              style={[styles.attachmentCard, isMe ? styles.attachmentCardMe : styles.attachmentCardThem]}
+              onPress={() => openAttachment(msg.attachment_url!)}
+              haptic
+            >
+              <Image source={{ uri: msg.attachment_url }} style={styles.attachmentImage} resizeMode="cover" />
+              <View style={styles.attachmentFooter}>
+                <Ionicons
+                  name="image-outline"
+                  size={15}
+                  color={isMe ? '#000' : Colors.text.secondary}
+                />
+                <Text style={[styles.attachmentText, isMe ? styles.attachmentTextMe : styles.attachmentTextThem]}>
+                  View attachment
+                </Text>
+              </View>
+            </AnimatedPressable>
+          )}
           {last && (
             <View style={styles.timeRow}>
               <Text style={[styles.timeText, isMe && styles.timeTextMe]}>{formatTime(msg.sent_at)}</Text>
@@ -171,7 +241,7 @@ export default function ChatScreen() {
         </View>
       </View>
     );
-  }, [renderData, user]);
+  }, [isFirstInGroup, isLastInGroup, openAttachment, user]);
 
   return (
     <GradientBackground>
@@ -197,7 +267,7 @@ export default function ChatScreen() {
         <KeyboardAvoidingView style={styles.flex} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
           <FlatList
             ref={listRef}
-            data={renderData}
+            data={errorMessage ? [] : renderData}
             keyExtractor={(item: any) => item.id ?? item.date}
             renderItem={renderItem}
             contentContainerStyle={styles.list}
@@ -207,8 +277,20 @@ export default function ChatScreen() {
             scrollEventThrottle={100}
             ListEmptyComponent={
               <View style={styles.empty}>
-                <Ionicons name="chatbubbles-outline" size={40} color={Colors.text.tertiary} />
-                <Text style={styles.emptyText}>No messages yet. Say hello!</Text>
+                {loading ? (
+                  <ActivityIndicator color={Colors.accent} />
+                ) : errorMessage ? (
+                  <>
+                    <Ionicons name="alert-circle-outline" size={40} color={Colors.text.tertiary} />
+                    <Text style={styles.emptyText}>{errorMessage}</Text>
+                    <GlassButton label="Try Again" onPress={loadMessages} size="sm" style={{ marginTop: 10 }} />
+                  </>
+                ) : (
+                  <>
+                    <Ionicons name="chatbubbles-outline" size={40} color={Colors.text.tertiary} />
+                    <Text style={styles.emptyText}>No messages yet. Say hello!</Text>
+                  </>
+                )}
               </View>
             }
           />
@@ -236,12 +318,12 @@ export default function ChatScreen() {
                 selectionColor={Colors.accent}
               />
               <AnimatedPressable
-                style={[styles.sendBtn, !text.trim() && styles.sendBtnDisabled]}
+                style={[styles.sendBtn, (!text.trim() || sending) && styles.sendBtnDisabled]}
                 haptic
                 onPress={handleSend}
-                disabled={!text.trim()}
+                disabled={!text.trim() || sending}
               >
-                <Ionicons name="send" size={16} color={text.trim() ? '#000' : Colors.text.tertiary} />
+                <Ionicons name="send" size={16} color={text.trim() && !sending ? '#000' : Colors.text.tertiary} />
               </AnimatedPressable>
             </View>
           </SafeAreaView>
@@ -291,6 +373,20 @@ const styles = StyleSheet.create({
 
   msgText: { fontSize: 15, color: '#fff', lineHeight: 21 },
   msgTextMe: { color: '#000' },
+  attachmentCard: {
+    width: 220,
+    maxWidth: '100%',
+    borderRadius: 12,
+    overflow: 'hidden',
+    marginTop: 8,
+  },
+  attachmentCardMe: { backgroundColor: 'rgba(0,0,0,0.06)' },
+  attachmentCardThem: { backgroundColor: Colors.bg.secondary },
+  attachmentImage: { width: '100%', height: 150, backgroundColor: Colors.bg.secondary },
+  attachmentFooter: { flexDirection: 'row', alignItems: 'center', gap: 6, paddingHorizontal: 10, paddingVertical: 8 },
+  attachmentText: { fontSize: 13, fontWeight: '600' },
+  attachmentTextMe: { color: '#000' },
+  attachmentTextThem: { color: Colors.text.secondary },
 
   timeRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'flex-end', marginTop: 2 },
   timeText: { fontSize: 10, color: Colors.text.tertiary },

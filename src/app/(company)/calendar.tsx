@@ -4,30 +4,21 @@ import {
   ScrollView,
   StyleSheet,
   Text,
+  TouchableOpacity,
   View,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import { useNavigation } from '@react-navigation/native';
 import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
 import { supabase } from '@/lib/supabase/client';
 import { useAuthStore } from '@/stores/auth.store';
 import { formatCad } from '@/lib/formatters';
-import { Colors, Radius, Spacing, Typography } from '@/constants/theme';
+import { mapCompanyCalendarMilestones, type CompanyCalendarMilestone } from '@/lib/company-calendar';
+import { Colors, Spacing, Typography } from '@/constants/theme';
 import { GlassCard, GradientBackground, ListItemSkeleton, StatusBadge } from '@/components/ui';
 import { TradeMetricStrip, TradeScreenHeader } from '@/components/company/TradeUI';
 
-interface Milestone {
-  id: string;
-  title: string;
-  amount: number;
-  status: string;
-  due_date: string | null;
-  project: {
-    id: string;
-    address: string;
-    city: string;
-    room_type: string;
-  };
-}
+type Milestone = CompanyCalendarMilestone;
 
 function groupByDate(milestones: Milestone[]): { label: string; items: Milestone[] }[] {
   const today = new Date();
@@ -65,46 +56,73 @@ function formatDate(dateStr: string | null): string {
 }
 
 export default function CalendarScreen() {
+  const navigation = useNavigation<any>();
   const { user } = useAuthStore();
   const [milestones, setMilestones] = useState<Milestone[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
+  const [hasCompanyProfile, setHasCompanyProfile] = useState(false);
+  const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
   const fetchData = useCallback(async () => {
-    if (!user) return;
+    if (!user) {
+      setMilestones([]);
+      setHasCompanyProfile(false);
+      setErrorMessage('You need to be signed in to view your calendar.');
+      setLoading(false);
+      setRefreshing(false);
+      return;
+    }
 
     // Get company
-    const { data: co } = await supabase
+    setErrorMessage(null);
+    const { data: co, error: companyError } = await supabase
       .from('companies')
       .select('id')
       .eq('user_id', user.id)
-      .single();
+      .order('created_at', { ascending: false })
+      .limit(1)
+      .maybeSingle();
+
+    if (companyError) {
+      setMilestones([]);
+      setHasCompanyProfile(false);
+      setErrorMessage(companyError.message);
+      setLoading(false);
+      setRefreshing(false);
+      return;
+    }
 
     if (!co) {
+      setMilestones([]);
+      setHasCompanyProfile(false);
       setLoading(false);
+      setRefreshing(false);
       return;
     }
 
     // Get milestones from approved quotes for this company
-    const { data } = await supabase
+    setHasCompanyProfile(true);
+    const { data, error } = await supabase
       .from('milestones')
       .select(`
         id, title, amount, status, due_date,
-        quote:quotes!inner ( company_id, project:projects ( id, address, city, room_type ) )
+        quote:quotes!inner ( company_id, status, project:projects ( id, address, city, room_type ) )
       `)
       .eq('quote.company_id', co.id)
+      .eq('quote.status', 'approved')
       .not('status', 'eq', 'paid')
       .order('due_date', { ascending: true, nullsFirst: false });
+    if (error) {
+      setMilestones([]);
+      setErrorMessage(error.message);
+      setLoading(false);
+      setRefreshing(false);
+      return;
+    }
 
     // Flatten the nested join
-    const mapped: Milestone[] = (data ?? []).map((m: any) => ({
-      id: m.id,
-      title: m.title,
-      amount: m.amount,
-      status: m.status,
-      due_date: m.due_date,
-      project: m.quote?.project ?? { id: '', address: '', city: '', room_type: '' },
-    }));
+    const mapped = mapCompanyCalendarMilestones((data ?? []) as any[]);
 
     setMilestones(mapped);
     setLoading(false);
@@ -151,6 +169,21 @@ export default function CalendarScreen() {
               <ListItemSkeleton style={{ marginBottom: 12 }} />
               <ListItemSkeleton style={{ marginBottom: 12 }} />
             </>
+          ) : errorMessage ? (
+            <View style={styles.emptyState}>
+              <Icon name="alert-circle-outline" size={48} color={Colors.text.tertiary} />
+              <Text style={styles.emptyTitle}>Could not load calendar</Text>
+              <Text style={styles.emptySub}>{errorMessage}</Text>
+            </View>
+          ) : !hasCompanyProfile ? (
+            <View style={styles.emptyState}>
+              <Icon name="domain" size={48} color={Colors.text.tertiary} />
+              <Text style={styles.emptyTitle}>Set up your company profile</Text>
+              <Text style={styles.emptySub}>Complete contractor onboarding before tracking milestones.</Text>
+              <TouchableOpacity style={styles.setupBtn} onPress={() => navigation.navigate('BusinessOnboarding')} activeOpacity={0.8}>
+                <Text style={styles.setupBtnText}>Start Setup</Text>
+              </TouchableOpacity>
+            </View>
           ) : groups.length === 0 ? (
             <View style={styles.emptyState}>
               <Icon name="calendar-blank-outline" size={48} color={Colors.text.tertiary} />
@@ -164,26 +197,36 @@ export default function CalendarScreen() {
               <View key={group.label}>
                 <Text style={styles.sectionLabel}>{group.label}</Text>
                 {group.items.map((m) => (
-                  <GlassCard key={m.id} style={styles.card}>
-                    <View style={styles.cardRow}>
-                      <View style={styles.cardIconWrap}>
-                        <Icon name="flag-checkered" size={18} color={Colors.success} />
-                      </View>
-                      <View style={{ flex: 1 }}>
-                        <Text style={styles.cardTitle}>{m.title}</Text>
-                        <View style={styles.cardMeta}>
-                          <Icon name={m.project.room_type === 'kitchen' ? 'countertop-outline' : 'shower'} size={13} color={Colors.text.tertiary} />
-                          <Text style={styles.cardAddress}>{m.project.city}</Text>
-                          <Text style={styles.cardDot}>·</Text>
-                          <Text style={styles.cardDate}>{formatDate(m.due_date)}</Text>
+                  <TouchableOpacity
+                    key={m.id}
+                    activeOpacity={0.85}
+                    disabled={!m.project.id}
+                    onPress={() => navigation.navigate('JobDetail', {
+                      screen: 'JobMilestones',
+                      params: { id: m.project.id },
+                    })}
+                  >
+                    <GlassCard style={styles.card}>
+                      <View style={styles.cardRow}>
+                        <View style={styles.cardIconWrap}>
+                          <Icon name="flag-checkered" size={18} color={Colors.success} />
+                        </View>
+                        <View style={{ flex: 1 }}>
+                          <Text style={styles.cardTitle}>{m.title}</Text>
+                          <View style={styles.cardMeta}>
+                            <Icon name={m.project.room_type === 'kitchen' ? 'countertop-outline' : 'shower'} size={13} color={Colors.text.tertiary} />
+                            <Text style={styles.cardAddress}>{m.project.city || 'Location pending'}</Text>
+                            <Text style={styles.cardDot}>·</Text>
+                            <Text style={styles.cardDate}>{formatDate(m.due_date)}</Text>
+                          </View>
+                        </View>
+                        <View style={styles.cardRight}>
+                          <Text style={styles.cardAmount}>{formatCad(m.amount)}</Text>
+                          <StatusBadge label={m.status.replace(/_/g, ' ')} variant={statusVariant(m.status)} />
                         </View>
                       </View>
-                      <View style={styles.cardRight}>
-                        <Text style={styles.cardAmount}>{formatCad(m.amount)}</Text>
-                        <StatusBadge label={m.status.replace(/_/g, ' ')} variant={statusVariant(m.status)} />
-                      </View>
-                    </View>
-                  </GlassCard>
+                    </GlassCard>
+                  </TouchableOpacity>
                 ))}
               </View>
             ))
@@ -222,4 +265,6 @@ const styles = StyleSheet.create({
   emptyState: { flex: 1, alignItems: 'center', justifyContent: 'center', paddingTop: 80 },
   emptyTitle: { ...Typography.h3, marginTop: Spacing.md, marginBottom: 8 },
   emptySub: { ...Typography.bodySecondary, textAlign: 'center', lineHeight: 22 },
+  setupBtn: { backgroundColor: Colors.accent, paddingHorizontal: 18, paddingVertical: 10, borderRadius: 20, marginTop: 12 },
+  setupBtnText: { fontSize: 14, fontWeight: '700', color: '#fff' },
 });

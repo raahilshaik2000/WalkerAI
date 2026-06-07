@@ -37,6 +37,31 @@ Deno.serve(async (req) => {
   try {
     const { notification_id, user_id, type, payload }: PushPayload = await req.json();
 
+    const preferenceKey = notificationPreferenceKey(type);
+    if (preferenceKey) {
+      const { data: prefs, error: prefsError } = await supabase
+        .from('notification_preferences')
+        .select(preferenceKey)
+        .eq('user_id', user_id)
+        .maybeSingle();
+
+      if (prefsError) throw prefsError;
+      if (prefs && prefs[preferenceKey] === false) {
+        await supabase
+          .from('notifications')
+          .update({
+            push_sent: false,
+            push_sent_at: new Date().toISOString(),
+            push_error: 'PREFERENCE_DISABLED',
+          })
+          .eq('id', notification_id);
+
+        return new Response(JSON.stringify({ sent: 0, skipped: 'preference_disabled' }), {
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        });
+      }
+    }
+
     // Get active device tokens for this user
     const { data: tokens, error: tokenError } = await supabase
       .from('device_tokens')
@@ -46,7 +71,16 @@ Deno.serve(async (req) => {
 
     if (tokenError) throw tokenError;
     if (!tokens || tokens.length === 0) {
-      // No tokens — user has no devices registered, that's fine
+      await supabase
+        .from('notifications')
+        .update({
+          push_sent: false,
+          push_sent_at: new Date().toISOString(),
+          push_error: 'NO_ACTIVE_DEVICE_TOKENS',
+        })
+        .eq('id', notification_id);
+
+      // No tokens — user has no devices registered, that's fine.
       return new Response(JSON.stringify({ sent: 0 }), {
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
       });
@@ -116,7 +150,7 @@ Deno.serve(async (req) => {
     // Mark notification as push-sent
     await supabase
       .from('notifications')
-      .update({ push_sent: true, push_sent_at: new Date().toISOString() })
+      .update({ push_sent: true, push_sent_at: new Date().toISOString(), push_error: null })
       .eq('id', notification_id);
 
     return new Response(
@@ -139,11 +173,24 @@ function buildNotificationContent(
 ): { title: string; body: string; priority: 'high' | 'normal' | 'default'; ttl?: number } {
   switch (type) {
     case 'job_dispatched':
+    case 'slot_dispatched':
       return {
         title: '⚡ New Job Available — Act Fast',
         body: `${payload.room_type ?? 'Renovation'} in ${payload.city ?? 'your area'} — estimated $${formatCad(payload.ai_cost_min)}–$${formatCad(payload.ai_cost_max)}. First to accept wins.`,
         priority: 'high',
         ttl: 7200, // 2 hours — matches dispatch window
+      };
+    case 'all_slots_filled':
+      return {
+        title: 'Ready to Schedule',
+        body: 'Every required trade has accepted. Confirm the schedule to keep the project moving.',
+        priority: 'high',
+      };
+    case 'schedule_confirmed':
+      return {
+        title: 'Schedule Confirmed',
+        body: 'The project schedule has been confirmed.',
+        priority: 'normal',
       };
     case 'job_filled':
       return {
@@ -152,6 +199,7 @@ function buildNotificationContent(
         priority: 'normal',
       };
     case 'job_accepted':
+    case 'slot_accepted':
       return {
         title: '🎉 A Contractor Accepted!',
         body: 'A verified contractor is ready for your project. Review their details.',
@@ -170,6 +218,7 @@ function buildNotificationContent(
         priority: 'high',
       };
     case 'milestone_needs_approval':
+    case 'milestone_completed':
       return {
         title: 'Milestone Complete — Approval Needed',
         body: `Your contractor marked a milestone complete. Approve to release payment.`,
@@ -179,6 +228,42 @@ function buildNotificationContent(
       return {
         title: '💰 Milestone Payment Released',
         body: `$${formatCad(payload.amount)} is being deposited to your account.`,
+        priority: 'normal',
+      };
+    case 'material_order_claimed':
+      return {
+        title: 'Material Order Claimed',
+        body: (payload.message as string) ?? 'A supplier has claimed a material order for this project.',
+        priority: 'normal',
+      };
+    case 'order_shipped':
+      return {
+        title: 'Material Order Shipped',
+        body: (payload.message as string) ?? 'A material order for your project has shipped.',
+        priority: 'normal',
+      };
+    case 'order_delivered':
+      return {
+        title: 'Material Order Delivered',
+        body: (payload.message as string) ?? 'A material order was delivered. Confirm receipt to release payment.',
+        priority: 'high',
+      };
+    case 'new_material_order':
+      return {
+        title: 'New Material Order Nearby',
+        body: `${payload.order_count ?? 'New'} material order${payload.order_count === 1 ? '' : 's'} available${payload.city ? ` in ${payload.city}` : ''}.`,
+        priority: 'high',
+      };
+    case 'supplier_paid':
+      return {
+        title: '💰 Supplier Payout Sent',
+        body: `$${formatCad(payload.amount)} is being deposited to your account.`,
+        priority: 'normal',
+      };
+    case 'project_complete':
+      return {
+        title: 'Project Complete',
+        body: (payload.message as string) ?? 'The project is complete. Review the closeout details.',
         priority: 'normal',
       };
     case 'new_message':
@@ -218,4 +303,32 @@ function buildNotificationContent(
 function formatCad(cents: unknown): string {
   if (typeof cents !== 'number') return '?';
   return new Intl.NumberFormat('en-CA', { maximumFractionDigits: 0 }).format(cents / 100);
+}
+
+function notificationPreferenceKey(type: string): string | null {
+  switch (type) {
+    case 'new_message':
+      return 'messages';
+    case 'job_dispatched':
+    case 'slot_dispatched':
+    case 'job_filled':
+      return 'job_dispatch';
+    case 'quote_submitted':
+    case 'quote_approved':
+      return 'quote_updates';
+    case 'milestone_needs_approval':
+    case 'milestone_completed':
+    case 'project_complete':
+    case 'all_slots_filled':
+    case 'schedule_confirmed':
+    case 'material_order_claimed':
+    case 'new_material_order':
+    case 'order_shipped':
+    case 'order_delivered':
+      return 'milestone_updates';
+    case 'warranty_expiring':
+      return 'warranty_reminders';
+    default:
+      return null;
+  }
 }

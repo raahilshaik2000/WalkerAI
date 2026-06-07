@@ -12,7 +12,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { useNavigation } from '@react-navigation/native';
 import { launchImageLibrary } from 'react-native-image-picker';
 import { supabase } from '@/lib/supabase/client';
-import { uploadFile } from '@/lib/supabase/storage';
+import { getUploadMetadata, uploadFile } from '@/lib/supabase/storage';
 import { useAuthStore } from '@/stores/auth.store';
 import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
 import { Colors, Radius, Spacing, Typography } from '@/constants/theme';
@@ -20,6 +20,8 @@ import { GlassButton, GlassCard, GradientBackground } from '@/components/ui';
 
 interface DocUploadState {
   uri: string | null;
+  fileName?: string | null;
+  type?: string | null;
   uploading: boolean;
   progress: number;
 }
@@ -37,9 +39,17 @@ export default function InsuranceOnboardingScreen() {
       mediaType: 'photo',
       quality: 0.8,
       selectionLimit: 1,
+      assetRepresentationMode: 'compatible',
     });
     if (!result.didCancel && result.assets && result.assets[0]) {
-      setter({ uri: result.assets[0].uri ?? null, uploading: false, progress: 0 });
+      const asset = result.assets[0];
+      setter({
+        uri: asset.uri ?? null,
+        fileName: asset.fileName ?? null,
+        type: asset.type ?? null,
+        uploading: false,
+        progress: 0,
+      });
     }
   };
 
@@ -48,9 +58,11 @@ export default function InsuranceOnboardingScreen() {
     prefix: string
   ): Promise<string | null> => {
     if (!state.uri) return null;
-    const path = `${user!.id}/${prefix}-${Date.now()}.jpg`;
-    const result = await uploadFile('company-docs', path, state.uri, 'image/jpeg');
-    return result.publicUrl;
+    if (!user?.id) throw new Error('Please sign in again before uploading documents.');
+    const upload = getUploadMetadata(state);
+    const path = `${user.id}/${prefix}-${Date.now()}.${upload.extension}`;
+    const result = await uploadFile('company-docs', path, upload.uri, upload.contentType);
+    return result.storagePath;
   };
 
   const handleSubmit = async () => {
@@ -61,28 +73,36 @@ export default function InsuranceOnboardingScreen() {
 
     setSubmitting(true);
     try {
+      if (!user?.id) throw new Error('Please sign in again before submitting contractor verification.');
+
       const [insuranceUrl, wcUrl] = await Promise.all([
         uploadDoc(insurance, 'insurance'),
         uploadDoc(wc, 'wc'),
       ]);
 
-      const { data: company } = await supabase
+      const { data: company, error: companyError } = await supabase
         .from('companies')
         .select('id')
-        .eq('user_id', user!.id)
-        .single();
+        .eq('user_id', user.id)
+        .order('created_at', { ascending: false })
+        .limit(1)
+        .maybeSingle();
 
+      if (companyError) throw companyError;
       if (!company) throw new Error('Company not found.');
 
-      const { error } = await supabase
+      const { data: updated, error } = await supabase
         .from('companies')
         .update({
           insurance_doc_url: insuranceUrl,
           ...(wcUrl ? { wc_doc_url: wcUrl } : {}),
         })
-        .eq('id', company.id);
+        .eq('id', company.id)
+        .select('id')
+        .maybeSingle();
 
       if (error) throw error;
+      if (!updated) throw new Error('Company insurance documents were not saved.');
 
       // Navigate to pending verification screen
       navigation.reset({ index: 0, routes: [{ name: 'PendingVerification' }] });

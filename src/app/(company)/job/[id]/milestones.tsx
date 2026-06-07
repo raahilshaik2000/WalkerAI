@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import {
   Alert,
   ScrollView,
@@ -15,8 +15,13 @@ import { launchImageLibrary } from 'react-native-image-picker';
 import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
 import Ionicons from 'react-native-vector-icons/Ionicons';
 import { supabase } from '@/lib/supabase/client';
-import { Colors, Radius, Spacing, Typography } from '@/constants/theme';
+import { companyEstimatedNetPayoutCents } from '@/lib/company-payouts';
+import { formatCadCents } from '@/lib/currency';
+import { getUploadMetadata, uploadFile } from '@/lib/supabase/storage';
+import { useAuthStore } from '@/stores/auth.store';
+import { Colors, Spacing, Typography } from '@/constants/theme';
 import { formatStatusLabel } from '@/lib/formatters';
+import { getRequiredStringParam } from '@/lib/navigation-params';
 import { GlassButton, GradientBackground, StatusBadge } from '@/components/ui';
 import { TradeEmptyState, TradeMetricStrip, TradePanel } from '@/components/company/TradeUI';
 
@@ -24,6 +29,7 @@ interface Milestone {
   id: string;
   title: string;
   amount: number;
+  commission_rate: number | null;
   status: string;
   due_date: string | null;
   completed_at: string | null;
@@ -34,9 +40,9 @@ interface QuoteSummary {
   id: string;
   status: string | null;
   submitted_at: string | null;
+  commission_rate?: number | null;
+  slot_id?: string | null;
 }
-
-const STATUS_ORDER = ['pending', 'started', 'in_progress', 'completed', 'homeowner_approved', 'paid'];
 
 const STATUS_NEXT: Record<string, string> = {
   pending: 'started',
@@ -51,9 +57,7 @@ const STATUS_LABEL: Record<string, string> = {
 };
 
 function formatCad(cents: number) {
-  return new Intl.NumberFormat('en-CA', {
-    style: 'currency', currency: 'CAD', maximumFractionDigits: 0,
-  }).format(cents / 100);
+  return formatCadCents(cents);
 }
 
 function statusVariant(status: string): 'pending' | 'active' | 'completed' | 'paid' {
@@ -64,29 +68,109 @@ function statusVariant(status: string): 'pending' | 'active' | 'completed' | 'pa
   return 'pending';
 }
 
+function isReleasedMilestone(status: string) {
+  return status === 'paid' || status === 'homeowner_approved';
+}
+
+function isMissingColumnError(error: { message?: string } | null | undefined) {
+  return !!error?.message && /column .* does not exist/i.test(error.message);
+}
+
+function isPolicyError(error: { code?: string; message?: string } | null | undefined) {
+  const message = error?.message?.toLowerCase() ?? '';
+  return error?.code === '42501'
+    || message.includes('row-level security')
+    || message.includes('permission denied')
+    || message.includes('violates row-level security policy');
+}
+
+async function hasMilestoneProgressEvidence(projectId: string, milestoneId: string): Promise<boolean> {
+  const [photoResult, messageResult] = await Promise.all([
+    supabase
+      .from('project_photos')
+      .select('id')
+      .eq('project_id', projectId)
+      .like('storage_path', `${projectId}/milestones/${milestoneId}/%`)
+      .limit(1),
+    supabase
+      .from('messages')
+      .select('id')
+      .eq('project_id', projectId)
+      .not('attachment_url', 'is', null)
+      .ilike('body', `%milestone:${milestoneId}%`)
+      .limit(1),
+  ]);
+
+  if (photoResult.error) throw photoResult.error;
+  if (messageResult.error) throw messageResult.error;
+  return (photoResult.data?.length ?? 0) > 0 || (messageResult.data?.length ?? 0) > 0;
+}
+
 export default function CompanyMilestonesScreen() {
   const route = useRoute<any>();
-  const projectId = route.params?.id;
+  const projectId = getRequiredStringParam(route.params, 'id');
+  const slotId: string | undefined = route.params?.slot;
   const navigation = useNavigation<any>();
+  const { user } = useAuthStore();
   const [milestones, setMilestones] = useState<Milestone[]>([]);
   const [loading, setLoading] = useState(true);
   const [updating, setUpdating] = useState<string | null>(null);
 
-  const fetchMilestones = async () => {
-    const { data: quotes, error: quoteError } = await supabase
-      .from('quotes')
-      .select('id, status, submitted_at')
-      .eq('project_id', projectId)
-      .order('submitted_at', { ascending: false });
-
-    if (quoteError) {
-      Alert.alert('Error', quoteError.message);
+  const fetchMilestones = useCallback(async () => {
+    if (!projectId || !user?.id) {
+      setMilestones([]);
       setLoading(false);
       return;
     }
 
-    const quoteData = ((quotes ?? []) as QuoteSummary[]).find((q) => q.status === 'approved')
-      ?? (quotes?.[0] as QuoteSummary | undefined);
+    const { data: company, error: companyError } = await supabase
+      .from('companies')
+      .select('id')
+      .eq('user_id', user.id)
+      .order('created_at', { ascending: false })
+      .limit(1)
+      .maybeSingle();
+
+    if (companyError) {
+      Alert.alert('Error', companyError.message);
+      setLoading(false);
+      return;
+    }
+
+    if (!company) {
+      setMilestones([]);
+      setLoading(false);
+      return;
+    }
+
+    let quoteResult: any = await supabase
+      .from('quotes')
+      .select('id, status, submitted_at, commission_rate, slot_id')
+      .eq('project_id', projectId)
+      .eq('company_id', company.id)
+      .order('submitted_at', { ascending: false });
+
+    if (isMissingColumnError(quoteResult.error)) {
+      quoteResult = await supabase
+        .from('quotes')
+        .select('id, status, submitted_at, commission_rate')
+        .eq('project_id', projectId)
+        .eq('company_id', company.id)
+        .order('submitted_at', { ascending: false });
+    }
+
+    if (quoteResult.error) {
+      Alert.alert('Error', quoteResult.error.message);
+      setLoading(false);
+      return;
+    }
+
+    const scopedQuotes = ((quoteResult.data ?? []) as QuoteSummary[]).filter((q) => {
+      if (!slotId || !('slot_id' in q)) return true;
+      return q.slot_id === slotId;
+    });
+
+    const quoteData = scopedQuotes.find((q) => q.status === 'approved');
 
     if (!quoteData) {
       setMilestones([]);
@@ -106,12 +190,16 @@ export default function CompanyMilestonesScreen() {
       return;
     }
 
-    setMilestones((data ?? []) as Milestone[]);
+    setMilestones(((data ?? []) as Omit<Milestone, 'commission_rate'>[]).map((milestone) => ({
+      ...milestone,
+      commission_rate: quoteData.commission_rate ?? null,
+    })));
     setLoading(false);
-  };
+  }, [projectId, slotId, user?.id]);
 
   useEffect(() => {
     fetchMilestones();
+    if (!projectId) return;
 
     const channel = supabase
       .channel(`company-milestones:${projectId}`)
@@ -121,9 +209,14 @@ export default function CompanyMilestonesScreen() {
       .subscribe();
 
     return () => { supabase.removeChannel(channel); };
-  }, [projectId]);
+  }, [fetchMilestones, projectId]);
 
   const handleAdvanceStatus = async (milestone: Milestone) => {
+    if (!projectId) {
+      Alert.alert('Missing project', 'Reopen milestones from the job page and try again.');
+      return;
+    }
+    const currentProjectId = projectId;
     const nextStatus = STATUS_NEXT[milestone.status];
     if (!nextStatus) return;
 
@@ -138,56 +231,132 @@ export default function CompanyMilestonesScreen() {
         text: 'Confirm',
         onPress: async () => {
           setUpdating(milestone.id);
-          const updates: Record<string, unknown> = { status: nextStatus };
-          if (isComplete) updates.completed_at = new Date().toISOString();
+          try {
+            if (isComplete) {
+              const hasEvidence = await hasMilestoneProgressEvidence(currentProjectId, milestone.id);
+              if (!hasEvidence) {
+                throw new Error('Upload at least one progress photo for this milestone before marking it complete.');
+              }
+            }
 
-          const { error } = await supabase.from('milestones').update(updates).eq('id', milestone.id);
-          if (error) {
-            Alert.alert('Error', error.message);
+            const updates: Record<string, unknown> = { status: nextStatus };
+            if (isComplete) updates.completed_at = new Date().toISOString();
+
+            const { data: updatedMilestone, error } = await supabase
+              .from('milestones')
+              .update(updates)
+              .eq('id', milestone.id)
+              .select('id')
+              .maybeSingle();
+            if (error) throw error;
+            if (!updatedMilestone) throw new Error('Milestone is no longer available.');
+
+            if (isComplete) {
+              const { data: project, error: projectError } = await supabase
+                .from('projects')
+                .select('homeowner_id')
+                .eq('id', currentProjectId)
+                .maybeSingle();
+              if (projectError) throw projectError;
+              if (!project) throw new Error('Project not found while notifying homeowner.');
+
+              const { error: notificationError } = await supabase.from('notifications').insert({
+                user_id: project.homeowner_id,
+                type: 'milestone_needs_approval',
+                payload: {
+                  project_id: currentProjectId,
+                  milestone_id: milestone.id,
+                  milestone_title: milestone.title,
+                  amount: milestone.amount,
+                  deep_link: `/(homeowner)/project/${currentProjectId}/milestones`,
+                },
+              });
+              if (notificationError) {
+                console.warn('milestone_needs_approval notification failed:', notificationError);
+              }
+            }
+
+            ReactNativeHapticFeedback.trigger('notificationSuccess');
+            setMilestones((prev) =>
+              prev.map((m) => m.id === milestone.id ? { ...m, ...updates } as Milestone : m)
+            );
+          } catch (err) {
+            Alert.alert('Error', err instanceof Error ? err.message : 'Failed to update milestone.');
+          } finally {
             setUpdating(null);
-            return;
           }
-
-          ReactNativeHapticFeedback.trigger('notificationSuccess');
-          setMilestones((prev) =>
-            prev.map((m) => m.id === milestone.id ? { ...m, ...updates } as Milestone : m)
-          );
-          setUpdating(null);
         },
       },
     ]);
   };
 
   const handleUploadPhoto = async (milestone: Milestone) => {
+    if (!projectId) {
+      Alert.alert('Missing project', 'Reopen milestones from the job page and try again.');
+      return;
+    }
+    if (!user?.id) {
+      Alert.alert('Sign in required', 'Please sign in again before uploading progress photos.');
+      return;
+    }
+
     const result = await launchImageLibrary({
       mediaType: 'photo',
       quality: 0.8,
       selectionLimit: 1,
+      assetRepresentationMode: 'compatible',
     });
     if (result.didCancel || !result.assets || !result.assets[0]) return;
 
-    const asset = result.assets[0];
-    const ext = (asset.uri ?? '').split('.').pop() ?? 'jpg';
-    const path = `milestones/${milestone.id}/progress-${Date.now()}.${ext}`;
+    try {
+      const upload = getUploadMetadata(result.assets[0]);
+      const path = `${projectId}/milestones/${milestone.id}/progress-${Date.now()}.${upload.extension}`;
+      const { publicUrl, storagePath } = await uploadFile(
+        'project-photos',
+        path,
+        upload.uri,
+        upload.contentType
+      );
 
-    const response = await fetch(asset.uri ?? '');
-    const blob = await response.blob();
+      const { error } = await supabase.from('project_photos').insert({
+        project_id: projectId,
+        url: publicUrl,
+        storage_path: storagePath,
+      });
+      if (error) {
+        if (!isPolicyError(error)) throw error;
 
-    const { error } = await supabase.storage
-      .from('project-photos')
-      .upload(path, blob, { contentType: `image/${ext}` });
+        const { error: messageError } = await supabase.from('messages').insert({
+          project_id: projectId,
+          sender_id: user.id,
+          body: `[milestone:${milestone.id}] Progress photo uploaded for "${milestone.title}": ${publicUrl}`,
+          attachment_url: publicUrl,
+        });
 
-    if (error) {
-      Alert.alert('Upload failed', error.message);
-    } else {
+        if (messageError) {
+          throw new Error(`Photo uploaded, but WalkerAI could not save the progress record (${error.message}) or send it in messages (${messageError.message}).`);
+        }
+
+        ReactNativeHapticFeedback.trigger('notificationSuccess');
+        Alert.alert(
+          'Photo sent in messages',
+          'This environment needs the company progress-photo policy migration before contractor uploads can appear in project photos. The photo was sent to the homeowner in the project message thread instead.'
+        );
+        return;
+      }
+
       ReactNativeHapticFeedback.trigger('notificationSuccess');
       Alert.alert('Photo uploaded', 'Progress photo saved successfully.');
+    } catch (err) {
+      Alert.alert('Upload failed', err instanceof Error ? err.message : 'Please try again.');
     }
   };
 
-  const totalPaid = milestones.filter((m) => m.status === 'paid').reduce((s, m) => s + m.amount, 0);
-  const totalAmount = milestones.reduce((s, m) => s + m.amount, 0);
-  const progressPct = totalAmount > 0 ? totalPaid / totalAmount : 0;
+  const netPayout = (milestone: Milestone) => companyEstimatedNetPayoutCents(milestone.amount, milestone.commission_rate);
+  const netPaid = milestones.filter((m) => isReleasedMilestone(m.status)).reduce((s, m) => s + netPayout(m), 0);
+  const netTotal = milestones.reduce((s, m) => s + netPayout(m), 0);
+  const grossTotal = milestones.reduce((s, m) => s + m.amount, 0);
+  const progressPct = netTotal > 0 ? netPaid / netTotal : 0;
 
   return (
     <GradientBackground glow="top-right">
@@ -204,18 +373,19 @@ export default function CompanyMilestonesScreen() {
           <TradeMetricStrip
             items={[
               { label: 'Milestones', value: milestones.length, tone: 'muted' },
-              { label: 'Total', value: totalAmount ? formatCad(totalAmount) : '$0', tone: totalAmount ? 'success' : 'muted' },
-              { label: 'Paid', value: formatCad(totalPaid), tone: totalPaid ? 'success' : 'muted' },
+              { label: 'Net total', value: netTotal ? formatCad(netTotal) : '$0.00', tone: netTotal ? 'success' : 'muted' },
+              { label: 'Net paid', value: formatCad(netPaid), tone: netPaid ? 'success' : 'muted' },
             ]}
           />
 
           {/* Escrow progress */}
-          {totalAmount > 0 && (
+          {grossTotal > 0 && (
             <TradePanel style={styles.card}>
-              <Text style={styles.sectionLabel}>Payments Received</Text>
+              <Text style={styles.sectionLabel}>Net Payments Received</Text>
               <Text style={styles.escrowAmount}>
-                {formatCad(totalPaid)} <Text style={styles.escrowTotal}>of {formatCad(totalAmount)}</Text>
+                {formatCad(netPaid)} <Text style={styles.escrowTotal}>of {formatCad(netTotal)}</Text>
               </Text>
+              <Text style={styles.escrowGross}>Gross milestone total: {formatCad(grossTotal)}</Text>
               <View style={styles.progressTrack}>
                 <View style={[styles.progressFill, { width: `${progressPct * 100}%` }]} />
               </View>
@@ -225,6 +395,7 @@ export default function CompanyMilestonesScreen() {
           {/* Milestone list */}
           {milestones.map((m, i) => {
             const canAdvance = !!STATUS_NEXT[m.status];
+            const canUploadPhoto = !isReleasedMilestone(m.status);
             const isUpdating = updating === m.id;
 
             return (
@@ -242,7 +413,8 @@ export default function CompanyMilestonesScreen() {
                     )}
                   </View>
                   <View style={styles.milestoneRight}>
-                    <Text style={styles.milestoneAmount}>{formatCad(m.amount)}</Text>
+                    <Text style={styles.milestoneAmount}>{formatCad(netPayout(m))}</Text>
+                    <Text style={styles.milestoneGross}>{formatCad(m.amount)} gross</Text>
                     <StatusBadge label={formatStatusLabel(m.status)} variant={statusVariant(m.status)} size="sm" />
                   </View>
                 </View>
@@ -265,24 +437,28 @@ export default function CompanyMilestonesScreen() {
                   </View>
                 )}
 
-                {canAdvance && (
+                {(canAdvance || canUploadPhoto) && (
                   <View style={styles.milestoneActions}>
-                    <GlassButton
-                      label={STATUS_LABEL[m.status] ?? 'Update'}
-                      onPress={() => handleAdvanceStatus(m)}
-                      loading={isUpdating}
-                      size="sm"
-                      haptic
-                      style={styles.actionBtn}
-                    />
-                    <GlassButton
-                      label="Photo"
-                      icon={<Icon name="camera-outline" size={16} color={Colors.text.primary} />}
-                      onPress={() => handleUploadPhoto(m)}
-                      variant="secondary"
-                      size="sm"
-                      style={styles.actionBtn}
-                    />
+                    {canAdvance && (
+                      <GlassButton
+                        label={STATUS_LABEL[m.status] ?? 'Update'}
+                        onPress={() => handleAdvanceStatus(m)}
+                        loading={isUpdating}
+                        size="sm"
+                        haptic
+                        style={styles.actionBtn}
+                      />
+                    )}
+                    {canUploadPhoto && (
+                      <GlassButton
+                        label="Photo"
+                        icon={<Icon name="camera-outline" size={16} color={Colors.text.primary} />}
+                        onPress={() => handleUploadPhoto(m)}
+                        variant="secondary"
+                        size="sm"
+                        style={styles.actionBtn}
+                      />
+                    )}
                   </View>
                 )}
 
@@ -303,7 +479,7 @@ export default function CompanyMilestonesScreen() {
             <TradeEmptyState
               icon="clipboard-text-outline"
               title="No milestones yet"
-              body="Submit or accept a quote to create project milestones."
+              body="Milestones appear here after the homeowner funds your quote."
             />
           )}
         </ScrollView>
@@ -324,6 +500,7 @@ const styles = StyleSheet.create({
   sectionLabel: { ...Typography.label, marginBottom: 8 },
   escrowAmount: { fontSize: 28, fontWeight: '700', color: Colors.text.primary, marginBottom: 12 },
   escrowTotal: { fontSize: 16, fontWeight: '400', color: Colors.text.secondary },
+  escrowGross: { ...Typography.caption, marginBottom: 10 },
   progressTrack: {
     height: 6, backgroundColor: Colors.glass.border, borderRadius: 3, overflow: 'hidden',
   },
@@ -343,6 +520,7 @@ const styles = StyleSheet.create({
   dueDate: { ...Typography.caption },
   milestoneRight: { alignItems: 'flex-end', gap: 6 },
   milestoneAmount: { fontSize: 16, fontWeight: '600', color: Colors.text.primary },
+  milestoneGross: { ...Typography.caption, textAlign: 'right' },
   approvedBanner: {
     marginTop: 10, paddingTop: 10,
     borderTopWidth: 1, borderTopColor: Colors.glass.border,

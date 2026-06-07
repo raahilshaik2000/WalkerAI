@@ -2,8 +2,9 @@ import { supabase } from './client';
 import type { UserRole } from '@/constants/enums';
 
 export async function signUp(email: string, password: string, role: UserRole) {
+  const normalizedEmail = email.trim().toLowerCase();
   const { data, error } = await supabase.auth.signUp({
-    email,
+    email: normalizedEmail,
     password,
     options: {
       data: { role },
@@ -17,7 +18,7 @@ export async function signUp(email: string, password: string, role: UserRole) {
   // the authoritative path.
   if (data.user && data.session) {
     await supabase.from('users').upsert(
-      { id: data.user.id, email, role },
+      { id: data.user.id, email: normalizedEmail, role },
       { onConflict: 'id' },
     );
   }
@@ -26,7 +27,7 @@ export async function signUp(email: string, password: string, role: UserRole) {
 }
 
 export async function signIn(email: string, password: string) {
-  const { data, error } = await supabase.auth.signInWithPassword({ email, password });
+  const { data, error } = await supabase.auth.signInWithPassword({ email: email.trim().toLowerCase(), password });
   if (error) throw error;
   return data;
 }

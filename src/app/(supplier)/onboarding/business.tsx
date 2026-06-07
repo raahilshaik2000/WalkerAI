@@ -14,8 +14,25 @@ import { useNavigation } from '@react-navigation/native';
 import Ionicons from 'react-native-vector-icons/Ionicons';
 import { supabase } from '@/lib/supabase/client';
 import { useAuthStore } from '@/stores/auth.store';
-import { Colors, Radius, Spacing, Typography } from '@/constants/theme';
+import { Colors, Spacing, Typography } from '@/constants/theme';
 import { GlassButton, GlassCard, GlassInput, GradientBackground } from '@/components/ui';
+import { AddressAutocomplete, type AddressResult } from '@/components/ui/AddressAutocomplete';
+import { normalizeCanadianProvince } from '@/lib/canada';
+
+function isMissingColumnError(error: { message?: string } | null | undefined) {
+  return !!error?.message && /column .* does not exist/i.test(error.message);
+}
+
+function withoutKeys<T extends Record<string, unknown>>(payload: T, keys: string[]) {
+  return Object.fromEntries(Object.entries(payload).filter(([key]) => !keys.includes(key)));
+}
+
+function parseWholeNumber(value: string): number | null {
+  const trimmed = value.trim();
+  if (!/^\d+$/.test(trimmed)) return null;
+  const parsed = Number(trimmed);
+  return Number.isSafeInteger(parsed) ? parsed : null;
+}
 
 export default function SupplierBusinessOnboarding() {
   const navigation = useNavigation<any>();
@@ -27,32 +44,89 @@ export default function SupplierBusinessOnboarding() {
   const [province, setProvince] = useState('');
   const [postalCode, setPostalCode] = useState('');
   const [serviceRadius, setServiceRadius] = useState('100');
+  const [lat, setLat] = useState<number | null>(null);
+  const [lng, setLng] = useState<number | null>(null);
   const [loading, setLoading] = useState(false);
+
+  const handleAddressSelect = (result: AddressResult) => {
+    setAddress(result.street || result.fullAddress);
+    setCity(result.city);
+    setProvince(normalizeCanadianProvince(result.province));
+    setPostalCode(result.postalCode);
+    setLat(result.lat ?? null);
+    setLng(result.lng ?? null);
+  };
+
+  const clearSelectedCoordinates = () => {
+    setLat(null);
+    setLng(null);
+  };
 
   const handleNext = async () => {
     if (!businessName.trim() || !city.trim() || !province.trim()) {
       Alert.alert('Required', 'Please fill in business name, city, and province.');
       return;
     }
-    const radius = parseInt(serviceRadius, 10);
-    if (isNaN(radius) || radius < 10 || radius > 1000) {
+    const provinceCode = normalizeCanadianProvince(province);
+    if (!provinceCode) {
+      Alert.alert('Invalid province', 'Use a valid Canadian province or territory code, such as ON, BC, or AB.');
+      return;
+    }
+    if (lat == null || lng == null) {
+      Alert.alert('Delivery location required', 'Select your business address from the address search so WalkerAI can match material orders near you.');
+      return;
+    }
+    const radius = parseWholeNumber(serviceRadius);
+    if (radius == null || radius < 10 || radius > 1000) {
       Alert.alert('Invalid radius', 'Service radius must be between 10 and 1000 km.');
+      return;
+    }
+    if (!user?.id) {
+      Alert.alert('Sign in required', 'Please sign in again before continuing supplier onboarding.');
       return;
     }
 
     setLoading(true);
     try {
-      const { error } = await supabase.from('suppliers').upsert({
-        user_id: user!.id,
+      const payload = {
+        user_id: user.id,
         business_name: businessName.trim(),
         address: address.trim() || null,
         city: city.trim(),
-        province: province.trim().toUpperCase().slice(0, 2),
+        province: provinceCode,
         postal_code: postalCode.trim() || null,
         service_radius_km: radius,
+        lat,
+        lng,
         verified: false,
-      });
+      };
+
+      const { data: existingSupplier, error: existingError } = await supabase
+        .from('suppliers')
+        .select('id')
+        .eq('user_id', user.id)
+        .order('created_at', { ascending: false })
+        .limit(1)
+        .maybeSingle();
+      if (existingError) throw existingError;
+
+      let saveQuery = existingSupplier?.id
+        ? supabase.from('suppliers').update(payload).eq('id', existingSupplier.id)
+        : supabase.from('suppliers').insert(payload);
+      let { data, error } = await saveQuery.select('id').maybeSingle();
+
+      if (isMissingColumnError(error)) {
+        const legacyPayload = withoutKeys(payload, ['lat', 'lng']);
+        saveQuery = existingSupplier?.id
+          ? supabase.from('suppliers').update(legacyPayload).eq('id', existingSupplier.id)
+          : supabase.from('suppliers').insert(legacyPayload);
+        const legacyResult = await saveQuery.select('id').maybeSingle();
+        data = legacyResult.data;
+        error = legacyResult.error;
+      }
+
       if (error) throw error;
+      if (!data) throw new Error('Supplier profile was not saved.');
       navigation.navigate('SupplierLicenseOnboarding');
     } catch (err) {
       Alert.alert('Error', err instanceof Error ? err.message : 'Failed to save. Try again.');
@@ -81,12 +155,46 @@ export default function SupplierBusinessOnboarding() {
 
             <GlassCard style={styles.card}>
               <GlassInput label="Business Name" value={businessName} onChangeText={setBusinessName} autoCapitalize="words" containerStyle={styles.input} />
-              <GlassInput label="Street Address (optional)" value={address} onChangeText={setAddress} containerStyle={styles.input} />
+              <AddressAutocomplete
+                placeholder="Search business address"
+                initialValue={address}
+                onSelect={handleAddressSelect}
+                onClearSelection={clearSelectedCoordinates}
+                containerStyle={styles.input}
+              />
               <View style={styles.row}>
-                <GlassInput label="City" value={city} onChangeText={setCity} autoCapitalize="words" containerStyle={[styles.input, { flex: 1 }]} />
-                <GlassInput label="Province" value={province} onChangeText={setProvince} autoCapitalize="characters" maxLength={2} containerStyle={[styles.input, { width: 80 }]} />
+                <GlassInput
+                  label="City"
+                  value={city}
+                  onChangeText={(value) => {
+                    setCity(value);
+                    clearSelectedCoordinates();
+                  }}
+                  autoCapitalize="words"
+                  containerStyle={[styles.input, { flex: 1 }]}
+                />
+                <GlassInput
+                  label="Province"
+                  value={province}
+                  onChangeText={(value) => {
+                    setProvince(value);
+                    clearSelectedCoordinates();
+                  }}
+                  autoCapitalize="characters"
+                  maxLength={2}
+                  containerStyle={[styles.input, { width: 80 }]}
+                />
               </View>
-              <GlassInput label="Postal Code (optional)" value={postalCode} onChangeText={setPostalCode} autoCapitalize="characters" containerStyle={styles.input} />
+              <GlassInput
+                label="Postal Code (optional)"
+                value={postalCode}
+                onChangeText={(value) => {
+                  setPostalCode(value);
+                  clearSelectedCoordinates();
+                }}
+                autoCapitalize="characters"
+                containerStyle={styles.input}
+              />
               <GlassInput
                 label="Service Radius (km)"
                 value={serviceRadius}

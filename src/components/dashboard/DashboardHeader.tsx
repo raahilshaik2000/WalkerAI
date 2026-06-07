@@ -4,6 +4,7 @@ import Animated from 'react-native-reanimated';
 import Ionicons from 'react-native-vector-icons/Ionicons';
 import { useNavigation } from '@react-navigation/native';
 import { AnimatedPressable } from '@/components/ui';
+import { NotificationButton } from '@/components/notifications/NotificationButton';
 import { useAuthStore } from '@/stores/auth.store';
 import { useProfileStore } from '@/stores/profile.store';
 import { Colors, Spacing } from '@/constants/theme';
@@ -13,10 +14,10 @@ import { useStaggeredEntrance } from './useStaggeredEntrance';
 export function DashboardHeader() {
   const navigation = useNavigation<any>();
   const { user } = useAuthStore();
-  const { address, city } = useProfileStore();
+  const { displayName, address, city } = useProfileStore();
   const animatedStyle = useStaggeredEntrance(0);
 
-  const displayName = user?.email?.split('@')[0] ?? 'Homeowner';
+  const greetingName = displayName || user?.email?.split('@')[0] || 'Homeowner';
   const locationLabel = address || city || 'Canada';
 
   return (
@@ -25,16 +26,13 @@ export function DashboardHeader() {
       <View style={styles.topRow}>
         <View style={styles.greetingCol}>
           <Text style={styles.greeting}>{getGreeting()},</Text>
-          <Text style={styles.name}>{displayName}</Text>
+          <Text style={styles.name}>{greetingName}</Text>
           <Text style={styles.location}>
             <Ionicons name="location-outline" size={11} color={Colors.text.tertiary} />
             {' '}{locationLabel}
           </Text>
         </View>
-        <AnimatedPressable style={styles.notifBtn} haptic onPress={() => navigation.navigate('Notifications')}>
-          <Ionicons name="notifications-outline" size={22} color="rgba(255,255,255,0.7)" />
-          <View style={styles.notifDot} />
-        </AnimatedPressable>
+        <NotificationButton />
       </View>
 
       {/* Search bar */}
@@ -61,25 +59,6 @@ const styles = StyleSheet.create({
   greeting: { fontSize: 14, color: 'rgba(255,255,255,0.5)', marginBottom: 2 },
   name: { fontSize: 24, fontWeight: '700', color: '#fff', marginBottom: 4 },
   location: { fontSize: 12, color: Colors.text.tertiary },
-  notifBtn: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
-    backgroundColor: 'rgba(255,255,255,0.08)',
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  notifDot: {
-    position: 'absolute',
-    top: 8,
-    right: 8,
-    width: 8,
-    height: 8,
-    borderRadius: 4,
-    backgroundColor: '#EF4444',
-    borderWidth: 1.5,
-    borderColor: 'rgba(8,10,24,1)',
-  },
   searchBar: {
     flexDirection: 'row',
     alignItems: 'center',

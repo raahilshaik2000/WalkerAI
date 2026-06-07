@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import {
+  Alert,
   KeyboardAvoidingView,
   Platform,
   ScrollView,
@@ -14,6 +15,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { useNavigation } from '@react-navigation/native';
 import Ionicons from 'react-native-vector-icons/Ionicons';
 import { useProjectWizardStore } from '@/stores/project-wizard.store';
+import { isValidOptionalCount, isValidOptionalMetricDimension } from '@/lib/measurements';
 import { Colors, Radius, Spacing, Typography } from '@/constants/theme';
 import { GlassButton, GradientBackground, WizardHeader } from '@/components/ui';
 
@@ -107,7 +109,7 @@ function Divider() {
 
 export default function MeasurementsStep() {
   const navigation = useNavigation<any>();
-  const { setMeasurements, roomType } = useProjectWizardStore();
+  const { setMeasurements, setRoomScanData, roomType } = useProjectWizardStore();
   const isBathroom = roomType === 'bathroom';
 
   // Room
@@ -169,7 +171,63 @@ export default function MeasurementsStep() {
     ...(isBathroom ? bathroomValues : kitchenValues),
   ].some(Boolean) || hasDishwasher || hasIsland || hasShowerTub;
 
+  const invalidMeasurementLabels = () => {
+    const dimensionFields = [
+      ['room length', roomLength],
+      ['room width', roomWidth],
+      ['ceiling height', ceilingHeight],
+      ['door width', doorWidth],
+      ['door height', doorHeight],
+      ['window width', windowWidth],
+      ['window height', windowHeight],
+      ...(isBathroom
+        ? [
+            ['shower/tub length', showerLength],
+            ['shower/tub width', showerWidth],
+            ['vanity width', vanityWidth],
+            ['floor tile area', floorTileArea],
+            ['wall tile area', wallTileArea],
+          ]
+        : [
+            ['upper cabinet height', upperCabHeight],
+            ['lower cabinet height', lowerCabHeight],
+            ['cabinet depth', cabDepth],
+            ['upper cabinet run', upperLinearFt],
+            ['lower cabinet run', lowerLinearFt],
+            ['countertop length', countertopLinearFt],
+            ['fridge opening width', fridgeWidth],
+            ['range/cooktop width', rangeWidth],
+            ['island length', islandLength],
+            ['island width', islandWidth],
+          ]),
+    ];
+
+    const countFields = [
+      ['number of doors', numDoors],
+      ['number of windows', numWindows],
+      ...(isBathroom ? [['number of sinks', numSinks]] : []),
+    ];
+
+    return [
+      ...dimensionFields
+        .filter(([, value]) => !isValidOptionalMetricDimension(value))
+        .map(([label]) => label),
+      ...countFields
+        .filter(([, value]) => !isValidOptionalCount(value))
+        .map(([label]) => label),
+    ];
+  };
+
   const handleContinue = () => {
+    const invalidLabels = invalidMeasurementLabels();
+    if (invalidLabels.length > 0) {
+      Alert.alert(
+        'Invalid measurements',
+        `Check these fields: ${invalidLabels.join(', ')}. Use positive numbers for dimensions and whole numbers from 0 to 20 for counts.`
+      );
+      return;
+    }
+
     if (hasAnyValue) {
       setMeasurements({
         lengthFt: roomLength,
@@ -202,13 +260,17 @@ export default function MeasurementsStep() {
         floorTileArea: isBathroom ? floorTileArea : '',
         wallTileArea: isBathroom ? wallTileArea : '',
       });
+    } else {
+      setMeasurements(null);
     }
+    setRoomScanData(null);
     useProjectWizardStore.getState().setStep(3);
     navigation.navigate('Analyzing');
   };
 
   const handleSkip = () => {
     setMeasurements(null);
+    setRoomScanData(null);
     useProjectWizardStore.getState().setStep(3);
     navigation.navigate('Analyzing');
   };
@@ -217,7 +279,7 @@ export default function MeasurementsStep() {
     <GradientBackground glow="top-right">
       <SafeAreaView style={styles.safe}>
         <KeyboardAvoidingView
-          style={{ flex: 1 }}
+          style={styles.keyboard}
           behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
           keyboardVerticalOffset={16}
         >
@@ -226,7 +288,7 @@ export default function MeasurementsStep() {
             showsVerticalScrollIndicator={false}
             keyboardShouldPersistTaps="handled"
           >
-            <WizardHeader currentStep={2} />
+            <WizardHeader currentStep={3} />
 
             <Text style={styles.stepLabel}>STEP 3 OF 8</Text>
             <Text style={styles.title}>Room measurements</Text>
@@ -422,6 +484,7 @@ export default function MeasurementsStep() {
 
 const styles = StyleSheet.create({
   safe: { flex: 1 },
+  keyboard: { flex: 1 },
   scroll: {
     flexGrow: 1,
     paddingHorizontal: Spacing.sm,

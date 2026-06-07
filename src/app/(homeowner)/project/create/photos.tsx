@@ -1,4 +1,3 @@
-import { useState } from 'react';
 import {
   Alert,
   Image,
@@ -13,6 +12,7 @@ import { useNavigation } from '@react-navigation/native';
 import { launchImageLibrary } from 'react-native-image-picker';
 import Ionicons from 'react-native-vector-icons/Ionicons';
 import { useProjectWizardStore } from '@/stores/project-wizard.store';
+import { getUploadMetadata } from '@/lib/supabase/storage';
 import { Colors, Radius, Spacing, Typography } from '@/constants/theme';
 import { GlassButton, GradientBackground, Skeleton, WizardHeader } from '@/components/ui';
 
@@ -22,7 +22,6 @@ const MAX_PHOTOS = 12;
 export default function PhotosStep() {
   const navigation = useNavigation<any>();
   const { addPhoto, removePhoto, photos } = useProjectWizardStore();
-  const [analyzing, setAnalyzing] = useState(false);
 
   const pickPhotos = async () => {
     const result = await launchImageLibrary({
@@ -32,19 +31,45 @@ export default function PhotosStep() {
       maxWidth: 1024,
       maxHeight: 1024,
       includeBase64: true,
+      assetRepresentationMode: 'compatible',
     });
 
+    if (result.errorCode) {
+      Alert.alert('Photo picker failed', result.errorMessage ?? 'Please try selecting your photos again.');
+      return;
+    }
+
     if (!result.didCancel && result.assets) {
+      let skipped = 0;
       for (const asset of result.assets) {
-        const tempId = `temp_${Date.now()}_${Math.random()}`;
-        addPhoto({
-          id: tempId,
-          uri: asset.uri ?? '',
-          base64: asset.base64 ?? undefined,
-          status: 'done',
-          progress: 100,
-          url: '',
-        });
+        try {
+          const upload = getUploadMetadata(asset);
+          if (!asset.base64) {
+            skipped += 1;
+            continue;
+          }
+          const tempId = `temp_${Date.now()}_${Math.random()}`;
+          addPhoto({
+            id: tempId,
+            uri: upload.uri,
+            base64: asset.base64,
+            fileName: asset.fileName ?? undefined,
+            extension: upload.extension,
+            contentType: upload.contentType,
+            status: 'done',
+            progress: 100,
+            url: '',
+          });
+        } catch {
+          skipped += 1;
+        }
+      }
+
+      if (skipped > 0) {
+        Alert.alert(
+          'Some photos were skipped',
+          'WalkerAI could not read one or more selected photos. Please re-select them from your camera roll.'
+        );
       }
     }
   };
@@ -59,13 +84,12 @@ export default function PhotosStep() {
       return;
     }
 
-    setAnalyzing(true);
     navigation.navigate('Measurements');
   };
 
-  const uploadedCount = photos.filter((p) => p.status === 'done').length;
+  const selectedCount = photos.filter((p) => p.status === 'done').length;
   const uploadingCount = photos.filter((p) => p.status === 'uploading').length;
-  const canContinue = uploadedCount >= MIN_PHOTOS && uploadingCount === 0;
+  const canContinue = selectedCount >= MIN_PHOTOS && uploadingCount === 0;
 
   return (
     <GradientBackground glow="top-right">
@@ -142,10 +166,10 @@ export default function PhotosStep() {
 
           {/* Status line */}
           <Text style={styles.statusLine}>
-            {uploadedCount} of {photos.length} uploaded
+            {selectedCount} of {photos.length} selected
             {uploadingCount > 0 ? ` · ${uploadingCount} uploading…` : ''}
-            {uploadedCount < MIN_PHOTOS
-              ? ` · Need ${MIN_PHOTOS - uploadedCount} more`
+            {selectedCount < MIN_PHOTOS
+              ? ` · Need ${MIN_PHOTOS - selectedCount} more`
               : ' · Ready!'}
           </Text>
 
@@ -153,7 +177,6 @@ export default function PhotosStep() {
             label="Analyze with AI"
             onPress={handleAnalyze}
             disabled={!canContinue}
-            loading={analyzing}
             fullWidth
             size="lg"
           />

@@ -1,25 +1,121 @@
-import React from 'react';
+import React, { useEffect, useState } from 'react';
 import { Alert, Linking, ScrollView, StyleSheet, Switch, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useNavigation } from '@react-navigation/native';
 import Ionicons from 'react-native-vector-icons/Ionicons';
 import ReactNativeHapticFeedback from 'react-native-haptic-feedback';
 import { AnimatedPressable, GlassCard, GradientBackground } from '@/components/ui';
-import { Colors, Radius, Spacing } from '@/constants/theme';
+import { Colors, Radius } from '@/constants/theme';
 import { useProfileStore } from '@/stores/profile.store';
 import { useAuthStore } from '@/stores/auth.store';
 import { signOut } from '@/lib/supabase/auth';
 import { supabase } from '@/lib/supabase/client';
+
+type LocalPreferenceKey =
+  | 'pushEnabled'
+  | 'emailDigest'
+  | 'smsAlerts'
+  | 'milestoneAlerts'
+  | 'quoteAlerts'
+  | 'messageAlerts'
+  | 'faceId'
+  | 'locationServices'
+  | 'analyticsEnabled';
+
+const BACKEND_PREF_BY_LOCAL_KEY = {
+  messageAlerts: 'messages',
+  milestoneAlerts: 'milestone_updates',
+  quoteAlerts: 'quote_updates',
+} as const;
 
 export default function HomeownerSettings() {
   const navigation = useNavigation<any>();
   const profile = useProfileStore();
   const { user, clearSession } = useAuthStore();
   const email = user?.email || '';
+  const [preferenceError, setPreferenceError] = useState<string | null>(null);
+  const {
+    messageAlerts,
+    milestoneAlerts,
+    quoteAlerts,
+    updateProfile,
+  } = profile;
 
-  const toggle = (key: string, value: boolean) => {
+  useEffect(() => {
+    if (!user?.id) return;
+
+    let mounted = true;
+    const loadNotificationPreferences = async () => {
+      let prefsResult: any = await supabase
+        .from('notification_preferences')
+        .select('messages, milestone_updates, quote_updates')
+        .eq('user_id', user.id)
+        .maybeSingle();
+
+      if (prefsResult.error && /column .*quote_updates.* does not exist/i.test(prefsResult.error.message ?? '')) {
+        prefsResult = await supabase
+          .from('notification_preferences')
+          .select('messages, milestone_updates')
+          .eq('user_id', user.id)
+          .maybeSingle();
+      }
+
+      if (!mounted) return;
+      if (prefsResult.error) {
+        const message = prefsResult.error.message?.toLowerCase() ?? '';
+        if (!message.includes('notification_preferences')) {
+          setPreferenceError(prefsResult.error.message);
+        }
+        return;
+      }
+
+      const data = prefsResult.data;
+      if (data) {
+        updateProfile({
+          messageAlerts: data.messages ?? messageAlerts,
+          milestoneAlerts: data.milestone_updates ?? milestoneAlerts,
+          quoteAlerts: data.quote_updates ?? quoteAlerts,
+        });
+      }
+      setPreferenceError(null);
+    };
+
+    loadNotificationPreferences();
+    return () => { mounted = false; };
+  }, [messageAlerts, milestoneAlerts, quoteAlerts, updateProfile, user?.id]);
+
+  const syncBackendPreference = async (key: LocalPreferenceKey, value: boolean) => {
+    if (!user?.id) return;
+
+    if (key === 'pushEnabled') {
+      const { error } = await supabase
+        .from('device_tokens')
+        .update({ is_active: value, last_seen_at: new Date().toISOString() })
+        .eq('user_id', user.id);
+      if (error) setPreferenceError(error.message);
+      else setPreferenceError(null);
+      return;
+    }
+
+    const backendKey = BACKEND_PREF_BY_LOCAL_KEY[key as keyof typeof BACKEND_PREF_BY_LOCAL_KEY];
+    if (!backendKey) return;
+
+    const { error } = await supabase
+      .from('notification_preferences')
+      .upsert({
+        user_id: user.id,
+        [backendKey]: value,
+        updated_at: new Date().toISOString(),
+      }, { onConflict: 'user_id' });
+
+    if (error) setPreferenceError(error.message);
+    else setPreferenceError(null);
+  };
+
+  const toggle = (key: LocalPreferenceKey, value: boolean) => {
     profile.updateProfile({ [key]: value });
     ReactNativeHapticFeedback.trigger('impactLight');
+    syncBackendPreference(key, value);
   };
 
   const handleDeleteAccount = () => {
@@ -41,11 +137,25 @@ export default function HomeownerSettings() {
                   text: 'Delete Forever',
                   style: 'destructive',
                   onPress: async () => {
-                    // Mark account for deletion then sign out — full deletion handled server-side within 24h
-                    await supabase.from('deletion_requests').insert({ user_id: user?.id });
-                    profile.resetProfile();
-                    await signOut();
-                    clearSession();
+                    try {
+                      if (!user?.id) throw new Error('Please sign in again before requesting account deletion.');
+                      const { error } = await supabase
+                        .from('deletion_requests')
+                        .insert({ user_id: user.id });
+                      if (error) {
+                        const duplicatePending = error.code === '23505'
+                          || error.message?.toLowerCase().includes('duplicate key');
+                        if (!duplicatePending) throw error;
+                      }
+                      profile.resetProfile();
+                      await signOut();
+                      clearSession();
+                    } catch (err) {
+                      Alert.alert(
+                        'Request not saved',
+                        err instanceof Error ? err.message : 'Could not request account deletion. Please try again.'
+                      );
+                    }
                   },
                 },
               ],
@@ -54,6 +164,34 @@ export default function HomeownerSettings() {
         },
       ],
     );
+  };
+
+  const handleExportData = () => {
+    Alert.alert('Export Data', `Your data export will be sent to ${email}. This may take up to 24 hours.`, [
+      { text: 'Cancel', style: 'cancel' },
+      {
+        text: 'Export',
+        onPress: async () => {
+          try {
+            if (!user?.id) throw new Error('Please sign in again before requesting a data export.');
+            const { error } = await supabase
+              .from('data_export_requests')
+              .insert({ user_id: user.id });
+            if (error) {
+              const duplicatePending = error.code === '23505'
+                || error.message?.toLowerCase().includes('duplicate key');
+              if (!duplicatePending) throw error;
+            }
+            Alert.alert('Request Sent', "You'll receive an email when your export is ready.");
+          } catch (err) {
+            Alert.alert(
+              'Request not saved',
+              err instanceof Error ? err.message : 'Could not request a data export. Please try again.'
+            );
+          }
+        },
+      },
+    ]);
   };
 
   return (
@@ -87,6 +225,9 @@ export default function HomeownerSettings() {
             <Divider />
             <ToggleRow icon="chatbubbles-outline" iconColor="#60A5FA" label="Message Alerts" value={profile.messageAlerts} onToggle={(v) => toggle('messageAlerts', v)} />
           </GlassCard>
+          {preferenceError ? (
+            <Text style={styles.syncError}>Could not sync notification preferences: {preferenceError}</Text>
+          ) : null}
 
           {/* Security */}
           <Text style={styles.sectionLabel}>Security & Privacy</Text>
@@ -117,10 +258,15 @@ export default function HomeownerSettings() {
             <Divider />
             <ToggleRow icon="analytics-outline" iconColor="#F59E0B" label="Analytics" value={profile.analyticsEnabled} onToggle={(v) => toggle('analyticsEnabled', v)} />
             <Divider />
-            <LinkRow icon="trash-outline" iconColor={Colors.text.tertiary} label="Clear Cache" onPress={() => Alert.alert('Clear Cache', 'Clear cached images and data?', [
-              { text: 'Cancel', style: 'cancel' },
-              { text: 'Clear', style: 'destructive', onPress: () => { ReactNativeHapticFeedback.trigger('impactMedium'); Alert.alert('Cache Cleared'); } },
-            ])} />
+            <LinkRow
+              icon="trash-outline"
+              iconColor={Colors.text.tertiary}
+              label="Clear Cache"
+              onPress={() => Alert.alert(
+                'Clear Cache',
+                'WalkerAI does not have a separate app cache to clear yet. Sign out to remove session data from this device.'
+              )}
+            />
           </GlassCard>
 
           {/* Legal */}
@@ -132,10 +278,7 @@ export default function HomeownerSettings() {
             <Divider />
             <LinkRow icon="code-outline" iconColor={Colors.text.tertiary} label="Open Source Licenses" onPress={() => Alert.alert('Open Source', 'This app uses React Native, Supabase, Zustand, and other open-source libraries. Full license details available at walkerai.com/licenses.')} />
             <Divider />
-            <LinkRow icon="cloud-download-outline" iconColor={Colors.text.tertiary} label="Export My Data" onPress={() => Alert.alert('Export Data', `Your data export will be sent to ${email}. This may take up to 24 hours.`, [
-              { text: 'Cancel', style: 'cancel' },
-              { text: 'Export', onPress: () => Alert.alert('Request Sent', 'You\'ll receive an email when your export is ready.') },
-            ])} />
+            <LinkRow icon="cloud-download-outline" iconColor={Colors.text.tertiary} label="Export My Data" onPress={handleExportData} />
           </GlassCard>
 
           {/* Danger Zone */}
@@ -218,5 +361,6 @@ const styles = StyleSheet.create({
   },
   deleteText: { fontSize: 14, fontWeight: '600', color: '#EF4444' },
 
+  syncError: { color: Colors.warning, fontSize: 12, lineHeight: 17, marginTop: 8, marginHorizontal: 4 },
   version: { textAlign: 'center', fontSize: 11, color: Colors.text.tertiary, marginTop: 20 },
 });

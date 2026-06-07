@@ -55,6 +55,8 @@ CREATE POLICY "reviews_public_read" ON reviews
 -- ============================================================
 ALTER TABLE change_orders ENABLE ROW LEVEL SECURITY;
 
+DROP POLICY IF EXISTS "change_orders_participants" ON change_orders;
+
 CREATE POLICY "change_orders_participants" ON change_orders
   FOR ALL USING (
     project_id IN (
@@ -105,6 +107,8 @@ CREATE POLICY "quotes_participants" ON quotes
 -- RLS for disputes
 -- ============================================================
 ALTER TABLE disputes ENABLE ROW LEVEL SECURITY;
+
+DROP POLICY IF EXISTS "disputes_participants" ON disputes;
 
 CREATE POLICY "disputes_participants" ON disputes
   FOR ALL USING (

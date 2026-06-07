@@ -17,41 +17,47 @@ import Ionicons from 'react-native-vector-icons/Ionicons';
 import LinearGradient from 'react-native-linear-gradient';
 import { AnimatedPressable, GlassButton, GradientBackground } from '@/components/ui';
 import { ProgressRing } from '@/components/dashboard/ProgressRing';
-import { Colors, Radius, Spacing } from '@/constants/theme';
+import { Colors, Radius } from '@/constants/theme';
 import { supabase } from '@/lib/supabase/client';
 import { useAuthStore } from '@/stores/auth.store';
 import { useDIYWizardStore, type DIYGuide } from '@/stores/diy-wizard.store';
 
 interface RealProject {
   id: string;
-  room_type: string;
+  room_type: string | null;
   status: string;
-  description: string;
+  description: string | null;
   address: string | null;
   city: string | null;
   ai_cost_min: number | null;
   ai_cost_max: number | null;
   created_at: string;
-  renders: Array<{ url: string }>;
+  renders: Array<{ url: string; selected?: boolean | null }>;
   project_photos: Array<{ url: string }>;
 }
 
 const STATUS_LABEL: Record<string, { label: string; color: string }> = {
   draft:       { label: 'Setting up',          color: '#6B7280' },
+  brief_ready: { label: 'Ready to send',        color: '#F59E0B' },
   dispatching: { label: 'Finding contractor',  color: '#A78BFA' },
+  scheduling:  { label: 'Schedule needed',     color: '#38BDF8' },
   quoting:     { label: 'Quote pending',        color: '#F59E0B' },
   accepted:    { label: 'Contractor reviewing', color: '#60A5FA' },
   active:      { label: 'In progress',          color: '#22C55E' },
   completed:   { label: 'Completed',            color: '#FF6B00' },
+  diy_saved:   { label: 'DIY saved',            color: '#34D399' },
 };
 
 const CONTRACTOR_LABEL: Record<string, string> = {
   draft:       'Setting up',
+  brief_ready: 'Ready to send again',
   dispatching: 'Finding contractor',
+  scheduling:  'Schedule needed',
   quoting:     'Quote received',
   accepted:    'Contractor reviewing',
   active:      'Contractor assigned',
   completed:   'Project complete',
+  diy_saved:   'DIY guide saved',
 };
 
 const FILTERS = ['All', 'Active', 'Quoting', 'Completed', 'DIY'] as const;
@@ -59,16 +65,25 @@ type Filter = (typeof FILTERS)[number];
 
 const STATUS_MAP: Record<Filter, string[]> = {
   All: [],
-  Active: ['active', 'draft', 'dispatching', 'accepted'],
+  Active: ['active', 'draft', 'brief_ready', 'dispatching', 'scheduling', 'accepted'],
   Quoting: ['quoting'],
   Completed: ['completed'],
   DIY: ['diy_saved'],
 };
 
+function isReleasedMilestoneStatus(status: string) {
+  return status === 'paid' || status === 'homeowner_approved';
+}
+
+function isMissingColumnError(error: { message?: string } | null | undefined) {
+  return !!error?.message && /column .* does not exist/i.test(error.message);
+}
+
 interface DIYProject {
   id: string;
-  description: string;
-  room_type: string;
+  description: string | null;
+  room_type: string | null;
+  diy_category?: string | null;
   created_at: string;
   diy_guide: DIYGuide;
 }
@@ -92,7 +107,9 @@ const DIFFICULTY_COLOR: Record<string, string> = {
 
 function DIYProjectCard({ item, onPress }: { item: DIYProject; onPress: () => void }) {
   const guide = item.diy_guide;
-  const iconName = CATEGORY_ICONS[item.room_type] ?? 'hammer-outline';
+  const category = item.diy_category ?? item.room_type ?? 'general';
+  const categoryLabel = category.charAt(0).toUpperCase() + category.slice(1);
+  const iconName = CATEGORY_ICONS[category] ?? 'hammer-outline';
   const diffColor = DIFFICULTY_COLOR[guide?.difficulty] ?? '#34D399';
   const stepCount = guide?.steps?.length ?? 0;
   const date = new Date(item.created_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
@@ -116,7 +133,7 @@ function DIYProjectCard({ item, onPress }: { item: DIYProject; onPress: () => vo
               <View style={styles.diyCategory}>
                 <Ionicons name={iconName} size={11} color={Colors.text.tertiary} />
                 <Text style={styles.diyCategoryText}>
-                  {item.room_type.charAt(0).toUpperCase() + item.room_type.slice(1)}
+                  {categoryLabel}
                 </Text>
               </View>
               <View style={[styles.diyDifficulty, { borderColor: diffColor + '55', backgroundColor: diffColor + '15' }]}>
@@ -169,8 +186,10 @@ export default function HomeownerProjects() {
   const [refreshing, setRefreshing] = useState(false);
   const [projects, setProjects] = useState<RealProject[]>([]);
   const [projectsLoading, setProjectsLoading] = useState(false);
+  const [projectsError, setProjectsError] = useState<string | null>(null);
   const [diyProjects, setDiyProjects] = useState<DIYProject[]>([]);
   const [diyLoading, setDiyLoading] = useState(false);
+  const [diyError, setDiyError] = useState<string | null>(null);
   const [milestoneProgressMap, setMilestoneProgressMap] = useState<Record<string, number>>({});
 
   const filtered = useMemo(() => {
@@ -187,33 +206,54 @@ export default function HomeownerProjects() {
   const fetchProjects = useCallback(async () => {
     if (!user) return;
     setProjectsLoading(true);
+    setProjectsError(null);
     try {
-      const { data } = await supabase
+      let projectResult: any = await supabase
         .from('projects')
-        .select('id, room_type, status, description, address, city, ai_cost_min, ai_cost_max, created_at, renders(url), project_photos(url)')
+        .select('id, room_type, status, description, address, city, ai_cost_min, ai_cost_max, created_at, renders(url, selected), project_photos(url)')
         .eq('homeowner_id', user.id)
         .not('status', 'eq', 'diy_saved')
         .order('created_at', { ascending: false });
-      const projectList = (data as RealProject[]) ?? [];
+
+      if (isMissingColumnError(projectResult.error)) {
+        projectResult = await supabase
+          .from('projects')
+          .select('id, room_type, status, address, city, ai_cost_min, ai_cost_max, created_at, renders(url, selected), project_photos(url)')
+          .eq('homeowner_id', user.id)
+          .not('status', 'eq', 'diy_saved')
+          .order('created_at', { ascending: false });
+      }
+
+      if (projectResult.error) throw projectResult.error;
+
+      const projectList = ((projectResult.data ?? []) as Array<Omit<RealProject, 'description'> & { description?: string | null }>)
+        .map((project) => ({ ...project, description: project.description ?? null }));
       setProjects(projectList);
 
       // Fetch milestone-based progress for all projects
       const ids = projectList.map((p) => p.id);
       if (ids.length > 0) {
-        const { data: quoteData } = await supabase
+        const { data: quoteData, error: quoteError } = await supabase
           .from('quotes')
           .select('project_id, milestones(status)')
           .in('project_id', ids)
           .eq('status', 'approved');
+        if (quoteError) throw quoteError;
 
         const progressMap: Record<string, number> = {};
         for (const q of quoteData ?? []) {
           const ms = (q.milestones as Array<{ status: string }>) ?? [];
           if (ms.length === 0) continue;
-          progressMap[q.project_id] = ms.filter((m) => m.status === 'paid').length / ms.length;
+          progressMap[q.project_id] = ms.filter((m) => isReleasedMilestoneStatus(m.status)).length / ms.length;
         }
         setMilestoneProgressMap(progressMap);
+      } else {
+        setMilestoneProgressMap({});
       }
+    } catch (err) {
+      setProjects([]);
+      setMilestoneProgressMap({});
+      setProjectsError(err instanceof Error ? err.message : 'Could not load projects.');
     } finally {
       setProjectsLoading(false);
     }
@@ -222,15 +262,40 @@ export default function HomeownerProjects() {
   const fetchDIYProjects = useCallback(async () => {
     if (!user) return;
     setDiyLoading(true);
+    setDiyError(null);
     try {
-      const { data } = await supabase
+      let diyResult: any = await supabase
         .from('projects')
-        .select('id, description, room_type, created_at, diy_guide')
+        .select('id, description, room_type, diy_category, created_at, diy_guide')
         .eq('homeowner_id', user.id)
         .eq('status', 'diy_saved')
         .not('diy_guide', 'is', null)
         .order('created_at', { ascending: false });
-      setDiyProjects((data as DIYProject[]) ?? []);
+
+      if (isMissingColumnError(diyResult.error)) {
+        diyResult = await supabase
+          .from('projects')
+          .select('id, description, room_type, created_at, diy_guide')
+          .eq('homeowner_id', user.id)
+          .eq('status', 'diy_saved')
+          .not('diy_guide', 'is', null)
+          .order('created_at', { ascending: false });
+      }
+
+      if (diyResult.error) throw diyResult.error;
+
+      setDiyProjects(((diyResult.data ?? []) as DIYProject[]).map((project) => ({
+        ...project,
+        description: project.description ?? null,
+        room_type: project.room_type ?? null,
+        diy_category: project.diy_category ?? null,
+      })));
+    } catch (err) {
+      setDiyProjects([]);
+      const message = err instanceof Error ? err.message : 'Could not load DIY guides.';
+      setDiyError(isMissingColumnError({ message })
+        ? 'Saved DIY guides are not enabled in this environment yet.'
+        : message);
     } finally {
       setDiyLoading(false);
     }
@@ -263,7 +328,8 @@ export default function HomeownerProjects() {
 
   const renderProject = ({ item }: { item: RealProject }) => {
     const statusInfo = STATUS_LABEL[item.status] ?? { label: item.status, color: '#6B7280' };
-    const coverImage = item.renders?.[0]?.url ?? item.project_photos?.[0]?.url;
+    const selectedRender = item.renders?.find((render) => render.selected);
+    const coverImage = selectedRender?.url ?? item.renders?.[0]?.url ?? item.project_photos?.[0]?.url;
     const title = item.room_type
       ? item.room_type.charAt(0).toUpperCase() + item.room_type.slice(1) + ' Renovation'
       : item.description?.slice(0, 40) ?? 'Project';
@@ -278,7 +344,10 @@ export default function HomeownerProjects() {
       <AnimatedPressable
         style={styles.card}
         haptic
-        onPress={() => navigation.navigate('ProjectDetailView', { project: item })}
+        onPress={() => navigation.navigate('ProjectDetail', {
+          screen: 'ProjectDetailMain',
+          params: { id: item.id },
+        })}
       >
         {coverImage ? (
           <Image source={{ uri: coverImage }} style={styles.cover} />
@@ -374,6 +443,20 @@ export default function HomeownerProjects() {
             <View style={styles.loadingWrap}>
               <ActivityIndicator color="#34D399" size="large" />
             </View>
+          ) : diyError ? (
+            <View style={styles.empty}>
+              <Ionicons name="alert-circle-outline" size={48} color={Colors.text.tertiary} />
+              <Text style={styles.emptyTitle}>Could not load DIY guides</Text>
+              <Text style={styles.emptySub}>{diyError}</Text>
+              <GlassButton
+                label="Try Again"
+                onPress={fetchDIYProjects}
+                variant="primary"
+                size="sm"
+                haptic
+                style={styles.emptyButton}
+              />
+            </View>
           ) : (
             <FlatList
               data={diyProjects}
@@ -410,6 +493,20 @@ export default function HomeownerProjects() {
           <View style={styles.loadingWrap}>
             <ActivityIndicator color={Colors.accent} size="large" />
           </View>
+        ) : projectsError ? (
+          <View style={styles.empty}>
+            <Ionicons name="alert-circle-outline" size={48} color={Colors.text.tertiary} />
+            <Text style={styles.emptyTitle}>Could not load projects</Text>
+            <Text style={styles.emptySub}>{projectsError}</Text>
+            <GlassButton
+              label="Try Again"
+              onPress={fetchProjects}
+              variant="primary"
+              size="sm"
+              haptic
+              style={styles.emptyButton}
+            />
+          </View>
         ) : (
           <FlatList
             data={filtered}
@@ -430,7 +527,7 @@ export default function HomeownerProjects() {
                   variant="primary"
                   size="sm"
                   haptic
-                  style={{ marginTop: 12, alignSelf: 'center' }}
+                  style={styles.emptyButton}
                 />
               </View>
             }
@@ -521,4 +618,6 @@ const styles = StyleSheet.create({
   // Regular empty state
   empty: { alignItems: 'center', justifyContent: 'center', paddingTop: 60, gap: 8 },
   emptyTitle: { fontSize: 16, fontWeight: '600', color: '#fff' },
+  emptySub: { fontSize: 13, color: Colors.text.tertiary, textAlign: 'center', lineHeight: 19, paddingHorizontal: 24 },
+  emptyButton: { marginTop: 12, alignSelf: 'center' },
 });

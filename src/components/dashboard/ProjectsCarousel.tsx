@@ -15,7 +15,7 @@ import { useNavigation } from '@react-navigation/native';
 import { supabase } from '@/lib/supabase/client';
 import { useAuthStore } from '@/stores/auth.store';
 import { AnimatedPressable, GlassButton } from '@/components/ui';
-import { Colors, Radius, Spacing } from '@/constants/theme';
+import { Colors, Spacing } from '@/constants/theme';
 import { SectionHeader } from './SectionHeader';
 import { ProgressRing } from './ProgressRing';
 import { useStaggeredEntrance } from './useStaggeredEntrance';
@@ -26,11 +26,14 @@ const CARD_GAP = 12;
 
 const STATUS_META: Record<string, { label: string; color: string }> = {
   draft:       { label: 'Setting up',          color: '#6B7280' },
+  brief_ready: { label: 'Ready to send',        color: '#F59E0B' },
   dispatching: { label: 'Finding contractor',  color: '#A78BFA' },
   quoting:     { label: 'Quote pending',        color: '#F59E0B' },
   accepted:    { label: 'Contractor reviewing', color: '#60A5FA' },
+  scheduling:  { label: 'Schedule needed',      color: '#38BDF8' },
   active:      { label: 'In progress',          color: '#22C55E' },
   completed:   { label: 'Completed',            color: '#FF6B00' },
+  diy_saved:   { label: 'DIY saved',            color: '#34D399' },
 };
 
 interface Project {
@@ -41,8 +44,31 @@ interface Project {
   city: string | null;
   ai_cost_min: number | null;
   ai_cost_max: number | null;
-  renders: Array<{ url: string }>;
+  renders: Array<{ url: string; selected?: boolean | null }>;
   project_photos: Array<{ url: string }>;
+}
+
+function getProjectProgress(status: string) {
+  if (status === 'completed') return 1;
+  if (status === 'active') return 0.65;
+  if (status === 'scheduling') return 0.45;
+  if (status === 'accepted' || status === 'quoting') return 0.35;
+  if (status === 'dispatching') return 0.2;
+  if (status === 'brief_ready') return 0.18;
+  return 0.1;
+}
+
+function getContractorStatus(status: string) {
+  if (status === 'completed' || status === 'active' || status === 'scheduling') {
+    return 'Contractor assigned';
+  }
+  if (status === 'accepted' || status === 'quoting') {
+    return 'Contractor reviewing';
+  }
+  if (status === 'brief_ready') {
+    return 'Ready to send again';
+  }
+  return 'Finding contractor';
 }
 
 export function ProjectsCarousel({ refreshKey = 0, onRefreshDone }: { refreshKey?: number; onRefreshDone?: () => void }) {
@@ -51,27 +77,47 @@ export function ProjectsCarousel({ refreshKey = 0, onRefreshDone }: { refreshKey
   const animatedStyle = useStaggeredEntrance(3);
   const [projects, setProjects] = useState<Project[]>([]);
   const [loading, setLoading] = useState(true);
+  const [errorMessage, setErrorMessage] = useState<string | null>(null);
+
+  const loadProjects = useCallback(async () => {
+    if (!user) {
+      setLoading(false);
+      setProjects([]);
+      setErrorMessage(null);
+      return;
+    }
+    setLoading(true);
+    setErrorMessage(null);
+    try {
+      const { data, error } = await supabase
+        .from('projects')
+        .select('id, room_type, status, address, city, ai_cost_min, ai_cost_max, renders(url, selected), project_photos(url)')
+        .eq('homeowner_id', user.id)
+        .not('status', 'eq', 'diy_saved')
+        .order('created_at', { ascending: false })
+        .limit(5);
+
+      if (error) {
+        setProjects([]);
+        setErrorMessage(error.message);
+        return;
+      }
+      setProjects((data as Project[]) ?? []);
+    } finally {
+      setLoading(false);
+      onRefreshDone?.();
+    }
+  }, [user, onRefreshDone]);
 
   useEffect(() => {
-    if (!user) return;
-    supabase
-      .from('projects')
-      .select('id, room_type, status, address, city, ai_cost_min, ai_cost_max, renders(url), project_photos(url)')
-      .eq('homeowner_id', user.id)
-      .not('status', 'eq', 'diy_saved')
-      .order('created_at', { ascending: false })
-      .limit(5)
-      .then(({ data }) => {
-        setProjects((data as Project[]) ?? []);
-        setLoading(false);
-        onRefreshDone?.();
-      });
-  }, [user, refreshKey]);
+    loadProjects();
+  }, [loadProjects, refreshKey]);
 
   const renderProject = useCallback(
     ({ item }: { item: Project }) => {
       const meta = STATUS_META[item.status] ?? { label: item.status, color: '#6B7280' };
-      const coverImage = item.renders?.[0]?.url ?? item.project_photos?.[0]?.url;
+      const selectedRender = item.renders?.find((render) => render.selected);
+      const coverImage = selectedRender?.url ?? item.renders?.[0]?.url ?? item.project_photos?.[0]?.url;
       const title = item.room_type
         ? item.room_type.charAt(0).toUpperCase() + item.room_type.slice(1) + ' Renovation'
         : 'Project';
@@ -79,13 +125,16 @@ export function ProjectsCarousel({ refreshKey = 0, onRefreshDone }: { refreshKey
       const budget = item.ai_cost_min && item.ai_cost_max
         ? `$${Math.round(item.ai_cost_min / 100).toLocaleString()}–$${Math.round(item.ai_cost_max / 100).toLocaleString()}`
         : 'TBD';
-      const progress = item.status === 'completed' ? 1 : item.status === 'active' ? 0.5 : 0.1;
+      const progress = getProjectProgress(item.status);
 
       return (
         <AnimatedPressable
           style={styles.card}
           haptic
-          onPress={() => navigation.navigate('ProjectDetailView', { project: item })}
+          onPress={() => navigation.navigate('ProjectDetail', {
+            screen: 'ProjectDetailMain',
+            params: { id: item.id },
+          })}
         >
           {coverImage ? (
             <Image source={{ uri: coverImage }} style={styles.cover} />
@@ -119,7 +168,7 @@ export function ProjectsCarousel({ refreshKey = 0, onRefreshDone }: { refreshKey
                   <Ionicons name="person" size={12} color="rgba(255,255,255,0.5)" />
                 </View>
                 <Text style={styles.contractor} numberOfLines={1}>
-                  {item.status === 'active' || item.status === 'completed' ? 'Contractor assigned' : 'Finding contractor'}
+                  {getContractorStatus(item.status)}
                 </Text>
               </View>
               <Text style={styles.budget}>{budget}</Text>
@@ -128,7 +177,7 @@ export function ProjectsCarousel({ refreshKey = 0, onRefreshDone }: { refreshKey
         </AnimatedPressable>
       );
     },
-    [],
+    [navigation],
   );
 
   const renderEmpty = () => (
@@ -142,7 +191,23 @@ export function ProjectsCarousel({ refreshKey = 0, onRefreshDone }: { refreshKey
         variant="primary"
         size="sm"
         haptic
-        style={{ marginTop: 12, alignSelf: 'center' }}
+        style={styles.emptyButton}
+      />
+    </View>
+  );
+
+  const renderError = () => (
+    <View style={styles.emptyCard}>
+      <Ionicons name="alert-circle-outline" size={36} color={Colors.text.tertiary} />
+      <Text style={styles.emptyTitle}>Projects could not load</Text>
+      <Text style={styles.emptySubtitle}>{errorMessage}</Text>
+      <GlassButton
+        label="Try Again"
+        onPress={loadProjects}
+        variant="primary"
+        size="sm"
+        haptic
+        style={styles.emptyButton}
       />
     </View>
   );
@@ -157,6 +222,8 @@ export function ProjectsCarousel({ refreshKey = 0, onRefreshDone }: { refreshKey
         <View style={styles.emptyCard}>
           <ActivityIndicator color="rgba(255,255,255,0.3)" />
         </View>
+      ) : errorMessage ? (
+        renderError()
       ) : projects.length > 0 ? (
         <FlatList
           data={projects}
@@ -261,4 +328,5 @@ const styles = StyleSheet.create({
     marginTop: 4,
     textAlign: 'center',
   },
+  emptyButton: { marginTop: 12, alignSelf: 'center' },
 });

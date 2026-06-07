@@ -3,6 +3,7 @@ import { createStackNavigator } from '@react-navigation/stack';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import Ionicons from 'react-native-vector-icons/Ionicons';
 import { FloatingTabBar } from '@/components/ui/FloatingTabBar';
+import NotificationsScreen from '@/app/notifications';
 
 // Supplier screens
 import SupplierOrderFeed from '@/app/(supplier)/orders/index';
@@ -66,6 +67,7 @@ export function SupplierNavigator() {
       <Stack.Screen name="SupplierOrderDetail" component={SupplierOrderDetail} />
       <Stack.Screen name="SupplierAddCatalogItem" component={AddCatalogItem} />
       <Stack.Screen name="SupplierEditCatalogItem" component={EditCatalogItem} />
+      <Stack.Screen name="Notifications" component={NotificationsScreen} />
       <Stack.Screen name="SupplierPendingVerification" component={SupplierPendingVerification} />
       <Stack.Screen name="SupplierBusinessOnboarding" component={SupplierBusinessOnboarding} />
       <Stack.Screen name="SupplierLicenseOnboarding" component={SupplierLicenseOnboarding} />

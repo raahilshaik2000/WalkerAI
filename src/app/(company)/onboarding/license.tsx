@@ -2,7 +2,6 @@ import { useState } from 'react';
 import {
   Alert,
   Image,
-  Platform,
   ScrollView,
   StyleSheet,
   Text,
@@ -13,19 +12,22 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { useNavigation } from '@react-navigation/native';
 import { launchImageLibrary } from 'react-native-image-picker';
 import { supabase } from '@/lib/supabase/client';
-import { uploadFile } from '@/lib/supabase/storage';
+import { getUploadMetadata, uploadFile, type StorageUploadAsset } from '@/lib/supabase/storage';
 import { useAuthStore } from '@/stores/auth.store';
 import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
 import { Colors, Radius, Spacing, Typography } from '@/constants/theme';
 import { GlassButton, GlassCard, GlassInput, GradientBackground } from '@/components/ui';
+
+function isMissingColumnError(error: { message?: string } | null | undefined) {
+  return !!error?.message && /column .* does not exist/i.test(error.message);
+}
 
 export default function LicenseOnboardingScreen() {
   const navigation = useNavigation<any>();
   const { user } = useAuthStore();
 
   const [licenseNumber, setLicenseNumber] = useState('');
-  const [licensePhoto, setLicensePhoto] = useState<string | null>(null);
-  const [uploadProgress, setUploadProgress] = useState(0);
+  const [licensePhoto, setLicensePhoto] = useState<StorageUploadAsset | null>(null);
   const [loading, setLoading] = useState(false);
 
   const pickLicensePhoto = async () => {
@@ -33,9 +35,10 @@ export default function LicenseOnboardingScreen() {
       mediaType: 'photo',
       quality: 0.8,
       selectionLimit: 1,
+      assetRepresentationMode: 'compatible',
     });
     if (!result.didCancel && result.assets && result.assets[0]) {
-      setLicensePhoto(result.assets[0].uri ?? null);
+      setLicensePhoto(result.assets[0]);
     }
   };
 
@@ -47,39 +50,57 @@ export default function LicenseOnboardingScreen() {
 
     setLoading(true);
     try {
-      let licenseDocUrl: string | null = null;
+      if (!user?.id) throw new Error('Please sign in again before continuing contractor onboarding.');
+
+      let licenseDocPath: string | null = null;
 
       // Upload license photo if provided
       if (licensePhoto) {
-        const path = `${user!.id}/license-${Date.now()}.jpg`;
+        const upload = getUploadMetadata(licensePhoto);
+        const path = `${user.id}/license-${Date.now()}.${upload.extension}`;
         const result = await uploadFile(
           'company-docs',
           path,
-          licensePhoto,
-          'image/jpeg',
-          (p) => setUploadProgress(p)
+          upload.uri,
+          upload.contentType
         );
-        licenseDocUrl = result.publicUrl;
+        licenseDocPath = result.storagePath;
       }
 
       // Look up company for this user
-      const { data: company } = await supabase
+      const { data: company, error: companyError } = await supabase
         .from('companies')
         .select('id')
-        .eq('user_id', user!.id)
-        .single();
+        .eq('user_id', user.id)
+        .order('created_at', { ascending: false })
+        .limit(1)
+        .maybeSingle();
 
+      if (companyError) throw companyError;
       if (!company) throw new Error('Company not found. Please complete Step 1 first.');
 
-      const { error } = await supabase
+      let updateResult = await supabase
         .from('companies')
         .update({
           license_number: licenseNumber.trim(),
-          ...(licenseDocUrl ? { license_doc_url: licenseDocUrl } : {}),
+          ...(licenseDocPath ? { license_doc_url: licenseDocPath } : {}),
         })
-        .eq('id', company.id);
+        .eq('id', company.id)
+        .select('id')
+        .maybeSingle();
 
-      if (error) throw error;
+      if (isMissingColumnError(updateResult.error) && licenseDocPath) {
+        console.warn('companies.license_doc_url missing; saving license number without document path.');
+        updateResult = await supabase
+          .from('companies')
+          .update({ license_number: licenseNumber.trim() })
+          .eq('id', company.id)
+          .select('id')
+          .maybeSingle();
+      }
+
+      if (updateResult.error) throw updateResult.error;
+      if (!updateResult.data) throw new Error('Company license was not saved.');
       navigation.navigate('InsuranceOnboarding');
     } catch (err) {
       Alert.alert('Error', err instanceof Error ? err.message : 'Failed to save. Please try again.');
@@ -134,7 +155,7 @@ export default function LicenseOnboardingScreen() {
               activeOpacity={0.8}
             >
               {licensePhoto ? (
-                <Image source={{ uri: licensePhoto }} style={styles.uploadPreview} />
+                <Image source={{ uri: licensePhoto.uri ?? '' }} style={styles.uploadPreview} />
               ) : (
                 <View style={styles.uploadPlaceholder}>
                   <Icon name="file-document-outline" size={32} color={Colors.text.secondary} />

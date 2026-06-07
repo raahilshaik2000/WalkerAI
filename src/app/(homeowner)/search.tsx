@@ -28,16 +28,25 @@ export default function SearchScreen() {
   const inputRef = useRef<TextInput>(null);
   const [query, setQuery] = useState('');
   const [projects, setProjects] = useState<Project[]>([]);
+  const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
   useEffect(() => {
     if (!user) return;
+    setErrorMessage(null);
     supabase
       .from('projects')
       .select('id, room_type, status, address, city')
       .eq('homeowner_id', user.id)
       .not('status', 'eq', 'diy_saved')
       .order('created_at', { ascending: false })
-      .then(({ data }) => setProjects((data as Project[]) ?? []));
+      .then(({ data, error }) => {
+        if (error) {
+          setProjects([]);
+          setErrorMessage(error.message);
+          return;
+        }
+        setProjects((data as Project[]) ?? []);
+      });
   }, [user]);
 
   const q = query.toLowerCase().trim();
@@ -84,7 +93,12 @@ export default function SearchScreen() {
           </View>
         </View>
 
-        {q.length === 0 ? (
+        {errorMessage ? (
+          <View style={styles.empty}>
+            <Ionicons name="alert-circle-outline" size={48} color={Colors.text.tertiary} />
+            <Text style={styles.emptyText}>Could not load projects: {errorMessage}</Text>
+          </View>
+        ) : q.length === 0 ? (
           <View style={styles.empty}>
             <Ionicons name="search-outline" size={48} color={Colors.text.tertiary} />
             <Text style={styles.emptyText}>Search your projects by room type or address</Text>
@@ -102,7 +116,10 @@ export default function SearchScreen() {
               <AnimatedPressable
                 style={styles.row}
                 haptic
-                onPress={() => navigation.navigate('ProjectDetailView', { project: item })}
+                onPress={() => navigation.navigate('ProjectDetail', {
+                  screen: 'ProjectDetailMain',
+                  params: { id: item.id },
+                })}
               >
                 <View style={styles.iconWrap}>
                   <Ionicons name="home-outline" size={22} color={Colors.text.tertiary} />

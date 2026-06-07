@@ -12,6 +12,7 @@ import {
 } from 'react-native';
 import Ionicons from 'react-native-vector-icons/Ionicons';
 import { Colors, Radius } from '@/constants/theme';
+import { normalizeCanadianProvince } from '@/lib/canada';
 
 export interface AddressResult {
   fullAddress: string;
@@ -35,6 +36,7 @@ interface NominatimResult {
     town?: string;
     village?: string;
     state?: string;
+    'ISO3166-2-lvl4'?: string;
     postcode?: string;
     county?: string;
   };
@@ -43,14 +45,20 @@ interface NominatimResult {
 interface AddressAutocompleteProps {
   placeholder?: string;
   initialValue?: string;
+  voiceQuery?: string;
+  voiceQueryKey?: number;
   onSelect: (result: AddressResult) => void;
+  onClearSelection?: () => void;
   containerStyle?: StyleProp<ViewStyle>;
 }
 
 export function AddressAutocomplete({
   placeholder = 'Search address...',
   initialValue = '',
+  voiceQuery = '',
+  voiceQueryKey = 0,
   onSelect,
+  onClearSelection,
   containerStyle,
 }: AddressAutocompleteProps) {
   const [query, setQuery] = useState(initialValue);
@@ -58,6 +66,17 @@ export function AddressAutocomplete({
   const [loading, setLoading] = useState(false);
   const [selected, setSelected] = useState(false);
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  useEffect(() => {
+    const spokenQuery = voiceQuery.trim();
+    if (!spokenQuery || voiceQueryKey <= 0) return;
+
+    setSelected(false);
+    setQuery(spokenQuery);
+    setResults([]);
+    onClearSelection?.();
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [voiceQueryKey]);
 
   useEffect(() => {
     if (selected || query.length < 4) {
@@ -73,8 +92,9 @@ export function AddressAutocomplete({
         const res = await fetch(url, {
           headers: { 'Accept-Language': 'en', 'User-Agent': 'WalkerAI/1.0' },
         });
+        if (!res.ok) throw new Error(`Address lookup failed: ${res.status}`);
         const data: NominatimResult[] = await res.json();
-        setResults(data);
+        setResults(data.filter((item) => Number.isFinite(Number(item.lat)) && Number.isFinite(Number(item.lon))));
       } catch {
         setResults([]);
       } finally {
@@ -88,7 +108,7 @@ export function AddressAutocomplete({
     const a = item.address;
     const street = [a.house_number, a.road].filter(Boolean).join(' ');
     const city = a.city || a.town || a.village || a.county || '';
-    const province = a.state || '';
+    const province = normalizeCanadianProvince(a['ISO3166-2-lvl4'] || a.state);
     const postalCode = a.postcode || '';
 
     // Build a clean display name (strip the country suffix)
@@ -112,6 +132,7 @@ export function AddressAutocomplete({
 
   const handleChangeText = (text: string) => {
     setSelected(false);
+    onClearSelection?.();
     setQuery(text);
   };
 
@@ -132,7 +153,7 @@ export function AddressAutocomplete({
         />
         {loading && <ActivityIndicator size="small" color={Colors.text.tertiary} style={styles.spinner} />}
         {query.length > 0 && !loading && (
-          <TouchableOpacity onPress={() => { setQuery(''); setResults([]); setSelected(false); }} style={styles.clearBtn}>
+          <TouchableOpacity onPress={() => { setQuery(''); setResults([]); setSelected(false); onClearSelection?.(); }} style={styles.clearBtn}>
             <Ionicons name="close-circle" size={18} color={Colors.text.tertiary} />
           </TouchableOpacity>
         )}

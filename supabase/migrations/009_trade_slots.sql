@@ -49,7 +49,7 @@ ALTER TABLE projects
 ALTER TABLE projects
   ADD CONSTRAINT projects_status_check
   CHECK (status IN (
-    'draft', 'dispatching', 'scheduling', 'accepted', 'quoting',
+    'draft', 'brief_ready', 'dispatching', 'scheduling', 'accepted', 'quoting',
     'active', 'completed', 'cancelled', 'disputed'
   ));
 
@@ -125,14 +125,16 @@ BEGIN
 
   -- Mark this dispatch as accepted
   UPDATE dispatch_logs
-  SET response = 'accepted'
+  SET response = 'accepted',
+      responded_at = NOW()
   WHERE slot_id = p_slot_id
     AND company_id = p_company_id
     AND response = 'pending';
 
   -- Mark all other pending dispatches for this slot as filled (slot taken)
   UPDATE dispatch_logs
-  SET response = 'filled'
+  SET response = 'filled',
+      responded_at = NOW()
   WHERE slot_id = p_slot_id
     AND company_id != p_company_id
     AND response = 'pending';
@@ -195,9 +197,19 @@ $$;
 ALTER TABLE project_slots ENABLE ROW LEVEL SECURITY;
 ALTER TABLE quote_line_items ENABLE ROW LEVEL SECURITY;
 
--- Homeowners manage their project's slots
-CREATE POLICY "slots_homeowner" ON project_slots
-  FOR ALL USING (
+-- Homeowners read their project's slots
+CREATE POLICY "slots_homeowner_read" ON project_slots
+  FOR SELECT USING (
+    project_id IN (SELECT id FROM projects WHERE homeowner_id = auth.uid())
+  );
+
+-- Homeowners schedule already-filled slots from the app. Creation, deletion,
+-- assignment, trade selection, and pricing stay server-side.
+CREATE POLICY "slots_homeowner_schedule" ON project_slots
+  FOR UPDATE USING (
+    project_id IN (SELECT id FROM projects WHERE homeowner_id = auth.uid())
+  )
+  WITH CHECK (
     project_id IN (SELECT id FROM projects WHERE homeowner_id = auth.uid())
   );
 

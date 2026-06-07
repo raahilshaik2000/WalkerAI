@@ -1,38 +1,21 @@
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import {
   Alert,
   Image,
   ScrollView,
   StyleSheet,
   Text,
-  TouchableOpacity,
   View,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useNavigation, useRoute } from '@react-navigation/native';
 import ReactNativeHapticFeedback from 'react-native-haptic-feedback';
 import { supabase } from '@/lib/supabase/client';
+import { formatSupabaseFunctionError } from '@/lib/supabase/functions';
+import { materialOrderPaymentStatusLabel } from '@/lib/material-orders';
 import { Colors, Radius, Spacing, Typography } from '@/constants/theme';
+import { getRequiredStringParam } from '@/lib/navigation-params';
 import { GlassButton, GlassCard, GradientBackground, ListItemSkeleton } from '@/components/ui';
-
-interface BidSupplier {
-  id: string;
-  user_id: string;
-  business_name: string;
-  rating: number | null;
-  fulfillment_rate: number | null;
-}
-
-interface Bid {
-  id: string;
-  price_per_unit: number;
-  total_price: number;
-  lead_time_days: number | null;
-  notes: string | null;
-  status: 'pending' | 'selected' | 'rejected';
-  submitted_at: string;
-  supplier: BidSupplier | null;
-}
 
 interface MaterialOrder {
   id: string;
@@ -40,13 +23,13 @@ interface MaterialOrder {
   quantity_needed: number;
   unit: string;
   quality_tier: string | null;
+  offered_price: number | null;
   final_price: number | null;
   delivery_deadline: string | null;
   tracking_number: string | null;
   carrier: string | null;
   delivery_photo_url: string | null;
   material: { item: string; quantity: number | null; unit: string | null; quality_tier: string | null } | null;
-  bids: Bid[];
   accepted_supplier: { business_name: string; rating: number | null } | null;
 }
 
@@ -67,99 +50,63 @@ const TIMELINE_KEYS = ['accepted', 'processing', 'shipped', 'delivered'];
 
 export default function MaterialsScreen() {
   const route = useRoute<any>();
-  const projectId = route.params?.id;
+  const projectId = getRequiredStringParam(route.params, 'id');
   const navigation = useNavigation<any>();
 
   const [orders, setOrders] = useState<MaterialOrder[]>([]);
   const [loading, setLoading] = useState(true);
-  const [selectingBid, setSelectingBid] = useState<string | null>(null);
   const [confirmingOrder, setConfirmingOrder] = useState<string | null>(null);
+  const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
-  const fetchOrders = async () => {
-    const { data } = await supabase
+  const fetchOrders = useCallback(async () => {
+    setLoading(true);
+    setErrorMessage(null);
+    if (!projectId) {
+      setOrders([]);
+      setErrorMessage('Project is missing. Reopen materials from the project page.');
+      setLoading(false);
+      return;
+    }
+    const { data, error } = await supabase
       .from('material_orders')
       .select(`
-        id, status, quantity_needed, unit, quality_tier, final_price,
+        id, status, quantity_needed, unit, quality_tier, offered_price, final_price,
         delivery_deadline, tracking_number, carrier, delivery_photo_url,
         material:materials(item, quantity, unit, quality_tier),
-        bids:material_order_bids(
-          id, price_per_unit, total_price, lead_time_days, notes, status, submitted_at,
-          supplier:suppliers(id, user_id, business_name, rating, fulfillment_rate)
-        ),
         accepted_supplier:suppliers!accepted_supplier_id(business_name, rating)
       `)
       .eq('project_id', projectId)
       .order('created_at');
+    if (error) {
+      setOrders([]);
+      setErrorMessage(error.message);
+      setLoading(false);
+      return;
+    }
     setOrders((data as any) ?? []);
     setLoading(false);
-  };
+  }, [projectId]);
 
   useEffect(() => {
     fetchOrders();
+    if (!projectId) return;
     const channel = supabase
       .channel(`material_orders:${projectId}`)
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'material_orders' }, fetchOrders)
+      .on(
+        'postgres_changes',
+        { event: '*', schema: 'public', table: 'material_orders', filter: `project_id=eq.${projectId}` },
+        fetchOrders
+      )
       .subscribe();
     return () => { supabase.removeChannel(channel); };
-  }, [projectId]);
-
-  const selectBid = async (order: MaterialOrder, bid: Bid) => {
-    Alert.alert(
-      'Select this supplier?',
-      `${bid.supplier?.business_name ?? 'Supplier'} will fulfill this order for ${formatCad(bid.total_price)}.`,
-      [
-        { text: 'Cancel', style: 'cancel' },
-        {
-          text: 'Confirm',
-          onPress: async () => {
-            setSelectingBid(bid.id);
-            try {
-              const loserIds = order.bids.filter((b) => b.id !== bid.id).map((b) => b.id);
-
-              if (loserIds.length > 0) {
-                await supabase.from('material_order_bids').update({ status: 'rejected' }).in('id', loserIds);
-              }
-              await supabase.from('material_order_bids').update({ status: 'selected' }).eq('id', bid.id);
-              await supabase
-                .from('material_orders')
-                .update({ status: 'accepted', accepted_supplier_id: bid.supplier?.id, final_price: bid.total_price })
-                .eq('id', order.id);
-
-              // Notify suppliers (best-effort, non-blocking)
-              try {
-                if (bid.supplier?.user_id) {
-                  await supabase.from('notifications').insert({
-                    user_id: bid.supplier.user_id,
-                    type: 'bid_selected',
-                    payload: { order_id: order.id },
-                  });
-                }
-                for (const loserId of loserIds) {
-                  const loser = order.bids.find((b) => b.id === loserId);
-                  if (loser?.supplier?.user_id) {
-                    await supabase.from('notifications').insert({
-                      user_id: loser.supplier.user_id,
-                      type: 'bid_rejected',
-                      payload: { order_id: order.id },
-                    });
-                  }
-                }
-              } catch (_) {}
-
-              ReactNativeHapticFeedback.trigger('notificationSuccess');
-              await fetchOrders();
-            } catch (err) {
-              Alert.alert('Error', err instanceof Error ? err.message : 'Failed to select supplier.');
-            } finally {
-              setSelectingBid(null);
-            }
-          },
-        },
-      ]
-    );
-  };
+  }, [fetchOrders, projectId]);
 
   const confirmDelivery = async (order: MaterialOrder) => {
+    if (!order.delivery_photo_url) {
+      Alert.alert('Delivery photo missing', 'Ask the supplier to upload delivery proof before releasing payment.');
+      return;
+    }
+
     Alert.alert(
       'Confirm receipt?',
       'This will release payment to the supplier. Make sure your materials have arrived and are correct.',
@@ -171,20 +118,15 @@ export default function MaterialsScreen() {
           onPress: async () => {
             setConfirmingOrder(order.id);
             try {
-              await supabase
-                .from('material_orders')
-                .update({ status: 'confirmed', confirmed_at: new Date().toISOString() })
-                .eq('id', order.id);
-
               const { error } = await supabase.functions.invoke('supplier-payout', {
                 body: { order_id: order.id },
               });
-              if (error) throw error;
+              if (error) throw new Error(await formatSupabaseFunctionError(error));
 
               ReactNativeHapticFeedback.trigger('notificationSuccess');
               await fetchOrders();
             } catch (err) {
-              Alert.alert('Error', err instanceof Error ? err.message : 'Failed to release payment.');
+              Alert.alert('Error', await formatSupabaseFunctionError(err, 'Failed to release payment.'));
             } finally {
               setConfirmingOrder(null);
             }
@@ -194,8 +136,7 @@ export default function MaterialsScreen() {
     );
   };
 
-  const awaitingBids = orders.filter((o) => o.status === 'open' && o.bids.length === 0);
-  const hasBids = orders.filter((o) => o.status === 'open' && o.bids.length > 0);
+  const awaitingSupplier = orders.filter((o) => o.status === 'open');
   const inProgress = orders.filter((o) => ['accepted', 'processing', 'shipped'].includes(o.status));
   const needsConfirmation = orders.filter((o) => o.status === 'delivered');
   const completed = orders.filter((o) => ['confirmed', 'paid'].includes(o.status));
@@ -209,9 +150,24 @@ export default function MaterialsScreen() {
             <Text style={styles.title}>Materials</Text>
           </View>
 
-          {loading && Array.from({ length: 3 }).map((_, i) => <ListItemSkeleton key={i} style={{ marginBottom: 10 }} />)}
+          {loading && Array.from({ length: 3 }).map((_, i) => <ListItemSkeleton key={i} style={styles.skeletonSpacing} />)}
 
-          {!loading && orders.length === 0 && (
+          {!loading && errorMessage && (
+            <GlassCard style={styles.emptyCard}>
+              <Text style={styles.emptyIcon}>⚠️</Text>
+              <Text style={styles.emptyTitle}>Could not load materials</Text>
+              <Text style={styles.emptyBody}>{errorMessage}</Text>
+              <GlassButton
+                label="Try Again"
+                onPress={fetchOrders}
+                size="sm"
+                style={styles.retryButton}
+                haptic
+              />
+            </GlassCard>
+          )}
+
+          {!loading && !errorMessage && orders.length === 0 && (
             <GlassCard style={styles.emptyCard}>
               <Text style={styles.emptyIcon}>📦</Text>
               <Text style={styles.emptyTitle}>No material orders yet</Text>
@@ -221,15 +177,15 @@ export default function MaterialsScreen() {
             </GlassCard>
           )}
 
-          {awaitingBids.length > 0 && (
+          {awaitingSupplier.length > 0 && (
             <>
-              <Text style={styles.sectionHeader}>Finding Suppliers</Text>
-              {awaitingBids.map((order) => (
+              <Text style={styles.sectionHeader}>Awaiting Supplier Claim</Text>
+              {awaitingSupplier.map((order) => (
                 <GlassCard key={order.id} style={styles.orderCard}>
                   <View style={styles.orderTopRow}>
                     <Text style={styles.materialName}>{order.material?.item ?? 'Material'}</Text>
                     <View style={styles.chip}>
-                      <Text style={styles.chipText}>Searching...</Text>
+                      <Text style={styles.chipText}>Open</Text>
                     </View>
                   </View>
                   <Text style={styles.orderMeta}>
@@ -237,57 +193,11 @@ export default function MaterialsScreen() {
                     {order.quality_tier ? ` · ${order.quality_tier}` : ''}
                     {order.delivery_deadline ? ` · ${daysLeft(order.delivery_deadline)}` : ''}
                   </Text>
-                </GlassCard>
-              ))}
-            </>
-          )}
-
-          {hasBids.length > 0 && (
-            <>
-              <Text style={styles.sectionHeader}>Choose a Supplier</Text>
-              {hasBids.map((order) => (
-                <GlassCard key={order.id} style={styles.orderCard}>
-                  <Text style={styles.materialName}>{order.material?.item ?? 'Material'}</Text>
-                  <Text style={styles.orderMeta}>
-                    {order.quantity_needed} {order.unit}
-                    {order.quality_tier ? ` · ${order.quality_tier}` : ''}
-                    {order.delivery_deadline ? ` · ${daysLeft(order.delivery_deadline)}` : ''}
-                  </Text>
-                  <View style={styles.bidsContainer}>
-                    {order.bids
-                      .filter((b) => b.status === 'pending')
-                      .sort((a, b) => a.total_price - b.total_price)
-                      .map((bid, i) => (
-                        <View key={bid.id} style={[styles.bidRow, i === 0 && styles.bidRowBest]}>
-                          <View style={styles.bidInfo}>
-                            <Text style={styles.bidSupplier}>
-                              {bid.supplier?.business_name ?? 'Supplier'}
-                              {i === 0 ? ' 🏅' : ''}
-                            </Text>
-                            {bid.supplier?.rating != null && (
-                              <Text style={styles.bidMeta}>⭐ {bid.supplier.rating.toFixed(1)}</Text>
-                            )}
-                            {bid.lead_time_days != null && (
-                              <Text style={styles.bidMeta}>{bid.lead_time_days}d delivery</Text>
-                            )}
-                            {bid.notes ? <Text style={styles.bidNotes}>{bid.notes}</Text> : null}
-                          </View>
-                          <View style={styles.bidRight}>
-                            <Text style={styles.bidPrice}>{formatCad(bid.total_price)}</Text>
-                            <TouchableOpacity
-                              style={[styles.selectBtn, !!selectingBid && styles.selectBtnDisabled]}
-                              onPress={() => selectBid(order, bid)}
-                              disabled={!!selectingBid}
-                              activeOpacity={0.8}
-                            >
-                              <Text style={styles.selectBtnText}>
-                                {selectingBid === bid.id ? '...' : 'Select'}
-                              </Text>
-                            </TouchableOpacity>
-                          </View>
-                        </View>
-                      ))}
-                  </View>
+                  {(order.final_price ?? order.offered_price) != null && (
+                    <Text style={styles.fixedPrice}>
+                      Fixed price: {formatCad(order.final_price ?? order.offered_price ?? 0)}
+                    </Text>
+                  )}
                 </GlassCard>
               ))}
             </>
@@ -343,32 +253,40 @@ export default function MaterialsScreen() {
           {needsConfirmation.length > 0 && (
             <>
               <Text style={styles.sectionHeader}>Confirm Receipt</Text>
-              {needsConfirmation.map((order) => (
-                <GlassCard key={order.id} style={styles.orderCard}>
-                  <Text style={styles.materialName}>{order.material?.item ?? 'Material'}</Text>
-                  {order.accepted_supplier && (
-                    <Text style={styles.orderMeta}>From {order.accepted_supplier.business_name}</Text>
-                  )}
-                  {order.delivery_photo_url && (
-                    <Image
-                      source={{ uri: order.delivery_photo_url }}
-                      style={styles.deliveryPhoto}
-                      resizeMode="cover"
+              {needsConfirmation.map((order) => {
+                const hasDeliveryProof = !!order.delivery_photo_url;
+                return (
+                  <GlassCard key={order.id} style={styles.orderCard}>
+                    <Text style={styles.materialName}>{order.material?.item ?? 'Material'}</Text>
+                    {order.accepted_supplier && (
+                      <Text style={styles.orderMeta}>From {order.accepted_supplier.business_name}</Text>
+                    )}
+                    {hasDeliveryProof ? (
+                      <Image
+                        source={{ uri: order.delivery_photo_url! }}
+                        style={styles.deliveryPhoto}
+                        resizeMode="cover"
+                      />
+                    ) : (
+                      <Text style={styles.missingProofText}>
+                        Delivery photo proof is missing. Ask the supplier to upload proof before releasing payment.
+                      </Text>
+                    )}
+                    {order.final_price != null && (
+                      <Text style={styles.deliveryAmount}>{formatCad(order.final_price)}</Text>
+                    )}
+                    <GlassButton
+                      label={hasDeliveryProof ? 'Confirm Receipt — Release Payment' : 'Awaiting Delivery Proof'}
+                      onPress={() => confirmDelivery(order)}
+                      loading={confirmingOrder === order.id}
+                      disabled={!hasDeliveryProof}
+                      fullWidth
+                      style={styles.confirmBtn}
+                      haptic
                     />
-                  )}
-                  {order.final_price != null && (
-                    <Text style={styles.deliveryAmount}>{formatCad(order.final_price)}</Text>
-                  )}
-                  <GlassButton
-                    label="Confirm Receipt — Release Payment"
-                    onPress={() => confirmDelivery(order)}
-                    loading={confirmingOrder === order.id}
-                    fullWidth
-                    style={styles.confirmBtn}
-                    haptic
-                  />
-                </GlassCard>
-              ))}
+                  </GlassCard>
+                );
+              })}
             </>
           )}
 
@@ -377,15 +295,17 @@ export default function MaterialsScreen() {
               <Text style={styles.sectionHeader}>Completed</Text>
               {completed.map((order) => (
                 <GlassCard key={order.id} style={[styles.orderCard, styles.completedCard]}>
-                  <View style={styles.completedRow}>
-                    <Text style={styles.completedCheck}>✓</Text>
-                    <View style={{ flex: 1 }}>
-                      <Text style={styles.materialName}>{order.material?.item ?? 'Material'}</Text>
+                    <View style={styles.completedRow}>
+                      <Text style={styles.completedCheck}>✓</Text>
+                      <View style={styles.completedContent}>
+                        <Text style={styles.materialName}>{order.material?.item ?? 'Material'}</Text>
                       {order.accepted_supplier && (
                         <Text style={styles.orderMeta}>{order.accepted_supplier.business_name}</Text>
                       )}
                       {order.final_price != null && (
-                        <Text style={styles.paidNote}>{formatCad(order.final_price)} paid</Text>
+                        <Text style={styles.paidNote}>
+                          {materialOrderPaymentStatusLabel(order.status, formatCad(order.final_price))}
+                        </Text>
                       )}
                     </View>
                   </View>
@@ -417,6 +337,7 @@ const styles = StyleSheet.create({
   },
 
   orderCard: { marginBottom: 10 },
+  skeletonSpacing: { marginBottom: 10 },
   orderTopRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 6 },
   materialName: { ...Typography.h3, flex: 1, marginRight: 8 },
   orderMeta: { ...Typography.caption, marginBottom: 4 },
@@ -435,34 +356,9 @@ const styles = StyleSheet.create({
   emptyIcon: { fontSize: 48, marginBottom: 16 },
   emptyTitle: { ...Typography.h3, marginBottom: 8 },
   emptyBody: { ...Typography.bodySecondary, textAlign: 'center', lineHeight: 22 },
+  retryButton: { marginTop: 12, alignSelf: 'center' },
 
-  bidsContainer: { marginTop: 10, gap: 8 },
-  bidRow: {
-    backgroundColor: Colors.glass.surface,
-    borderRadius: Radius.item,
-    borderWidth: 1,
-    borderColor: Colors.glass.border,
-    padding: 12,
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    gap: 12,
-  },
-  bidRowBest: { borderColor: 'rgba(255,107,0,0.5)' },
-  bidInfo: { flex: 1, gap: 3 },
-  bidSupplier: { fontSize: 14, fontWeight: '600', color: Colors.text.primary },
-  bidMeta: { ...Typography.caption },
-  bidNotes: { ...Typography.caption, fontStyle: 'italic' },
-  bidRight: { alignItems: 'flex-end', gap: 8 },
-  bidPrice: { fontSize: 18, fontWeight: '700', color: Colors.text.primary },
-  selectBtn: {
-    backgroundColor: Colors.accent,
-    paddingHorizontal: 14,
-    paddingVertical: 7,
-    borderRadius: Radius.pill,
-  },
-  selectBtnDisabled: { opacity: 0.5 },
-  selectBtnText: { color: '#fff', fontWeight: '700', fontSize: 13 },
+  fixedPrice: { color: Colors.success, fontSize: 14, fontWeight: '700', marginTop: 6 },
 
   timeline: { flexDirection: 'row', marginTop: 14, marginBottom: 4 },
   timelineStep: { flex: 1, alignItems: 'center' },
@@ -496,11 +392,18 @@ const styles = StyleSheet.create({
   trackingValue: { color: Colors.text.primary, fontSize: 14, fontWeight: '600' },
 
   deliveryPhoto: { width: '100%', height: 180, borderRadius: Radius.item, marginVertical: 10 },
+  missingProofText: {
+    ...Typography.caption,
+    color: Colors.warning,
+    lineHeight: 18,
+    marginVertical: 10,
+  },
   deliveryAmount: { fontSize: 20, fontWeight: '700', color: Colors.text.primary, marginBottom: 4 },
   confirmBtn: { marginTop: 8 },
 
   completedCard: { borderColor: 'rgba(52, 199, 89, 0.3)' },
   completedRow: { flexDirection: 'row', alignItems: 'center', gap: 14 },
+  completedContent: { flex: 1 },
   completedCheck: { fontSize: 28, color: Colors.success },
   paidNote: { color: Colors.success, fontSize: 13, fontWeight: '600', marginTop: 2 },
 });

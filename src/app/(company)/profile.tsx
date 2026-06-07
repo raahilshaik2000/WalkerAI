@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from 'react';
 import {
   Alert,
+  AppState,
   Linking,
   RefreshControl,
   ScrollView,
@@ -10,11 +11,14 @@ import {
   View,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { useNavigation } from '@react-navigation/native';
+import { useFocusEffect, useNavigation } from '@react-navigation/native';
 import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
 import { supabase } from '@/lib/supabase/client';
+import { formatSupabaseFunctionError } from '@/lib/supabase/functions';
+import { companyEstimatedNetPayoutCents } from '@/lib/company-payouts';
+import { isStripePayoutLocallyReady } from '@/lib/payouts';
 import { useAuthStore } from '@/stores/auth.store';
-import { Colors, Radius, Spacing, Typography } from '@/constants/theme';
+import { Colors, Spacing, Typography } from '@/constants/theme';
 import { GlassButton, GlassCard, GradientBackground, StatusBadge } from '@/components/ui';
 import { TradeMetricStrip, TradeScreenHeader } from '@/components/company/TradeUI';
 
@@ -29,7 +33,15 @@ interface Company {
   rating: number | null;
   total_reviews: number;
   license_number: string | null;
+  insurance_doc_url: string | null;
+  wc_doc_url?: string | null;
   stripe_account_id: string | null;
+  stripe_details_submitted?: boolean | null;
+  stripe_payouts_enabled?: boolean | null;
+  stripe_transfers_active?: boolean | null;
+  stripe_onboarding_checked_at?: string | null;
+  trade_types: string[] | null;
+  primary_trade: string | null;
 }
 
 interface EarningsSummary {
@@ -38,31 +50,102 @@ interface EarningsSummary {
   completed_count: number;
 }
 
+const TRADE_LABELS: Record<string, string> = {
+  general_contractor: 'General Contractor',
+  plumber: 'Plumber',
+  electrician: 'Electrician',
+  tile_installer: 'Tile Installer',
+  cabinet_installer: 'Cabinet Installer',
+  painter: 'Painter',
+  flooring_installer: 'Flooring Installer',
+  drywall: 'Drywall',
+  demolition: 'Demolition',
+};
+
+function nextCompanyOnboardingRoute(company: Pick<Company, 'license_number' | 'insurance_doc_url'> | null): string | null {
+  if (!company) return 'BusinessOnboarding';
+  if (!company.license_number) return 'LicenseOnboarding';
+  if (!company.insurance_doc_url) return 'InsuranceOnboarding';
+  return null;
+}
+
+function getJoinedProjectStatus(row: any) {
+  const project = Array.isArray(row.projects) ? row.projects[0] : row.projects;
+  return project?.status as string | undefined;
+}
+
+function isMissingColumnError(message?: string | null) {
+  return !!message && /column .* does not exist/i.test(message);
+}
+
+async function fetchCompanyProfile(userId: string) {
+  const withReadiness = await supabase
+    .from('companies')
+    .select(`
+      id, name, address, city, province, service_radius_km, verified, rating,
+      total_reviews, license_number, insurance_doc_url, wc_doc_url,
+      stripe_account_id, stripe_details_submitted,
+      stripe_payouts_enabled, stripe_transfers_active, stripe_onboarding_checked_at,
+      trade_types, primary_trade
+    `)
+    .eq('user_id', userId)
+    .order('created_at', { ascending: false })
+    .limit(1)
+    .maybeSingle();
+
+  if (!withReadiness.error) return withReadiness.data as Company | null;
+  if (!isMissingColumnError(withReadiness.error.message)) throw withReadiness.error;
+
+  const legacy = await supabase
+    .from('companies')
+    .select(`
+      id, name, address, city, province, service_radius_km, verified, rating,
+      total_reviews, license_number, insurance_doc_url, wc_doc_url,
+      stripe_account_id, trade_types, primary_trade
+    `)
+    .eq('user_id', userId)
+    .order('created_at', { ascending: false })
+    .limit(1)
+    .maybeSingle();
+
+  if (legacy.error) throw legacy.error;
+  return legacy.data
+    ? {
+      ...legacy.data,
+      stripe_details_submitted: null,
+      stripe_payouts_enabled: null,
+      stripe_transfers_active: null,
+      stripe_onboarding_checked_at: null,
+    } as Company
+    : null;
+}
+
 export default function CompanyProfileScreen() {
   const { user, clearSession } = useAuthStore();
   const navigation = useNavigation<any>();
   const [company, setCompany] = useState<Company | null>(null);
   const [earnings, setEarnings] = useState<EarningsSummary>({ total_paid: 0, active_count: 0, completed_count: 0 });
-  const [loading, setLoading] = useState(true);
+  const [, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
+  const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
   const fetchData = useCallback(async () => {
     const currentUser = user ?? (await supabase.auth.getUser()).data.user;
     if (!currentUser) {
+      setErrorMessage('You need to be signed in to view your company profile.');
       setLoading(false);
       setRefreshing(false);
       return;
     }
+    setErrorMessage(null);
 
-    const { data: co, error: companyError } = await supabase
-      .from('companies')
-      .select('id, name, address, city, province, service_radius_km, verified, rating, total_reviews, license_number, stripe_account_id')
-      .eq('user_id', currentUser.id)
-      .single();
-
-    if (companyError) {
+    let co: Company | null = null;
+    try {
+      co = await fetchCompanyProfile(currentUser.id);
+    } catch (companyError) {
       setCompany(null);
       setEarnings({ total_paid: 0, active_count: 0, completed_count: 0 });
+      setErrorMessage(companyError instanceof Error ? companyError.message : 'Could not load company profile.');
       setLoading(false);
       setRefreshing(false);
       return;
@@ -71,32 +154,85 @@ export default function CompanyProfileScreen() {
     setCompany(co as Company | null);
 
     if (co?.id) {
-      // Count active and completed projects
-      const { data: projects } = await supabase
-        .from('projects')
-        .select('status')
-        .eq('assigned_company_id', co.id)
-        .in('status', ['accepted', 'quoting', 'active', 'completed']);
+      const statusByProject = new Map<string, string>();
 
-      const active = projects?.filter((p) => p.status !== 'completed').length ?? 0;
-      const completed = projects?.filter((p) => p.status === 'completed').length ?? 0;
+      // Count legacy single-company assignments.
+      const { data: legacyProjects, error: legacyProjectsError } = await supabase
+        .from('projects')
+        .select('id, status')
+        .eq('assigned_company_id', co.id)
+        .in('status', ['accepted', 'quoting', 'scheduling', 'active', 'completed']);
+      if (legacyProjectsError) {
+        setErrorMessage(legacyProjectsError.message);
+        setLoading(false);
+        setRefreshing(false);
+        return;
+      }
+
+      for (const project of legacyProjects ?? []) {
+        statusByProject.set(project.id, project.status);
+      }
+
+      // Count projects accepted through trade slots.
+      const { data: slotProjects, error: slotProjectsError } = await supabase
+        .from('project_slots')
+        .select('project_id, projects(status)')
+        .eq('assigned_company_id', co.id)
+        .in('status', ['filled', 'scheduled']);
+      if (slotProjectsError) {
+        setErrorMessage(slotProjectsError.message);
+        setLoading(false);
+        setRefreshing(false);
+        return;
+      }
+
+      for (const row of slotProjects ?? []) {
+        const status = getJoinedProjectStatus(row);
+        if (status) statusByProject.set(row.project_id, status);
+      }
+
+      const statuses = Array.from(statusByProject.values());
+      const active = statuses.filter((status) => status !== 'completed').length;
+      const completed = statuses.filter((status) => status === 'completed').length;
 
       // Sum paid milestones
-      const { data: milestones } = await supabase
+      const { data: milestones, error: milestonesError } = await supabase
         .from('milestones')
-        .select('amount, quotes!inner(company_id)')
+        .select('amount, quotes!inner(company_id, commission_rate)')
         .eq('status', 'paid')
         .eq('quotes.company_id', co.id);
+      if (milestonesError) {
+        setErrorMessage(milestonesError.message);
+        setLoading(false);
+        setRefreshing(false);
+        return;
+      }
 
-      const totalPaid = milestones?.reduce((s: number, m: any) => s + m.amount, 0) ?? 0;
-      setEarnings({ total_paid: totalPaid, active_count: active, completed_count: completed });
+      const netPaid = milestones?.reduce(
+        (s: number, m: any) => s + companyEstimatedNetPayoutCents(m.amount, m.quotes?.commission_rate ?? null),
+        0
+      ) ?? 0;
+      setEarnings({ total_paid: netPaid, active_count: active, completed_count: completed });
+    } else {
+      setEarnings({ total_paid: 0, active_count: 0, completed_count: 0 });
     }
 
     setLoading(false);
     setRefreshing(false);
   }, [user]);
 
-  useEffect(() => { fetchData(); }, [fetchData]);
+  useFocusEffect(
+    useCallback(() => {
+      fetchData();
+    }, [fetchData])
+  );
+
+  useEffect(() => {
+    const subscription = AppState.addEventListener('change', (state) => {
+      if (state === 'active') fetchData();
+    });
+    return () => subscription.remove();
+  }, [fetchData]);
 
   const handleSignOut = async () => {
     Alert.alert('Sign out', 'Are you sure?', [
@@ -118,8 +254,14 @@ export default function CompanyProfileScreen() {
   };
 
   const [connectLoading, setConnectLoading] = useState(false);
+  const payoutReady = isStripePayoutLocallyReady(company);
+  const setupRoute = nextCompanyOnboardingRoute(company);
 
   const handleSetupPayouts = async () => {
+    if (!company?.id) {
+      Alert.alert('Company profile required', 'Complete contractor onboarding before setting up payouts.');
+      return;
+    }
     setConnectLoading(true);
     try {
       const { data, error } = await supabase.functions.invoke('create-connect-account');
@@ -128,7 +270,7 @@ export default function CompanyProfileScreen() {
         await Linking.openURL(data.url);
       }
     } catch (err) {
-      Alert.alert('Error', err instanceof Error ? err.message : 'Could not start payout setup. Please try again.');
+      Alert.alert('Error', await formatSupabaseFunctionError(err, 'Could not start payout setup. Please try again.'));
     } finally {
       setConnectLoading(false);
     }
@@ -150,6 +292,23 @@ export default function CompanyProfileScreen() {
         >
           <TradeScreenHeader title="Profile" subtitle="Business status, payouts, and account controls" />
 
+          {errorMessage ? (
+            <GlassCard style={styles.card}>
+              <Text style={styles.sectionLabel}>Profile unavailable</Text>
+              <Text style={styles.infoVal}>{errorMessage}</Text>
+            </GlassCard>
+          ) : !company ? (
+            <GlassCard style={styles.card}>
+              <Text style={styles.sectionLabel}>Contractor setup</Text>
+              <Text style={styles.infoVal}>Complete your company profile before accepting jobs or setting up payouts.</Text>
+              <GlassButton
+                label="Start Setup"
+                onPress={() => navigation.navigate('BusinessOnboarding')}
+                style={{ marginTop: Spacing.sm }}
+              />
+            </GlassCard>
+          ) : null}
+
           {/* Identity card */}
           <GlassCard style={styles.card}>
             <View style={styles.identityRow}>
@@ -158,11 +317,19 @@ export default function CompanyProfileScreen() {
                   {company?.name?.charAt(0).toUpperCase() ?? user?.email?.charAt(0).toUpperCase() ?? '?'}
                 </Text>
               </View>
-              <View style={{ flex: 1 }}>
+              <View style={styles.identityBody}>
                 <Text style={styles.companyName}>{company?.name ?? 'Your Company'}</Text>
                 <Text style={styles.email}>{user?.email}</Text>
                 {company?.verified ? (
                   <StatusBadge label="Verified" variant="completed" size="sm" dot />
+                ) : setupRoute ? (
+                  <TouchableOpacity
+                    style={styles.continueSetupBtn}
+                    onPress={() => navigation.navigate(setupRoute)}
+                    activeOpacity={0.8}
+                  >
+                    <Text style={styles.continueSetupText}>Continue setup</Text>
+                  </TouchableOpacity>
                 ) : (
                   <StatusBadge label="Pending verification" variant="pending" size="sm" />
                 )}
@@ -192,7 +359,7 @@ export default function CompanyProfileScreen() {
             items={[
               { label: 'Active', value: earnings.active_count, tone: earnings.active_count ? 'success' : 'muted' },
               { label: 'Completed', value: earnings.completed_count, tone: earnings.completed_count ? 'success' : 'muted' },
-              { label: 'Earned', value: formatCad(earnings.total_paid), tone: earnings.total_paid ? 'success' : 'muted' },
+              { label: 'Net earned', value: formatCad(earnings.total_paid), tone: earnings.total_paid ? 'success' : 'muted' },
             ]}
           />
 
@@ -216,27 +383,67 @@ export default function CompanyProfileScreen() {
                 <Text style={styles.infoKey}>Service radius</Text>
                 <Text style={styles.infoVal}>{company.service_radius_km} km</Text>
               </View>
+              <View style={styles.infoRow}>
+                <Text style={styles.infoKey}>Services</Text>
+                <Text style={styles.infoVal}>
+                  {(company.trade_types?.length ? company.trade_types : ['general_contractor'])
+                    .map((trade) => TRADE_LABELS[trade] ?? trade.replace(/_/g, ' '))
+                    .join(', ')}
+                </Text>
+              </View>
               {company.license_number && (
                 <View style={styles.infoRow}>
                   <Text style={styles.infoKey}>License</Text>
                   <Text style={styles.infoVal}>{company.license_number}</Text>
                 </View>
               )}
-              <View style={[styles.infoRow, { borderBottomWidth: company.stripe_account_id ? 0 : 1 }]}>
-                <Text style={styles.infoKey}>Stripe</Text>
-                <Text style={[styles.infoVal, company.stripe_account_id ? styles.connected : styles.notConnected]}>
-                  {company.stripe_account_id ? 'Connected ✓' : 'Not connected'}
+              {!company.license_number && (
+                <View style={styles.infoRow}>
+                  <Text style={styles.infoKey}>License</Text>
+                  <Text style={[styles.infoVal, styles.notConnected]}>Required</Text>
+                </View>
+              )}
+              <View style={styles.infoRow}>
+                <Text style={styles.infoKey}>Insurance</Text>
+                <Text style={[styles.infoVal, company.insurance_doc_url ? styles.connected : styles.notConnected]}>
+                  {company.insurance_doc_url ? 'Submitted' : 'Required'}
                 </Text>
               </View>
-              {!company.stripe_account_id && (
-                <View style={[styles.infoRow, { borderBottomWidth: 0 }]}>
+              {setupRoute && (
+                <View style={styles.infoRow}>
+                  <Text style={styles.infoKey}>Setup</Text>
+                  <TouchableOpacity onPress={() => navigation.navigate(setupRoute)} activeOpacity={0.8}>
+                    <Text style={[styles.infoVal, styles.setupLink]}>Continue setup</Text>
+                  </TouchableOpacity>
+                </View>
+              )}
+              <View style={[styles.infoRow, payoutReady && styles.infoRowLast]}>
+                <Text style={styles.infoKey}>Stripe</Text>
+                <Text style={[styles.infoVal, payoutReady ? styles.connected : styles.notConnected]}>
+                  {payoutReady
+                    ? 'Payouts active'
+                    : company.stripe_account_id
+                    ? 'Onboarding incomplete'
+                    : 'Not connected'}
+                </Text>
+              </View>
+              {company.stripe_account_id && !payoutReady && company.stripe_onboarding_checked_at ? (
+                <View style={styles.infoRow}>
+                  <Text style={styles.infoKey}>Last checked</Text>
+                  <Text style={styles.infoVal}>
+                    {new Date(company.stripe_onboarding_checked_at).toLocaleDateString('en-CA')}
+                  </Text>
+                </View>
+              ) : null}
+              {!payoutReady && (
+                <View style={[styles.infoRow, styles.infoRowLast]}>
                   <GlassButton
-                    label={connectLoading ? 'Opening…' : 'Set up payouts'}
+                    label={connectLoading ? 'Opening…' : company.stripe_account_id ? 'Finish payout setup' : 'Set up payouts'}
                     onPress={handleSetupPayouts}
                     loading={connectLoading}
                     fullWidth
                     size="sm"
-                    style={{ marginTop: 4 }}
+                    style={styles.payoutButton}
                   />
                 </View>
               )}
@@ -280,6 +487,7 @@ const styles = StyleSheet.create({
   pageTitle: { ...Typography.h1, marginBottom: Spacing.md },
   card: { marginBottom: Spacing.sm },
   identityRow: { flexDirection: 'row', alignItems: 'flex-start', gap: 14, marginBottom: 12 },
+  identityBody: { flex: 1 },
   avatar: {
     width: 56, height: 56, borderRadius: 28,
     backgroundColor: 'rgba(255, 107, 0, 0.12)',
@@ -302,10 +510,20 @@ const styles = StyleSheet.create({
     flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start',
     paddingVertical: 10, borderBottomWidth: 1, borderBottomColor: Colors.glass.border,
   },
+  infoRowLast: { borderBottomWidth: 0 },
   infoKey: { ...Typography.bodySecondary, flex: 1 },
   infoVal: { ...Typography.body, flex: 2, textAlign: 'right' },
   connected: { color: Colors.success },
   notConnected: { color: Colors.warning },
+  setupLink: { color: Colors.accent, fontWeight: '700' },
+  continueSetupBtn: {
+    alignSelf: 'flex-start',
+    backgroundColor: Colors.accent,
+    borderRadius: 16,
+    paddingHorizontal: 12,
+    paddingVertical: 7,
+  },
+  continueSetupText: { color: Colors.accentFg, fontSize: 12, fontWeight: '700' },
   menuRow: {
     flexDirection: 'row', alignItems: 'center', gap: 12,
     paddingVertical: 14, borderBottomWidth: 1, borderBottomColor: Colors.glass.border,
@@ -313,4 +531,5 @@ const styles = StyleSheet.create({
   menuIcon: { width: 28, alignItems: 'center' as const, justifyContent: 'center' as const },
   menuLabel: { ...Typography.body, flex: 1 },
   signOutBtn: { marginTop: Spacing.sm },
+  payoutButton: { marginTop: 4 },
 });

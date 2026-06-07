@@ -1,7 +1,6 @@
 import React, { useCallback } from 'react';
 import { FlatList, Image, StyleSheet, Text, View } from 'react-native';
 import Animated from 'react-native-reanimated';
-import Ionicons from 'react-native-vector-icons/Ionicons';
 import LinearGradient from 'react-native-linear-gradient';
 import { useNavigation } from '@react-navigation/native';
 import { AnimatedPressable } from '@/components/ui';
@@ -35,14 +34,10 @@ export function InspirationCarousel() {
         {/* Bottom content */}
         <View style={styles.bottom}>
           <Text style={styles.title} numberOfLines={2}>{item.title}</Text>
-          <View style={styles.savesRow}>
-            <Ionicons name="heart-outline" size={13} color="rgba(255,255,255,0.6)" />
-            <Text style={styles.savesText}>{item.saves.toLocaleString()}</Text>
-          </View>
         </View>
       </AnimatedPressable>
     ),
-    [],
+    [navigation],
   );
 
   return (
@@ -109,14 +104,5 @@ const styles = StyleSheet.create({
     fontWeight: '600',
     color: '#fff',
     marginBottom: 4,
-  },
-  savesRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 4,
-  },
-  savesText: {
-    fontSize: 11,
-    color: 'rgba(255,255,255,0.6)',
   },
 });

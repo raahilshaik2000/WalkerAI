@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import {
+  Alert,
   Dimensions,
   KeyboardAvoidingView,
   Modal,
@@ -17,6 +18,8 @@ import { useNavigation, useRoute } from '@react-navigation/native';
 import Ionicons from 'react-native-vector-icons/Ionicons';
 import { AnimatedPressable, GlassButton, GradientBackground } from '@/components/ui';
 import { useProjectWizardStore } from '@/stores/project-wizard.store';
+import { parseMetricDimension } from '@/lib/measurements';
+import { getRoomScanMeasurementBlocker } from '@/lib/room-scan';
 import {
   FloorPlanView,
   USDZViewer,
@@ -35,25 +38,38 @@ const M_TO_FT = 3.28084;
 export default function RoomResultsScreen() {
   const navigation = useNavigation<any>();
   const route = useRoute<any>();
-  const { scanData, fromWizard } = route.params ?? {};
+  const { scanData: routeScanData, fromWizard } = route.params ?? {};
+  const scanData = routeScanData && typeof routeScanData === 'object' ? routeScanData : null;
+  const safeScanData = scanData ?? {};
   const [viewMode, setViewMode] = useState<ViewMode>('floorplan');
   const [editOpen, setEditOpen] = useState(false);
-  const [roomDimensions, setRoomDimensions] = useState(() => scanData.roomDimensions ?? {});
+  const [roomDimensions, setRoomDimensions] = useState(() => safeScanData.roomDimensions ?? {});
   const [draftDimensions, setDraftDimensions] = useState({
-    length: String(scanData.roomDimensions?.length ?? ''),
-    width: String(scanData.roomDimensions?.width ?? ''),
-    height: String(scanData.roomDimensions?.height ?? ''),
+    length: String(safeScanData.roomDimensions?.length ?? ''),
+    width: String(safeScanData.roomDimensions?.width ?? ''),
+    height: String(safeScanData.roomDimensions?.height ?? ''),
   });
-  const { setMeasurements } = useProjectWizardStore();
+  const { setMeasurements, setRoomScanData } = useProjectWizardStore();
+
+  const correctedScanData = {
+    ...safeScanData,
+    roomDimensions,
+  };
+  const measurementBlocker = getRoomScanMeasurementBlocker(correctedScanData);
 
   function handleUseMeasurements() {
+    if (measurementBlocker) {
+      Alert.alert('Measurements required', measurementBlocker);
+      return;
+    }
+
     const rd = roomDimensions ?? {};
     setMeasurements({
       lengthFt: rd.length ? (rd.length * M_TO_FT).toFixed(1) : '',
       widthFt: rd.width ? (rd.width * M_TO_FT).toFixed(1) : '',
       ceilingHeightFt: rd.height ? (rd.height * M_TO_FT).toFixed(1) : '',
-      numDoors: String(scanData.doors?.length ?? 0),
-      numWindows: String(scanData.windows?.length ?? 0),
+      numDoors: String(safeScanData.doors?.length ?? 0),
+      numWindows: String(safeScanData.windows?.length ?? 0),
       upperCabHeight: '',
       lowerCabHeight: '',
       cabDepth: '',
@@ -71,26 +87,78 @@ export default function RoomResultsScreen() {
       islandLength: '',
       islandWidth: '',
     });
+    setRoomScanData(correctedScanData);
     useProjectWizardStore.getState().setStep(3);
     navigation.navigate('ProjectCreate', { screen: 'Analyzing' });
   }
 
   function saveCorrections() {
-    const length = parseDimension(draftDimensions.length);
-    const width = parseDimension(draftDimensions.width);
-    const height = parseDimension(draftDimensions.height);
+    const invalidFields = [
+      ['length', draftDimensions.length],
+      ['width', draftDimensions.width],
+      ['height', draftDimensions.height],
+    ]
+      .filter(([, value]) => String(value).trim().length > 0 && parseMetricDimension(String(value)) == null)
+      .map(([label]) => label);
+
+    if (invalidFields.length > 0) {
+      Alert.alert(
+        'Invalid measurements',
+        `Enter valid positive numbers for: ${invalidFields.join(', ')}.`
+      );
+      return;
+    }
+
+    const length = parseMetricDimension(draftDimensions.length);
+    const width = parseMetricDimension(draftDimensions.width);
+    const height = parseMetricDimension(draftDimensions.height);
     setRoomDimensions({
-      length: Number.isFinite(length) && length > 0 ? length : roomDimensions.length,
-      width: Number.isFinite(width) && width > 0 ? width : roomDimensions.width,
-      height: Number.isFinite(height) && height > 0 ? height : roomDimensions.height,
-      area: Number.isFinite(length) && Number.isFinite(width) && length > 0 && width > 0
+      length: length ?? roomDimensions.length,
+      width: width ?? roomDimensions.width,
+      height: height ?? roomDimensions.height,
+      area: length != null && width != null
         ? length * width
         : roomDimensions.area,
     });
     setEditOpen(false);
   }
 
-  const { walls = [], doors = [], windows = [], objects = [], usdzFilePath, isMock } = scanData;
+  const { walls = [], doors = [], windows = [], objects = [], usdzFilePath, isMock } = safeScanData;
+
+  if (!scanData) {
+    return (
+      <GradientBackground>
+        <SafeAreaView style={styles.container}>
+          <View style={styles.header}>
+            <Text style={styles.headerTitle}>Room Measurements</Text>
+            <GlassButton
+              label=""
+              variant="ghost"
+              size="sm"
+              onPress={() => navigation.goBack()}
+              icon={<Ionicons name="close" size={22} color="#FFFFFF" />}
+            />
+          </View>
+          <View style={styles.unavailableState}>
+            <View style={styles.unavailableIcon}>
+              <Ionicons name="scan-outline" size={30} color={Colors.text.tertiary} />
+            </View>
+            <Text style={styles.unavailableTitle}>Measurement data unavailable</Text>
+            <Text style={styles.unavailableBody}>
+              Reopen this screen from a completed room scan or enter measurements manually in the project flow.
+            </Text>
+            <GlassButton
+              label="Go Back"
+              variant="primary"
+              size="lg"
+              fullWidth
+              onPress={() => navigation.goBack()}
+            />
+          </View>
+        </SafeAreaView>
+      </GradientBackground>
+    );
+  }
 
   return (
     <GradientBackground>
@@ -151,7 +219,7 @@ export default function RoomResultsScreen() {
               />
             ) : (
               <View style={{ width: PLAN_SIZE, height: PLAN_SIZE }}>
-                <USDZViewer filePath={usdzFilePath} scanData={scanData} style={{ flex: 1 }} />
+                <USDZViewer filePath={usdzFilePath} scanData={correctedScanData} style={{ flex: 1 }} />
               </View>
             )}
           </View>
@@ -266,8 +334,15 @@ export default function RoomResultsScreen() {
             <View style={styles.mockBanner}>
               <Ionicons name="information-circle-outline" size={16} color={Colors.text.tertiary} />
               <Text style={styles.mockText}>
-                Showing simulated data. Scan a real room on a LiDAR device for actual measurements.
+                Showing simulated data. Enter manual measurements or scan a real room before creating an estimate.
               </Text>
+            </View>
+          )}
+
+          {fromWizard && measurementBlocker && (
+            <View style={styles.blockerCard}>
+              <Ionicons name="alert-circle-outline" size={18} color="#FF6B00" />
+              <Text style={styles.blockerText}>{measurementBlocker}</Text>
             </View>
           )}
 
@@ -277,14 +352,25 @@ export default function RoomResultsScreen() {
         {/* Bottom CTA */}
         <View style={styles.bottom}>
           {fromWizard ? (
-            <GlassButton
-              label="Use These Measurements"
-              variant="primary"
-              size="lg"
-              fullWidth
-              onPress={handleUseMeasurements}
-              icon={<Ionicons name="checkmark-circle" size={20} color="#000" />}
-            />
+            measurementBlocker ? (
+              <GlassButton
+                label="Enter Measurements Manually"
+                variant="primary"
+                size="lg"
+                fullWidth
+                onPress={() => navigation.replace('ManualMeasurement', { fromWizard: true })}
+                icon={<Ionicons name="create-outline" size={20} color="#000" />}
+              />
+            ) : (
+              <GlassButton
+                label="Use These Measurements"
+                variant="primary"
+                size="lg"
+                fullWidth
+                onPress={handleUseMeasurements}
+                icon={<Ionicons name="checkmark-circle" size={20} color="#000" />}
+              />
+            )
           ) : (
             <GlassButton
               label="Done"
@@ -326,14 +412,6 @@ export default function RoomResultsScreen() {
       </SafeAreaView>
     </GradientBackground>
   );
-}
-
-function parseDimension(value: string) {
-  const normalized = value
-    .replace(/[٫٬,·•]/g, '.')
-    .replace(/[^\d.-]/g, '');
-
-  return Number.parseFloat(normalized);
 }
 
 function DimensionInput({
@@ -404,6 +482,30 @@ const styles = StyleSheet.create({
     paddingBottom: Spacing.xs,
   },
   headerTitle: Typography.h2,
+  unavailableState: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: Spacing.xl,
+    gap: 12,
+  },
+  unavailableIcon: {
+    width: 72,
+    height: 72,
+    borderRadius: 36,
+    backgroundColor: Colors.surface.default,
+    borderWidth: 1,
+    borderColor: Colors.surface.border,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: 4,
+  },
+  unavailableTitle: { ...Typography.h3, textAlign: 'center' },
+  unavailableBody: {
+    ...Typography.bodySecondary,
+    textAlign: 'center',
+    marginBottom: Spacing.sm,
+  },
   toggleRow: {
     flexDirection: 'row',
     paddingHorizontal: Spacing.sm,
@@ -489,6 +591,23 @@ const styles = StyleSheet.create({
     color: Colors.text.tertiary,
     marginLeft: 8,
     flex: 1,
+  },
+  blockerCard: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    gap: 8,
+    borderRadius: Radius.item,
+    borderWidth: 1,
+    borderColor: 'rgba(255, 107, 0, 0.28)',
+    backgroundColor: 'rgba(255, 107, 0, 0.1)',
+    padding: 12,
+    marginTop: Spacing.sm,
+  },
+  blockerText: {
+    flex: 1,
+    color: Colors.text.secondary,
+    fontSize: 13,
+    lineHeight: 19,
   },
   bottom: {
     position: 'absolute',

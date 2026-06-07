@@ -6,8 +6,6 @@ interface WalkerLogoProps {
 }
 
 export function WalkerLogo({ size = 32 }: WalkerLogoProps) {
-  const scale = size / 400;
-
   return (
     <Svg width={size} height={size} viewBox="0 0 400 400">
       <Defs>

@@ -16,6 +16,71 @@ interface UploadResult {
   storagePath: string;
 }
 
+export interface StorageUploadAsset {
+  uri?: string | null;
+  fileName?: string | null;
+  type?: string | null;
+}
+
+export interface StorageUploadMetadata {
+  uri: string;
+  extension: string;
+  contentType: string;
+}
+
+const MIME_BY_EXTENSION: Record<string, string> = {
+  jpg: 'image/jpeg',
+  jpeg: 'image/jpeg',
+  png: 'image/png',
+  webp: 'image/webp',
+  heic: 'image/heic',
+  heif: 'image/heif',
+  pdf: 'application/pdf',
+};
+
+const EXTENSION_BY_MIME: Record<string, string> = {
+  'image/jpeg': 'jpg',
+  'image/png': 'png',
+  'image/webp': 'webp',
+  'image/heic': 'heic',
+  'image/heif': 'heif',
+  'application/pdf': 'pdf',
+};
+
+function extensionFromName(value?: string | null): string | null {
+  const match = value?.match(/\.([a-zA-Z0-9]+)(?:[?#].*)?$/);
+  return match?.[1]?.toLowerCase() ?? null;
+}
+
+function sanitizeContentType(type?: string | null): string | null {
+  const trimmed = type?.trim().toLowerCase();
+  if (!trimmed || !/^[a-z0-9.+-]+\/[a-z0-9.+-]+$/.test(trimmed)) return null;
+  if (trimmed === 'image/jpg') return 'image/jpeg';
+  return trimmed;
+}
+
+export function getUploadMetadata(
+  asset: StorageUploadAsset,
+  fallbackContentType: string = 'image/jpeg',
+): StorageUploadMetadata {
+  if (!asset.uri) {
+    throw new Error('Selected file is missing a file URI.');
+  }
+
+  const extensionFromAsset = extensionFromName(asset.fileName) ?? extensionFromName(asset.uri);
+  const contentType =
+    sanitizeContentType(asset.type)
+    ?? (extensionFromAsset ? MIME_BY_EXTENSION[extensionFromAsset] : null)
+    ?? fallbackContentType;
+  const extension = EXTENSION_BY_MIME[contentType] ?? extensionFromAsset ?? 'jpg';
+
+  return {
+    uri: asset.uri,
+    extension,
+    contentType,
+  };
+}
+
 // React Native's fetch() returns empty blobs for file:// URIs.
 // Use XMLHttpRequest with responseType='blob' instead — it correctly reads local files.
 function readLocalFileAsBlob(uri: string): Promise<Blob> {
@@ -58,20 +123,23 @@ export async function uploadFile(
   return { publicUrl: data.publicUrl, storagePath: path };
 }
 
-function uploadWithProgress(
+async function uploadWithProgress(
   bucket: StorageBucket,
   path: string,
   blob: Blob,
   contentType: string,
   onProgress: (progress: number) => void
 ): Promise<void> {
-  return new Promise((resolve, reject) => {
-    const supabaseUrl = Config.SUPABASE_URL!;
-    const supabaseKey = Config.SUPABASE_ANON_KEY!;
+  const supabaseUrl = Config.SUPABASE_URL!;
+  const { data, error } = await supabase.auth.getSession();
+  if (error || !data.session?.access_token) {
+    throw new Error(error?.message ?? 'Sign in is required to upload files.');
+  }
 
+  return new Promise((resolve, reject) => {
     const xhr = new XMLHttpRequest();
     xhr.open('POST', `${supabaseUrl}/storage/v1/object/${bucket}/${path}`);
-    xhr.setRequestHeader('Authorization', `Bearer ${supabaseKey}`);
+    xhr.setRequestHeader('Authorization', `Bearer ${data.session.access_token}`);
     xhr.setRequestHeader('Content-Type', contentType);
     xhr.setRequestHeader('x-upsert', 'false');
 
@@ -100,7 +168,7 @@ export async function uploadBase64(
   base64: string,
   contentType: string = 'image/jpeg',
 ): Promise<UploadResult> {
-  const cleanBase64 = base64.replace(/^data:\w+\/\w+;base64,/, '');
+  const cleanBase64 = base64.replace(/^data:[^;]+;base64,/, '');
   const binary = atob(cleanBase64);
   const bytes = new Uint8Array(binary.length);
   for (let i = 0; i < binary.length; i++) {

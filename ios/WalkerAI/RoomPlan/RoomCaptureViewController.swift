@@ -177,11 +177,30 @@ class RoomCaptureViewController: UIViewController {
       ])
     }
 
-    // Calculate room dimensions from wall extents
-    let allX = room.walls.map { Double($0.transform.columns.3.x) }
-    let allZ = room.walls.map { Double($0.transform.columns.3.z) }
-    let roomLength = (allX.max() ?? 0) - (allX.min() ?? 0) + Double(room.walls.first?.dimensions.x ?? 0)
-    let roomWidth = (allZ.max() ?? 0) - (allZ.min() ?? 0) + Double(room.walls.first?.dimensions.x ?? 0)
+    // Calculate room dimensions from projected wall extents. Using the first
+    // wall length for both axes overstates the perpendicular room dimension.
+    var minX = Double.infinity
+    var maxX = -Double.infinity
+    var minZ = Double.infinity
+    var maxZ = -Double.infinity
+
+    for wall in room.walls {
+      let length = Double(wall.dimensions.x)
+      let angle = Double(atan2(wall.transform.columns.0.z, wall.transform.columns.0.x))
+      let centerX = Double(wall.transform.columns.3.x)
+      let centerZ = Double(wall.transform.columns.3.z)
+      let halfX = abs(cos(angle)) * length / 2
+      let halfZ = abs(sin(angle)) * length / 2
+
+      minX = min(minX, centerX - halfX)
+      maxX = max(maxX, centerX + halfX)
+      minZ = min(minZ, centerZ - halfZ)
+      maxZ = max(maxZ, centerZ + halfZ)
+    }
+
+    let hasWallBounds = minX.isFinite && maxX.isFinite && minZ.isFinite && maxZ.isFinite
+    let roomLength = hasWallBounds ? max(0, maxX - minX) : 0
+    let roomWidth = hasWallBounds ? max(0, maxZ - minZ) : 0
     let roomHeight = Double(room.walls.first?.dimensions.y ?? 2.7)
 
     // Export USDZ

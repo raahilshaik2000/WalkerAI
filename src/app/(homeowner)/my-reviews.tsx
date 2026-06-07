@@ -1,9 +1,9 @@
-import React, { useEffect, useState } from 'react';
-import { ScrollView, StyleSheet, Text, View } from 'react-native';
+import React, { useCallback, useEffect, useState } from 'react';
+import { ActivityIndicator, RefreshControl, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useNavigation } from '@react-navigation/native';
 import Ionicons from 'react-native-vector-icons/Ionicons';
-import { AnimatedPressable, GlassCard, GradientBackground } from '@/components/ui';
+import { AnimatedPressable, GlassButton, GlassCard, GradientBackground } from '@/components/ui';
 import { Colors, Radius } from '@/constants/theme';
 import { supabase } from '@/lib/supabase/client';
 import { useAuthStore } from '@/stores/auth.store';
@@ -17,6 +17,7 @@ interface Review {
   cleanliness_rating: number | null;
   comment: string | null;
   created_at: string;
+  reviewee_id: string;
   project: { room_type: string | null } | null;
   company: { name: string } | null;
 }
@@ -45,34 +46,88 @@ export default function MyReviewsScreen() {
   const { user } = useAuthStore();
   const [reviews, setReviews] = useState<Review[]>([]);
   const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
+  const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
-  useEffect(() => {
-    if (!user) return;
-    supabase
+  const loadReviews = useCallback(async (mode: 'initial' | 'refresh' = 'initial') => {
+    if (!user) {
+      setReviews([]);
+      setErrorMessage('Sign in to view your reviews.');
+      setLoading(false);
+      setRefreshing(false);
+      return;
+    }
+
+    if (mode === 'refresh') setRefreshing(true);
+    else setLoading(true);
+    setErrorMessage(null);
+
+    const { data, error } = await supabase
       .from('reviews')
       .select(`
-        id, rating, quality_rating, communication_rating, timeliness_rating, cleanliness_rating, comment, created_at,
-        project:projects!project_id(room_type, assigned_company_id, companies!assigned_company_id(name))
+        id, rating, quality_rating, communication_rating, timeliness_rating, cleanliness_rating, comment, created_at, reviewee_id,
+        project:projects!project_id(room_type)
       `)
       .eq('reviewer_id', user.id)
-      .order('created_at', { ascending: false })
-      .then(({ data }) => {
-        const mapped: Review[] = (data ?? []).map((r: any) => ({
-          id: r.id,
-          rating: r.rating,
-          quality_rating: r.quality_rating,
-          communication_rating: r.communication_rating,
-          timeliness_rating: r.timeliness_rating,
-          cleanliness_rating: r.cleanliness_rating,
-          comment: r.comment,
-          created_at: r.created_at,
-          project: r.project ?? null,
-          company: r.project?.companies ?? null,
-        }));
-        setReviews(mapped);
+      .order('created_at', { ascending: false });
+
+    if (error) {
+      setReviews([]);
+      setErrorMessage(error.message);
+      setLoading(false);
+      setRefreshing(false);
+      return;
+    }
+
+    const rows = (data ?? []) as any[];
+    const revieweeIds = Array.from(new Set(
+      rows
+        .map((r) => r.reviewee_id)
+        .filter((id): id is string => !!id)
+    ));
+
+    const companiesByUserId = new Map<string, { name: string }>();
+    if (revieweeIds.length > 0) {
+      const { data: companies, error: companiesError } = await supabase
+        .from('companies')
+        .select('user_id, name')
+        .in('user_id', revieweeIds);
+
+      if (companiesError) {
+        setReviews([]);
+        setErrorMessage(companiesError.message);
         setLoading(false);
-      });
+        setRefreshing(false);
+        return;
+      }
+
+      for (const company of companies ?? []) {
+        if (company.user_id) companiesByUserId.set(company.user_id, { name: company.name ?? 'Contractor' });
+      }
+    }
+
+    const mapped: Review[] = rows.map((r: any) => ({
+      id: r.id,
+      rating: r.rating,
+      quality_rating: r.quality_rating,
+      communication_rating: r.communication_rating,
+      timeliness_rating: r.timeliness_rating,
+      cleanliness_rating: r.cleanliness_rating,
+      comment: r.comment,
+      created_at: r.created_at,
+      reviewee_id: r.reviewee_id,
+      project: r.project ?? null,
+      company: companiesByUserId.get(r.reviewee_id) ?? null,
+    }));
+    setReviews(mapped);
+    setErrorMessage(null);
+    setLoading(false);
+    setRefreshing(false);
   }, [user]);
+
+  useEffect(() => {
+    loadReviews();
+  }, [loadReviews]);
 
   return (
     <GradientBackground>
@@ -85,40 +140,57 @@ export default function MyReviewsScreen() {
           <View style={{ width: 22 }} />
         </View>
 
-        <ScrollView contentContainerStyle={styles.scroll} showsVerticalScrollIndicator={false}>
-          {!loading && reviews.length === 0 && (
-            <View style={styles.empty}>
-              <Ionicons name="star-outline" size={48} color={Colors.text.tertiary} />
-              <Text style={styles.emptyTitle}>No reviews yet</Text>
-              <Text style={styles.emptySub}>Complete a project to leave a review for your contractor.</Text>
-            </View>
-          )}
-
-          {reviews.map((r) => (
-            <GlassCard key={r.id} style={{ marginBottom: 12 }}>
-              <View style={styles.topRow}>
-                <View style={{ flex: 1 }}>
-                  <Text style={styles.project}>{getProjectTitle(r.project?.room_type ?? null)}</Text>
-                  <Text style={styles.contractor}>{r.company?.name ?? 'Contractor'}</Text>
-                </View>
-                <View style={styles.overallBadge}>
-                  <Text style={styles.overallText}>{r.rating}</Text>
-                  <Ionicons name="star" size={12} color="#F59E0B" />
-                </View>
+        {loading ? (
+          <View style={styles.center}>
+            <ActivityIndicator color={Colors.accent} />
+          </View>
+        ) : (
+          <ScrollView
+            contentContainerStyle={styles.scroll}
+            showsVerticalScrollIndicator={false}
+            refreshControl={<RefreshControl refreshing={refreshing} onRefresh={() => loadReviews('refresh')} tintColor={Colors.accent} />}
+          >
+            {errorMessage ? (
+              <View style={styles.empty}>
+                <Ionicons name="alert-circle-outline" size={48} color={Colors.text.tertiary} />
+                <Text style={styles.emptyTitle}>Could not load reviews</Text>
+                <Text style={styles.emptySub}>{errorMessage}</Text>
+                <GlassButton label="Try Again" onPress={() => loadReviews()} size="sm" style={{ marginTop: 10 }} />
               </View>
-
-              <View style={styles.ratingsGrid}>
-                {r.quality_rating != null && <RatingItem label="Quality" rating={r.quality_rating} />}
-                {r.communication_rating != null && <RatingItem label="Communication" rating={r.communication_rating} />}
-                {r.timeliness_rating != null && <RatingItem label="Timeliness" rating={r.timeliness_rating} />}
-                {r.cleanliness_rating != null && <RatingItem label="Cleanliness" rating={r.cleanliness_rating} />}
+            ) : reviews.length === 0 ? (
+              <View style={styles.empty}>
+                <Ionicons name="star-outline" size={48} color={Colors.text.tertiary} />
+                <Text style={styles.emptyTitle}>No reviews yet</Text>
+                <Text style={styles.emptySub}>Complete a project to leave a review for your contractor.</Text>
               </View>
+            ) : null}
 
-              {r.comment ? <Text style={styles.comment}>"{r.comment}"</Text> : null}
-              <Text style={styles.date}>{formatDate(r.created_at)}</Text>
-            </GlassCard>
-          ))}
-        </ScrollView>
+            {reviews.map((r) => (
+              <GlassCard key={r.id} style={{ marginBottom: 12 }}>
+                <View style={styles.topRow}>
+                  <View style={{ flex: 1 }}>
+                    <Text style={styles.project}>{getProjectTitle(r.project?.room_type ?? null)}</Text>
+                    <Text style={styles.contractor}>{r.company?.name ?? 'Contractor'}</Text>
+                  </View>
+                  <View style={styles.overallBadge}>
+                    <Text style={styles.overallText}>{r.rating}</Text>
+                    <Ionicons name="star" size={12} color="#F59E0B" />
+                  </View>
+                </View>
+
+                <View style={styles.ratingsGrid}>
+                  {r.quality_rating != null && <RatingItem label="Quality" rating={r.quality_rating} />}
+                  {r.communication_rating != null && <RatingItem label="Communication" rating={r.communication_rating} />}
+                  {r.timeliness_rating != null && <RatingItem label="Timeliness" rating={r.timeliness_rating} />}
+                  {r.cleanliness_rating != null && <RatingItem label="Cleanliness" rating={r.cleanliness_rating} />}
+                </View>
+
+                {r.comment ? <Text style={styles.comment}>"{r.comment}"</Text> : null}
+                <Text style={styles.date}>{formatDate(r.created_at)}</Text>
+              </GlassCard>
+            ))}
+          </ScrollView>
+        )}
       </SafeAreaView>
     </GradientBackground>
   );
@@ -137,6 +209,7 @@ const styles = StyleSheet.create({
   safe: { flex: 1 },
   header: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 16, paddingVertical: 12 },
   headerTitle: { fontSize: 18, fontWeight: '700', color: '#fff' },
+  center: { flex: 1, alignItems: 'center', justifyContent: 'center' },
   scroll: { paddingHorizontal: 16, paddingBottom: 100 },
 
   topRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 14 },

@@ -6,14 +6,51 @@ const corsHeaders = {
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 };
 
-async function urlToBase64(url: string): Promise<string> {
+type VisionMediaType = 'image/jpeg' | 'image/png' | 'image/webp' | 'image/gif';
+
+function sniffVisionMediaType(bytes: Uint8Array): VisionMediaType | null {
+  if (bytes[0] === 0xff && bytes[1] === 0xd8 && bytes[2] === 0xff) return 'image/jpeg';
+  if (
+    bytes[0] === 0x89
+    && bytes[1] === 0x50
+    && bytes[2] === 0x4e
+    && bytes[3] === 0x47
+  ) return 'image/png';
+  if (
+    bytes[0] === 0x47
+    && bytes[1] === 0x49
+    && bytes[2] === 0x46
+  ) return 'image/gif';
+  if (
+    bytes[0] === 0x52
+    && bytes[1] === 0x49
+    && bytes[2] === 0x46
+    && bytes[3] === 0x46
+    && bytes[8] === 0x57
+    && bytes[9] === 0x45
+    && bytes[10] === 0x42
+    && bytes[11] === 0x50
+  ) return 'image/webp';
+  return null;
+}
+
+async function urlToVisionImage(url: string): Promise<{ data: string; mediaType: VisionMediaType } | null> {
   const res = await fetch(url);
   if (!res.ok) throw new Error(`Failed to fetch image (${res.status})`);
   const buffer = await res.arrayBuffer();
   const bytes = new Uint8Array(buffer);
+  const mediaType = sniffVisionMediaType(bytes);
+  if (!mediaType) return null;
   let binary = '';
   for (let i = 0; i < bytes.byteLength; i++) binary += String.fromCharCode(bytes[i]);
-  return btoa(binary);
+  return { data: btoa(binary), mediaType };
+}
+
+function jsonResponse(body: Record<string, unknown>, status = 200) {
+  return new Response(JSON.stringify(body), {
+    status,
+    headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+  });
 }
 
 Deno.serve(async (req) => {
@@ -21,9 +58,7 @@ Deno.serve(async (req) => {
 
   const authHeader = req.headers.get('Authorization');
   if (!authHeader) {
-    return new Response(JSON.stringify({ error: 'Unauthorized' }), {
-      status: 401, headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-    });
+    return jsonResponse({ error: 'Unauthorized' }, 401);
   }
 
   const userClient = createClient(
@@ -39,9 +74,7 @@ Deno.serve(async (req) => {
   try {
     const { data: { user }, error: authError } = await userClient.auth.getUser();
     if (authError || !user) {
-      return new Response(JSON.stringify({ error: 'Unauthorized' }), {
-        status: 401, headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-      });
+      return jsonResponse({ error: 'Unauthorized' }, 401);
     }
 
     const {
@@ -56,17 +89,56 @@ Deno.serve(async (req) => {
       timeline,
     } = await req.json();
 
+    if (!project_id || typeof project_id !== 'string') {
+      return jsonResponse({ error: 'Project ID is required' }, 400);
+    }
+
+    const requestedPhotoUrls = Array.isArray(photo_urls)
+      ? photo_urls.filter((url): url is string => typeof url === 'string' && url.trim().length > 0)
+      : [];
+    if (requestedPhotoUrls.length === 0) {
+      return jsonResponse({ error: 'At least one uploaded project photo is required' }, 400);
+    }
+
+    const { data: project, error: projectError } = await adminClient
+      .from('projects')
+      .select('id, homeowner_id')
+      .eq('id', project_id)
+      .maybeSingle();
+    if (projectError) throw projectError;
+    if (!project) return jsonResponse({ error: 'Project not found' }, 404);
+    if (project.homeowner_id !== user.id) {
+      return jsonResponse({ error: 'You can only generate a DIY guide for your own project' }, 403);
+    }
+
+    const { data: photoRows, error: photoError } = await adminClient
+      .from('project_photos')
+      .select('url')
+      .eq('project_id', project_id)
+      .in('url', requestedPhotoUrls);
+    if (photoError) throw photoError;
+
+    const projectPhotoUrls = new Set((photoRows ?? []).map((row) => row.url));
+    const safePhotoUrls = requestedPhotoUrls.filter((url) => projectPhotoUrls.has(url)).slice(0, 6);
+    if (safePhotoUrls.length === 0) {
+      return jsonResponse({ error: 'Uploaded project photos were not found for this DIY project' }, 400);
+    }
+
     const anthropic = new Anthropic({ apiKey: Deno.env.get('ANTHROPIC_API_KEY')! });
 
     // Convert photos to base64
     const imageBlocks: Anthropic.ImageBlockParam[] = [];
-    for (const url of (photo_urls ?? []).slice(0, 6)) {
+    for (const url of safePhotoUrls) {
       try {
-        const b64 = await urlToBase64(url);
-        imageBlocks.push({ type: 'image', source: { type: 'base64', media_type: 'image/jpeg', data: b64 } });
+        const image = await urlToVisionImage(url);
+        if (!image) continue;
+        imageBlocks.push({ type: 'image', source: { type: 'base64', media_type: image.mediaType, data: image.data } });
       } catch (e) {
         console.error('Image fetch failed, skipping:', e);
       }
+    }
+    if (imageBlocks.length === 0) {
+      return jsonResponse({ error: 'DIY guide photos must be JPEG, PNG, GIF, or WebP images' }, 400);
     }
 
     const budgetLabel = budget_max >= 5000
@@ -178,22 +250,24 @@ ${isHazardous ? `- First step MUST be the safety shut-off procedure described ab
       }
     }
 
-    // Persist guide to project
-    await adminClient
+    const { data: persistedProject, error: persistError } = await adminClient
       .from('projects')
-      .update({ diy_guide: guide, ai_analysis: { category, skill_level, budget_min, budget_max } })
-      .eq('id', project_id);
+      .update({
+        diy_guide: guide,
+        diy_category: category,
+        ai_analysis: { category, skill_level, budget_min, budget_max },
+      })
+      .eq('id', project_id)
+      .eq('homeowner_id', user.id)
+      .select('id')
+      .maybeSingle();
+    if (persistError) throw new Error(`DIY guide could not be saved: ${persistError.message}`);
+    if (!persistedProject) throw new Error('DIY guide could not be saved to this project');
 
-    return new Response(
-      JSON.stringify({ success: true, guide }),
-      { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-    );
+    return jsonResponse({ success: true, guide });
 
   } catch (err) {
     console.error('generate-diy-guide error:', err);
-    return new Response(
-      JSON.stringify({ error: err instanceof Error ? err.message : 'Internal error' }),
-      { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-    );
+    return jsonResponse({ error: err instanceof Error ? err.message : 'Internal error' }, 500);
   }
 });

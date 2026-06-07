@@ -7,7 +7,6 @@ import {
   StyleSheet,
   Text,
   TouchableOpacity,
-  View,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useNavigation } from '@react-navigation/native';
@@ -22,13 +21,14 @@ export default function LoginScreen() {
   const [loading, setLoading] = useState(false);
 
   const handleLogin = async () => {
-    if (!email || !password) {
+    const normalizedEmail = email.trim().toLowerCase();
+    if (!normalizedEmail || !password) {
       Alert.alert('Error', 'Please enter your email and password.');
       return;
     }
     setLoading(true);
     try {
-      await signIn(email, password);
+      await signIn(normalizedEmail, password);
       // Auth store listener in RootNavigator handles redirect
     } catch (error: unknown) {
       const msg = error instanceof Error

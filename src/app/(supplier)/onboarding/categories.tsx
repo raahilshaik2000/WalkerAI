@@ -5,7 +5,7 @@ import { useNavigation } from '@react-navigation/native';
 import Ionicons from 'react-native-vector-icons/Ionicons';
 import { supabase } from '@/lib/supabase/client';
 import { useAuthStore } from '@/stores/auth.store';
-import { Colors, Radius, Spacing, Typography } from '@/constants/theme';
+import { Colors, Spacing, Typography } from '@/constants/theme';
 import { GlassButton, GlassCard, GradientBackground } from '@/components/ui';
 import { SUPPLIER_CATEGORIES, type SupplierCategory } from '@/constants/enums';
 
@@ -30,11 +30,27 @@ export default function SupplierCategoriesOnboarding() {
     }
     setLoading(true);
     try {
-      const { error } = await supabase
+      if (!user?.id) throw new Error('Please sign in again before submitting your supplier profile.');
+
+      const { data: supplier, error: supplierError } = await supabase
+        .from('suppliers')
+        .select('id')
+        .eq('user_id', user.id)
+        .order('created_at', { ascending: false })
+        .limit(1)
+        .maybeSingle();
+
+      if (supplierError) throw supplierError;
+      if (!supplier) throw new Error('Supplier profile not found. Complete business details first.');
+
+      const { data, error } = await supabase
         .from('suppliers')
         .update({ categories: Array.from(selected) })
-        .eq('user_id', user!.id);
+        .eq('id', supplier.id)
+        .select('id')
+        .maybeSingle();
       if (error) throw error;
+      if (!data) throw new Error('Supplier categories were not saved.');
       navigation.navigate('SupplierPendingVerification');
     } catch (err) {
       Alert.alert('Error', err instanceof Error ? err.message : 'Failed to save. Try again.');

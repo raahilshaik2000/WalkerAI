@@ -1,7 +1,10 @@
 import { useEffect, useRef, useState } from 'react';
 import {
+  Alert,
   FlatList,
+  Image,
   KeyboardAvoidingView,
+  Linking,
   Platform,
   StyleSheet,
   Text,
@@ -15,6 +18,7 @@ import { useRoute } from '@react-navigation/native';
 import ReactNativeHapticFeedback from 'react-native-haptic-feedback';
 import Ionicons from 'react-native-vector-icons/Ionicons';
 import { supabase } from '@/lib/supabase/client';
+import { getRequiredStringParam } from '@/lib/navigation-params';
 import { useAuthStore } from '@/stores/auth.store';
 import { Colors, Spacing, Typography } from '@/constants/theme';
 import { GradientBackground } from '@/components/ui';
@@ -24,25 +28,37 @@ interface Message {
   body: string;
   sender_id: string;
   sent_at: string;
+  attachment_url: string | null;
 }
 
 export default function CompanyMessagesScreen() {
   const route = useRoute<any>();
-  const projectId = route.params?.id;
+  const projectId = getRequiredStringParam(route.params, 'id');
   const navigation = useNavigation<any>();
   const { user } = useAuthStore();
   const [messages, setMessages] = useState<Message[]>([]);
   const [body, setBody] = useState('');
   const [sending, setSending] = useState(false);
+  const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const flatListRef = useRef<FlatList>(null);
 
   useEffect(() => {
+    if (!projectId) {
+      setErrorMessage('Project is missing. Reopen messages from the job page.');
+      return;
+    }
+
     const load = async () => {
-      const { data } = await supabase
+      const { data, error } = await supabase
         .from('messages')
-        .select('id, body, sender_id, sent_at')
+        .select('id, body, sender_id, sent_at, attachment_url')
         .eq('project_id', projectId)
         .order('sent_at', { ascending: true });
+      if (error) {
+        setErrorMessage(`Could not load messages: ${error.message}`);
+        return;
+      }
+      setErrorMessage(null);
       setMessages(data ?? []);
     };
     load();
@@ -63,20 +79,34 @@ export default function CompanyMessagesScreen() {
 
   const sendMessage = async () => {
     if (!body.trim() || sending) return;
+    if (!projectId || !user?.id) {
+      Alert.alert('Unable to send', 'Please reopen this job and try again.');
+      return;
+    }
     setSending(true);
     const trimmed = body.trim();
     setBody('');
-    try {
-      await supabase.from('messages').insert({
-        project_id: projectId,
-        sender_id: user!.id,
-        body: trimmed,
-      });
-      ReactNativeHapticFeedback.trigger('impactLight');
-    } catch {
+
+    const { error } = await supabase.from('messages').insert({
+      project_id: projectId,
+      sender_id: user.id,
+      body: trimmed,
+    });
+
+    if (error) {
       setBody(trimmed);
-    } finally {
-      setSending(false);
+      Alert.alert('Message not sent', error.message);
+    } else {
+      ReactNativeHapticFeedback.trigger('impactLight');
+    }
+    setSending(false);
+  };
+
+  const openAttachment = async (url: string) => {
+    try {
+      await Linking.openURL(url);
+    } catch {
+      Alert.alert('Unable to open attachment', 'Please try again in a moment.');
     }
   };
 
@@ -98,14 +128,43 @@ export default function CompanyMessagesScreen() {
             keyExtractor={(m) => m.id}
             contentContainerStyle={styles.list}
             onLayout={() => flatListRef.current?.scrollToEnd({ animated: false })}
+            ListEmptyComponent={
+              <View style={styles.emptyState}>
+                <Ionicons name="chatbubbles-outline" size={36} color={Colors.text.tertiary} />
+                <Text style={styles.emptyText}>
+                  {errorMessage ?? 'No messages yet.'}
+                </Text>
+              </View>
+            }
             renderItem={({ item }) => {
               const isMe = item.sender_id === user?.id;
               return (
                 <View style={isMe ? styles.bubbleWrapMe : styles.bubbleWrapThem}>
                   <View style={[styles.bubble, isMe ? styles.bubbleMe : styles.bubbleThem]}>
-                    <Text style={[styles.bubbleText, isMe ? { color: Colors.accentFg } : { color: Colors.text.primary }]}>
-                      {item.body}
-                    </Text>
+                    {!!item.body && (
+                      <Text style={[styles.bubbleText, isMe ? { color: Colors.accentFg } : { color: Colors.text.primary }]}>
+                        {item.body}
+                      </Text>
+                    )}
+                    {!!item.attachment_url && (
+                      <TouchableOpacity
+                        style={[styles.attachmentCard, isMe ? styles.attachmentCardMe : styles.attachmentCardThem]}
+                        onPress={() => openAttachment(item.attachment_url!)}
+                        activeOpacity={0.85}
+                      >
+                        <Image source={{ uri: item.attachment_url }} style={styles.attachmentImage} resizeMode="cover" />
+                        <View style={styles.attachmentFooter}>
+                          <Ionicons
+                            name="image-outline"
+                            size={15}
+                            color={isMe ? Colors.accentFg : Colors.text.secondary}
+                          />
+                          <Text style={[styles.attachmentText, isMe ? styles.attachmentTextMe : styles.attachmentTextThem]}>
+                            View attachment
+                          </Text>
+                        </View>
+                      </TouchableOpacity>
+                    )}
                   </View>
                   <Text style={[styles.timestamp, isMe ? styles.timestampMe : styles.timestampThem]}>
                     {new Date(item.sent_at).toLocaleTimeString('en-CA', { hour: 'numeric', minute: '2-digit' })}
@@ -157,11 +216,27 @@ const styles = StyleSheet.create({
     borderWidth: 1, borderColor: Colors.glass.border, borderBottomLeftRadius: 4,
   },
   bubbleText: { fontSize: 15, lineHeight: 22 },
+  attachmentCard: {
+    width: 220,
+    maxWidth: '100%',
+    borderRadius: 12,
+    overflow: 'hidden',
+    marginTop: 8,
+  },
+  attachmentCardMe: { backgroundColor: 'rgba(255,255,255,0.16)' },
+  attachmentCardThem: { backgroundColor: Colors.bg.secondary },
+  attachmentImage: { width: '100%', height: 150, backgroundColor: Colors.bg.secondary },
+  attachmentFooter: { flexDirection: 'row', alignItems: 'center', gap: 6, paddingHorizontal: 10, paddingVertical: 8 },
+  attachmentText: { fontSize: 13, fontWeight: '600' },
+  attachmentTextMe: { color: Colors.accentFg },
+  attachmentTextThem: { color: Colors.text.secondary },
   bubbleWrapMe: { alignSelf: 'flex-end', maxWidth: '78%', marginBottom: 8 },
   bubbleWrapThem: { alignSelf: 'flex-start', maxWidth: '78%', marginBottom: 8 },
   timestamp: { fontSize: 11, color: Colors.text.tertiary, marginTop: 3 },
   timestampMe: { alignSelf: 'flex-end', marginRight: 4 },
   timestampThem: { alignSelf: 'flex-start', marginLeft: 4 },
+  emptyState: { flex: 1, alignItems: 'center', justifyContent: 'center', paddingTop: 60, gap: 12 },
+  emptyText: { ...Typography.bodySecondary, textAlign: 'center' },
   compose: {
     flexDirection: 'row', alignItems: 'flex-end',
     padding: Spacing.sm, borderTopWidth: 1, borderTopColor: Colors.glass.border,

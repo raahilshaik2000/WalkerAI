@@ -23,7 +23,7 @@ const COLUMN_WIDTH = (SCREEN_WIDTH - PADDING * 2 - COLUMN_GAP) / 2;
 const CATEGORY_FILTERS: { id: InspirationCategory | 'all'; label: string }[] = [
   { id: 'all', label: 'All' },
   { id: 'photos', label: 'Photos' },
-  { id: 'ai_render', label: 'AI Design' },
+  { id: 'ai_render', label: 'Concepts' },
   { id: 'pro_work', label: 'Pro Work' },
 ];
 
@@ -55,10 +55,6 @@ export default function BrowseIdeasScreen() {
         </View>
         <View style={styles.bottom}>
           <Text style={styles.title} numberOfLines={2}>{item.title}</Text>
-          <View style={styles.savesRow}>
-            <Ionicons name="heart-outline" size={12} color="rgba(255,255,255,0.6)" />
-            <Text style={styles.savesText}>{item.saves.toLocaleString()}</Text>
-          </View>
         </View>
       </AnimatedPressable>
     );
@@ -166,6 +162,4 @@ const styles = StyleSheet.create({
     padding: 10,
   },
   title: { fontSize: 13, fontWeight: '600', color: '#fff', marginBottom: 3 },
-  savesRow: { flexDirection: 'row', alignItems: 'center', gap: 3 },
-  savesText: { fontSize: 10, color: 'rgba(255,255,255,0.6)' },
 });

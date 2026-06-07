@@ -16,9 +16,12 @@ import { useRoute } from '@react-navigation/native';
 import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
 import Ionicons from 'react-native-vector-icons/Ionicons';
 import { supabase } from '@/lib/supabase/client';
+import { parseNonNegativeCadToCents } from '@/lib/currency';
+import { isValidIsoDate, normalizeOptionalIsoDate } from '@/lib/dates';
+import { getRequiredStringParam } from '@/lib/navigation-params';
 import { useAuthStore } from '@/stores/auth.store';
 import { Colors, Radius, Spacing, Typography } from '@/constants/theme';
-import { GlassButton, GlassCard, GlassInput, GradientBackground } from '@/components/ui';
+import { GlassButton, GlassCard, GradientBackground } from '@/components/ui';
 
 interface LineItem {
   id: string;
@@ -34,15 +37,42 @@ interface MilestoneInput {
 }
 
 function formatTotal(items: LineItem[]): number {
-  return items.reduce((s, i) => {
-    const n = parseFloat(i.amount);
-    return s + (isNaN(n) ? 0 : n);
-  }, 0);
+  return items.reduce((s, i) => s + (parseMoneyToCents(i.amount) / 100), 0);
+}
+
+function totalCents(items: Array<{ amount: string }>): number {
+  return items.reduce((sum, item) => sum + parseMoneyToCents(item.amount), 0);
+}
+
+function parseMoneyToCents(value: string): number {
+  return parseNonNegativeCadToCents(value) ?? 0;
+}
+
+function invalidMoneyInputs(items: Array<{ amount: string }>): string[] {
+  return items
+    .filter((item) => {
+      const trimmed = item.amount.trim();
+      if (!trimmed) return false;
+      return parseNonNegativeCadToCents(trimmed) == null;
+    })
+    .map((item) => item.amount.trim());
+}
+
+function isMissingColumnError(error: { message?: string } | null | undefined) {
+  return !!error?.message && /column .* does not exist/i.test(error.message);
+}
+
+function lineItemType(description: string, index: number): 'labour' | 'material' | 'other' {
+  const normalized = description.toLowerCase();
+  if (normalized.includes('material')) return 'material';
+  if (normalized.includes('labour') || normalized.includes('labor')) return 'labour';
+  return index === 0 ? 'labour' : index === 1 ? 'material' : 'other';
 }
 
 export default function QuoteBuilderScreen() {
   const route = useRoute<any>();
-  const projectId = route.params?.id;
+  const projectId = getRequiredStringParam(route.params, 'id');
+  const slotId: string | undefined = route.params?.slot;
   const navigation = useNavigation<any>();
   const { user } = useAuthStore();
 
@@ -84,109 +114,276 @@ export default function QuoteBuilderScreen() {
     setMilestones((prev) => prev.map((m) => m.id === id ? { ...m, [field]: value } : m));
   };
 
-  const isValidDate = (s: string) => {
-    if (!s) return true;
-    if (!/^\d{4}-\d{2}-\d{2}$/.test(s)) return false;
-    const d = new Date(s);
-    return !isNaN(d.getTime());
-  };
-
   const handleSubmit = async () => {
+    if (!projectId) {
+      Alert.alert('Missing project', 'Reopen this job from your dashboard and try again.');
+      return;
+    }
+    if (!user) {
+      Alert.alert('Sign in required', 'Please sign in again before submitting a quote.');
+      return;
+    }
+
+    const invalidLineAmounts = invalidMoneyInputs(lineItems);
+    if (invalidLineAmounts.length > 0) {
+      Alert.alert('Invalid line item amount', 'Line item amounts must be positive numbers or blank.');
+      return;
+    }
+
+    const invalidMilestoneAmounts = invalidMoneyInputs(milestones);
+    if (invalidMilestoneAmounts.length > 0) {
+      Alert.alert('Invalid milestone amount', 'Milestone amounts must be positive numbers.');
+      return;
+    }
+
     const totalDollars = formatTotal(lineItems);
+    const totalAmountCents = totalCents(lineItems);
     if (totalDollars <= 0) {
       Alert.alert('Invalid quote', 'Please enter at least one line item with an amount.');
       return;
     }
 
-    const milestonesTotalDollars = formatTotal(milestones as any);
-    const diff = Math.abs(milestonesTotalDollars - totalDollars);
-    if (diff > 1) {
+    const pricedLineItems = lineItems
+      .map((item, index) => ({
+        ...item,
+        description: item.description.trim(),
+        amountCents: parseMoneyToCents(item.amount),
+        index,
+      }))
+      .filter((item) => item.amountCents > 0);
+
+    const unnamedItem = pricedLineItems.find((item) => !item.description);
+    if (unnamedItem) {
+      Alert.alert('Missing line item description', 'Every priced line item needs a description.');
+      return;
+    }
+
+    const milestonesTotalCents = totalCents(milestones);
+    const diffCents = Math.abs(milestonesTotalCents - totalAmountCents);
+    if (diffCents > 1) {
       Alert.alert(
         'Milestone total mismatch',
-        `Milestones total $${milestonesTotalDollars.toFixed(2)} but quote total is $${totalDollars.toFixed(2)}. They should match.`
+        `Milestones total $${(milestonesTotalCents / 100).toFixed(2)} but quote total is $${(totalAmountCents / 100).toFixed(2)}. They should match.`
       );
       return;
     }
 
     for (const m of milestones) {
-      if (!m.title.trim() || !m.amount) {
+      const amountCents = parseMoneyToCents(m.amount);
+      if (!m.title.trim() || amountCents <= 0) {
         Alert.alert('Incomplete milestones', 'Please fill in all milestone titles and amounts.');
         return;
       }
-      if (!isValidDate(m.due_date)) {
+      try {
+        normalizeOptionalIsoDate(m.due_date, 'milestone due date');
+      } catch {
         Alert.alert('Invalid date', `Milestone "${m.title}" has an invalid due date. Use YYYY-MM-DD format.`);
         return;
       }
     }
 
     setSubmitting(true);
+    let createdQuoteId: string | null = null;
+    let coreQuoteSaved = false;
     try {
       // Get company
-      const { data: company } = await supabase
+      const { data: company, error: companyError } = await supabase
         .from('companies')
         .select('id')
-        .eq('user_id', user!.id)
-        .single();
+        .eq('user_id', user.id)
+        .order('created_at', { ascending: false })
+        .limit(1)
+        .maybeSingle();
 
+      if (companyError) throw companyError;
       if (!company) throw new Error('Company not found');
 
-      // Create quote
-      const totalCents = Math.round(totalDollars * 100);
-      const { data: quote, error: quoteError } = await supabase
-        .from('quotes')
-        .insert({
-          project_id: projectId,
-          company_id: company.id,
-          total_amount: totalCents,
-          notes: notes.trim() || null,
-          status: 'pending',
-          submitted_at: new Date().toISOString(),
-        })
-        .select('id')
-        .single();
+      const [{ data: projectAssignment, error: projectAssignmentError }, { data: assignedSlots, error: slotsError }] = await Promise.all([
+        supabase
+          .from('projects')
+          .select('assigned_company_id')
+          .eq('id', projectId)
+          .maybeSingle(),
+        supabase
+          .from('project_slots')
+          .select('id, assigned_company_id, status, trade_type')
+          .eq('project_id', projectId)
+          .eq('assigned_company_id', company.id)
+          .in('status', ['filled', 'scheduled']),
+      ]);
 
+      if (projectAssignmentError) throw projectAssignmentError;
+      if (slotsError) throw slotsError;
+
+      const projectAssignedToCompany = projectAssignment?.assigned_company_id === company.id;
+      const slotAssignedToCompany = (assignedSlots ?? []).some((slot) => (
+        slot.assigned_company_id === company.id && ['filled', 'scheduled'].includes(slot.status)
+      ));
+      const assignedSlotRows = (assignedSlots ?? []) as Array<{ id: string; assigned_company_id: string | null; status: string; trade_type?: string | null }>;
+      const routeSlot = slotId ? assignedSlotRows.find((slot) => slot.id === slotId) : null;
+      if (slotId && !routeSlot) {
+        throw new Error('This trade slot is not assigned to your company.');
+      }
+
+      if (!projectAssignedToCompany && !slotAssignedToCompany) {
+        throw new Error('You can only submit a quote after accepting this project or one of its trade slots.');
+      }
+
+      const quoteSlotId = routeSlot?.id
+        ?? (!projectAssignedToCompany && assignedSlotRows.length === 1 ? assignedSlotRows[0].id : null);
+
+      if (!projectAssignedToCompany && !quoteSlotId) {
+        throw new Error('Open this job from the specific trade slot you want to quote.');
+      }
+
+      let existingQuoteResult: any = await supabase
+        .from('quotes')
+        .select('id, status, submitted_at, slot_id')
+        .eq('project_id', projectId)
+        .eq('company_id', company.id)
+        .in('status', ['pending', 'approved'])
+        .order('submitted_at', { ascending: false });
+
+      if (isMissingColumnError(existingQuoteResult.error)) {
+        existingQuoteResult = await supabase
+          .from('quotes')
+          .select('id, status, submitted_at')
+          .eq('project_id', projectId)
+          .eq('company_id', company.id)
+          .in('status', ['pending', 'approved'])
+          .order('submitted_at', { ascending: false });
+      }
+
+      if (existingQuoteResult.error) throw existingQuoteResult.error;
+      const existingQuotes = ((existingQuoteResult.data ?? []) as Array<{ id: string; status: string; submitted_at: string | null; slot_id?: string | null }>)
+        .filter((quote) => {
+          if (!('slot_id' in quote)) return true;
+          return quoteSlotId ? quote.slot_id === quoteSlotId : quote.slot_id === null;
+        });
+      const existingQuote = existingQuotes[0];
+      if (existingQuote?.status === 'approved') {
+        throw new Error('This trade already has a paid quote from your company.');
+      }
+      if (existingQuote?.status === 'pending') {
+        throw new Error('You already submitted a quote for this trade. Wait for the homeowner to review it before submitting another.');
+      }
+
+      // Create quote
+      const quotePayload: Record<string, unknown> = {
+        project_id: projectId,
+        company_id: company.id,
+        total_amount: totalAmountCents,
+        status: 'pending',
+        submitted_at: new Date().toISOString(),
+      };
+      if (quoteSlotId) quotePayload.slot_id = quoteSlotId;
+
+      let quoteResult = await supabase
+        .from('quotes')
+        .insert(quotePayload)
+        .select('id')
+        .maybeSingle();
+
+      if (quoteSlotId && isMissingColumnError(quoteResult.error)) {
+        const legacyPayload = { ...quotePayload };
+        delete legacyPayload.slot_id;
+        quoteResult = await supabase
+          .from('quotes')
+          .insert(legacyPayload)
+          .select('id')
+          .maybeSingle();
+      }
+
+      const { data: quote, error: quoteError } = quoteResult;
       if (quoteError) throw quoteError;
+      if (!quote) throw new Error('Quote was not saved.');
+      createdQuoteId = quote.id;
 
       // Insert milestones
       const milestoneRows = milestones.map((m, i) => ({
         quote_id: quote.id,
         title: m.title.trim(),
-        amount: Math.round(parseFloat(m.amount) * 100),
+        amount: parseMoneyToCents(m.amount),
         status: 'pending',
         sort_order: i + 1,
-        due_date: m.due_date || null,
+        due_date: normalizeOptionalIsoDate(m.due_date, 'milestone due date'),
       }));
 
       const { error: msError } = await supabase.from('milestones').insert(milestoneRows);
       if (msError) throw msError;
 
+      const noteText = notes.trim();
+      const lineItemRows = [
+        ...pricedLineItems.map((item, index) => ({
+          quote_id: quote.id,
+          type: lineItemType(item.description, item.index),
+          description: item.description,
+          quantity: 1,
+          unit: null,
+          unit_cost: item.amountCents,
+          total_cost: item.amountCents,
+          sort_order: index + 1,
+        })),
+        ...(noteText
+          ? [{
+              quote_id: quote.id,
+              type: 'other' as const,
+              description: `Contractor notes: ${noteText}`,
+              quantity: 1,
+              unit: null,
+              unit_cost: null,
+              total_cost: null,
+              sort_order: pricedLineItems.length + 1,
+            }]
+          : []),
+      ];
+
+      if (lineItemRows.length > 0) {
+        const { error: itemsError } = await supabase.from('quote_line_items').insert(lineItemRows);
+        if (itemsError) {
+          throw new Error(`Quote line items were not saved: ${itemsError.message}`);
+        }
+      }
+      coreQuoteSaved = true;
+
       // Notify homeowner
-      const { data: project } = await supabase
+      const { data: project, error: projectError } = await supabase
         .from('projects')
         .select('homeowner_id')
         .eq('id', projectId)
-        .single();
+        .maybeSingle();
+      if (projectError) throw projectError;
+      if (!project) throw new Error('Project not found while notifying homeowner.');
 
-      if (project) {
-        await supabase.from('notifications').insert({
-          user_id: project.homeowner_id,
-          type: 'quote_submitted',
-          payload: {
-            project_id: projectId,
-            quote_id: quote.id,
-            total_amount: totalCents,
-            deep_link: `/(homeowner)/project/${projectId}/quote`,
-          },
-        });
+      const { error: notificationError } = await supabase.from('notifications').insert({
+        user_id: project.homeowner_id,
+        type: 'quote_submitted',
+        payload: {
+          project_id: projectId,
+          quote_id: quote.id,
+          slot_id: quoteSlotId,
+          total_amount: totalAmountCents,
+          deep_link: `/(homeowner)/project/${projectId}/quote`,
+        },
+      });
+      if (notificationError) {
+        console.warn('quote_submitted notification failed:', notificationError);
       }
 
       Alert.alert(
         'Quote submitted!',
-        'The homeowner has been notified. You\'ll hear back within 48 hours.',
+        'The homeowner has been notified. You\'ll get an update when they review your quote.',
         [{ text: 'Done', onPress: () => navigation.goBack() }]
       );
     } catch (err) {
-      Alert.alert('Error', err instanceof Error ? err.message : 'Failed to submit quote.');
+      let rollbackMessage: string | null = null;
+      if (createdQuoteId && !coreQuoteSaved) {
+        const { error: rollbackError } = await supabase.from('quotes').delete().eq('id', createdQuoteId);
+        if (rollbackError) {
+          rollbackMessage = ` Also, the partial quote could not be removed automatically: ${rollbackError.message}`;
+        }
+      }
+      Alert.alert('Error', `${err instanceof Error ? err.message : 'Failed to submit quote.'}${rollbackMessage ?? ''}`);
     } finally {
       setSubmitting(false);
     }
@@ -292,7 +489,7 @@ export default function QuoteBuilderScreen() {
                         placeholderTextColor={Colors.text.tertiary}
                       />
                       <TextInput
-                        style={[styles.dateInput, { color: Colors.text.primary, borderBottomColor: m.due_date && !isValidDate(m.due_date) ? Colors.error : Colors.glass.border }]}
+                        style={[styles.dateInput, { color: Colors.text.primary, borderBottomColor: m.due_date && !isValidIsoDate(m.due_date) ? Colors.error : Colors.glass.border }]}
                         value={m.due_date}
                         onChangeText={(v) => updateMilestone(m.id, 'due_date', v)}
                         placeholder="YYYY-MM-DD"

@@ -4,12 +4,15 @@ import {
   ScrollView,
   StyleSheet,
   Text,
+  TouchableOpacity,
   View,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import { useNavigation } from '@react-navigation/native';
 import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
 import { supabase } from '@/lib/supabase/client';
 import { useAuthStore } from '@/stores/auth.store';
+import { companyEstimatedNetPayoutCents } from '@/lib/company-payouts';
 import { formatCad } from '@/lib/formatters';
 import { Colors, Spacing, Typography } from '@/constants/theme';
 import { CardSkeleton, GlassCard, GradientBackground, ListItemSkeleton, StatusBadge } from '@/components/ui';
@@ -19,44 +22,79 @@ interface PaidMilestone {
   id: string;
   title: string;
   amount: number;
+  commission_rate: number | null;
   completed_at: string | null;
   stripe_transfer_id: string | null;
   project: { address: string; city: string };
 }
 
 export default function EarningsScreen() {
+  const navigation = useNavigation<any>();
   const { user } = useAuthStore();
   const [milestones, setMilestones] = useState<PaidMilestone[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
-  const [companyId, setCompanyId] = useState<string | null>(null);
-
+  const [hasCompanyProfile, setHasCompanyProfile] = useState(false);
+  const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const fetchData = useCallback(async () => {
-    if (!user) return;
+    if (!user) {
+      setMilestones([]);
+      setHasCompanyProfile(false);
+      setErrorMessage('You need to be signed in to view earnings.');
+      setLoading(false);
+      setRefreshing(false);
+      return;
+    }
 
-    const { data: co } = await supabase
+    setErrorMessage(null);
+    const { data: co, error: companyError } = await supabase
       .from('companies')
       .select('id')
       .eq('user_id', user.id)
-      .single();
+      .order('created_at', { ascending: false })
+      .limit(1)
+      .maybeSingle();
 
-    if (!co) { setLoading(false); return; }
-    setCompanyId(co.id);
+    if (companyError) {
+      setMilestones([]);
+      setHasCompanyProfile(false);
+      setErrorMessage(companyError.message);
+      setLoading(false);
+      setRefreshing(false);
+      return;
+    }
 
-    const { data } = await supabase
+    if (!co) {
+      setMilestones([]);
+      setHasCompanyProfile(false);
+      setLoading(false);
+      setRefreshing(false);
+      return;
+    }
+
+    setHasCompanyProfile(true);
+    const { data, error } = await supabase
       .from('milestones')
       .select(`
         id, title, amount, completed_at, stripe_transfer_id,
-        quotes!inner(company_id, project:projects(address, city))
+        quotes!inner(company_id, commission_rate, project:projects(address, city))
       `)
       .eq('status', 'paid')
       .eq('quotes.company_id', co.id)
       .order('completed_at', { ascending: false });
+    if (error) {
+      setMilestones([]);
+      setErrorMessage(error.message);
+      setLoading(false);
+      setRefreshing(false);
+      return;
+    }
 
     const mapped = (data ?? []).map((m: any) => ({
       id: m.id,
       title: m.title,
       amount: m.amount,
+      commission_rate: m.quotes?.commission_rate ?? null,
       completed_at: m.completed_at,
       stripe_transfer_id: m.stripe_transfer_id,
       project: m.quotes?.project ?? { address: 'Unknown', city: '' },
@@ -70,8 +108,7 @@ export default function EarningsScreen() {
   useEffect(() => { fetchData(); }, [fetchData]);
 
   const totalEarned = milestones.reduce((s, m) => s + m.amount, 0);
-  // Platform takes 10%, company receives 90%
-  const netEarned = Math.floor(totalEarned * 0.9);
+  const netEarned = milestones.reduce((s, m) => s + companyEstimatedNetPayoutCents(m.amount, m.commission_rate), 0);
 
   return (
     <GradientBackground glow="top-right">
@@ -94,14 +131,14 @@ export default function EarningsScreen() {
           <GlassCard style={styles.summaryCard}>
             <Text style={styles.summaryLabel}>Total Received</Text>
             <Text style={styles.summaryAmount}>{formatCad(netEarned)}</Text>
-            <Text style={styles.summaryNote}>After 10% WalkerAI commission</Text>
+            <Text style={styles.summaryNote}>After WalkerAI commission</Text>
             <View style={styles.divider} />
             <View style={styles.summaryRow}>
               <Text style={styles.summarySubLabel}>Gross billed</Text>
               <Text style={styles.summarySubVal}>{formatCad(totalEarned)}</Text>
             </View>
             <View style={styles.summaryRow}>
-              <Text style={styles.summarySubLabel}>Commission (10%)</Text>
+              <Text style={styles.summarySubLabel}>Commission</Text>
               <Text style={styles.summarySubVal}>-{formatCad(totalEarned - netEarned)}</Text>
             </View>
           </GlassCard>
@@ -116,6 +153,21 @@ export default function EarningsScreen() {
               <ListItemSkeleton style={{ marginBottom: 10 }} />
               <ListItemSkeleton style={{ marginBottom: 10 }} />
             </>
+          ) : errorMessage ? (
+            <View style={styles.emptyState}>
+              <Icon name="alert-circle-outline" size={48} color={Colors.text.tertiary} />
+              <Text style={styles.emptyTitle}>Could not load earnings</Text>
+              <Text style={styles.emptySub}>{errorMessage}</Text>
+            </View>
+          ) : !hasCompanyProfile ? (
+            <View style={styles.emptyState}>
+              <Icon name="domain" size={48} color={Colors.text.tertiary} />
+              <Text style={styles.emptyTitle}>Set up your company profile</Text>
+              <Text style={styles.emptySub}>Complete contractor onboarding before tracking payouts.</Text>
+              <TouchableOpacity style={styles.setupBtn} onPress={() => navigation.navigate('BusinessOnboarding')} activeOpacity={0.8}>
+                <Text style={styles.setupBtnText}>Start Setup</Text>
+              </TouchableOpacity>
+            </View>
           ) : milestones.length === 0 ? (
             <View style={styles.emptyState}>
               <Icon name="cash-remove" size={48} color={Colors.text.tertiary} />
@@ -136,7 +188,7 @@ export default function EarningsScreen() {
                     )}
                   </View>
                   <View style={styles.txAmountCol}>
-                    <Text style={styles.txNet}>{formatCad(Math.floor(m.amount * 0.9))}</Text>
+                    <Text style={styles.txNet}>{formatCad(companyEstimatedNetPayoutCents(m.amount, m.commission_rate))}</Text>
                     <StatusBadge label="paid" variant="paid" size="sm" />
                   </View>
                 </View>
@@ -173,4 +225,6 @@ const styles = StyleSheet.create({
   emptyIcon: { fontSize: 48 },
   emptyTitle: { ...Typography.h3 },
   emptySub: { ...Typography.bodySecondary, textAlign: 'center', lineHeight: 22 },
+  setupBtn: { backgroundColor: Colors.accent, paddingHorizontal: 18, paddingVertical: 10, borderRadius: 20 },
+  setupBtnText: { fontSize: 14, fontWeight: '700', color: '#fff' },
 });

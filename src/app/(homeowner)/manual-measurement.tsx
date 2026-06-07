@@ -12,7 +12,8 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { useNavigation, useRoute } from '@react-navigation/native';
 import Ionicons from 'react-native-vector-icons/Ionicons';
 import { GlassButton, GlassInput, GradientBackground } from '@/components/ui';
-import { Colors, Typography, Spacing } from '@/constants/theme';
+import { isBlank, parseMetricDimension, parseOptionalCount } from '@/lib/measurements';
+import { Typography, Spacing } from '@/constants/theme';
 
 export default function ManualMeasurementScreen() {
   const navigation = useNavigation<any>();
@@ -25,14 +26,27 @@ export default function ManualMeasurementScreen() {
   const [windowCount, setWindowCount] = useState('1');
 
   function handleGenerate() {
-    const l = parseDimension(length);
-    const w = parseDimension(width);
-    const h = parseDimension(height) || 2.7;
-    const doors = parseInt(doorCount) || 0;
-    const windows = parseInt(windowCount) || 0;
+    const l = parseMetricDimension(length);
+    const w = parseMetricDimension(width);
+    const parsedHeight = parseMetricDimension(height);
+    const parsedDoors = parseOptionalCount(doorCount);
+    const parsedWindows = parseOptionalCount(windowCount);
+    const h = parsedHeight ?? 2.7;
+    const doors = parsedDoors ?? 0;
+    const windows = parsedWindows ?? 0;
 
-    if (!l || !w || l <= 0 || w <= 0) {
+    if (l == null || w == null) {
       Alert.alert('Invalid Dimensions', 'Please enter valid room length and width.');
+      return;
+    }
+
+    if (!isBlank(height) && parsedHeight == null) {
+      Alert.alert('Invalid Ceiling Height', 'Enter a positive number for ceiling height or leave it blank to use 2.7m.');
+      return;
+    }
+
+    if (parsedDoors == null || parsedWindows == null) {
+      Alert.alert('Invalid Openings', 'Enter whole numbers from 0 to 20 for doors and windows.');
       return;
     }
 
@@ -193,14 +207,6 @@ export default function ManualMeasurementScreen() {
       </SafeAreaView>
     </GradientBackground>
   );
-}
-
-function parseDimension(value: string) {
-  const normalized = value
-    .replace(/[٫٬,·•]/g, '.')
-    .replace(/[^\d.-]/g, '');
-
-  return parseFloat(normalized);
 }
 
 const styles = StyleSheet.create({
