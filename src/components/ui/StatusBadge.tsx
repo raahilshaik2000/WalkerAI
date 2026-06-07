@@ -1,6 +1,5 @@
 import React from 'react';
 import { StyleProp, StyleSheet, Text, View, ViewStyle } from 'react-native';
-import { BlurView } from '@react-native-community/blur';
 import { Colors, Radius } from '@/constants/theme';
 
 type BadgeVariant =

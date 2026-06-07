@@ -2,13 +2,16 @@ export type UserRole = 'homeowner' | 'company' | 'supplier' | 'admin';
 
 export type ProjectStatus =
   | 'draft'
+  | 'brief_ready'
   | 'dispatching'
+  | 'scheduling'
   | 'accepted'
   | 'quoting'
   | 'active'
   | 'completed'
   | 'cancelled'
-  | 'disputed';
+  | 'disputed'
+  | 'diy_saved';
 
 export type MilestoneStatus =
   | 'pending'
@@ -70,15 +73,21 @@ export type NotificationType =
   | 'job_dispatched'
   | 'job_filled'
   | 'job_accepted'
+  | 'slot_dispatched'
+  | 'slot_accepted'
+  | 'all_slots_filled'
+  | 'schedule_confirmed'
   | 'quote_submitted'
   | 'quote_approved'
   | 'milestone_needs_approval'
   | 'milestone_paid'
+  | 'project_complete'
   | 'new_message'
   | 'dispute_raised'
   | 'dispatch_no_match'
   | 'warranty_expiring'
   | 'new_material_order'
+  | 'material_order_claimed'
   | 'bid_selected'
   | 'bid_rejected'
   | 'order_shipped'

@@ -4,6 +4,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { useNavigation } from '@react-navigation/native';
 import Ionicons from 'react-native-vector-icons/Ionicons';
 import { supabase } from '@/lib/supabase/client';
+import { formatSupabaseFunctionError } from '@/lib/supabase/functions';
 import { uploadBase64 } from '@/lib/supabase/storage';
 import { useDIYWizardStore } from '@/stores/diy-wizard.store';
 import { useAuthStore } from '@/stores/auth.store';
@@ -20,6 +21,10 @@ const STEPS = [
   'Finalizing your guide…',
 ];
 
+function isMissingColumnError(error: { message?: string } | null | undefined) {
+  return !!error?.message && /column .* does not exist/i.test(error.message);
+}
+
 export default function DIYGeneratingScreen() {
   const navigation = useNavigation<any>();
   const { user } = useAuthStore();
@@ -31,6 +36,7 @@ export default function DIYGeneratingScreen() {
   const pulseAnim = useRef(new Animated.Value(1)).current;
   const rotateAnim = useRef(new Animated.Value(0)).current;
   const opacityAnim = useRef(new Animated.Value(0)).current;
+  const didRun = useRef(false);
 
   useEffect(() => {
     Animated.timing(opacityAnim, { toValue: 1, duration: 400, useNativeDriver: true }).start();
@@ -43,7 +49,7 @@ export default function DIYGeneratingScreen() {
     Animated.loop(
       Animated.timing(rotateAnim, { toValue: 1, duration: 2000, easing: Easing.linear, useNativeDriver: true })
     ).start();
-  }, []);
+  }, [opacityAnim, pulseAnim, rotateAnim]);
 
   useEffect(() => {
     const interval = setInterval(() => setCurrentStep((p) => (p + 1) % STEPS.length), 2000);
@@ -51,42 +57,65 @@ export default function DIYGeneratingScreen() {
   }, []);
 
   useEffect(() => {
+    if (didRun.current) return;
+    didRun.current = true;
+
     const run = async () => {
       try {
         await supabase.auth.refreshSession();
+        if (!user?.id) throw new Error('You need to be signed in to create a DIY guide.');
+
         // 1. Create project in DB
-        const { data: project, error: createErr } = await supabase
+        let createResult = await supabase
           .from('projects')
           .insert({
-            homeowner_id: user!.id,
-            room_type: store.category ?? 'general',
+            homeowner_id: user.id,
             status: 'draft',
             description: store.description,
+            diy_category: store.category,
           })
           .select('id')
-          .single();
+          .maybeSingle();
+
+        if (isMissingColumnError(createResult.error)) {
+          createResult = await supabase
+            .from('projects')
+            .insert({
+              homeowner_id: user.id,
+              status: 'draft',
+            })
+            .select('id')
+            .maybeSingle();
+        }
+
+        const { data: project, error: createErr } = createResult;
         if (createErr) throw new Error(`Project creation failed: ${createErr.message}`);
+        if (!project) throw new Error('Project creation failed: no project returned.');
         const pid = project.id;
         store.setProjectId(pid);
 
         // 2. Upload photos via base64
         const photoUrls: string[] = [];
+        const photoRows: Array<{ project_id: string; url: string; storage_path: string }> = [];
         for (const photo of store.photos.filter((p) => p.status === 'done')) {
           const base64 = store.photoBase64s[photo.id];
           if (!base64) continue;
-          const storagePath = `${pid}/diy_${photo.id}.jpg`;
-          const { publicUrl } = await uploadBase64('project-photos', storagePath, base64);
+          const extension = photo.extension ?? 'jpg';
+          const contentType = photo.contentType ?? 'image/jpeg';
+          const storagePath = `${pid}/diy_${photo.id}.${extension}`;
+          const { publicUrl, storagePath: savedStoragePath } = await uploadBase64('project-photos', storagePath, base64, contentType);
           photoUrls.push(publicUrl);
-          // Silently track photo — non-fatal if this fails
-          supabase.from('project_photos').insert({
+          photoRows.push({
             project_id: pid,
             url: publicUrl,
-            storage_path: storagePath,
-          }).then(({ error }) => {
-            if (error) console.warn('project_photos insert failed (non-fatal):', error.message);
+            storage_path: savedStoragePath,
           });
         }
         if (photoUrls.length === 0) throw new Error('No photos could be uploaded.');
+        const { error: photoInsertError } = await supabase.from('project_photos').insert(photoRows);
+        if (photoInsertError) {
+          throw new Error(`Photo upload metadata failed: ${photoInsertError.message}`);
+        }
 
         // 3. Call edge function
         const { data, error: fnErr } = await supabase.functions.invoke('generate-diy-guide', {
@@ -103,21 +132,7 @@ export default function DIYGeneratingScreen() {
           },
         });
 
-        if (fnErr) {
-          let msg = fnErr.message;
-          try {
-            const b = await (fnErr.context as Response).clone().json();
-            if (b?.error) msg = b.error;
-            else if (b?.message) msg = b.message;
-            else msg = JSON.stringify(b);
-          } catch {
-            try {
-              const txt = await (fnErr.context as Response).clone().text();
-              if (txt) msg = txt.slice(0, 300);
-            } catch {}
-          }
-          throw new Error(`Function error: ${msg}`);
-        }
+        if (fnErr) throw new Error(`Function error: ${await formatSupabaseFunctionError(fnErr)}`);
 
         store.setGuide(data.guide);
         navigation.replace('DIYGuide');
@@ -126,7 +141,7 @@ export default function DIYGeneratingScreen() {
       }
     };
     run();
-  }, []);
+  }, [navigation, store, user]);
 
   const spin = rotateAnim.interpolate({ inputRange: [0, 1], outputRange: ['0deg', '360deg'] });
 

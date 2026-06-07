@@ -7,10 +7,7 @@ import Svg, {
   G,
   Path,
   Polygon,
-  Defs,
-  Marker,
 } from 'react-native-svg';
-import { Colors } from '@/constants/theme';
 import { normalizeFloorPlan, type NormalizedSegment } from '@/lib/room-scan/normalizeFloorPlan';
 
 interface WallData {
@@ -48,7 +45,6 @@ type WallSegment = NormalizedSegment;
 
 const WALL_THICKNESS = 0.18;
 const WALL_COLOR = '#FFFFFF';
-const WALL_FILL = '#1A1A1A';
 const DIM_COLOR = '#FF6B00';
 const DOOR_COLOR = '#34D399';
 const WINDOW_COLOR = '#60A5FA';
@@ -256,7 +252,7 @@ export function FloorPlanView({ walls, doors, windows, size }: FloorPlanViewProp
         })}
 
         {/* Dimension lines outside the room */}
-        {segments.map((seg, i) => {
+        {segments.map((seg) => {
           const label = `${(seg.length * 3.28084).toFixed(1)}ft`;
           if (seg.isHorizontal) {
             // Position dimension below or above wall
@@ -420,55 +416,6 @@ function GridPattern({ bounds, scale }: { bounds: any; scale: number }) {
     );
   }
   return <G>{lines}</G>;
-}
-
-// Build a connected polygon from wall segments by sorting endpoints
-function buildRoomPolygon(segments: WallSegment[]): { x: number; y: number }[] {
-  if (segments.length < 3) return [];
-
-  // Collect all endpoints
-  const endpoints: { x: number; y: number }[] = [];
-  segments.forEach(seg => {
-    endpoints.push({ x: seg.x1, y: seg.y1 });
-    endpoints.push({ x: seg.x2, y: seg.y2 });
-  });
-
-  // Merge nearby endpoints (within tolerance)
-  const merged: { x: number; y: number }[] = [];
-  const used = new Set<number>();
-  const tolerance = 0.3;
-
-  for (let i = 0; i < endpoints.length; i++) {
-    if (used.has(i)) continue;
-    let sx = endpoints[i].x;
-    let sy = endpoints[i].y;
-    let count = 1;
-    for (let j = i + 1; j < endpoints.length; j++) {
-      if (used.has(j)) continue;
-      const dx = endpoints[j].x - sx / count;
-      const dy = endpoints[j].y - sy / count;
-      if (Math.abs(endpoints[j].x - endpoints[i].x) < tolerance &&
-          Math.abs(endpoints[j].y - endpoints[i].y) < tolerance) {
-        sx += endpoints[j].x;
-        sy += endpoints[j].y;
-        count++;
-        used.add(j);
-      }
-    }
-    used.add(i);
-    merged.push({ x: sx / count, y: sy / count });
-  }
-
-  // Sort points in clockwise order around centroid
-  const cx = merged.reduce((s, p) => s + p.x, 0) / merged.length;
-  const cy = merged.reduce((s, p) => s + p.y, 0) / merged.length;
-  merged.sort((a, b) => {
-    const angleA = Math.atan2(a.y - cy, a.x - cx);
-    const angleB = Math.atan2(b.y - cy, b.x - cx);
-    return angleA - angleB;
-  });
-
-  return merged;
 }
 
 // Find nearest wall segment to a door/window

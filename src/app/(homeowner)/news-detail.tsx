@@ -4,7 +4,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { useNavigation, useRoute } from '@react-navigation/native';
 import Ionicons from 'react-native-vector-icons/Ionicons';
 import { AnimatedPressable, GradientBackground } from '@/components/ui';
-import { Colors, Radius, Spacing } from '@/constants/theme';
+import { Colors, Radius } from '@/constants/theme';
 import { NewsItem, NEWS_DETAIL_CONTENT } from '@/components/dashboard/data';
 
 const TAG_LABELS: Record<string, string> = {
@@ -17,7 +17,33 @@ const TAG_LABELS: Record<string, string> = {
 export default function NewsDetailScreen() {
   const navigation = useNavigation<any>();
   const route = useRoute<any>();
-  const item: NewsItem = route.params?.item;
+  const item = route.params?.item as NewsItem | undefined;
+
+  if (!item) {
+    return (
+      <GradientBackground>
+        <SafeAreaView style={styles.safe}>
+          <View style={styles.header}>
+            <AnimatedPressable onPress={() => navigation.goBack()} haptic>
+              <Ionicons name="arrow-back" size={22} color="#fff" />
+            </AnimatedPressable>
+            <View style={{ width: 22 }} />
+          </View>
+
+          <View style={styles.emptyState}>
+            <View style={styles.emptyIcon}>
+              <Ionicons name="newspaper-outline" size={28} color={Colors.text.secondary} />
+            </View>
+            <Text style={styles.emptyTitle}>Article unavailable</Text>
+            <Text style={styles.emptyText}>
+              This update could not be opened. Go back and choose another article.
+            </Text>
+          </View>
+        </SafeAreaView>
+      </GradientBackground>
+    );
+  }
+
   const body = NEWS_DETAIL_CONTENT[item.id] ?? '';
 
   return (
@@ -113,5 +139,34 @@ const styles = StyleSheet.create({
     color: 'rgba(255,255,255,0.8)',
     lineHeight: 24,
     marginBottom: 16,
+  },
+  emptyState: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: 28,
+    paddingBottom: 80,
+  },
+  emptyIcon: {
+    width: 64,
+    height: 64,
+    borderRadius: 20,
+    backgroundColor: Colors.surface.default,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: 16,
+  },
+  emptyTitle: {
+    fontSize: 20,
+    fontWeight: '700',
+    color: '#fff',
+    marginBottom: 8,
+    textAlign: 'center',
+  },
+  emptyText: {
+    fontSize: 14,
+    color: Colors.text.secondary,
+    lineHeight: 20,
+    textAlign: 'center',
   },
 });

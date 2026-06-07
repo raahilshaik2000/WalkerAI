@@ -1,10 +1,9 @@
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import {
   Alert,
   ScrollView,
   StyleSheet,
   Text,
-  TextInput,
   TouchableOpacity,
   View,
 } from 'react-native';
@@ -17,11 +16,14 @@ import Ionicons from 'react-native-vector-icons/Ionicons';
 import { supabase } from '@/lib/supabase/client';
 import { useAuthStore } from '@/stores/auth.store';
 import { Colors, Radius, Spacing, Typography } from '@/constants/theme';
+import { formatSignedCadCents, parseSignedCadToCents } from '@/lib/currency';
 import { formatStatusLabel } from '@/lib/formatters';
+import { getRequiredStringParam } from '@/lib/navigation-params';
 import { GlassButton, GlassCard, GlassInput, GradientBackground, StatusBadge } from '@/components/ui';
 
 interface ChangeOrder {
   id: string;
+  company_id: string | null;
   description: string;
   cost_delta: number | null;
   status: string;
@@ -30,12 +32,24 @@ interface ChangeOrder {
   created_at: string;
 }
 
-function formatCad(cents: number) {
-  const abs = Math.abs(cents);
-  const formatted = new Intl.NumberFormat('en-CA', {
-    style: 'currency', currency: 'CAD', maximumFractionDigits: 0,
-  }).format(abs / 100);
-  return cents < 0 ? `-${formatted}` : `+${formatted}`;
+const CHANGE_ORDER_SELECT_WITH_COMPANY =
+  'id, company_id, description, cost_delta, status, signed_by_homeowner, signed_by_company, created_at';
+
+const CHANGE_ORDER_SELECT_LEGACY =
+  'id, description, cost_delta, status, signed_by_homeowner, signed_by_company, created_at';
+
+function isMissingChangeOrderCompanyColumn(error: { message?: string } | null | undefined) {
+  const message = error?.message ?? '';
+  return /column .*company_id.* does not exist/i.test(message)
+    || /change_orders.*company_id/i.test(message)
+    || /schema cache/i.test(message);
+}
+
+function normalizeLegacyChangeOrders(data: Array<Omit<ChangeOrder, 'company_id'>> | null): ChangeOrder[] {
+  return (data ?? []).map((changeOrder) => ({
+    ...changeOrder,
+    company_id: null,
+  }));
 }
 
 function statusVariant(status: string): 'pending' | 'active' | 'completed' | 'error' {
@@ -46,28 +60,87 @@ function statusVariant(status: string): 'pending' | 'active' | 'completed' | 'er
 
 export default function CompanyChangeOrdersScreen() {
   const route = useRoute<any>();
-  const projectId = route.params?.id;
+  const projectId = getRequiredStringParam(route.params, 'id');
   const navigation = useNavigation<any>();
   const { user } = useAuthStore();
   const [changeOrders, setChangeOrders] = useState<ChangeOrder[]>([]);
+  const [companyId, setCompanyId] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [showForm, setShowForm] = useState(false);
   const [description, setDescription] = useState('');
   const [costDelta, setCostDelta] = useState('');
   const [submitting, setSubmitting] = useState(false);
+  const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
-  const fetchChangeOrders = async () => {
-    const { data } = await supabase
+  const fetchChangeOrders = useCallback(async () => {
+    if (!projectId || !user?.id) {
+      setErrorMessage('Project is missing. Reopen change orders from the job page.');
+      setLoading(false);
+      return;
+    }
+
+    const companyResult = await supabase
+      .from('companies')
+      .select('id')
+      .eq('user_id', user.id)
+      .order('created_at', { ascending: false })
+      .limit(1)
+      .maybeSingle();
+
+    if (companyResult.error) {
+      setErrorMessage(`Could not load company profile: ${companyResult.error.message}`);
+      setLoading(false);
+      return;
+    }
+    const currentCompanyId = companyResult.data?.id ?? null;
+    setCompanyId(currentCompanyId);
+
+    if (!currentCompanyId) {
+      setErrorMessage('Complete contractor onboarding before viewing change orders for this job.');
+      setLoading(false);
+      return;
+    }
+
+    const changeOrdersResult = await supabase
       .from('change_orders')
-      .select('id, description, cost_delta, status, signed_by_homeowner, signed_by_company, created_at')
+      .select(CHANGE_ORDER_SELECT_WITH_COMPANY)
       .eq('project_id', projectId)
+      .or(`company_id.eq.${currentCompanyId},company_id.is.null`)
       .order('created_at', { ascending: false });
+
+    const { data, error } = changeOrdersResult;
+    if (error) {
+      if (isMissingChangeOrderCompanyColumn(error)) {
+        const legacyResult = await supabase
+          .from('change_orders')
+          .select(CHANGE_ORDER_SELECT_LEGACY)
+          .eq('project_id', projectId)
+          .order('created_at', { ascending: false });
+
+        if (legacyResult.error) {
+          setErrorMessage(`Could not load change orders: ${legacyResult.error.message}`);
+          setLoading(false);
+          return;
+        }
+
+        setErrorMessage(null);
+        setChangeOrders(normalizeLegacyChangeOrders(legacyResult.data as Array<Omit<ChangeOrder, 'company_id'>> | null));
+        setLoading(false);
+        return;
+      }
+
+      setErrorMessage(`Could not load change orders: ${error.message}`);
+      setLoading(false);
+      return;
+    }
+    setErrorMessage(null);
     setChangeOrders((data ?? []) as ChangeOrder[]);
     setLoading(false);
-  };
+  }, [projectId, user?.id]);
 
   useEffect(() => {
     fetchChangeOrders();
+    if (!projectId) return;
 
     const channel = supabase
       .channel(`company-change-orders:${projectId}`)
@@ -78,7 +151,7 @@ export default function CompanyChangeOrdersScreen() {
       .subscribe();
 
     return () => { supabase.removeChannel(channel); };
-  }, [projectId]);
+  }, [fetchChangeOrders, projectId]);
 
   const handleSubmit = async () => {
     if (!description.trim()) {
@@ -86,22 +159,55 @@ export default function CompanyChangeOrdersScreen() {
       return;
     }
 
-    const deltaCents = costDelta.trim()
-      ? Math.round(parseFloat(costDelta.replace(/[^0-9.-]/g, '')) * 100)
-      : null;
+    if (!projectId) {
+      Alert.alert('Missing project', 'Please reopen this job and try again.');
+      return;
+    }
+
+    if (!companyId) {
+      Alert.alert('Company profile missing', 'Complete contractor onboarding before proposing a change order.');
+      return;
+    }
+
+    let deltaCents: number | null = null;
+    if (costDelta.trim()) {
+      const parsedDelta = parseSignedCadToCents(costDelta);
+      if (parsedDelta == null) {
+        Alert.alert('Invalid cost adjustment', 'Enter a valid CAD amount, such as +500, -200, or 125.50.');
+        return;
+      }
+      deltaCents = parsedDelta;
+    }
 
     setSubmitting(true);
-    const { error } = await supabase.from('change_orders').insert({
+    const changeOrderPayload = {
       project_id: projectId,
+      company_id: companyId,
       description: description.trim(),
       cost_delta: deltaCents,
       status: 'proposed',
       signed_by_company: true,
       signed_by_homeowner: false,
-    });
+    };
 
-    if (error) {
-      Alert.alert('Error', error.message);
+    const insertResult = await supabase.from('change_orders').insert(changeOrderPayload);
+    let insertError = insertResult.error;
+
+    if (isMissingChangeOrderCompanyColumn(insertError)) {
+      const legacyPayload = {
+        project_id: changeOrderPayload.project_id,
+        description: changeOrderPayload.description,
+        cost_delta: changeOrderPayload.cost_delta,
+        status: changeOrderPayload.status,
+        signed_by_company: changeOrderPayload.signed_by_company,
+        signed_by_homeowner: changeOrderPayload.signed_by_homeowner,
+      };
+      const legacyInsertResult = await supabase.from('change_orders').insert(legacyPayload);
+      insertError = legacyInsertResult.error;
+    }
+
+    if (insertError) {
+      Alert.alert('Error', insertError.message);
     } else {
       ReactNativeHapticFeedback.trigger('notificationSuccess');
       setDescription('');
@@ -113,6 +219,11 @@ export default function CompanyChangeOrdersScreen() {
   };
 
   const handleSign = async (co: ChangeOrder) => {
+    if (co.company_id && companyId && co.company_id !== companyId) {
+      Alert.alert('Not available', 'This change order belongs to another contractor.');
+      return;
+    }
+
     Alert.alert(
       'Sign change order',
       'Confirm your digital signature for this change order.',
@@ -121,11 +232,22 @@ export default function CompanyChangeOrdersScreen() {
         {
           text: 'Sign',
           onPress: async () => {
-            await supabase.from('change_orders')
-              .update({ signed_by_company: true })
-              .eq('id', co.id);
-            ReactNativeHapticFeedback.trigger('notificationSuccess');
-            fetchChangeOrders();
+            const { data, error } = await supabase.from('change_orders')
+              .update({
+                signed_by_company: true,
+                status: co.signed_by_homeowner ? 'approved' : 'proposed',
+              })
+              .eq('id', co.id)
+              .select('id')
+              .maybeSingle();
+            if (error) {
+              Alert.alert('Error', error.message);
+            } else if (!data) {
+              Alert.alert('Error', 'This change order is no longer available.');
+            } else {
+              ReactNativeHapticFeedback.trigger('notificationSuccess');
+              fetchChangeOrders();
+            }
           },
         },
       ]
@@ -164,7 +286,7 @@ export default function CompanyChangeOrdersScreen() {
                 containerStyle={styles.inputGap}
               />
               <Text style={styles.signNote}>
-                <Icon name="draw" size={14} color={Colors.text.secondary} /> Submitting counts as your digital signature. Both parties must sign before work begins.
+                <Icon name="draw" size={14} color={Colors.text.secondary} /> Submitting counts as your digital signature. Cost changes are documented here, but funded escrow and milestone payments are not updated automatically.
               </Text>
               <GlassButton
                 label="Submit Change Order"
@@ -180,7 +302,14 @@ export default function CompanyChangeOrdersScreen() {
           {/* Change order list */}
           {loading ? (
             <View style={styles.center}>
-              <Text style={Typography.bodySecondary}>Loading…</Text>
+                <Text style={Typography.bodySecondary}>Loading…</Text>
+              </View>
+          ) : errorMessage ? (
+            <View style={styles.emptyState}>
+              <Icon name="alert-circle-outline" size={48} color={Colors.error} />
+              <Text style={styles.emptyTitle}>Could not load change orders</Text>
+              <Text style={styles.emptySub}>{errorMessage}</Text>
+              <GlassButton label="Try Again" onPress={fetchChangeOrders} style={{ marginTop: Spacing.md }} />
             </View>
           ) : changeOrders.length === 0 ? (
             <View style={styles.emptyState}>
@@ -203,12 +332,15 @@ export default function CompanyChangeOrdersScreen() {
                 <Text style={styles.orderDesc}>{co.description}</Text>
 
                 {co.cost_delta !== null && (
-                  <Text style={[
-                    styles.costDelta,
-                    co.cost_delta >= 0 ? styles.costPos : styles.costNeg,
-                  ]}>
-                    {formatCad(co.cost_delta)} CAD
-                  </Text>
+                  <View style={styles.costBlock}>
+                    <Text style={[
+                      styles.costDelta,
+                      co.cost_delta >= 0 ? styles.costPos : styles.costNeg,
+                    ]}>
+                      {formatSignedCadCents(co.cost_delta)} CAD
+                    </Text>
+                    <Text style={styles.costHint}>Documented only; escrow is not adjusted automatically.</Text>
+                  </View>
                 )}
 
                 <View style={styles.sigRow}>
@@ -242,9 +374,9 @@ export default function CompanyChangeOrdersScreen() {
 
                 {co.status === 'approved' && (
                   <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, marginTop: 10 }}>
-                  <Icon name="check-circle" size={14} color={Colors.success} />
-                  <Text style={styles.approvedNote}>Both parties signed — change is approved</Text>
-                </View>
+                    <Icon name="check-circle" size={14} color={Colors.success} />
+                    <Text style={styles.approvedNote}>Both parties signed — change is approved</Text>
+                  </View>
                 )}
               </GlassCard>
             ))
@@ -272,7 +404,9 @@ const styles = StyleSheet.create({
   orderHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 },
   orderDate: { ...Typography.caption },
   orderDesc: { ...Typography.body, marginBottom: 8, lineHeight: 22 },
-  costDelta: { fontSize: 18, fontWeight: '700', marginBottom: 12 },
+  costBlock: { marginBottom: 12 },
+  costDelta: { fontSize: 18, fontWeight: '700' },
+  costHint: { ...Typography.caption, color: Colors.text.tertiary, marginTop: 2 },
   costPos: { color: Colors.warning },
   costNeg: { color: Colors.success },
   sigRow: { flexDirection: 'row', gap: 8 },

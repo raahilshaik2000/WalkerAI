@@ -1,48 +1,116 @@
 import { useCallback, useEffect, useState } from 'react';
-import { ActivityIndicator, Alert, FlatList, Linking, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { ActivityIndicator, Alert, AppState, Linking, RefreshControl, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import { useFocusEffect, useNavigation } from '@react-navigation/native';
 import Ionicons from 'react-native-vector-icons/Ionicons';
 import { supabase } from '@/lib/supabase/client';
+import { formatSupabaseFunctionError } from '@/lib/supabase/functions';
+import { materialOrderNetPayoutCents, materialOrderPlatformFeeCents } from '@/lib/material-orders';
+import { isStripePayoutLocallyReady } from '@/lib/payouts';
 import { useAuthStore } from '@/stores/auth.store';
-import { Colors, Radius, Spacing, Typography } from '@/constants/theme';
+import { Colors, Spacing, Typography } from '@/constants/theme';
 import { GlassCard, GradientBackground } from '@/components/ui';
 import type { MaterialOrder, Supplier } from '@/types/database.types';
 
 export default function SupplierEarnings() {
+  const navigation = useNavigation<any>();
   const { user } = useAuthStore();
   const [supplier, setSupplier] = useState<Supplier | null>(null);
   const [orders, setOrders] = useState<MaterialOrder[]>([]);
   const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
+  const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
-  useEffect(() => {
-    (async () => {
-      if (!user) return;
-      const { data: sup } = await supabase.from('suppliers').select('*').eq('user_id', user.id).single();
-      setSupplier(sup);
-      if (!sup) { setLoading(false); return; }
-      const { data } = await supabase
-        .from('material_orders')
-        .select('*, material:materials(item)')
-        .eq('accepted_supplier_id', sup.id)
-        .in('status', ['confirmed', 'paid'])
-        .order('confirmed_at', { ascending: false });
-      setOrders((data as MaterialOrder[]) ?? []);
+  const loadEarnings = useCallback(async ({ showSpinner = false } = {}) => {
+    if (showSpinner) setLoading(true);
+    if (!user) {
+      setSupplier(null);
+      setOrders([]);
+      setErrorMessage('You need to be signed in to view supplier earnings.');
       setLoading(false);
-    })();
+      setRefreshing(false);
+      return;
+    }
+    const { data: sup, error: supplierError } = await supabase
+      .from('suppliers')
+      .select('*')
+      .eq('user_id', user.id)
+      .order('created_at', { ascending: false })
+      .limit(1)
+      .maybeSingle();
+    if (supplierError) {
+      setSupplier(null);
+      setOrders([]);
+      setErrorMessage(supplierError.message);
+      setLoading(false);
+      setRefreshing(false);
+      return;
+    }
+    setSupplier(sup);
+    if (!sup) {
+      setOrders([]);
+      setErrorMessage(null);
+      setLoading(false);
+      setRefreshing(false);
+      return;
+    }
+    const { data, error } = await supabase
+      .from('material_orders')
+      .select('*, material:materials(item)')
+      .eq('accepted_supplier_id', sup.id)
+      .in('status', ['confirmed', 'paid'])
+      .order('confirmed_at', { ascending: false });
+    if (error) {
+      setOrders([]);
+      setErrorMessage(error.message);
+      setLoading(false);
+      setRefreshing(false);
+      return;
+    }
+    setOrders((data as MaterialOrder[]) ?? []);
+    setErrorMessage(null);
+    setLoading(false);
+    setRefreshing(false);
   }, [user]);
 
-  const totalPaid = orders.filter((o) => o.status === 'paid').reduce((sum, o) => sum + (o.final_price ?? 0), 0);
-  const pending = orders.filter((o) => o.status === 'confirmed').reduce((sum, o) => sum + (o.final_price ?? 0), 0);
-  const platformFees = orders.filter((o) => o.status === 'paid').reduce((sum, o) => sum + Math.round((o.final_price ?? 0) * (o.platform_fee_pct / 100)), 0);
+  useFocusEffect(
+    useCallback(() => {
+      loadEarnings({ showSpinner: true });
+    }, [loadEarnings])
+  );
+
+  useEffect(() => {
+    const subscription = AppState.addEventListener('change', (state) => {
+      if (state === 'active') loadEarnings();
+    });
+    return () => subscription.remove();
+  }, [loadEarnings]);
+
+  const onRefresh = () => {
+    setRefreshing(true);
+    loadEarnings();
+  };
+
+  const paidOrders = orders.filter((o) => o.status === 'paid');
+  const confirmedOrders = orders.filter((o) => o.status === 'confirmed');
+  const grossPaid = paidOrders.reduce((sum, o) => sum + (o.final_price ?? 0), 0);
+  const netPaid = paidOrders.reduce((sum, o) => sum + materialOrderNetPayoutCents(o.final_price, o.platform_fee_pct), 0);
+  const pendingNet = confirmedOrders.reduce((sum, o) => sum + materialOrderNetPayoutCents(o.final_price, o.platform_fee_pct), 0);
+  const platformFees = paidOrders.reduce((sum, o) => sum + materialOrderPlatformFeeCents(o.final_price, o.platform_fee_pct), 0);
+  const payoutReady = isStripePayoutLocallyReady(supplier);
 
   const fmt = (cents: number) => `$${(cents / 100).toLocaleString('en-CA', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 
   const handleStripeConnect = async () => {
-    const { data, error } = await supabase.functions.invoke('stripe-connect', {
-      body: { user_id: user?.id, role: 'supplier' },
+    if (!user?.id || !supplier?.id) {
+      Alert.alert('Supplier profile required', 'Create your supplier profile before setting up payouts.');
+      return;
+    }
+    const { data, error } = await supabase.functions.invoke('create-connect-account', {
+      body: { role: 'supplier' },
     });
     if (error || !data?.url) {
-      Alert.alert('Error', 'Could not start Stripe onboarding. Please try again.');
+      Alert.alert('Error', error ? await formatSupabaseFunctionError(error) : 'Could not start Stripe onboarding. Please try again.');
       return;
     }
     Linking.openURL(data.url);
@@ -54,45 +122,78 @@ export default function SupplierEarnings() {
     <GradientBackground>
       <SafeAreaView style={styles.safe}>
         <Text style={styles.pageTitle}>Earnings</Text>
-        <ScrollView contentContainerStyle={styles.scroll} showsVerticalScrollIndicator={false}>
+        <ScrollView
+          contentContainerStyle={styles.scroll}
+          showsVerticalScrollIndicator={false}
+          refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={Colors.accent} />}
+        >
+          {errorMessage ? (
+            <GlassCard style={styles.stripeCard}>
+              <Ionicons name="alert-circle-outline" size={28} color={Colors.accent} />
+              <Text style={styles.stripeTitle}>Could not load earnings</Text>
+              <Text style={styles.stripeBody}>{errorMessage}</Text>
+            </GlassCard>
+          ) : !supplier ? (
+            <GlassCard style={styles.stripeCard}>
+              <Ionicons name="storefront-outline" size={28} color={Colors.accent} />
+              <Text style={styles.stripeTitle}>Set up your supplier profile</Text>
+              <Text style={styles.stripeBody}>Create a supplier profile before viewing payouts or connecting Stripe.</Text>
+              <TouchableOpacity style={styles.stripeBtn} activeOpacity={0.8} onPress={() => navigation.navigate('SupplierBusinessOnboarding')}>
+                <Text style={styles.stripeBtnText}>Start Setup</Text>
+              </TouchableOpacity>
+            </GlassCard>
+          ) : null}
+
           {/* Summary cards */}
-          <View style={styles.statsRow}>
+          {supplier && <View style={styles.statsRow}>
             <GlassCard style={[styles.statCard, { borderColor: 'rgba(52,211,153,0.3)' }]}>
-              <Text style={styles.statLabel}>Total Earned</Text>
-              <Text style={[styles.statValue, { color: '#34D399' }]}>{fmt(totalPaid)}</Text>
+              <Text style={styles.statLabel}>Net Earned</Text>
+              <Text style={[styles.statValue, { color: '#34D399' }]}>{fmt(netPaid)}</Text>
             </GlassCard>
             <GlassCard style={[styles.statCard, { borderColor: 'rgba(255,107,0,0.3)' }]}>
-              <Text style={styles.statLabel}>Pending</Text>
-              <Text style={[styles.statValue, { color: Colors.accent }]}>{fmt(pending)}</Text>
+              <Text style={styles.statLabel}>Pending Net</Text>
+              <Text style={[styles.statValue, { color: Colors.accent }]}>{fmt(pendingNet)}</Text>
             </GlassCard>
-          </View>
+          </View>}
 
-          <GlassCard style={styles.feesCard}>
+          {supplier && <GlassCard style={styles.feesCard}>
             <View style={styles.feeRow}>
-              <Text style={styles.feeLabel}>Platform fees paid</Text>
+              <Text style={styles.feeLabel}>Gross paid by homeowners</Text>
+              <Text style={styles.feeValue}>{fmt(grossPaid)}</Text>
+            </View>
+            <View style={styles.feeRow}>
+              <Text style={styles.feeLabel}>Platform fees deducted</Text>
               <Text style={styles.feeValue}>{fmt(platformFees)}</Text>
             </View>
             <View style={styles.feeRow}>
               <Text style={styles.feeLabel}>Net received</Text>
-              <Text style={[styles.feeValue, { color: '#34D399' }]}>{fmt(totalPaid - platformFees)}</Text>
+              <Text style={[styles.feeValue, { color: '#34D399' }]}>{fmt(netPaid)}</Text>
             </View>
-          </GlassCard>
+          </GlassCard>}
 
-          {/* Stripe Connect CTA if no account */}
-          {!supplier?.stripe_account_id && (
+          {/* Stripe Connect CTA until payouts are truly active */}
+          {supplier && !payoutReady && (
             <GlassCard style={styles.stripeCard}>
               <Ionicons name="card-outline" size={28} color={Colors.accent} />
-              <Text style={styles.stripeTitle}>Set up payouts</Text>
-              <Text style={styles.stripeBody}>Connect your bank account via Stripe to receive payments when orders are confirmed.</Text>
+              <Text style={styles.stripeTitle}>
+                {supplier.stripe_account_id ? 'Finish payout setup' : 'Set up payouts'}
+              </Text>
+              <Text style={styles.stripeBody}>
+                {supplier.stripe_account_id
+                  ? 'Finish Stripe onboarding before claiming fixed-price material orders.'
+                  : 'Connect your bank account via Stripe to receive payments when orders are confirmed.'}
+              </Text>
               <TouchableOpacity style={styles.stripeBtn} activeOpacity={0.8} onPress={handleStripeConnect}>
-                <Text style={styles.stripeBtnText}>Connect Bank Account</Text>
+                <Text style={styles.stripeBtnText}>
+                  {supplier.stripe_account_id ? 'Continue Stripe Setup' : 'Connect Bank Account'}
+                </Text>
               </TouchableOpacity>
             </GlassCard>
           )}
 
           {/* Order history */}
-          <Text style={styles.sectionTitle}>Order History</Text>
-          {orders.length === 0 ? (
+          {supplier && <Text style={styles.sectionTitle}>Order History</Text>}
+          {supplier && (orders.length === 0 ? (
             <Text style={styles.emptyText}>No completed orders yet.</Text>
           ) : (
             orders.map((order) => (
@@ -104,7 +205,7 @@ export default function SupplierEarnings() {
                   </Text>
                 </View>
                 <View style={{ alignItems: 'flex-end' }}>
-                  <Text style={styles.historyAmount}>{fmt(order.final_price ?? 0)}</Text>
+                  <Text style={styles.historyAmount}>{fmt(materialOrderNetPayoutCents(order.final_price, order.platform_fee_pct))}</Text>
                   <View style={[styles.historyBadge, { backgroundColor: order.status === 'paid' ? 'rgba(52,211,153,0.15)' : 'rgba(255,107,0,0.15)' }]}>
                     <Text style={[styles.historyBadgeText, { color: order.status === 'paid' ? '#34D399' : Colors.accent }]}>
                       {order.status === 'paid' ? 'Paid' : 'Pending'}
@@ -113,7 +214,7 @@ export default function SupplierEarnings() {
                 </View>
               </View>
             ))
-          )}
+          ))}
         </ScrollView>
       </SafeAreaView>
     </GradientBackground>

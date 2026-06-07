@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import {
   Alert,
   ScrollView,
@@ -13,24 +13,19 @@ import { useRoute } from '@react-navigation/native';
 import ReactNativeHapticFeedback from 'react-native-haptic-feedback';
 import { supabase } from '@/lib/supabase/client';
 import { Colors, Radius, Spacing, Typography } from '@/constants/theme';
+import { formatSignedCadCents } from '@/lib/currency';
+import { getRequiredStringParam } from '@/lib/navigation-params';
 import { GlassButton, GlassCard, GradientBackground, StatusBadge } from '@/components/ui';
 
 interface ChangeOrder {
   id: string;
+  company_id: string | null;
   description: string;
   cost_delta: number | null;
   status: string;
   signed_by_homeowner: boolean;
   signed_by_company: boolean;
   created_at: string;
-}
-
-function formatCad(cents: number) {
-  const abs = Math.abs(cents);
-  const formatted = new Intl.NumberFormat('en-CA', {
-    style: 'currency', currency: 'CAD', maximumFractionDigits: 0,
-  }).format(abs / 100);
-  return cents < 0 ? `-${formatted}` : `+${formatted}`;
 }
 
 function statusVariant(status: string): 'pending' | 'active' | 'completed' | 'error' {
@@ -41,24 +36,38 @@ function statusVariant(status: string): 'pending' | 'active' | 'completed' | 'er
 
 export default function HomeownerChangeOrdersScreen() {
   const route = useRoute<any>();
-  const projectId = route.params?.id;
+  const projectId = getRequiredStringParam(route.params, 'id');
   const navigation = useNavigation<any>();
   const [changeOrders, setChangeOrders] = useState<ChangeOrder[]>([]);
   const [loading, setLoading] = useState(true);
   const [responding, setResponding] = useState<string | null>(null);
+  const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
-  const fetchChangeOrders = async () => {
-    const { data } = await supabase
+  const fetchChangeOrders = useCallback(async () => {
+    if (!projectId) {
+      setErrorMessage('Project is missing. Reopen change orders from the project page.');
+      setLoading(false);
+      return;
+    }
+
+    const { data, error } = await supabase
       .from('change_orders')
-      .select('id, description, cost_delta, status, signed_by_homeowner, signed_by_company, created_at')
+      .select('id, company_id, description, cost_delta, status, signed_by_homeowner, signed_by_company, created_at')
       .eq('project_id', projectId)
       .order('created_at', { ascending: false });
+    if (error) {
+      setErrorMessage(`Could not load change orders: ${error.message}`);
+      setLoading(false);
+      return;
+    }
+    setErrorMessage(null);
     setChangeOrders((data ?? []) as ChangeOrder[]);
     setLoading(false);
-  };
+  }, [projectId]);
 
   useEffect(() => {
     fetchChangeOrders();
+    if (!projectId) return;
 
     const channel = supabase
       .channel(`homeowner-change-orders:${projectId}`)
@@ -69,11 +78,11 @@ export default function HomeownerChangeOrdersScreen() {
       .subscribe();
 
     return () => { supabase.removeChannel(channel); };
-  }, [projectId]);
+  }, [fetchChangeOrders, projectId]);
 
   const handleApprove = async (co: ChangeOrder) => {
     const costMsg = co.cost_delta !== null
-      ? ` This will adjust the project cost by ${formatCad(co.cost_delta)} CAD.`
+      ? ` This documents a requested cost change of ${formatSignedCadCents(co.cost_delta)} CAD, but it does not automatically update funded escrow or milestone payments.`
       : '';
 
     Alert.alert(
@@ -85,13 +94,15 @@ export default function HomeownerChangeOrdersScreen() {
           text: 'Approve & Sign',
           onPress: async () => {
             setResponding(co.id);
-            const { error } = await supabase.from('change_orders').update({
+            const { data, error } = await supabase.from('change_orders').update({
               signed_by_homeowner: true,
               status: co.signed_by_company ? 'approved' : 'proposed',
-            }).eq('id', co.id);
+            }).eq('id', co.id).select('id').maybeSingle();
 
             if (error) {
               Alert.alert('Error', error.message);
+            } else if (!data) {
+              Alert.alert('Error', 'This change order is no longer available.');
             } else {
               ReactNativeHapticFeedback.trigger('notificationSuccess');
               fetchChangeOrders();
@@ -114,11 +125,19 @@ export default function HomeownerChangeOrdersScreen() {
           style: 'destructive',
           onPress: async () => {
             setResponding(co.id);
-            await supabase.from('change_orders')
+            const { data, error } = await supabase.from('change_orders')
               .update({ status: 'rejected' })
-              .eq('id', co.id);
-            ReactNativeHapticFeedback.trigger('notificationWarning');
-            fetchChangeOrders();
+              .eq('id', co.id)
+              .select('id')
+              .maybeSingle();
+            if (error) {
+              Alert.alert('Error', error.message);
+            } else if (!data) {
+              Alert.alert('Error', 'This change order is no longer available.');
+            } else {
+              ReactNativeHapticFeedback.trigger('notificationWarning');
+              fetchChangeOrders();
+            }
             setResponding(null);
           },
         },
@@ -139,12 +158,18 @@ export default function HomeownerChangeOrdersScreen() {
           </View>
 
           <Text style={styles.explainerText}>
-            Change orders document scope changes proposed by your contractor. Review and sign each one before work begins.
+            Change orders document scope changes proposed by your contractor. Signing records approval for the changed work; it does not automatically change funded escrow or milestone payments.
           </Text>
 
           {loading ? (
             <View style={styles.center}>
-              <Text style={Typography.bodySecondary}>Loading…</Text>
+                <Text style={Typography.bodySecondary}>Loading…</Text>
+              </View>
+          ) : errorMessage ? (
+            <View style={styles.emptyState}>
+              <Text style={styles.emptyIcon}>!</Text>
+              <Text style={styles.emptyTitle}>Could not load change orders</Text>
+              <Text style={styles.emptySub}>{errorMessage}</Text>
             </View>
           ) : changeOrders.length === 0 ? (
             <View style={styles.emptyState}>
@@ -177,13 +202,13 @@ export default function HomeownerChangeOrdersScreen() {
                   <Text style={styles.orderDesc}>{co.description}</Text>
 
                   {co.cost_delta !== null && (
-                    <View style={styles.costRow}>
-                      <Text style={styles.costLabel}>Cost adjustment</Text>
+                  <View style={styles.costRow}>
+                      <Text style={styles.costLabel}>Documented cost change</Text>
                       <Text style={[
                         styles.costDelta,
                         co.cost_delta >= 0 ? styles.costPos : styles.costNeg,
                       ]}>
-                        {formatCad(co.cost_delta)} CAD
+                        {formatSignedCadCents(co.cost_delta)} CAD
                       </Text>
                     </View>
                   )}

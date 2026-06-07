@@ -13,9 +13,17 @@ import Ionicons from 'react-native-vector-icons/Ionicons';
 import { supabase } from '@/lib/supabase/client';
 import { useDIYWizardStore } from '@/stores/diy-wizard.store';
 import { GradientBackground } from '@/components/ui';
-import { Colors, Radius, Spacing, Typography } from '@/constants/theme';
+import { Colors, Radius, Spacing } from '@/constants/theme';
 
 type Tab = 'steps' | 'materials';
+
+function isMissingColumnError(error: { message?: string } | null | undefined) {
+  return !!error?.message && /column .* does not exist/i.test(error.message);
+}
+
+function diySchemaError() {
+  return new Error('Saved DIY guides are not enabled in this environment yet. Please try again after the project schema is updated.');
+}
 
 export default function DIYGuideScreen() {
   const navigation = useNavigation<any>();
@@ -36,8 +44,9 @@ export default function DIYGuideScreen() {
     try {
       const { error } = await supabase
         .from('projects')
-        .update({ diy_guide: guide, status: 'diy_saved' })
+        .update({ diy_guide: guide, diy_category: store.category, status: 'diy_saved' })
         .eq('id', store.projectId!);
+      if (isMissingColumnError(error)) throw diySchemaError();
       if (error) throw error;
       setSaved(true);
       setTimeout(() => {
@@ -63,8 +72,9 @@ export default function DIYGuideScreen() {
             try {
               const { error } = await supabase
                 .from('projects')
-                .update({ diy_guide: guide, status: 'draft' })
+                .update({ diy_guide: guide, diy_category: store.category, status: 'draft' })
                 .eq('id', store.projectId!);
+              if (isMissingColumnError(error)) throw diySchemaError();
               if (error) throw error;
               store.reset();
               navigation.navigate('HomeownerTabs', { screen: 'Projects' });

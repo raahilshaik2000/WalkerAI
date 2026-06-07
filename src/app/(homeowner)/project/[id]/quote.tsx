@@ -1,5 +1,6 @@
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import {
+  AppState,
   Alert,
   ScrollView,
   StyleSheet,
@@ -15,12 +16,16 @@ if (Platform.OS === 'android' && UIManager.setLayoutAnimationEnabledExperimental
   UIManager.setLayoutAnimationEnabledExperimental(true);
 }
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { useNavigation, useRoute } from '@react-navigation/native';
+import { useFocusEffect, useNavigation, useRoute } from '@react-navigation/native';
 import Ionicons from 'react-native-vector-icons/Ionicons';
 import ReactNativeHapticFeedback from 'react-native-haptic-feedback';
 import { useStripe } from '@stripe/stripe-react-native';
 import { supabase } from '@/lib/supabase/client';
+import { formatCadCents } from '@/lib/currency';
+import { formatSupabaseFunctionError } from '@/lib/supabase/functions';
+import { getPaymentSheetConfig } from '@/lib/payments';
 import { Colors, Spacing, Typography, Radius } from '@/constants/theme';
+import { getRequiredStringParam } from '@/lib/navigation-params';
 import { GlassCard, GradientBackground } from '@/components/ui';
 
 interface ProjectData {
@@ -51,71 +56,215 @@ interface LineItem {
 
 interface Quote {
   id: string;
+  slot_id: string | null;
   total_amount: number;
   status: string;
+  submitted_at: string | null;
   milestones: Milestone[];
+  company_name: string | null;
+  trade_label: string | null;
+  companies?: { name: string | null } | Array<{ name: string | null }> | null;
+  project_slots?: { trade_type: string | null } | Array<{ trade_type: string | null }> | null;
 }
 
 function formatCad(cents: number) {
-  return new Intl.NumberFormat('en-CA', { style: 'currency', currency: 'CAD', maximumFractionDigits: 0 }).format(cents / 100);
+  return formatCadCents(cents);
 }
 
 const MILESTONE_COLORS = ['#FF6B00', '#60A5FA', '#34D399'];
 
+const TRADE_LABELS: Record<string, string> = {
+  general_contractor: 'General Contractor',
+  plumber: 'Plumber',
+  electrician: 'Electrician',
+  tile_installer: 'Tile Installer',
+  cabinet_installer: 'Cabinet Installer',
+  painter: 'Painter',
+  flooring_installer: 'Flooring Installer',
+  drywall: 'Drywall',
+  demolition: 'Demolition',
+};
+
+function normalizeQuote(row: any): Quote {
+  const company = Array.isArray(row.companies) ? row.companies[0] : row.companies;
+  const slot = Array.isArray(row.project_slots) ? row.project_slots[0] : row.project_slots;
+  const tradeType = slot?.trade_type ?? null;
+  return {
+    ...row,
+    slot_id: row.slot_id ?? null,
+    company_name: company?.name ?? null,
+    trade_label: tradeType ? (TRADE_LABELS[tradeType] ?? tradeType.replace(/_/g, ' ')) : null,
+  };
+}
+
+function isMissingQuoteSlotSelectError(error: { message?: string } | null | undefined) {
+  if (!error?.message) return false;
+  return /column .*slot_id.* does not exist/i.test(error.message)
+    || /project_slots|relationship/i.test(error.message);
+}
+
+function isMissingLineItemsError(error: { message?: string } | null | undefined) {
+  if (!error?.message) return false;
+  return /relation .*quote_line_items.* does not exist/i.test(error.message)
+    || /quote_line_items/i.test(error.message)
+    || /schema cache/i.test(error.message);
+}
+
+function quoteStatusLabel(status: string) {
+  if (status === 'approved') return 'Paid';
+  if (status === 'pending') return 'Ready to pay';
+  if (status === 'rejected') return 'Rejected';
+  return status.replace(/_/g, ' ');
+}
+
+function milestoneStatusLabel(status: string) {
+  if (status === 'paid') return 'Paid';
+  if (status === 'homeowner_approved') return 'Approved';
+  if (status === 'completed') return 'Ready for approval';
+  return null;
+}
+
 export default function CostBreakdownScreen() {
   const route = useRoute<any>();
-  const projectId = route.params?.id;
+  const projectId = getRequiredStringParam(route.params, 'id');
   const navigation = useNavigation<any>();
   const { initPaymentSheet, presentPaymentSheet } = useStripe();
 
   const [project, setProject] = useState<ProjectData | null>(null);
+  const [quotes, setQuotes] = useState<Quote[]>([]);
   const [quote, setQuote] = useState<Quote | null>(null);
+  const [selectedQuoteId, setSelectedQuoteId] = useState<string | null>(null);
   const [lineItems, setLineItems] = useState<LineItem[]>([]);
   const [labourExpanded, setLabourExpanded] = useState(false);
   const [materialsExpanded, setMaterialsExpanded] = useState(false);
   const [loading, setLoading] = useState(true);
   const [paying, setPaying] = useState(false);
+  const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
-  const fetchData = async () => {
-    const [{ data: proj }, { data: q }] = await Promise.all([
-      supabase
-        .from('projects')
-        .select('ai_cost_min, ai_cost_max, status, room_type, ai_analysis')
-        .eq('id', projectId)
-        .single(),
-      supabase
-        .from('quotes')
-        .select('id, total_amount, status, milestones ( title, amount, sort_order, status )')
-        .eq('project_id', projectId)
-        .order('submitted_at', { ascending: false })
-        .limit(1)
-        .maybeSingle(),
+  const fetchData = useCallback(async () => {
+    setLoading(true);
+    setErrorMessage(null);
+    if (!projectId) {
+      setProject(null);
+      setQuotes([]);
+      setQuote(null);
+      setLineItems([]);
+      setErrorMessage('Project is missing. Reopen the quote from the project page.');
+      setLoading(false);
+      return;
+    }
+    const projectPromise = supabase
+      .from('projects')
+      .select('ai_cost_min, ai_cost_max, status, room_type, ai_analysis')
+      .eq('id', projectId)
+      .maybeSingle();
+    const quotesPromise = supabase
+      .from('quotes')
+      .select('id, slot_id, total_amount, status, submitted_at, companies(name), project_slots(trade_type), milestones ( title, amount, sort_order, status )')
+      .eq('project_id', projectId)
+      .order('submitted_at', { ascending: false });
+
+    const [projectResult, initialQuoteResult] = await Promise.all([
+      projectPromise,
+      quotesPromise,
     ]);
+    const { data: proj, error: projectError } = projectResult;
+    let quotes: any[] | null = initialQuoteResult.data as any[] | null;
+    let quoteError = initialQuoteResult.error;
+
+    if (isMissingQuoteSlotSelectError(quoteError)) {
+      const legacyQuotes = await supabase
+        .from('quotes')
+        .select('id, total_amount, status, submitted_at, companies(name), milestones ( title, amount, sort_order, status )')
+        .eq('project_id', projectId)
+        .order('submitted_at', { ascending: false });
+      quotes = legacyQuotes.data;
+      quoteError = legacyQuotes.error;
+    }
+    if (projectError) {
+      setErrorMessage(projectError.message);
+      setProject(null);
+      setQuotes([]);
+      setQuote(null);
+      setLineItems([]);
+      setLoading(false);
+      return;
+    }
+    if (!proj) {
+      setErrorMessage('Project not found.');
+      setProject(null);
+      setQuotes([]);
+      setQuote(null);
+      setLineItems([]);
+      setLoading(false);
+      return;
+    }
+    if (quoteError) {
+      setErrorMessage(quoteError.message);
+      setProject(proj as any);
+      setQuotes([]);
+      setQuote(null);
+      setLineItems([]);
+      setLoading(false);
+      return;
+    }
+
+    const quoteRows = ((quotes ?? []) as any[]).map(normalizeQuote);
+    const quoteData = quoteRows.find((q) => q.id === selectedQuoteId)
+      ?? quoteRows.find((q) => q.status === 'pending')
+      ?? quoteRows.find((q) => q.status === 'approved')
+      ?? quoteRows[0]
+      ?? null;
     setProject(proj as any);
-    setQuote(q as any);
+    setQuotes(quoteRows);
+    setQuote(quoteData);
+    setSelectedQuoteId(quoteData?.id ?? null);
 
     // Fetch line items if quote exists
-    if (q?.id) {
-      const { data: items } = await supabase
+    if (quoteData?.id) {
+      const { data: items, error: itemsError } = await supabase
         .from('quote_line_items')
         .select('id, type, description, quantity, unit, unit_cost, total_cost, sort_order')
-        .eq('quote_id', q.id)
+        .eq('quote_id', quoteData.id)
         .order('sort_order', { ascending: true });
+      if (itemsError) {
+        if (isMissingLineItemsError(itemsError)) {
+          setLineItems([]);
+          setLoading(false);
+          return;
+        }
+        setErrorMessage(itemsError.message);
+        setLineItems([]);
+        setLoading(false);
+        return;
+      }
       setLineItems((items as LineItem[]) ?? []);
+    } else {
+      setLineItems([]);
     }
 
     setLoading(false);
-  };
+  }, [projectId, selectedQuoteId]);
+
+  useFocusEffect(
+    useCallback(() => {
+      fetchData();
+    }, [fetchData])
+  );
 
   useEffect(() => {
-    fetchData();
-  }, [projectId]);
+    const subscription = AppState.addEventListener('change', (state) => {
+      if (state === 'active') fetchData();
+    });
+
+    return () => subscription.remove();
+  }, [fetchData]);
 
   const handlePay = async () => {
     if (!quote) return;
     Alert.alert(
       'Confirm Payment',
-      `Pay ${formatCad(quote.total_amount)} to start your project? Funds are held in escrow and released milestone by milestone.`,
+      `Pay ${formatCad(quote.total_amount)} for ${quote.company_name ?? 'this contractor'}? Funds are held in escrow and released milestone by milestone.`,
       [
         { text: 'Cancel', style: 'cancel' },
         {
@@ -124,12 +273,13 @@ export default function CostBreakdownScreen() {
             setPaying(true);
             try {
               const { data, error } = await supabase.functions.invoke('create-payment-intent', {
-                body: { project_id: projectId },
+                body: { quote_id: quote.id },
               });
-              if (error) throw error;
+              if (error) throw new Error(await formatSupabaseFunctionError(error));
+              const paymentSheetConfig = getPaymentSheetConfig(data);
 
               const { error: initErr } = await initPaymentSheet({
-                paymentIntentClientSecret: data.client_secret,
+                paymentIntentClientSecret: paymentSheetConfig.clientSecret,
                 merchantDisplayName: 'WalkerAI',
               });
               if (initErr) throw new Error(initErr.message);
@@ -142,13 +292,14 @@ export default function CostBreakdownScreen() {
 
               ReactNativeHapticFeedback.trigger('notificationSuccess');
               setTimeout(() => fetchData(), 1500);
+              setTimeout(() => fetchData(), 4000);
               Alert.alert(
                 'Payment received!',
-                'Your project is now active. Funds are held in escrow and released as milestones are completed.',
+                'This contractor quote is now funded. Funds are held in escrow and released as milestones are completed.',
                 [{ text: 'View Project', onPress: () => navigation.goBack() }]
               );
             } catch (err) {
-              Alert.alert('Payment failed', err instanceof Error ? err.message : 'Please try again.');
+              Alert.alert('Payment failed', await formatSupabaseFunctionError(err, 'Please try again.'));
             } finally {
               setPaying(false);
             }
@@ -170,10 +321,31 @@ export default function CostBreakdownScreen() {
     );
   }
 
+  if (errorMessage) {
+    return (
+      <GradientBackground>
+        <SafeAreaView style={styles.safe}>
+          <View style={styles.center}>
+            <Ionicons name="alert-circle-outline" size={42} color={Colors.text.tertiary} />
+            <Text style={Typography.h3}>Could not load quote</Text>
+            <Text style={[Typography.bodySecondary, styles.errorText]}>{errorMessage}</Text>
+          </View>
+        </SafeAreaView>
+      </GradientBackground>
+    );
+  }
+
   const milestones = [...(quote?.milestones ?? [])].sort((a, b) => a.sort_order - b.sort_order);
   const totalAmount = quote?.total_amount ?? project?.ai_cost_min ?? 0;
-  const isAccepted = project?.status === 'accepted';
-  const isPaid = quote?.status === 'approved' || project?.status === 'active';
+  const payableProjectStatuses = ['dispatching', 'accepted', 'quoting', 'scheduling', 'active'];
+  const canPay = !!quote && quote.status === 'pending' && payableProjectStatuses.includes(project?.status ?? '');
+  const isPaid = quote?.status === 'approved';
+  const pendingQuoteCount = quotes.filter((q) => q.status === 'pending').length;
+  const paidBannerText = project?.status === 'active'
+    ? 'Payment received — project is active'
+    : pendingQuoteCount > 0
+    ? 'Payment received — fund remaining contractor quotes to start'
+    : 'Payment received — project activation is processing';
   const scopeItems: Array<{ phase: string; description: string }> = project?.ai_analysis?.scope_of_work ?? [];
 
   const labourItems = lineItems.filter((li) => li.type === 'labour');
@@ -233,6 +405,46 @@ export default function CostBreakdownScreen() {
               <Text style={styles.pendingText}>Waiting for a contractor to accept this project</Text>
             )}
           </GlassCard>
+
+          {quotes.length > 0 && (
+            <GlassCard style={styles.card}>
+              <Text style={styles.sectionLabel}>Contractor Quotes</Text>
+              <Text style={styles.sectionSub}>
+                Review and fund each contractor quote separately. Every trade keeps its own escrow and milestones.
+              </Text>
+              {quotes.map((q) => {
+                const selected = q.id === quote?.id;
+                const paid = q.status === 'approved';
+                return (
+                  <TouchableOpacity
+                    key={q.id}
+                    style={[styles.quoteOption, selected && styles.quoteOptionSelected]}
+                    onPress={() => setSelectedQuoteId(q.id)}
+                    activeOpacity={0.8}
+                  >
+                    <View style={styles.quoteOptionLeft}>
+                      <View style={[styles.quoteStatusDot, paid ? styles.quoteStatusDotPaid : styles.quoteStatusDotPending]} />
+                      <View style={{ flex: 1 }}>
+                        <Text style={styles.quoteCompany}>{q.company_name ?? 'Contractor quote'}</Text>
+                        <Text style={styles.quoteStatusText}>
+                          {q.trade_label ? `${q.trade_label} · ${quoteStatusLabel(q.status)}` : quoteStatusLabel(q.status)}
+                        </Text>
+                      </View>
+                    </View>
+                    <View style={styles.quoteOptionRight}>
+                      <Text style={styles.quoteOptionAmount}>{formatCad(q.total_amount)}</Text>
+                      {selected ? <Ionicons name="checkmark-circle" size={17} color="#FF6B00" /> : null}
+                    </View>
+                  </TouchableOpacity>
+                );
+              })}
+              {pendingQuoteCount > 0 ? (
+                <Text style={styles.pendingQuoteNote}>
+                  {pendingQuoteCount} quote{pendingQuoteCount === 1 ? '' : 's'} still need escrow funding.
+                </Text>
+              ) : null}
+            </GlassCard>
+          )}
 
           {/* Line Items — Labour & Materials */}
           {lineItems.length > 0 && (
@@ -313,6 +525,35 @@ export default function CostBreakdownScreen() {
                   ))}
                 </>
               )}
+
+              {otherItems.length > 0 && (
+                <>
+                  <View style={styles.lineDivider} />
+                  <View style={styles.lineSection}>
+                    <View style={styles.lineSectionLeft}>
+                      <Ionicons name="receipt-outline" size={16} color="#F59E0B" />
+                      <Text style={styles.lineSectionTitle}>Other</Text>
+                      <View style={[styles.lineCount, styles.otherLineCount]}>
+                        <Text style={[styles.lineCountText, styles.otherLineCountText]}>{otherItems.length}</Text>
+                      </View>
+                    </View>
+                    {otherItems.some((li) => li.total_cost) && (
+                      <Text style={styles.lineSectionTotal}>
+                        {formatCad(otherItems.reduce((s, li) => s + (li.total_cost ?? 0), 0))}
+                      </Text>
+                    )}
+                  </View>
+
+                  {otherItems.map((li, i) => (
+                    <View key={li.id} style={[styles.lineRow, i < otherItems.length - 1 && styles.lineRowBorder]}>
+                      <Text style={styles.lineDesc}>{li.description}</Text>
+                      {li.total_cost ? (
+                        <Text style={styles.lineTotal}>{formatCad(li.total_cost)}</Text>
+                      ) : null}
+                    </View>
+                  ))}
+                </>
+              )}
             </GlassCard>
           )}
 
@@ -334,9 +575,9 @@ export default function CostBreakdownScreen() {
                   </View>
                   <View style={{ alignItems: 'flex-end' }}>
                     <Text style={styles.milestoneAmount}>{formatCad(m.amount)}</Text>
-                    {m.status === 'released' && (
-                      <Text style={styles.releasedBadge}>Released</Text>
-                    )}
+                    {milestoneStatusLabel(m.status) ? (
+                      <Text style={styles.releasedBadge}>{milestoneStatusLabel(m.status)}</Text>
+                    ) : null}
                   </View>
                 </View>
               ))}
@@ -391,7 +632,7 @@ export default function CostBreakdownScreen() {
           </GlassCard>
 
           {/* Pay CTA */}
-          {isAccepted && !isPaid && quote && (
+          {canPay && !isPaid && (
             <TouchableOpacity style={styles.payCta} onPress={handlePay} activeOpacity={0.85} disabled={paying}>
               <Ionicons name="card-outline" size={20} color="#000" />
               <Text style={styles.payCtaText}>
@@ -403,7 +644,7 @@ export default function CostBreakdownScreen() {
           {isPaid && (
             <View style={styles.paidBanner}>
               <Ionicons name="checkmark-circle" size={20} color="#34D399" />
-              <Text style={styles.paidBannerText}>Payment received — project is active</Text>
+              <Text style={styles.paidBannerText}>{paidBannerText}</Text>
             </View>
           )}
 
@@ -416,6 +657,7 @@ export default function CostBreakdownScreen() {
 const styles = StyleSheet.create({
   safe: { flex: 1 },
   center: { flex: 1, alignItems: 'center', justifyContent: 'center' },
+  errorText: { marginTop: 8, paddingHorizontal: Spacing.lg, textAlign: 'center' },
   header: {
     flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
     paddingHorizontal: 16, paddingVertical: 12,
@@ -439,6 +681,32 @@ const styles = StyleSheet.create({
   confirmedRow: { flexDirection: 'row', alignItems: 'center', gap: 6 },
   confirmedText: { fontSize: 13, color: '#34D399', fontWeight: '600' },
   pendingText: { fontSize: 13, color: Colors.text.tertiary, fontStyle: 'italic' },
+  quoteOption: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: 12,
+    paddingVertical: 12,
+    paddingHorizontal: 12,
+    borderRadius: Radius.card,
+    borderWidth: 1,
+    borderColor: Colors.glass.border,
+    backgroundColor: Colors.glass.surface,
+    marginTop: 8,
+  },
+  quoteOptionSelected: {
+    borderColor: 'rgba(255,107,0,0.55)',
+    backgroundColor: 'rgba(255,107,0,0.08)',
+  },
+  quoteOptionLeft: { flex: 1, flexDirection: 'row', alignItems: 'center', gap: 10 },
+  quoteOptionRight: { alignItems: 'flex-end', gap: 4 },
+  quoteStatusDot: { width: 9, height: 9, borderRadius: 5 },
+  quoteStatusDotPaid: { backgroundColor: '#34D399' },
+  quoteStatusDotPending: { backgroundColor: '#FF6B00' },
+  quoteCompany: { fontSize: 14, fontWeight: '700', color: Colors.text.primary, marginBottom: 2 },
+  quoteStatusText: { fontSize: 12, color: Colors.text.tertiary },
+  quoteOptionAmount: { fontSize: 14, fontWeight: '700', color: Colors.text.primary },
+  pendingQuoteNote: { fontSize: 12, color: Colors.text.tertiary, marginTop: 10, textAlign: 'center' },
 
   // Milestones
   sectionLabel: { fontSize: 13, fontWeight: '700', color: Colors.text.tertiary, textTransform: 'uppercase', letterSpacing: 0.5, marginBottom: 4 },
@@ -502,6 +770,8 @@ const styles = StyleSheet.create({
     paddingHorizontal: 7, paddingVertical: 2,
   },
   lineCountText: { fontSize: 11, fontWeight: '700', color: '#60A5FA' },
+  otherLineCount: { backgroundColor: 'rgba(245,158,11,0.15)' },
+  otherLineCountText: { color: '#F59E0B' },
   lineSectionRight: { flexDirection: 'row', alignItems: 'center', gap: 10 },
   lineSectionTotal: { fontSize: 14, fontWeight: '700', color: Colors.text.primary },
   lineDivider: { height: 1, backgroundColor: Colors.glass.border, marginVertical: 2 },

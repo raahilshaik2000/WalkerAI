@@ -1,20 +1,20 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import {
+  ActivityIndicator,
   FlatList,
+  RefreshControl,
   StyleSheet,
   Text,
   TextInput,
   View,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { useNavigation } from '@react-navigation/native';
-import { useFocusEffect } from '@react-navigation/native';
-import { useCallback } from 'react';
+import { useFocusEffect, useNavigation } from '@react-navigation/native';
 import Ionicons from 'react-native-vector-icons/Ionicons';
 import { supabase } from '@/lib/supabase/client';
 import { useAuthStore } from '@/stores/auth.store';
-import { AnimatedPressable, GradientBackground } from '@/components/ui';
-import { Colors, Radius, Spacing } from '@/constants/theme';
+import { AnimatedPressable, GlassButton, GradientBackground } from '@/components/ui';
+import { Colors, Radius } from '@/constants/theme';
 
 interface Thread {
   projectId: string;
@@ -41,38 +41,73 @@ export default function HomeownerMessages() {
   const [threads, setThreads] = useState<Thread[]>([]);
   const [search, setSearch] = useState('');
   const [showSearch, setShowSearch] = useState(false);
+  const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
+  const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
-  const fetchThreads = useCallback(async () => {
-    if (!user) return;
+  const fetchThreads = useCallback(async (mode: 'initial' | 'refresh' | 'background' = 'initial') => {
+    if (!user) {
+      setThreads([]);
+      setErrorMessage('Sign in to view your messages.');
+      setLoading(false);
+      setRefreshing(false);
+      return;
+    }
+
+    if (mode === 'refresh') setRefreshing(true);
+    else if (mode === 'initial') setLoading(true);
+    setErrorMessage(null);
 
     // Get homeowner's active projects with assigned companies
-    const { data: projects } = await supabase
+    const { data: projects, error: projectsError } = await supabase
       .from('projects')
       .select('id, room_type, companies!assigned_company_id(name)')
       .eq('homeowner_id', user.id)
       .not('assigned_company_id', 'is', null)
       .order('created_at', { ascending: false });
 
+    if (projectsError) {
+      setThreads([]);
+      setErrorMessage(projectsError.message);
+      setLoading(false);
+      setRefreshing(false);
+      return;
+    }
+
     if (!projects?.length) {
       setThreads([]);
+      setLoading(false);
+      setRefreshing(false);
       return;
     }
 
     const projectIds = projects.map((p) => p.id);
 
     // Get latest message per project
-    const { data: msgs } = await supabase
+    const { data: msgs, error: messagesError } = await supabase
       .from('messages')
-      .select('project_id, body, sent_at')
+      .select('project_id, body, sent_at, attachment_url')
       .in('project_id', projectIds)
       .order('sent_at', { ascending: false })
       .limit(500);
 
+    if (messagesError) {
+      setThreads([]);
+      setErrorMessage(messagesError.message);
+      setLoading(false);
+      setRefreshing(false);
+      return;
+    }
+
     // Build latest-per-project map
-    const latestMsg: Record<string, { body: string; sent_at: string }> = {};
+    const latestMsg: Record<string, { body: string | null; sent_at: string; attachment_url: string | null }> = {};
     for (const m of msgs ?? []) {
       if (!latestMsg[m.project_id]) {
-        latestMsg[m.project_id] = { body: m.body, sent_at: m.sent_at };
+        latestMsg[m.project_id] = {
+          body: m.body,
+          sent_at: m.sent_at,
+          attachment_url: m.attachment_url,
+        };
       }
     }
 
@@ -86,7 +121,7 @@ export default function HomeownerMessages() {
         projectId: p.id,
         projectTitle: title,
         contractorName: companyName,
-        lastMessage: last?.body ?? 'No messages yet',
+        lastMessage: last ? (last.body || (last.attachment_url ? 'Photo attachment' : 'No message text')) : 'No messages yet',
         lastMessageTime: last ? timeAgo(last.sent_at) : '',
         lastSentAt: last?.sent_at ?? '',
       };
@@ -101,6 +136,9 @@ export default function HomeownerMessages() {
     });
 
     setThreads(result);
+    setErrorMessage(null);
+    setLoading(false);
+    setRefreshing(false);
   }, [user]);
 
   useFocusEffect(useCallback(() => { fetchThreads(); }, [fetchThreads]));
@@ -109,10 +147,10 @@ export default function HomeownerMessages() {
     if (!user) return;
     const channel = supabase
       .channel('homeowner-messages-list')
-      .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'messages' }, () => fetchThreads())
+      .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'messages' }, () => fetchThreads('background'))
       .subscribe();
     return () => { supabase.removeChannel(channel); };
-  }, [user]);
+  }, [fetchThreads, user]);
 
   const filtered = useMemo(() => {
     if (!search.trim()) return threads;
@@ -175,21 +213,37 @@ export default function HomeownerMessages() {
           </View>
         )}
 
-        <FlatList
-          data={filtered}
-          keyExtractor={(item) => item.projectId}
-          renderItem={renderThread}
-          contentContainerStyle={styles.list}
-          showsVerticalScrollIndicator={false}
-          ItemSeparatorComponent={() => <View style={styles.separator} />}
-          ListEmptyComponent={
-            <View style={styles.empty}>
-              <Ionicons name="chatbubbles-outline" size={48} color={Colors.text.tertiary} />
-              <Text style={styles.emptyTitle}>No conversations</Text>
-              <Text style={styles.emptySub}>Messages with your contractors will appear here once a project is accepted</Text>
-            </View>
-          }
-        />
+        {loading ? (
+          <View style={styles.center}>
+            <ActivityIndicator color={Colors.accent} />
+          </View>
+        ) : (
+          <FlatList
+            data={errorMessage ? [] : filtered}
+            keyExtractor={(item) => item.projectId}
+            renderItem={renderThread}
+            contentContainerStyle={styles.list}
+            showsVerticalScrollIndicator={false}
+            refreshControl={<RefreshControl refreshing={refreshing} onRefresh={() => fetchThreads('refresh')} tintColor={Colors.accent} />}
+            ItemSeparatorComponent={() => <View style={styles.separator} />}
+            ListEmptyComponent={
+              errorMessage ? (
+                <View style={styles.empty}>
+                  <Ionicons name="alert-circle-outline" size={48} color={Colors.text.tertiary} />
+                  <Text style={styles.emptyTitle}>Could not load messages</Text>
+                  <Text style={styles.emptySub}>{errorMessage}</Text>
+                  <GlassButton label="Try Again" onPress={() => fetchThreads()} size="sm" style={{ marginTop: 10 }} />
+                </View>
+              ) : (
+                <View style={styles.empty}>
+                  <Ionicons name="chatbubbles-outline" size={48} color={Colors.text.tertiary} />
+                  <Text style={styles.emptyTitle}>No conversations</Text>
+                  <Text style={styles.emptySub}>Messages with your contractors will appear here once a project is accepted</Text>
+                </View>
+              )
+            }
+          />
+        )}
       </SafeAreaView>
     </GradientBackground>
   );
@@ -202,6 +256,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 16, paddingTop: 8, paddingBottom: 12,
   },
   headerTitle: { fontSize: 24, fontWeight: '700', color: '#fff' },
+  center: { flex: 1, alignItems: 'center', justifyContent: 'center' },
   searchWrap: {
     flexDirection: 'row', alignItems: 'center', gap: 8,
     marginHorizontal: 16, marginBottom: 12,

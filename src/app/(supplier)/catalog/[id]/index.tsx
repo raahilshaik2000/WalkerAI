@@ -4,9 +4,16 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { useNavigation, useRoute } from '@react-navigation/native';
 import Ionicons from 'react-native-vector-icons/Ionicons';
 import { supabase } from '@/lib/supabase/client';
+import { getRequiredStringParam } from '@/lib/navigation-params';
+import { useAuthStore } from '@/stores/auth.store';
 import { Colors, Spacing, Typography } from '@/constants/theme';
 import { GlassButton, GlassCard, GlassInput, GradientBackground } from '@/components/ui';
-import { SUPPLIER_CATEGORIES, type SupplierCategory, type QualityTier } from '@/constants/enums';
+import { type SupplierCategory, type QualityTier } from '@/constants/enums';
+import {
+  parseNonNegativeDays,
+  parsePositiveCadToCents,
+  selectedSupplierCategories,
+} from '@/lib/supplier-catalog';
 
 const QUALITY_OPTIONS: QualityTier[] = ['budget', 'mid-range', 'luxury'];
 const UNIT_OPTIONS = ['units', 'sq ft', 'linear ft', 'lbs', 'bags', 'sheets', 'rolls', 'gallons'];
@@ -14,7 +21,8 @@ const UNIT_OPTIONS = ['units', 'sq ft', 'linear ft', 'lbs', 'bags', 'sheets', 'r
 export default function EditCatalogItem() {
   const navigation = useNavigation<any>();
   const route = useRoute<any>();
-  const { itemId } = route.params;
+  const itemId = getRequiredStringParam(route.params, 'itemId');
+  const { user } = useAuthStore();
 
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -29,15 +37,66 @@ export default function EditCatalogItem() {
   const [brand, setBrand] = useState('');
   const [qualityTier, setQualityTier] = useState<QualityTier>('mid-range');
   const [leadTime, setLeadTime] = useState('3');
+  const [availableCategories, setAvailableCategories] = useState<SupplierCategory[]>([]);
 
   useEffect(() => {
     (async () => {
-      const { data, error } = await supabase.from('supplier_catalog').select('*').eq('id', itemId).single();
-      if (error || !data) {
-        Alert.alert('Error', 'Could not load item.');
+      if (!itemId) {
+        Alert.alert('Missing item', 'Reopen this catalog item and try again.');
         navigation.goBack();
         return;
       }
+      if (!user?.id) {
+        Alert.alert('Sign in required', 'Please sign in again before editing catalog items.');
+        navigation.goBack();
+        return;
+      }
+
+      const [supplierResult, itemResult] = await Promise.all([
+        supabase
+          .from('suppliers')
+          .select('id, categories')
+          .eq('user_id', user.id)
+          .order('created_at', { ascending: false })
+          .limit(1)
+          .maybeSingle(),
+        supabase
+          .from('supplier_catalog')
+          .select('*')
+          .eq('id', itemId)
+          .maybeSingle(),
+      ]);
+
+      if (supplierResult.error) {
+        Alert.alert('Error', supplierResult.error.message);
+        navigation.goBack();
+        return;
+      }
+      if (!supplierResult.data) {
+        Alert.alert('Supplier setup required', 'Complete supplier setup before editing catalog items.');
+        navigation.goBack();
+        return;
+      }
+
+      const { data, error } = itemResult;
+      if (error || !data) {
+        Alert.alert('Error', error?.message ?? 'Could not load item.');
+        navigation.goBack();
+        return;
+      }
+      if (data.supplier_id !== supplierResult.data.id) {
+        Alert.alert('Item unavailable', 'This catalog item does not belong to your supplier profile.');
+        navigation.goBack();
+        return;
+      }
+
+      const categories = selectedSupplierCategories(supplierResult.data.categories);
+      if (categories.length === 0) {
+        Alert.alert('Supply categories required', 'Select supply categories before editing catalog items.');
+        navigation.goBack();
+        return;
+      }
+      setAvailableCategories(categories);
       setName(data.name);
       setDescription(data.description ?? '');
       setCategory(data.category as SupplierCategory);
@@ -49,19 +108,32 @@ export default function EditCatalogItem() {
       setLeadTime(String(data.lead_time_days ?? 3));
       setLoading(false);
     })();
-  }, [itemId]);
+  }, [itemId, navigation, user?.id]);
 
   const handleSave = async () => {
     if (!name.trim() || !category || !priceStr) {
       Alert.alert('Required', 'Please fill in name, category, and price.');
       return;
     }
-    const price = Math.round(parseFloat(priceStr) * 100);
-    if (isNaN(price) || price <= 0) { Alert.alert('Invalid price', 'Enter a valid price.'); return; }
+    if (!availableCategories.includes(category)) {
+      Alert.alert('Category required', 'Choose one of the supply categories selected in your supplier profile.');
+      return;
+    }
+    const price = parsePositiveCadToCents(priceStr);
+    if (price == null) { Alert.alert('Invalid price', 'Enter a valid price greater than $0, with up to two decimal places and below $21,474,836.47.'); return; }
+    const leadTimeDays = parseNonNegativeDays(leadTime);
+    if (leadTimeDays == null) {
+      Alert.alert('Invalid lead time', 'Enter a whole number of days.');
+      return;
+    }
+    if (!itemId) {
+      Alert.alert('Missing item', 'Reopen this catalog item and try again.');
+      return;
+    }
 
     setSaving(true);
     try {
-      const { error } = await supabase.from('supplier_catalog').update({
+      const { data, error } = await supabase.from('supplier_catalog').update({
         name: name.trim(),
         description: description.trim() || null,
         category,
@@ -70,9 +142,10 @@ export default function EditCatalogItem() {
         price_per_unit: price,
         quality_tier: qualityTier,
         brand: brand.trim() || null,
-        lead_time_days: parseInt(leadTime, 10) || 3,
-      }).eq('id', itemId);
+        lead_time_days: leadTimeDays,
+      }).eq('id', itemId).select('id').maybeSingle();
       if (error) throw error;
+      if (!data) throw new Error('Catalog item was not saved.');
       navigation.goBack();
     } catch (err) {
       Alert.alert('Error', err instanceof Error ? err.message : 'Failed to save.');
@@ -88,10 +161,22 @@ export default function EditCatalogItem() {
         text: 'Delete',
         style: 'destructive',
         onPress: async () => {
+          if (!itemId) {
+            Alert.alert('Missing item', 'Reopen this catalog item and try again.');
+            return;
+          }
           setDeleting(true);
-          const { error } = await supabase.from('supplier_catalog').delete().eq('id', itemId);
+          const { data, error } = await supabase
+            .from('supplier_catalog')
+            .delete()
+            .eq('id', itemId)
+            .select('id')
+            .maybeSingle();
           if (error) {
-            Alert.alert('Error', 'Could not delete item.');
+            Alert.alert('Error', error.message);
+            setDeleting(false);
+          } else if (!data) {
+            Alert.alert('Error', 'This catalog item is no longer available.');
             setDeleting(false);
           } else {
             navigation.goBack();
@@ -131,7 +216,7 @@ export default function EditCatalogItem() {
 
             <Text style={styles.sectionLabel}>Category</Text>
             <View style={styles.chipGrid}>
-              {SUPPLIER_CATEGORIES.map((c) => (
+              {availableCategories.map((c) => (
                 <TouchableOpacity key={c} style={[styles.chip, category === c && styles.chipActive]} onPress={() => setCategory(c)} activeOpacity={0.7}>
                   <Text style={[styles.chipText, category === c && styles.chipTextActive]}>{c}</Text>
                 </TouchableOpacity>

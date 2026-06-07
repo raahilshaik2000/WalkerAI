@@ -15,11 +15,11 @@ import Ionicons from 'react-native-vector-icons/Ionicons';
 import { launchCamera, launchImageLibrary } from 'react-native-image-picker';
 import ReactNativeHapticFeedback from 'react-native-haptic-feedback';
 import { AnimatedPressable, GlassInput, GradientBackground, AddressAutocomplete } from '@/components/ui';
-import type { AddressResult } from '@/components/ui';
-import { Colors, Radius, Spacing } from '@/constants/theme';
+import { Colors } from '@/constants/theme';
 import { useProfileStore } from '@/stores/profile.store';
 import { useAuthStore } from '@/stores/auth.store';
 import { supabase } from '@/lib/supabase/client';
+import { getUploadMetadata, uploadFile, type StorageUploadAsset } from '@/lib/supabase/storage';
 
 export default function EditProfileScreen() {
   const navigation = useNavigation<any>();
@@ -37,9 +37,78 @@ export default function EditProfileScreen() {
     setTimeout(() => setSaved(null), 1500);
   };
 
-  const saveField = (field: string, value: string) => {
-    updateProfile({ [field]: value });
-    showSaved(field);
+  const saveField = async (field: 'displayName' | 'phone', value: string) => {
+    try {
+      if (!user?.id) throw new Error('Please sign in again before saving profile changes.');
+      const column = field === 'displayName' ? 'full_name' : 'phone';
+      const { error } = await supabase
+        .from('users')
+        .update({ [column]: value || null })
+        .eq('id', user.id);
+      if (error) {
+        const missingProfileColumn = /column .* does not exist/i.test(error.message ?? '');
+        if (!missingProfileColumn) throw error;
+        console.warn(`users.${column} missing; saving ${field} locally only.`);
+      }
+      updateProfile({ [field]: value });
+      showSaved(field);
+    } catch (err) {
+      Alert.alert('Save failed', err instanceof Error ? err.message : 'Could not save profile changes.');
+    }
+  };
+
+  const saveAddress = async (result: {
+    street: string;
+    fullAddress: string;
+    city: string;
+    province: string;
+    postalCode: string;
+  }) => {
+    const nextAddress = {
+      address: result.street || result.fullAddress,
+      city: result.city,
+      province: result.province,
+    };
+    try {
+      if (!user?.id) throw new Error('Please sign in again before saving profile changes.');
+      const { error } = await supabase
+        .from('users')
+        .update({
+          address: nextAddress.address || null,
+          city: nextAddress.city || null,
+          province: nextAddress.province || null,
+          postal_code: result.postalCode || null,
+        })
+        .eq('id', user.id);
+      if (error) {
+        const missingAddressColumn = /column .*(address|postal_code).* does not exist/i.test(error.message ?? '');
+        if (!missingAddressColumn) throw error;
+        console.warn('user profile address columns missing; saving address locally only.');
+      }
+      updateProfile(nextAddress);
+      showSaved('address');
+    } catch (err) {
+      Alert.alert('Save failed', err instanceof Error ? err.message : 'Could not save profile address.');
+    }
+  };
+
+  const removeAvatar = async () => {
+    try {
+      if (!user?.id) throw new Error('Please sign in again before removing your profile photo.');
+      const { error } = await supabase
+        .from('users')
+        .update({ avatar_url: null })
+        .eq('id', user.id);
+      if (error) {
+        const missingAvatarColumn = /column .*avatar_url.* does not exist/i.test(error.message ?? '');
+        if (!missingAvatarColumn) throw error;
+        console.warn('users.avatar_url missing; removing avatar locally only.');
+      }
+      setAvatar(null);
+      ReactNativeHapticFeedback.trigger('impactLight');
+    } catch (err) {
+      Alert.alert('Remove failed', err instanceof Error ? err.message : 'Could not remove profile photo.');
+    }
   };
 
   const handlePickPhoto = () => {
@@ -50,61 +119,65 @@ export default function EditProfileScreen() {
         (index) => {
           if (index === 0) pickFromCamera();
           else if (index === 1) pickFromLibrary();
-          else if (index === 2) { setAvatar(null); ReactNativeHapticFeedback.trigger('impactLight'); }
+          else if (index === 2) { removeAvatar(); }
         },
       );
     } else {
       Alert.alert('Profile Photo', '', [
         { text: 'Take Photo', onPress: pickFromCamera },
         { text: 'Choose from Library', onPress: pickFromLibrary },
-        { text: 'Remove Photo', style: 'destructive', onPress: () => { setAvatar(null); ReactNativeHapticFeedback.trigger('impactLight'); } },
+        { text: 'Remove Photo', style: 'destructive', onPress: removeAvatar },
         { text: 'Cancel', style: 'cancel' },
       ]);
     }
   };
 
-  const uploadAndSetAvatar = async (localUri: string) => {
+  const uploadAndSetAvatar = async (asset: StorageUploadAsset) => {
     try {
-      const userId = user?.id ?? 'unknown';
-      const path = `${userId}/avatar_${Date.now()}.jpg`;
-
-      // Read local file as blob via XHR (fetch doesn't work for file:// in RN)
-      const blob: Blob = await new Promise((resolve, reject) => {
-        const xhr = new XMLHttpRequest();
-        xhr.open('GET', localUri, true);
-        xhr.responseType = 'blob';
-        xhr.onload = () => (xhr.status === 200 || xhr.status === 0) ? resolve(xhr.response) : reject(new Error('Read failed'));
-        xhr.onerror = () => reject(new Error('Read error'));
-        xhr.send();
-      });
-
-      const { error } = await supabase.storage.from('avatars').upload(path, blob, {
-        contentType: 'image/jpeg',
-        upsert: true,
-      });
-      if (error) throw error;
-
-      const { data } = supabase.storage.from('avatars').getPublicUrl(path);
-      setAvatar(data.publicUrl);
+      if (!user?.id) throw new Error('Please sign in again before uploading a profile photo.');
+      const upload = getUploadMetadata(asset);
+      const path = `${user.id}/avatar_${Date.now()}.${upload.extension}`;
+      const { publicUrl } = await uploadFile('avatars', path, upload.uri, upload.contentType);
+      const { error } = await supabase
+        .from('users')
+        .update({ avatar_url: publicUrl })
+        .eq('id', user.id);
+      if (error) {
+        const missingAvatarColumn = /column .*avatar_url.* does not exist/i.test(error.message ?? '');
+        if (!missingAvatarColumn) throw error;
+        console.warn('users.avatar_url missing; saving avatar locally only.');
+      }
+      setAvatar(publicUrl);
       ReactNativeHapticFeedback.trigger('impactMedium');
     } catch (err: any) {
       Alert.alert('Upload failed', err?.message ?? 'Could not upload photo.');
-      setAvatar(localUri);
     }
   };
 
   const pickFromCamera = () => {
-    launchCamera({ mediaType: 'photo', maxWidth: 800, maxHeight: 800, quality: 0.8 }, (res) => {
+    launchCamera({
+      mediaType: 'photo',
+      maxWidth: 800,
+      maxHeight: 800,
+      quality: 0.8,
+      assetRepresentationMode: 'compatible',
+    }, (res) => {
       if (res.assets?.[0]?.uri) {
-        uploadAndSetAvatar(res.assets[0].uri);
+        uploadAndSetAvatar(res.assets[0]);
       }
     });
   };
 
   const pickFromLibrary = () => {
-    launchImageLibrary({ mediaType: 'photo', maxWidth: 800, maxHeight: 800, quality: 0.8 }, (res) => {
+    launchImageLibrary({
+      mediaType: 'photo',
+      maxWidth: 800,
+      maxHeight: 800,
+      quality: 0.8,
+      assetRepresentationMode: 'compatible',
+    }, (res) => {
       if (res.assets?.[0]?.uri) {
-        uploadAndSetAvatar(res.assets[0].uri);
+        uploadAndSetAvatar(res.assets[0]);
       }
     });
   };
@@ -144,7 +217,7 @@ export default function EditProfileScreen() {
 
           {/* Form */}
           <View style={styles.form}>
-            <FieldRow label="Display Name" saved={saved === 'displayName'}>
+            <FieldRow saved={saved === 'displayName'}>
               <GlassInput
                 label="Display Name"
                 value={name}
@@ -154,7 +227,7 @@ export default function EditProfileScreen() {
               />
             </FieldRow>
 
-            <FieldRow label="Phone Number" saved={saved === 'phone'}>
+            <FieldRow saved={saved === 'phone'}>
               <GlassInput
                 label="Phone Number"
                 value={phoneVal}
@@ -176,14 +249,7 @@ export default function EditProfileScreen() {
               <AddressAutocomplete
                 placeholder="Search new address..."
                 initialValue=""
-                onSelect={(result) => {
-                  updateProfile({
-                    address: result.street || result.fullAddress,
-                    city: result.city,
-                    province: result.province,
-                  });
-                  showSaved('address');
-                }}
+                onSelect={saveAddress}
               />
             </View>
           </View>
@@ -197,7 +263,7 @@ export default function EditProfileScreen() {
   );
 }
 
-function FieldRow({ label, saved, children }: { label: string; saved: boolean; children: React.ReactNode }) {
+function FieldRow({ saved, children }: { saved: boolean; children: React.ReactNode }) {
   return (
     <View style={styles.fieldRow}>
       {children}

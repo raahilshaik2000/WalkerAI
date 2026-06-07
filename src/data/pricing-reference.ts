@@ -4,6 +4,8 @@
  * All prices in CAD.
  */
 
+import { parseMetricDimension } from '@/lib/measurements';
+
 // ─── Labor Pricing Library ────────────────────────────────────────────────────
 
 export const LABOR_PRICING = {
@@ -232,9 +234,9 @@ export const WASTE_FACTORS = {
   tile_complex:    0.15,
   flooring_standard: 0.07,
   flooring_complex:  0.10,
-  drywall:         0.10,
+  drywall:         0.08,
   framing_lumber:  0.09,
-  paint:           0.10,
+  paint:           0.05,
   waterproof_membrane: 0.09,
 };
 
@@ -260,6 +262,7 @@ export const CONFIDENCE_MODEL = {
     gas_line_change:         -10,
     exterior_penetration:    -8,
     basement_project:        -6,
+    each_unsure_before_three: -2,
     three_plus_unsure:       -10,
   },
   thresholds: {
@@ -276,25 +279,41 @@ export function calculateQuantities(m: {
   lengthFt: string; widthFt: string; ceilingHeightFt: string;
   numDoors: string; numWindows: string; upperLinearFt?: string; lowerLinearFt?: string;
   countertopLinearFt?: string; showerLengthFt?: string; showerWidthFt?: string;
+  doorWidthFt?: string; doorHeightFt?: string; windowWidthFt?: string; windowHeightFt?: string;
+  floorTileAreaSqf?: string; wallTileAreaSqf?: string;
 }) {
-  const L = parseFloat(m.lengthFt) || 0;
-  const W = parseFloat(m.widthFt) || 0;
-  const H = parseFloat(m.ceilingHeightFt) || 9;
-  const doors = parseInt(m.numDoors) || 0;
-  const windows = parseInt(m.numWindows) || 0;
+  const positiveNumber = (value: string | undefined, fallback = 0) => {
+    return parseMetricDimension(value ?? '') ?? fallback;
+  };
+
+  const L = positiveNumber(m.lengthFt);
+  const W = positiveNumber(m.widthFt);
+  const H = positiveNumber(m.ceilingHeightFt, 9);
+  const doors = parseInt(m.numDoors, 10) || 0;
+  const windows = parseInt(m.numWindows, 10) || 0;
+  const doorWidth = positiveNumber(m.doorWidthFt, 3);
+  const doorHeight = positiveNumber(m.doorHeightFt, 7);
+  const windowWidth = positiveNumber(m.windowWidthFt);
+  const windowHeight = positiveNumber(m.windowHeightFt);
 
   const floorArea     = L * W;
   const perimeter     = 2 * (L + W);
   const grossWallArea = perimeter * H;
-  const openingDeduction = (doors * 21) + (windows * 15); // standard defaults
-  const netWallArea   = grossWallArea - openingDeduction;
+  const doorArea = doorWidth * doorHeight;
+  const windowArea = windowWidth > 0 && windowHeight > 0 ? windowWidth * windowHeight : 15;
+  const openingDeduction = (doors * doorArea) + (windows * windowArea);
+  const netWallArea   = Math.max(0, grossWallArea - openingDeduction);
   const ceilingArea   = L * W;
-  const baseboardLf   = perimeter - (doors * 3);
-  const casingLf      = (doors * 16) + (windows * 14);
+  const baseboardLf   = perimeter - (doors * doorWidth);
+  const casingLf      = (doors * (2 * doorHeight + doorWidth)) + (windows * (2 * ((windowHeight || 4) + (windowWidth || 3))));
 
-  const showerL = parseFloat(m.showerLengthFt || '0') || 0;
-  const showerW = parseFloat(m.showerWidthFt || '0') || 0;
-  const shower_sqf = showerL > 0 && showerW > 0 ? Math.round(showerL * showerW) : 0;
+  const showerL = positiveNumber(m.showerLengthFt);
+  const showerW = positiveNumber(m.showerWidthFt);
+  const explicitFloorTileArea = positiveNumber(m.floorTileAreaSqf);
+  const explicitWallTileArea = positiveNumber(m.wallTileAreaSqf);
+  const showerWallSqf = showerL > 0 && showerW > 0 ? (showerL + showerW + showerL) * H : 0;
+  const shower_sqf = Math.round(explicitWallTileArea || showerWallSqf);
+  const floorTileBase = explicitFloorTileArea || floorArea;
 
   return {
     floor_area_sqf:      Math.round(floorArea),
@@ -304,11 +323,70 @@ export function calculateQuantities(m: {
     perimeter_lf:        Math.round(perimeter),
     baseboard_lf:        Math.round(Math.max(0, baseboardLf)),
     casing_lf:           Math.round(casingLf),
-    floor_tile_sqf:      Math.round(floorArea * (1 + WASTE_FACTORS.tile_standard)),
-    upper_cabinet_lf:    parseFloat(m.upperLinearFt || '0') || 0,
-    lower_cabinet_lf:    parseFloat(m.lowerLinearFt || '0') || 0,
-    countertop_lf:       parseFloat(m.countertopLinearFt || '0') || 0,
+    floor_tile_sqf:      Math.round(floorTileBase * (1 + WASTE_FACTORS.tile_standard)),
+    upper_cabinet_lf:    positiveNumber(m.upperLinearFt),
+    lower_cabinet_lf:    positiveNumber(m.lowerLinearFt),
+    countertop_lf:       positiveNumber(m.countertopLinearFt),
     shower_sqf,
+  };
+}
+
+export interface ConfidenceEstimate {
+  score: number;
+  notes: string;
+}
+
+export function calculateEstimateConfidence(params: {
+  roomType: 'kitchen' | 'bathroom';
+  answers: Record<string, string>;
+  hasMeasurements: boolean;
+  analysisResult?: { structural_concerns?: string[] } | null;
+}): ConfidenceEstimate {
+  const { roomType, answers, hasMeasurements, analysisResult } = params;
+  const deductions: string[] = [];
+  let score = CONFIDENCE_MODEL.base;
+
+  const applyDeduction = (amount: number, note: string) => {
+    score += amount;
+    deductions.push(note);
+  };
+
+  const kitchenLayout = answers.k_layout ?? '';
+  const bathroomPlumbing = answers.b_plumbing ?? '';
+  const structuralConcerns = analysisResult?.structural_concerns ?? [];
+
+  if (kitchenLayout.includes('major') || structuralConcerns.length > 0) {
+    applyDeduction(CONFIDENCE_MODEL.deductions.structural_wall_mod, 'structural or layout changes');
+  }
+
+  if (kitchenLayout.includes('major') || bathroomPlumbing.includes('major')) {
+    applyDeduction(CONFIDENCE_MODEL.deductions.drain_relocation, 'possible drain or plumbing relocation');
+  }
+
+  if (roomType === 'kitchen' && kitchenLayout.includes('minor')) {
+    applyDeduction(CONFIDENCE_MODEL.deductions.exterior_penetration, 'minor layout/opening changes');
+  }
+
+  if (!hasMeasurements) {
+    applyDeduction(-8, 'measurements not provided');
+  }
+
+  const unknownAnswers = Object.values(answers).filter((answer) => /not[_\s-]?sure|unsure|unknown/i.test(answer)).length;
+  if (unknownAnswers >= 3) {
+    applyDeduction(CONFIDENCE_MODEL.deductions.three_plus_unsure, 'three or more uncertain answers');
+  } else if (unknownAnswers > 0) {
+    applyDeduction(
+      CONFIDENCE_MODEL.deductions.each_unsure_before_three * unknownAnswers,
+      `${unknownAnswers} uncertain answer${unknownAnswers === 1 ? '' : 's'}`
+    );
+  }
+
+  const boundedScore = Math.max(30, Math.min(95, score));
+  return {
+    score: boundedScore,
+    notes: deductions.length > 0
+      ? `Reduced for ${deductions.join(', ')}.`
+      : CONFIDENCE_MODEL.thresholds.high.message,
   };
 }
 
@@ -326,13 +404,68 @@ export interface CostEstimate {
   lineItems: Array<{ label: string; avgCad: number }>;
 }
 
+const REGIONAL_COST_BASELINES: Record<string, Record<'kitchen' | 'bathroom', { min: number; max: number }>> = {
+  ON: { kitchen: { min: 2500000, max: 7500000 }, bathroom: { min: 800000, max: 2500000 } },
+  BC: { kitchen: { min: 2800000, max: 8500000 }, bathroom: { min: 900000, max: 2800000 } },
+  AB: { kitchen: { min: 2200000, max: 6500000 }, bathroom: { min: 750000, max: 2200000 } },
+  QC: { kitchen: { min: 2000000, max: 6000000 }, bathroom: { min: 700000, max: 2000000 } },
+  MB: { kitchen: { min: 1800000, max: 5500000 }, bathroom: { min: 650000, max: 1800000 } },
+  SK: { kitchen: { min: 1800000, max: 5000000 }, bathroom: { min: 600000, max: 1700000 } },
+  NS: { kitchen: { min: 2000000, max: 5500000 }, bathroom: { min: 700000, max: 2000000 } },
+  NB: { kitchen: { min: 1900000, max: 5000000 }, bathroom: { min: 650000, max: 1800000 } },
+  NL: { kitchen: { min: 1900000, max: 5000000 }, bathroom: { min: 650000, max: 1800000 } },
+  PE: { kitchen: { min: 1800000, max: 4500000 }, bathroom: { min: 600000, max: 1600000 } },
+};
+
+function regionalCostMultiplier(roomType: 'kitchen' | 'bathroom', provinceCode?: string | null) {
+  const province = provinceCode?.toUpperCase().replace(/^CA-/, '') || 'ON';
+  const baseline = REGIONAL_COST_BASELINES[province]?.[roomType];
+  const ontario = REGIONAL_COST_BASELINES.ON[roomType];
+  if (!baseline) return 1;
+
+  const baselineAverage = (baseline.min + baseline.max) / 2;
+  const ontarioAverage = (ontario.min + ontario.max) / 2;
+  return baselineAverage / ontarioAverage;
+}
+
+function repairAllowanceLines(flags: {
+  plumbingWallWork?: boolean;
+  electricalWallAccess?: boolean;
+  drainRelocation?: boolean;
+  tileDemolition?: boolean;
+  structuralFraming?: boolean;
+  ceilingPlumbing?: boolean;
+}) {
+  const lines: Array<{ label: string; avgCad: number }> = [];
+  if (flags.plumbingWallWork) {
+    lines.push({ label: 'Plumbing wall repair allowance', avgCad: REPAIR_TRIGGERS.plumbing_wall_work });
+  }
+  if (flags.electricalWallAccess) {
+    lines.push({ label: 'Electrical wall access repair allowance', avgCad: REPAIR_TRIGGERS.electrical_wall_access });
+  }
+  if (flags.drainRelocation) {
+    lines.push({ label: 'Drain relocation floor repair allowance', avgCad: REPAIR_TRIGGERS.drain_relocation });
+  }
+  if (flags.tileDemolition) {
+    lines.push({ label: 'Tile demolition patch allowance', avgCad: REPAIR_TRIGGERS.tile_demolition });
+  }
+  if (flags.structuralFraming) {
+    lines.push({ label: 'Structural framing repair allowance', avgCad: REPAIR_TRIGGERS.structural_framing });
+  }
+  if (flags.ceilingPlumbing) {
+    lines.push({ label: 'Ceiling plumbing access patch allowance', avgCad: REPAIR_TRIGGERS.ceiling_plumbing });
+  }
+  return lines;
+}
+
 export function estimateProjectCost(params: {
   roomType: 'kitchen' | 'bathroom';
   qualityTier: 'budget' | 'mid-range' | 'luxury';
   answers: Record<string, string>;
   quantities?: ReturnType<typeof calculateQuantities> | null;
+  provinceCode?: string | null;
 }): CostEstimate {
-  const { roomType, qualityTier, answers, quantities } = params;
+  const { roomType, qualityTier, answers, quantities, provinceCode } = params;
   const lines: Array<{ label: string; avgCad: number }> = [];
 
   const add = (label: string, avgCad: number) => {
@@ -347,14 +480,29 @@ export function estimateProjectCost(params: {
     // ── Quantities (use measurements or GTA typical defaults) ──
     const cabinetLf     = (quantities?.upper_cabinet_lf ?? 0) + (quantities?.lower_cabinet_lf ?? 0) || 32;
     const counterLf     = quantities?.countertop_lf || 22;
-    const floorSqf      = quantities?.floor_tile_sqf || 160;
+    const floorSqf      = quantities?.floor_area_sqf || 160;
     const wallSqf       = quantities?.wall_area_net_sqf || 420;
     const backsplashSqf = Math.min(counterLf * 1.5, 40);
     const baseboardLf   = quantities?.baseboard_lf || 50;
+    const hasMajorPlumb = answers['k_layout']?.includes('major');
+    const hasStructural = answers['k_layout']?.includes('major');
+    const hasMinorLayout = answers['k_layout']?.includes('minor');
+    const cabinetAnswer = answers['k_cabinets'] ?? '';
+    const countertopAnswer = answers['k_countertops'] ?? '';
+    const floorAnswer = answers['k_flooring'] ?? '';
+    const replacesCabinets = cabinetAnswer.includes('k_cab_full') || cabinetAnswer === '';
+    const paintsCabinets = cabinetAnswer.includes('k_cab_paint');
+    const replacesCountertops = countertopAnswer === '' || !countertopAnswer.includes('k_ct_keep');
+    const replacesFlooring = floorAnswer.includes('k_floor_full') || floorAnswer === '';
+    const repairsFlooring = floorAnswer.includes('k_floor_repair');
 
     // ── Demo ──
-    add('Cabinet demolition & removal', p(LABOR_PRICING.demolition.kitchen_cabinet_removal) * cabinetLf);
-    add('Floor removal', p(LABOR_PRICING.demolition.floor_removal) * floorSqf);
+    if (replacesCabinets) {
+      add('Cabinet demolition & removal', p(LABOR_PRICING.demolition.kitchen_cabinet_removal) * cabinetLf);
+    }
+    if (replacesFlooring) {
+      add('Floor removal', p(LABOR_PRICING.demolition.floor_removal) * floorSqf);
+    }
 
     // ── Cabinetry (material + install labor) ──
     const cabMat = qualityTier === 'luxury'
@@ -365,8 +513,13 @@ export function estimateProjectCost(params: {
     const cabInstallLabor = qualityTier === 'luxury'
       ? LABOR_PRICING.cabinetry.custom_cabinet_install.high
       : p(LABOR_PRICING.cabinetry.kitchen_cabinet_install);
-    add(`${qualityTier === 'luxury' ? 'Custom' : qualityTier === 'mid-range' ? 'Semi-custom' : 'Stock'} cabinets (material)`, cabMat * cabinetLf);
-    add('Cabinet installation (labour)', cabInstallLabor * cabinetLf);
+    if (replacesCabinets) {
+      add(`${qualityTier === 'luxury' ? 'Custom' : qualityTier === 'mid-range' ? 'Semi-custom' : 'Stock'} cabinets (material)`, cabMat * cabinetLf);
+      add('Cabinet installation (labour)', cabInstallLabor * cabinetLf);
+    } else if (paintsCabinets) {
+      add('Cabinet painting/refinishing (labour)', p(LABOR_PRICING.painting.cabinet_painting) * cabinetLf);
+      add('Cabinet paint and prep materials', p(MATERIAL_PRICING.paint.trim_cabinet_paint));
+    }
 
     // ── Countertops ──
     const ctRate = qualityTier === 'luxury'
@@ -374,11 +527,15 @@ export function estimateProjectCost(params: {
       : qualityTier === 'mid-range'
       ? MATERIAL_PRICING.countertops.quartz.avg
       : MATERIAL_PRICING.countertops.laminate.low;
-    add('Countertop (supply, fabricate & install)', ctRate * counterLf);
+    if (replacesCountertops) {
+      add('Countertop (supply, fabricate & install)', ctRate * counterLf);
+    }
 
     // ── Backsplash ──
-    add('Backsplash tile (material)', p(MATERIAL_PRICING.tile_surface.backsplash_tile) * backsplashSqf);
-    add('Backsplash tile install (labour)', p(LABOR_PRICING.tile.backsplash_tile_install) * backsplashSqf);
+    if (replacesCountertops || replacesCabinets) {
+      add('Backsplash tile (material)', p(MATERIAL_PRICING.tile_surface.backsplash_tile) * backsplashSqf);
+      add('Backsplash tile install (labour)', p(LABOR_PRICING.tile.backsplash_tile_install) * backsplashSqf);
+    }
 
     // ── Flooring ──
     const floorMatRate = qualityTier === 'luxury'
@@ -389,11 +546,14 @@ export function estimateProjectCost(params: {
     const floorLaborRate = qualityTier === 'luxury'
       ? LABOR_PRICING.flooring.engineered_hardwood.high
       : p(LABOR_PRICING.flooring.vinyl_plank_install);
-    add('Flooring material', floorMatRate * floorSqf * (1 + WASTE_FACTORS.flooring_standard));
-    add('Flooring installation (labour)', floorLaborRate * floorSqf);
+    if (replacesFlooring) {
+      add('Flooring material', floorMatRate * floorSqf * (1 + WASTE_FACTORS.flooring_standard));
+      add('Flooring installation (labour)', floorLaborRate * floorSqf);
+    } else if (repairsFlooring) {
+      add('Floor repair/refinish allowance', p(LABOR_PRICING.flooring.subfloor_repair) * Math.min(floorSqf, 40));
+    }
 
     // ── Plumbing (kitchen sink + faucet + rough-in) ──
-    const hasMajorPlumb = answers['k_layout']?.includes('major');
     add('Kitchen sink & faucet', p(MATERIAL_PRICING.plumbing_fixtures.sink_basin) + p(MATERIAL_PRICING.plumbing_fixtures.sink_faucet));
     add('Sink installation (labour)', p(LABOR_PRICING.plumbing.vanity_install));
     if (hasMajorPlumb) {
@@ -429,6 +589,14 @@ export function estimateProjectCost(params: {
 
     // ── Drywall repair ──
     add('Drywall patch & repair', p(LABOR_PRICING.drywall.drywall_patch_repair) * 2);
+    repairAllowanceLines({
+      plumbingWallWork: hasMajorPlumb,
+      drainRelocation: hasMajorPlumb,
+      electricalWallAccess: true,
+      structuralFraming: hasStructural,
+      tileDemolition: floorAnswer.includes('full'),
+      ceilingPlumbing: false,
+    }).forEach((line) => add(line.label, line.avgCad));
 
     // ── Trim & baseboard ──
     add('Baseboard material', p(MATERIAL_PRICING.doors_trim.baseboard) * baseboardLf);
@@ -438,7 +606,9 @@ export function estimateProjectCost(params: {
     add('Disposal & dumpster', p(MATERIAL_PRICING.disposal.disposal_bin_rental));
 
     // ── Permits ──
-    const hasStructural = answers['k_layout']?.includes('major');
+    if (hasMinorLayout) {
+      add('Minor layout repair allowance', REPAIR_TRIGGERS.electrical_wall_access);
+    }
     add('Building permit', hasStructural ? p(LABOR_PRICING.permit.permit_allowance) * 1.5 : p(LABOR_PRICING.permit.permit_allowance));
 
     // ── General contractor overhead (15%) ──
@@ -447,24 +617,32 @@ export function estimateProjectCost(params: {
 
   } else {
     // ── BATHROOM ──
-    const floorSqf  = quantities?.floor_tile_sqf || 65;
+    const floorSqf  = quantities?.floor_area_sqf || 65;
+    const floorTileSqf = quantities?.floor_tile_sqf || Math.round(floorSqf * (1 + WASTE_FACTORS.tile_standard));
     const wallSqf   = quantities?.wall_area_net_sqf || 300;
     // Use measured shower dimensions when available; fallback to standard 3×5 = 45 sqf
     const showerSqf = quantities?.shower_sqf || 45;
+    const plumbAns = answers['b_plumbing'] ?? '';
+    const hasMinorPlumbing = plumbAns.includes('minor');
+    const hasMajorPlumbing = plumbAns.includes('major');
+    const tileAnswer = answers['b_tile'] ?? 'b_tile_full';
+    const replacesTile = !tileAnswer.includes('keep');
+    const replacesVanity = !answers['b_vanity']?.includes('keep');
+    const replacesToilet = !answers['b_toilet']?.includes('keep');
 
     // Demo
     const hasShowerChange = !answers['b_shower']?.includes('keep');
     if (hasShowerChange) add('Full bathroom demolition', p(LABOR_PRICING.demolition.full_bathroom_demo));
     else {
-      add('Tile demolition (partial)', p(LABOR_PRICING.demolition.tile_demolition) * floorSqf);
-      add('Vanity & fixture removal', p(LABOR_PRICING.demolition.vanity_removal) + p(LABOR_PRICING.demolition.toilet_removal));
+      if (replacesTile) add('Tile demolition (partial)', p(LABOR_PRICING.demolition.tile_demolition) * floorSqf);
+      if (replacesVanity) add('Vanity removal', p(LABOR_PRICING.demolition.vanity_removal));
+      if (replacesToilet) add('Toilet removal', p(LABOR_PRICING.demolition.toilet_removal));
     }
 
     // Tile (floor)
-    const tileAnswer = answers['b_tile'] ?? 'b_tile_full';
     const tileMat = p(MATERIAL_PRICING.tile_surface.floor_tile);
     if (!tileAnswer.includes('keep') && !tileAnswer.includes('shower')) {
-      add('Floor tile (material)', tileMat * floorSqf * (1 + WASTE_FACTORS.tile_standard));
+      add('Floor tile (material)', tileMat * floorTileSqf);
       add('Floor tile installation (labour)', p(LABOR_PRICING.tile.floor_tile_install) * floorSqf);
     }
 
@@ -510,9 +688,8 @@ export function estimateProjectCost(params: {
     }
 
     // Plumbing relocation
-    const plumbAns = answers['b_plumbing'] ?? '';
-    if (plumbAns.includes('major')) add('Drain relocation (wood floor)', p(LABOR_PRICING.plumbing.drain_reloc_wood_floor));
-    else if (plumbAns.includes('minor')) add('Minor plumbing relocation', p(LABOR_PRICING.plumbing.minor_plumbing_reloc));
+    if (hasMajorPlumbing) add('Drain relocation (wood floor)', p(LABOR_PRICING.plumbing.drain_reloc_wood_floor));
+    else if (hasMinorPlumbing) add('Minor plumbing relocation', p(LABOR_PRICING.plumbing.minor_plumbing_reloc));
 
     // Electrical
     add('Bathroom exhaust fan (material + labour)', p(MATERIAL_PRICING.electrical_fixtures.bathroom_fan) + p(LABOR_PRICING.electrical.bathroom_fan_install));
@@ -523,6 +700,13 @@ export function estimateProjectCost(params: {
     const dwSheets = qualityTier === 'luxury' ? 10 : 8;
     add('Moisture-resistant drywall (material)', p(MATERIAL_PRICING.drywall.moisture_resist_dw) * dwSheets);
     add('Drywall installation (labour)', p(LABOR_PRICING.drywall.moisture_resistant_dw) * (wallSqf * 0.65));
+    repairAllowanceLines({
+      plumbingWallWork: hasMinorPlumbing || hasMajorPlumbing || hasShowerChange,
+      drainRelocation: hasMajorPlumbing,
+      electricalWallAccess: true,
+      tileDemolition: !tileAnswer.includes('keep'),
+      ceilingPlumbing: false,
+    }).forEach((line) => add(line.label, line.avgCad));
 
     // Paint
     const paintableWall = wallSqf - showerSqf;
@@ -549,7 +733,12 @@ export function estimateProjectCost(params: {
     add('Contingency allowance (10%)', postGcSubtotal * 0.10);
   }
 
-  const avgDollars = Math.round(lines.reduce((s, l) => s + l.avgCad, 0));
+  const multiplier = regionalCostMultiplier(roomType, provinceCode);
+  const adjustedLines = lines.map((line) => ({
+    label: line.label,
+    avgCad: Math.round(line.avgCad * multiplier),
+  }));
+  const avgDollars = Math.round(adjustedLines.reduce((s, l) => s + l.avgCad, 0));
 
   // ±1% with measurements (yields ~$200–$500 spread on typical job), ±5% without
   const rangeMultiplier = quantities?.floor_area_sqf ? 0.01 : 0.05;
@@ -557,7 +746,7 @@ export function estimateProjectCost(params: {
     min: Math.round(avgDollars * (1 - rangeMultiplier)) * 100,
     max: Math.round(avgDollars * (1 + rangeMultiplier)) * 100,
     avgDollars,
-    lineItems: lines,
+    lineItems: adjustedLines,
   };
 }
 
@@ -738,7 +927,7 @@ MATERIALS - FLOORING:
 
 WASTE FACTORS (apply to material quantities):
 - Tile: 10% standard, 15% complex layouts
-- Flooring: 7-10% | Drywall: 10% | Framing lumber: 8-10% | Paint: 10%
+- Flooring: 7-10% | Drywall sheets: 8% | Framing lumber: 8-10% | Paint: 5%
 
 AUTOMATIC REPAIR ALLOWANCES (add to scope if applicable):
 - Plumbing wall work → +$200 drywall allowance

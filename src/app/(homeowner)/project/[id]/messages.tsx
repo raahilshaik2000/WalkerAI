@@ -1,7 +1,10 @@
 import { useEffect, useRef, useState } from 'react';
 import {
+  Alert,
   FlatList,
+  Image,
   KeyboardAvoidingView,
+  Linking,
   Platform,
   StyleSheet,
   Text,
@@ -13,9 +16,11 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { useNavigation } from '@react-navigation/native'
 import { useRoute } from '@react-navigation/native';
 import ReactNativeHapticFeedback from 'react-native-haptic-feedback';
+import Ionicons from 'react-native-vector-icons/Ionicons';
 import { supabase } from '@/lib/supabase/client';
+import { getRequiredStringParam } from '@/lib/navigation-params';
 import { useAuthStore } from '@/stores/auth.store';
-import { Colors, Radius, Spacing, Typography } from '@/constants/theme';
+import { Colors, Spacing, Typography } from '@/constants/theme';
 import { GradientBackground } from '@/components/ui';
 
 interface Message {
@@ -28,22 +33,32 @@ interface Message {
 
 export default function MessagesScreen() {
   const route = useRoute<any>();
-  const projectId = route.params?.id;
+  const projectId = getRequiredStringParam(route.params, 'id');
   const navigation = useNavigation<any>();
   const { user } = useAuthStore();
   const [messages, setMessages] = useState<Message[]>([]);
   const [body, setBody] = useState('');
   const [sending, setSending] = useState(false);
+  const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const flatListRef = useRef<FlatList>(null);
 
   useEffect(() => {
-    // Load existing messages
+    if (!projectId) {
+      setErrorMessage('Project is missing. Reopen messages from the project page.');
+      return;
+    }
+
     const loadMessages = async () => {
-      const { data } = await supabase
+      const { data, error } = await supabase
         .from('messages')
         .select('id, body, sender_id, sent_at, attachment_url')
         .eq('project_id', projectId)
         .order('sent_at', { ascending: true });
+      if (error) {
+        setErrorMessage(`Could not load messages: ${error.message}`);
+        return;
+      }
+      setErrorMessage(null);
       setMessages(data ?? []);
     };
     loadMessages();
@@ -67,21 +82,34 @@ export default function MessagesScreen() {
 
   const sendMessage = async () => {
     if (!body.trim() || sending) return;
+    if (!projectId || !user?.id) {
+      Alert.alert('Unable to send', 'Please reopen this project and try again.');
+      return;
+    }
     setSending(true);
     const trimmed = body.trim();
     setBody('');
 
-    try {
-      await supabase.from('messages').insert({
-        project_id: projectId,
-        sender_id: user!.id,
-        body: trimmed,
-      });
-      ReactNativeHapticFeedback.trigger('impactLight');
-    } catch {
+    const { error } = await supabase.from('messages').insert({
+      project_id: projectId,
+      sender_id: user.id,
+      body: trimmed,
+    });
+
+    if (error) {
       setBody(trimmed); // restore on error
-    } finally {
-      setSending(false);
+      Alert.alert('Message not sent', error.message);
+    } else {
+      ReactNativeHapticFeedback.trigger('impactLight');
+    }
+    setSending(false);
+  };
+
+  const openAttachment = async (url: string) => {
+    try {
+      await Linking.openURL(url);
+    } catch {
+      Alert.alert('Unable to open attachment', 'Please try again in a moment.');
     }
   };
 
@@ -91,9 +119,30 @@ export default function MessagesScreen() {
 
     return (
       <View style={[styles.bubble, isMe ? styles.bubbleMe : styles.bubbleThem]}>
-        <Text style={[styles.bubbleText, isMe ? styles.bubbleTextMe : styles.bubbleTextThem]}>
-          {item.body}
-        </Text>
+        {!!item.body && (
+          <Text style={[styles.bubbleText, isMe ? styles.bubbleTextMe : styles.bubbleTextThem]}>
+            {item.body}
+          </Text>
+        )}
+        {!!item.attachment_url && (
+          <TouchableOpacity
+            style={[styles.attachmentCard, isMe ? styles.attachmentCardMe : styles.attachmentCardThem]}
+            onPress={() => openAttachment(item.attachment_url!)}
+            activeOpacity={0.85}
+          >
+            <Image source={{ uri: item.attachment_url }} style={styles.attachmentImage} resizeMode="cover" />
+            <View style={styles.attachmentFooter}>
+              <Ionicons
+                name="image-outline"
+                size={15}
+                color={isMe ? '#FFFFFF' : Colors.text.secondary}
+              />
+              <Text style={[styles.attachmentText, isMe ? styles.attachmentTextMe : styles.attachmentTextThem]}>
+                View attachment
+              </Text>
+            </View>
+          </TouchableOpacity>
+        )}
         <Text style={[styles.timeText, isMe ? styles.timeTextMe : {}]}>{timeStr}</Text>
       </View>
     );
@@ -127,7 +176,9 @@ export default function MessagesScreen() {
             ListEmptyComponent={
               <View style={styles.emptyState}>
                 <Text style={styles.emptyIcon}>💬</Text>
-                <Text style={styles.emptyText}>No messages yet. Start the conversation!</Text>
+                <Text style={styles.emptyText}>
+                  {errorMessage ?? 'No messages yet. Start the conversation!'}
+                </Text>
               </View>
             }
           />
@@ -195,6 +246,20 @@ const styles = StyleSheet.create({
   bubbleText: { fontSize: 15, lineHeight: 22 },
   bubbleTextMe: { color: '#FFFFFF' },
   bubbleTextThem: { color: Colors.text.primary },
+  attachmentCard: {
+    width: 220,
+    maxWidth: '100%',
+    borderRadius: 12,
+    overflow: 'hidden',
+    marginTop: 8,
+  },
+  attachmentCardMe: { backgroundColor: 'rgba(255,255,255,0.16)' },
+  attachmentCardThem: { backgroundColor: Colors.bg.secondary },
+  attachmentImage: { width: '100%', height: 150, backgroundColor: Colors.bg.secondary },
+  attachmentFooter: { flexDirection: 'row', alignItems: 'center', gap: 6, paddingHorizontal: 10, paddingVertical: 8 },
+  attachmentText: { fontSize: 13, fontWeight: '600' },
+  attachmentTextMe: { color: '#FFFFFF' },
+  attachmentTextThem: { color: Colors.text.secondary },
   timeText: { fontSize: 11, color: 'rgba(255,255,255,0.6)', marginTop: 4, textAlign: 'right' },
   timeTextMe: { color: 'rgba(255,255,255,0.6)' },
   emptyState: { flex: 1, alignItems: 'center', justifyContent: 'center', paddingTop: 60, gap: 12 },

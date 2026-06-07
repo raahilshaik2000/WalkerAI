@@ -26,7 +26,8 @@ export default function RegisterScreen() {
   const [loading, setLoading] = useState(false);
 
   const handleRegister = async () => {
-    if (!email || !password) {
+    const normalizedEmail = email.trim().toLowerCase();
+    if (!normalizedEmail || !password) {
       Alert.alert('Error', 'Please fill in all fields.');
       return;
     }
@@ -40,12 +41,12 @@ export default function RegisterScreen() {
     }
     setLoading(true);
     try {
-      const data = await signUp(email, password, role);
+      const data = await signUp(normalizedEmail, password, role);
       if (!data.session) {
         // Email confirmation required — account created, awaiting verification
         Alert.alert(
           'Check your email',
-          `We sent a confirmation link to ${email}. Tap it to activate your account, then sign in.`,
+          `We sent a confirmation link to ${normalizedEmail}. Tap it to activate your account, then sign in.`,
           [{ text: 'OK', onPress: () => navigation.navigate('Login') }]
         );
       }

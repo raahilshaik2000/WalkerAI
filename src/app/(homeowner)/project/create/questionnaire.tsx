@@ -1,17 +1,26 @@
-import { useState, useRef, useEffect } from 'react';
+import { useRef, useEffect, useState } from 'react';
 import {
   Animated,
+  Alert,
   ScrollView,
   StyleSheet,
   Text,
   TouchableOpacity,
   View,
 } from 'react-native';
+import Ionicons from 'react-native-vector-icons/Ionicons';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useNavigation } from '@react-navigation/native';
 import ReactNativeHapticFeedback from 'react-native-haptic-feedback';
-import { supabase } from '@/lib/supabase/client';
 import { useProjectWizardStore } from '@/stores/project-wizard.store';
+import {
+  isProjectVoiceAvailable,
+  listenForProjectAnswer,
+  matchTranscriptToQuestionOption,
+  requestProjectVoicePermissions,
+  speakProjectQuestion,
+  stopProjectVoice,
+} from '@/lib/project-voice';
 import { Colors, Radius, Spacing, Typography } from '@/constants/theme';
 import { GlassButton, GradientBackground, WizardHeader } from '@/components/ui';
 
@@ -23,15 +32,15 @@ export default function QuestionnaireStep() {
     currentQuestionIndex,
     setAnswer,
     nextQuestion,
-    projectId,
-    analysisResult,
-    setQuestions,
   } = useProjectWizardStore();
 
   const fadeAnim = useRef(new Animated.Value(1)).current;
   const slideAnim = useRef(new Animated.Value(0)).current;
+  const [voiceBusy, setVoiceBusy] = useState(false);
+  const [voiceTranscript, setVoiceTranscript] = useState('');
 
   const question = questions[currentQuestionIndex];
+  const voiceAvailable = isProjectVoiceAvailable();
 
   const animateTransition = (callback: () => void) => {
     Animated.parallel([
@@ -52,15 +61,61 @@ export default function QuestionnaireStep() {
     setAnswer(question.id, optionId);
   };
 
+  const handleVoiceAnswer = async () => {
+    if (!question || voiceBusy) return;
+
+    if (!voiceAvailable) {
+      Alert.alert(
+        'Voice answers unavailable',
+        'Voice answers are available on iPhone in this version. You can still answer manually here.'
+      );
+      return;
+    }
+
+    setVoiceBusy(true);
+    setVoiceTranscript('');
+    try {
+      const permissions = await requestProjectVoicePermissions();
+      if (!permissions.speech || !permissions.microphone) {
+        Alert.alert('Permission needed', 'Enable microphone and speech recognition permissions to answer by voice.');
+        return;
+      }
+
+      await speakProjectQuestion(question);
+      const transcript = await listenForProjectAnswer();
+      setVoiceTranscript(transcript);
+
+      const matchedOptionId = matchTranscriptToQuestionOption(transcript, question);
+      if (!matchedOptionId) {
+        Alert.alert(
+          'Could not match answer',
+          transcript
+            ? `I heard "${transcript}", but could not match it to one of the options. Please try again or tap an answer.`
+            : 'I did not hear an answer. Please try again or tap an answer.'
+        );
+        return;
+      }
+
+      ReactNativeHapticFeedback.trigger('notificationSuccess');
+      setAnswer(question.id, matchedOptionId);
+    } catch (err) {
+      Alert.alert('Voice answer failed', err instanceof Error ? err.message : 'Please try again or answer manually.');
+    } finally {
+      setVoiceBusy(false);
+      await stopProjectVoice();
+    }
+  };
+
   const handleNext = () => {
     if (!answers[question.id]) return;
 
     const answerId = answers[question.id];
     const selectedOption = question.options.find((o) => o.id === answerId);
     const nextQuestionId = selectedOption?.next_question_id;
+    const isExplicitTerminal = selectedOption?.next_question_id === null;
 
     animateTransition(() => {
-      const isLast = currentQuestionIndex >= questions.length - 1 || !nextQuestionId;
+      const isLast = currentQuestionIndex >= questions.length - 1 || isExplicitTerminal;
       if (isLast) {
         useProjectWizardStore.getState().setStep(5);
         navigation.navigate('Renders');
@@ -71,33 +126,17 @@ export default function QuestionnaireStep() {
   };
 
   useEffect(() => {
-    if (!projectId || !analysisResult) return;
-    const fetchDynamic = async () => {
-      try {
-        const { data } = await supabase.functions.invoke('generate-questionnaire', {
-          body: { project_id: projectId, analysis: analysisResult },
-        });
-        if (data?.questions?.length > 0) {
-          setQuestions(data.questions);
-        }
-      } catch {
-        // Static questions already set by analyzing.tsx — fall through
-      }
-    };
-    fetchDynamic();
-  }, [projectId]);
-
-  useEffect(() => {
     if (!question) {
       useProjectWizardStore.getState().setStep(5);
       navigation.navigate('Renders');
     }
-  }, [question]);
+  }, [navigation, question]);
 
   if (!question) return null;
 
   const selectedAnswer = answers[question.id];
-  const progress = ((currentQuestionIndex + 1) / questions.length) * 100;
+  const selectedOption = question.options.find((option) => option.id === selectedAnswer);
+  const isTerminalQuestion = currentQuestionIndex >= questions.length - 1 || selectedOption?.next_question_id === null;
 
   return (
     <GradientBackground glow="top-right">
@@ -121,6 +160,33 @@ export default function QuestionnaireStep() {
             {question.context_note && (
               <Text style={styles.contextNote}>{question.context_note}</Text>
             )}
+
+            <TouchableOpacity
+              style={[styles.voiceCard, voiceBusy && styles.voiceCardActive, !voiceAvailable && styles.voiceCardDisabled]}
+              onPress={handleVoiceAnswer}
+              activeOpacity={0.85}
+              disabled={voiceBusy || !voiceAvailable}
+            >
+              <View style={[styles.voiceIcon, voiceBusy && styles.voiceIconActive, !voiceAvailable && styles.voiceIconDisabled]}>
+                <Ionicons
+                  name={voiceBusy ? 'radio-outline' : 'mic-outline'}
+                  size={18}
+                  color={voiceBusy ? '#000' : voiceAvailable ? Colors.accent : Colors.text.tertiary}
+                />
+              </View>
+              <View style={styles.voiceTextWrap}>
+                <Text style={styles.voiceTitle}>
+                  {voiceBusy ? 'Listening for your answer…' : voiceAvailable ? 'Answer with voice' : 'Voice unavailable on this device'}
+                </Text>
+                <Text style={styles.voiceSub} numberOfLines={2}>
+                  {voiceTranscript
+                    ? `Heard: ${voiceTranscript}`
+                    : voiceAvailable
+                      ? 'WalkerAI will read the question and select the closest matching option.'
+                      : 'Tap an answer manually to continue.'}
+                </Text>
+              </View>
+            </TouchableOpacity>
 
             {/* Options */}
             <View style={styles.optionsContainer}>
@@ -146,7 +212,7 @@ export default function QuestionnaireStep() {
           </Animated.View>
 
           <GlassButton
-            label={currentQuestionIndex >= questions.length - 1 ? 'See Renders' : 'Next'}
+            label={isTerminalQuestion ? 'Visual Preview' : 'Next'}
             onPress={handleNext}
             disabled={!selectedAnswer}
             fullWidth
@@ -181,6 +247,44 @@ const styles = StyleSheet.create({
     lineHeight: 18,
     fontStyle: 'italic',
   },
+  voiceCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+    borderRadius: Radius.item,
+    borderWidth: 1,
+    borderColor: 'rgba(255, 107, 0, 0.28)',
+    backgroundColor: 'rgba(255, 107, 0, 0.07)',
+    paddingHorizontal: 14,
+    paddingVertical: 13,
+    marginBottom: Spacing.md,
+  },
+  voiceCardActive: {
+    borderColor: Colors.accent,
+    backgroundColor: 'rgba(255, 107, 0, 0.14)',
+  },
+  voiceCardDisabled: {
+    borderColor: Colors.glass.border,
+    backgroundColor: Colors.glass.surface,
+    opacity: 0.78,
+  },
+  voiceIcon: {
+    width: 34,
+    height: 34,
+    borderRadius: 17,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: 'rgba(255, 107, 0, 0.14)',
+  },
+  voiceIconActive: {
+    backgroundColor: Colors.accent,
+  },
+  voiceIconDisabled: {
+    backgroundColor: 'rgba(255, 255, 255, 0.06)',
+  },
+  voiceTextWrap: { flex: 1 },
+  voiceTitle: { fontSize: 14, fontWeight: '700', color: Colors.text.primary, marginBottom: 3 },
+  voiceSub: { ...Typography.caption, lineHeight: 17 },
   optionsContainer: {
     gap: 10,
     marginBottom: Spacing.lg,

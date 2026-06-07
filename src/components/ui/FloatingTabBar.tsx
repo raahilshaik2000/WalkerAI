@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { Platform, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { Platform, StyleSheet, TouchableOpacity, View } from 'react-native';
 import { BlurView } from '@react-native-community/blur';
 import LinearGradient from 'react-native-linear-gradient';
 import Animated, {
@@ -13,18 +13,6 @@ import Ionicons from 'react-native-vector-icons/Ionicons';
 import type { BottomTabBarProps } from '@react-navigation/bottom-tabs';
 
 const POST_TAB_NAMES = ['Post'];
-
-// Tab labels for active state
-const TAB_LABELS: Record<string, string> = {
-  Dashboard: 'Home',
-  Projects: 'Projects',
-  Messages: 'Messages',
-  Profile: 'Profile',
-  Jobs: 'Jobs',
-  Calendar: 'Calendar',
-  Earnings: 'Earnings',
-  CompanyProfile: 'Profile',
-};
 
 // Pill geometry
 const PILL_PADDING_V = 10;
@@ -59,7 +47,7 @@ export function FloatingTabBar({ state, descriptors, navigation }: BottomTabBarP
         indicatorX.value = withTiming(targetX, { duration: SLIDE_DURATION, easing: SLIDE_EASING });
       }
     }
-  }, [state.index, tabWidth]);
+  }, [indicatorX, state.index, tabWidth]);
 
   const indicatorAnimStyle = useAnimatedStyle(() => ({
     transform: [{ translateX: indicatorX.value }],
@@ -74,7 +62,7 @@ export function FloatingTabBar({ state, descriptors, navigation }: BottomTabBarP
     >
       {/* Solid floor: fills the gap between pill and screen bottom edge */}
       <View
-        style={[styles.floor, { height: floorHeight, bottom: -floorHeight + PILL_HEIGHT / 2 }]}
+        style={[styles.floor, { height: floorHeight, bottom: -floorHeight + PILL_HEIGHT }]}
         pointerEvents="none"
       />
       <View style={styles.shadowRing} pointerEvents="auto">
@@ -127,7 +115,6 @@ export function FloatingTabBar({ state, descriptors, navigation }: BottomTabBarP
               const { options } = descriptors[route.key];
               const isFocused = state.index === index;
               const isPost = POST_TAB_NAMES.includes(route.name);
-              const label = TAB_LABELS[route.name];
               const color = isFocused ? '#FFFFFF' : 'rgba(255,255,255,0.4)';
 
               const onPress = () => {
@@ -187,11 +174,12 @@ const styles = StyleSheet.create({
     left: -16,
     right: -16,
     backgroundColor: '#000000',
-    zIndex: -1,
+    zIndex: 0,
   },
 
   shadowRing: {
     borderRadius: PILL_RADIUS,
+    zIndex: 1,
     ...Platform.select({
       ios: {
         shadowColor: '#000',

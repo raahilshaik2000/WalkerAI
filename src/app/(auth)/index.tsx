@@ -21,8 +21,8 @@ import { WalkerLogo } from '@/components/ui/WalkerLogo';
 const { width } = Dimensions.get('window');
 
 const VALUE_PROPS = [
-  'Upload a photo, get a design in seconds',
-  'AI-powered renovation planning',
+  'Upload photos, get a renovation plan',
+  'Measured budgeting and material scope',
   'Matched with verified local pros',
 ];
 
@@ -79,7 +79,19 @@ export default function WelcomeScreen() {
     vp3Progress.value = withDelay(1250, withTiming(1, { duration: 500, easing: Easing.out(Easing.cubic) }));
     ctaProgress.value = withDelay(1400, withSpring(1, { damping: 18, stiffness: 180 }));
     signInProgress.value = withDelay(1500, withTiming(1, { duration: 400, easing: Easing.out(Easing.cubic) }));
-  }, []);
+  }, [
+    ctaProgress,
+    glowProgress,
+    glowPulse,
+    headline1Progress,
+    headline2Progress,
+    signInProgress,
+    subtitleProgress,
+    topBarProgress,
+    vp1Progress,
+    vp2Progress,
+    vp3Progress,
+  ]);
 
   // Animated styles
   const glowStyle = useAnimatedStyle(() => {
@@ -179,7 +191,7 @@ export default function WelcomeScreen() {
 
             {/* Subtitle */}
             <Animated.Text style={[styles.subtitle, subtitleStyle]}>
-              AI design meets verified contractors.
+              AI planning meets verified contractors.
             </Animated.Text>
 
             {/* Value propositions */}

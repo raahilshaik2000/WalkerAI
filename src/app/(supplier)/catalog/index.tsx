@@ -1,5 +1,5 @@
-import { useCallback, useEffect, useState } from 'react';
-import { ActivityIndicator, FlatList, RefreshControl, StyleSheet, Switch, Text, TouchableOpacity, View } from 'react-native';
+import { useCallback, useState } from 'react';
+import { ActivityIndicator, Alert, FlatList, RefreshControl, StyleSheet, Switch, Text, TouchableOpacity, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useNavigation, useFocusEffect } from '@react-navigation/native';
 import Ionicons from 'react-native-vector-icons/Ionicons';
@@ -8,21 +8,66 @@ import { useAuthStore } from '@/stores/auth.store';
 import { Colors, Radius, Spacing, Typography } from '@/constants/theme';
 import { GradientBackground } from '@/components/ui';
 import type { Supplier, SupplierCatalogItem } from '@/types/database.types';
+import { nextCatalogSetupRoute } from '@/lib/supplier-catalog';
 
 export default function SupplierCatalog() {
   const navigation = useNavigation<any>();
   const { user } = useAuthStore();
-  const [supplier, setSupplier] = useState<Supplier | null>(null);
   const [items, setItems] = useState<SupplierCatalogItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
+  const [hasSupplierProfile, setHasSupplierProfile] = useState(false);
+  const [setupRoute, setSetupRoute] = useState<string | null>(null);
+  const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
   const fetchData = useCallback(async () => {
-    if (!user) return;
-    const { data: sup } = await supabase.from('suppliers').select('*').eq('user_id', user.id).single();
-    setSupplier(sup);
-    if (!sup) { setLoading(false); return; }
-    const { data } = await supabase.from('supplier_catalog').select('*').eq('supplier_id', sup.id).order('created_at', { ascending: false });
+    if (!user) {
+      setItems([]);
+      setHasSupplierProfile(false);
+      setSetupRoute('SupplierBusinessOnboarding');
+      setErrorMessage('You need to be signed in to manage your catalog.');
+      setLoading(false);
+      return;
+    }
+
+    setErrorMessage(null);
+    const { data: sup, error: supplierError } = await supabase
+      .from('suppliers')
+      .select('id, license_number, categories')
+      .eq('user_id', user.id)
+      .order('created_at', { ascending: false })
+      .limit(1)
+      .maybeSingle();
+    if (supplierError) {
+      setItems([]);
+      setHasSupplierProfile(false);
+      setSetupRoute(null);
+      setErrorMessage(supplierError.message);
+      setLoading(false);
+      return;
+    }
+    if (!sup) {
+      setItems([]);
+      setHasSupplierProfile(false);
+      setSetupRoute('SupplierBusinessOnboarding');
+      setLoading(false);
+      return;
+    }
+
+    setHasSupplierProfile(true);
+    setSetupRoute(nextCatalogSetupRoute(sup as Pick<Supplier, 'categories' | 'license_number'>));
+    const { data, error } = await supabase
+      .from('supplier_catalog')
+      .select('*')
+      .eq('supplier_id', sup.id)
+      .order('created_at', { ascending: false });
+    if (error) {
+      setItems([]);
+      setErrorMessage(error.message);
+      setLoading(false);
+      return;
+    }
+
     setItems((data as SupplierCatalogItem[]) ?? []);
     setLoading(false);
   }, [user]);
@@ -31,11 +76,24 @@ export default function SupplierCatalog() {
 
   const onRefresh = async () => { setRefreshing(true); await fetchData(); setRefreshing(false); };
 
+  const openAddItem = () => {
+    navigation.navigate(setupRoute ?? 'SupplierAddCatalogItem');
+  };
+
   const toggleStock = async (item: SupplierCatalogItem) => {
     setItems((prev) => prev.map((i) => i.id === item.id ? { ...i, in_stock: !i.in_stock } : i));
-    const { error } = await supabase.from('supplier_catalog').update({ in_stock: !item.in_stock }).eq('id', item.id);
+    const { data, error } = await supabase
+      .from('supplier_catalog')
+      .update({ in_stock: !item.in_stock })
+      .eq('id', item.id)
+      .select('id')
+      .maybeSingle();
     if (error) {
       setItems((prev) => prev.map((i) => i.id === item.id ? { ...i, in_stock: item.in_stock } : i));
+      Alert.alert('Could not update stock', error.message);
+    } else if (!data) {
+      setItems((prev) => prev.map((i) => i.id === item.id ? { ...i, in_stock: item.in_stock } : i));
+      Alert.alert('Could not update stock', 'This catalog item is no longer available.');
     }
   };
 
@@ -46,13 +104,33 @@ export default function SupplierCatalog() {
       <SafeAreaView style={styles.safe}>
         <View style={styles.header}>
           <Text style={styles.headerTitle}>My Catalog</Text>
-          <TouchableOpacity style={styles.addBtn} onPress={() => navigation.navigate('SupplierAddCatalogItem')} activeOpacity={0.8}>
-            <Ionicons name="add" size={20} color="#fff" />
-            <Text style={styles.addBtnText}>Add Item</Text>
+          <TouchableOpacity style={styles.addBtn} onPress={openAddItem} activeOpacity={0.8}>
+            <Ionicons name={setupRoute ? 'arrow-forward' : 'add'} size={20} color="#fff" />
+            <Text style={styles.addBtnText}>{setupRoute ? 'Setup' : 'Add Item'}</Text>
           </TouchableOpacity>
         </View>
 
-        {items.length === 0 ? (
+        {errorMessage ? (
+          <View style={styles.empty}>
+            <Ionicons name="alert-circle-outline" size={48} color={Colors.text.tertiary} />
+            <Text style={styles.emptyTitle}>Could not load catalog</Text>
+            <Text style={styles.emptyBody}>{errorMessage}</Text>
+            <TouchableOpacity style={styles.emptyBtn} onPress={fetchData} activeOpacity={0.8}>
+              <Text style={styles.emptyBtnText}>Try Again</Text>
+            </TouchableOpacity>
+          </View>
+        ) : !hasSupplierProfile || setupRoute ? (
+          <View style={styles.empty}>
+            <Ionicons name="storefront-outline" size={48} color={Colors.text.tertiary} />
+            <Text style={styles.emptyTitle}>{hasSupplierProfile ? 'Finish supplier setup' : 'Set up your supplier profile'}</Text>
+            <Text style={styles.emptyBody}>
+              Complete your supplier profile, license, and supply categories before adding catalog items.
+            </Text>
+            <TouchableOpacity style={styles.emptyBtn} onPress={openAddItem} activeOpacity={0.8}>
+              <Text style={styles.emptyBtnText}>{hasSupplierProfile ? 'Continue Setup' : 'Start Setup'}</Text>
+            </TouchableOpacity>
+          </View>
+        ) : items.length === 0 ? (
           <View style={styles.empty}>
             <Ionicons name="storefront-outline" size={48} color={Colors.text.tertiary} />
             <Text style={styles.emptyTitle}>No catalog items</Text>

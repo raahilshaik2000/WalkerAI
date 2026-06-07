@@ -13,24 +13,31 @@ import { supabase } from '@/lib/supabase/client';
 export default function HomeownerProfile() {
   const navigation = useNavigation<any>();
   const { user, clearSession } = useAuthStore();
-  const { displayName, avatarUri } = useProfileStore();
+  const { displayName, avatarUri, resetProfile } = useProfileStore();
 
   const name = displayName || user?.email?.split('@')[0] || 'Homeowner';
   const email = user?.email || '';
   const initials = name.slice(0, 2).toUpperCase();
+  const memberSince = user?.created_at ? new Date(user.created_at).getFullYear() : null;
 
   const [totalProjects, setTotalProjects] = useState(0);
   const [completedProjects, setCompletedProjects] = useState(0);
   const [totalBudget, setTotalBudget] = useState(0);
+  const [statsError, setStatsError] = useState<string | null>(null);
 
   useEffect(() => {
     if (!user) return;
     const load = async () => {
-      const { data } = await supabase
+      setStatsError(null);
+      const { data, error } = await supabase
         .from('projects')
         .select('status, ai_cost_max')
         .eq('homeowner_id', user.id)
         .not('status', 'eq', 'diy_saved');
+      if (error) {
+        setStatsError(error.message);
+        return;
+      }
       if (!data) return;
       setTotalProjects(data.length);
       setCompletedProjects(data.filter((p) => p.status === 'completed').length);
@@ -47,6 +54,7 @@ export default function HomeownerProfile() {
         style: 'destructive',
         onPress: async () => {
           await signOut();
+          resetProfile();
           clearSession();
         },
       },
@@ -82,7 +90,9 @@ export default function HomeownerProfile() {
                 <Text style={styles.email}>{email}</Text>
                 <View style={styles.memberBadge}>
                   <Ionicons name="shield-checkmark" size={11} color="#22C55E" />
-                  <Text style={styles.memberText}>Member since 2025</Text>
+                  <Text style={styles.memberText}>
+                    {memberSince ? `Member since ${memberSince}` : 'Verified account'}
+                  </Text>
                 </View>
               </View>
             </View>
@@ -105,6 +115,9 @@ export default function HomeownerProfile() {
               <Text style={styles.statLabel}>Budget</Text>
             </View>
           </View>
+          {statsError ? (
+            <Text style={styles.statsError}>Could not load profile stats: {statsError}</Text>
+          ) : null}
 
           {/* Account */}
           <Text style={styles.sectionLabel}>Account</Text>
@@ -174,6 +187,7 @@ const styles = StyleSheet.create({
     borderWidth: 1, borderColor: Colors.surface.border,
     paddingVertical: 16, marginBottom: Spacing.md,
   },
+  statsError: { color: Colors.text.tertiary, fontSize: 12, textAlign: 'center', marginTop: -8, marginBottom: Spacing.md },
   stat: { flex: 1, alignItems: 'center' },
   statValue: { fontSize: 20, fontWeight: '700', color: '#fff', marginBottom: 2 },
   statLabel: { fontSize: 11, color: Colors.text.tertiary },

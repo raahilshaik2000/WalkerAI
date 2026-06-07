@@ -12,11 +12,19 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { useNavigation } from '@react-navigation/native';
 import Ionicons from 'react-native-vector-icons/Ionicons';
 import { supabase } from '@/lib/supabase/client';
+import { formatSupabaseFunctionError } from '@/lib/supabase/functions';
 import { useProjectWizardStore } from '@/stores/project-wizard.store';
 import { Colors, Spacing, Typography, Radius } from '@/constants/theme';
 import { GlassButton, GlassCard, GradientBackground, StatusBadge, WizardHeader } from '@/components/ui';
-import { buildPricingPromptSection, calculateQuantities, estimateProjectCost } from '@/data/pricing-reference';
+import { calculateEstimateConfidence, calculateQuantities, estimateProjectCost } from '@/data/pricing-reference';
 import { getQuestionsForRoomType, extractQualityTier, buildAnswerSummary } from '@/data/fixed-questions';
+import { normalizeCanadianProvince } from '@/lib/canada';
+import { parseMetricDimension } from '@/lib/measurements';
+import {
+  answersWithSurfaceSelections,
+  buildSurfaceSelectionSummary,
+  projectAnswersWithSurfaceSelections,
+} from '@/lib/room-customizer';
 
 
 interface BriefData {
@@ -56,6 +64,34 @@ const TIER_BADGE_VARIANT = {
   luxury: 'warning' as const,
 };
 
+type QuantityEstimate = ReturnType<typeof calculateQuantities>;
+
+function isMissingColumnError(message?: string | null) {
+  return !!message && /column .* does not exist/i.test(message);
+}
+
+function positiveMeasurement(value?: string | null) {
+  return parseMetricDimension(String(value ?? '')) != null;
+}
+
+function measuredQuantityLines(quantities: QuantityEstimate | null) {
+  if (!quantities) return [];
+
+  return [
+    ['Floor area', quantities.floor_area_sqf, 'sqf'],
+    ['Wall area (net)', quantities.wall_area_net_sqf, 'sqf'],
+    ['Wall area (gross)', quantities.wall_area_gross_sqf, 'sqf'],
+    ['Ceiling area', quantities.ceiling_area_sqf, 'sqf'],
+    ['Perimeter', quantities.perimeter_lf, 'LF'],
+    ['Baseboard', quantities.baseboard_lf, 'LF'],
+    ['Door/window casing', quantities.casing_lf, 'LF'],
+    ['Floor tile (with waste)', quantities.floor_tile_sqf, 'sqf'],
+    ['Upper cabinet run', quantities.upper_cabinet_lf, 'LF'],
+    ['Lower cabinet run', quantities.lower_cabinet_lf, 'LF'],
+    ['Countertop', quantities.countertop_lf, 'LF'],
+  ] as Array<[string, number, string]>;
+}
+
 export default function BriefStep() {
   const navigation = useNavigation<any>();
   const {
@@ -63,10 +99,10 @@ export default function BriefStep() {
     analysisResult,
     answers,
     selectedRenderId,
-    address,
     province,
     photos,
     materialOverrides,
+    surfaceSelections,
     measurements,
   } = useProjectWizardStore();
 
@@ -79,25 +115,45 @@ export default function BriefStep() {
     setLoading(true);
     setError(null);
     try {
+      if (!projectId) {
+        throw new Error('Project is missing. Go back and complete photo analysis before generating a brief.');
+      }
+
       if (selectedRenderId) {
-        const { data: render } = await supabase
+        const { data: render, error: renderError } = await supabase
           .from('renders')
           .select('url')
           .eq('id', selectedRenderId)
-          .single();
+          .maybeSingle();
+        if (renderError) throw new Error(`Selected render could not be loaded: ${renderError.message}`);
+        if (!render) throw new Error('Selected render could not be found.');
         if (render) setRenderUrl(render.url);
       }
 
       const roomType = (analysisResult as any)?.room_type ?? 'kitchen';
-      const provinceCode = (province ?? 'ON').toUpperCase();
+      const pricingAnswers = answersWithSurfaceSelections(answers, roomType, surfaceSelections);
+      const persistedAnswers = projectAnswersWithSurfaceSelections(answers, roomType, surfaceSelections);
+      const finishSummary = buildSurfaceSelectionSummary(roomType, surfaceSelections, pricingAnswers);
+      const provinceCode = normalizeCanadianProvince(province);
+      if (!provinceCode) {
+        throw new Error('Project province is missing. Add the project address before generating the brief.');
+      }
 
       // Resolve quality tier and human-readable answer summary from fixed questions
-      const qualityTier = extractQualityTier(answers);
+      const qualityTier = extractQualityTier(pricingAnswers);
       const fixedQuestions = getQuestionsForRoomType(roomType);
-      const answerSummary = buildAnswerSummary(fixedQuestions, answers);
+      const answerSummary = buildAnswerSummary(fixedQuestions, pricingAnswers);
 
-      // Pre-calculate room quantities from homeowner measurements
-      const quantities = measurements ? calculateQuantities({
+      const hasAnyNumericMeasurement = measurements
+        ? Object.values(measurements).some((value) => typeof value === 'string' && positiveMeasurement(value))
+        : false;
+      const hasCoreRoomMeasurements = !!measurements
+        && positiveMeasurement(measurements.lengthFt)
+        && positiveMeasurement(measurements.widthFt);
+
+      // Pre-calculate room quantities from homeowner measurements when at least
+      // one numeric field was actually entered. Boolean toggles alone are not a takeoff.
+      const quantities = measurements && hasAnyNumericMeasurement ? calculateQuantities({
         lengthFt: measurements.lengthFt,
         widthFt: measurements.widthFt,
         ceilingHeightFt: measurements.ceilingHeightFt,
@@ -108,28 +164,34 @@ export default function BriefStep() {
         countertopLinearFt: measurements.countertopLinearFt,
         showerLengthFt: measurements.showerLength,
         showerWidthFt: measurements.showerWidth,
+        doorWidthFt: measurements.doorWidth,
+        doorHeightFt: measurements.doorHeight,
+        windowWidthFt: measurements.windowWidth,
+        windowHeightFt: measurements.windowHeight,
+        floorTileAreaSqf: measurements.floorTileArea,
+        wallTileAreaSqf: measurements.wallTileArea,
       }) : null;
+      const quantityLines = measuredQuantityLines(quantities)
+        .filter(([, value]) => Number.isFinite(value) && value > 0)
+        .map(([label, value, unit]) => `- ${label}: ${value} ${unit}`);
 
       // Calculate cost directly from Walker AI pricing data — do NOT let AI guess this
       const costEstimate = estimateProjectCost({
         roomType: roomType as 'kitchen' | 'bathroom',
         qualityTier,
-        answers,
+        answers: pricingAnswers,
         quantities,
+        provinceCode,
+      });
+      const confidenceEstimate = calculateEstimateConfidence({
+        roomType: roomType as 'kitchen' | 'bathroom',
+        answers: pricingAnswers,
+        hasMeasurements: hasCoreRoomMeasurements,
+        analysisResult,
       });
 
-      const quantitiesNote = quantities
-        ? `\nPre-calculated quantities from homeowner measurements (use these for line-item takeoffs):
-- Floor area: ${quantities.floor_area_sqf} sqf
-- Wall area (net): ${quantities.wall_area_net_sqf} sqf (gross: ${quantities.wall_area_gross_sqf} sqf)
-- Ceiling area: ${quantities.ceiling_area_sqf} sqf
-- Perimeter: ${quantities.perimeter_lf} LF
-- Baseboard: ${quantities.baseboard_lf} LF
-- Door/window casing: ${quantities.casing_lf} LF
-- Floor tile (with waste): ${quantities.floor_tile_sqf} sqf
-- Upper cabinet run: ${quantities.upper_cabinet_lf} LF
-- Lower cabinet run: ${quantities.lower_cabinet_lf} LF
-- Countertop: ${quantities.countertop_lf} LF\n`
+      const quantitiesNote = quantityLines.length > 0
+        ? `\nAvailable measured quantities from homeowner input (use only these positive values for line-item takeoffs; use defaults for missing quantities):\n${quantityLines.join('\n')}\n`
         : '';
 
       const materialsTarget = roomType === 'kitchen' ? '18–25' : '12–18';
@@ -144,6 +206,9 @@ ${JSON.stringify(analysisResult, null, 2)}
 
 === HOMEOWNER SELECTIONS ===
 ${answerSummary}
+
+=== FINISH CUSTOMIZER SELECTIONS ===
+${finishSummary}
 
 === QUALITY TIER: ${qualityTier.toUpperCase()} ===
 The homeowner selected "${qualityTier}" quality. ALL materials must be "${qualityTier}" grade.
@@ -172,24 +237,24 @@ Return a valid JSON object — no markdown, no explanation, just the JSON:
     { "permit_type": "string", "required": true }
   ],
   "ai_observations": "2-3 sentence summary for the homeowner",
-  "confidence_score": number,
-  "confidence_notes": "string"
+  "confidence_score": ${confidenceEstimate.score},
+  "confidence_notes": ${JSON.stringify(confidenceEstimate.notes)}
 }
 
 RULES:
 1. ai_cost_min and ai_cost_max: copy the exact values above (${costEstimate.min} and ${costEstimate.max}). Do not change them.
 2. QUALITY TIER: All materials MUST use quality_tier: "${qualityTier}". For luxury: name premium brands (Thermador, Sub-Zero, Caesarstone, Kohler Artifacts, Wolf). For budget: name stock-grade products. For mid-range: semi-custom grades.
-3. MATERIALS LIST: Include ${materialsTarget} line items matching the cost breakdown above. Include cabinets (upper + lower), countertops, backsplash tile, flooring, drywall repair, paint (walls + ceiling), plumbing fixtures, electrical fixtures, hardware, trim/baseboard, disposal. Add appliances if homeowner selected replacement.
+3. MATERIALS LIST: Include ${materialsTarget} line items that match the cost breakdown above and the finish customizer selections. Treat "Homeowner selected" and "From questionnaire" finishes as homeowner intent; treat "Preview default" finishes only as visual placeholders. Do not add cabinets, countertops, backsplash, flooring, appliances, demolition, or other work the homeowner selected to keep unless the pricing engine cost breakdown includes that line. Add appliances only if homeowner selected replacement.
 4. SCOPE: Cover all phases in logical order (demolition → rough-in → installation → finishing).
-5. PERMITS: List realistic Ontario Building Code permit requirements.
-6. CONFIDENCE: Start at 90, deduct for structural changes (-15), drain relocation (-12), no measurements provided (-8), pre-1980 home (-10). Minimum 30.
+5. PERMITS: List realistic local Canadian permit requirements for ${provinceCode}. Mention Ontario Building Code only when the project province is ON; otherwise use the local authority having jurisdiction for that province/municipality.
+6. CONFIDENCE: copy confidence_score ${confidenceEstimate.score} and confidence_notes ${JSON.stringify(confidenceEstimate.notes)}. Do not recalculate confidence.
 7. Return ONLY the JSON.`;
 
       // Route through edge function — API key stays server-side, DB writes handled there
       const { data: briefResponse, error: briefError } = await supabase.functions.invoke('generate-project-brief', {
         body: {
           project_id: projectId,
-          questionnaire_answers: answers,
+          questionnaire_answers: persistedAnswers,
           province,
           custom_prompt: prompt,
           forced_cost_min: costEstimate.min,
@@ -197,20 +262,25 @@ RULES:
         },
       });
 
-      if (briefError) throw new Error(`Brief generation failed: ${briefError.message}`);
+      if (briefError) throw new Error(`Brief generation failed: ${await formatSupabaseFunctionError(briefError)}`);
       if (!briefResponse?.materials) throw new Error('Invalid response from brief generator.');
 
       const briefData: BriefData = {
         ...briefResponse,
         ai_cost_min: costEstimate.min,
         ai_cost_max: costEstimate.max,
+        confidence_score: confidenceEstimate.score,
+        confidence_notes: confidenceEstimate.notes,
       };
 
       // Persist confidence score if present (edge function doesn't handle this field)
       if (briefData.confidence_score != null) {
-        await supabase.from('projects')
+        const { error: confidenceError } = await supabase.from('projects')
           .update({ ai_confidence_score: briefData.confidence_score })
           .eq('id', projectId);
+        if (confidenceError && !isMissingColumnError(confidenceError.message)) {
+          throw new Error(`Brief saved but confidence score update failed: ${confidenceError.message}`);
+        }
       }
 
       setBrief(briefData);
@@ -219,15 +289,51 @@ RULES:
     } finally {
       setLoading(false);
     }
-  }, [projectId, analysisResult, answers, selectedRenderId, address, province, measurements]);
+  }, [projectId, analysisResult, answers, selectedRenderId, province, measurements, surfaceSelections]);
 
   useEffect(() => {
     generateBrief();
   }, [generateBrief]);
 
-  const handleConfirm = () => {
-    useProjectWizardStore.getState().setStep(7);
-    navigation.navigate('Confirm');
+  const handleConfirm = async () => {
+    if (!projectId) {
+      setError('Project is missing. Go back and complete photo analysis before dispatching.');
+      return;
+    }
+
+    try {
+      const updates = Object.entries(materialOverrides);
+      for (const [index, override] of updates) {
+        const sortOrder = Number(index);
+        const payload = {
+          quality_tier: override.quality_tier,
+          brand_preference: override.brand_preference ?? null,
+          color_finish: override.color_finish ?? null,
+          specific_model: override.specific_model ?? null,
+          contractor_notes: override.contractor_notes ?? null,
+        };
+
+        const { data, error: updateError } = await supabase
+          .from('materials')
+          .update(payload)
+          .eq('project_id', projectId)
+          .eq('sort_order', sortOrder)
+          .select('id')
+          .maybeSingle();
+        if (updateError) {
+          if (isMissingColumnError(updateError.message)) continue;
+          throw new Error(`Could not save ${brief?.materials[sortOrder]?.item ?? 'material'} details: ${updateError.message}`);
+        }
+        if (!data) {
+          throw new Error(`Could not save ${brief?.materials[sortOrder]?.item ?? 'material'} details because the material row is no longer available.`);
+        }
+      }
+
+      useProjectWizardStore.getState().setStep(8);
+      navigation.navigate('Confirm');
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to save material details.');
+    }
   };
 
   if (loading) {
@@ -247,6 +353,7 @@ RULES:
   }
 
   if (error || !brief) {
+    const needsAddress = /province is missing|address/i.test(error ?? '');
     return (
       <GradientBackground glow="center">
         <SafeAreaView style={styles.safe}>
@@ -255,8 +362,8 @@ RULES:
             <Text style={styles.loadingTitle}>Brief generation failed</Text>
             <Text style={styles.loadingSubtitle}>{error}</Text>
             <GlassButton
-              label="Retry"
-              onPress={generateBrief}
+              label={needsAddress ? 'Add Address' : 'Retry'}
+              onPress={needsAddress ? () => navigation.navigate('Address') : generateBrief}
               style={{ marginTop: 24 }}
             />
           </View>
@@ -272,11 +379,11 @@ RULES:
           contentContainerStyle={styles.scroll}
           showsVerticalScrollIndicator={false}
         >
-          <WizardHeader currentStep={6} />
+          <WizardHeader currentStep={7} />
 
-          <Text style={styles.stepLabel}>STEP 6 OF 8</Text>
+          <Text style={styles.stepLabel}>STEP 7 OF 8</Text>
           <Text style={styles.title}>Your project brief</Text>
-          <Text style={styles.subtitle}>Review the AI-generated plan before dispatching to contractors.</Text>
+          <Text style={styles.subtitle}>Review the measured scope, materials, permits, and pricing before dispatching to contractors.</Text>
 
           {/* Hero render or photo */}
           {(renderUrl || photos[0]?.url) && (
@@ -302,7 +409,7 @@ RULES:
               {formatCad(brief.ai_cost_min)} – {formatCad(brief.ai_cost_max)}
             </Text>
             <Text style={styles.costNote}>
-              AI estimate (±8%) · exact price confirmed by contractor quote
+              Pricing engine estimate · exact price confirmed by contractor quote
             </Text>
             {brief.confidence_score != null && (
               <View style={styles.confidenceRow}>
@@ -354,6 +461,7 @@ RULES:
                   onPress={() => navigation.navigate('MaterialDetail', {
                     materialIndex: i,
                     materialName: mat.item,
+                    materialQualityTier: activeTier,
                     quantity: mat.quantity,
                     unit: mat.unit,
                   })}
@@ -395,7 +503,7 @@ RULES:
           )}
 
           <GlassButton
-            label="Dispatch to Contractors"
+            label="Continue to Dispatch"
             onPress={handleConfirm}
             fullWidth
             size="lg"

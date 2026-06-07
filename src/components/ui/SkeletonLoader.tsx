@@ -30,7 +30,7 @@ export function Skeleton({ width = '100%', height = 16, radius = Radius.sm, styl
     );
     animation.start();
     return () => animation.stop();
-  }, []);
+  }, [shimmer]);
 
   const translateX = shimmer.interpolate({
     inputRange: [0, 1],

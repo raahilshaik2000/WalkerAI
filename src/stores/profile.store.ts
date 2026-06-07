@@ -63,10 +63,24 @@ export const useProfileStore = create<ProfileState>()(
     {
       name: 'walker-ai-profile',
       storage: createJSONStorage(() => AsyncStorage),
-      partialize: (state) => {
-        const { updateProfile, setAvatar, resetProfile, ...data } = state;
-        return data;
-      },
+      partialize: (state) => ({
+        displayName: state.displayName,
+        phone: state.phone,
+        address: state.address,
+        city: state.city,
+        province: state.province,
+        avatarUri: state.avatarUri,
+        pushEnabled: state.pushEnabled,
+        emailDigest: state.emailDigest,
+        smsAlerts: state.smsAlerts,
+        milestoneAlerts: state.milestoneAlerts,
+        quoteAlerts: state.quoteAlerts,
+        messageAlerts: state.messageAlerts,
+        faceId: state.faceId,
+        locationServices: state.locationServices,
+        analyticsEnabled: state.analyticsEnabled,
+        appearance: state.appearance,
+      }),
     },
   ),
 );

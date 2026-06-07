@@ -8,7 +8,6 @@ import {
   View,
   ViewStyle,
 } from 'react-native';
-import ReactNativeHapticFeedback from 'react-native-haptic-feedback';
 import { Colors, Radius } from '@/constants/theme';
 import { AnimatedPressable } from './AnimatedPressable';
 

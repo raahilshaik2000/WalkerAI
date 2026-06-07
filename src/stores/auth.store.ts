@@ -46,6 +46,9 @@ export const useAuthStore = create<AuthState>()(
         role: state.role,
       }),
       onRehydrateStorage: () => (state) => {
+        if (state?.session) {
+          state.setSession(state.session);
+        }
         state?.setHydrated(true);
       },
     }

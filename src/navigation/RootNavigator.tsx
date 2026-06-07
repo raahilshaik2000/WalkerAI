@@ -11,10 +11,11 @@ import { NavigationContainer } from '@react-navigation/native';
 import { createStackNavigator } from '@react-navigation/stack';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import Ionicons from 'react-native-vector-icons/Ionicons';
-import { Colors } from '@/constants/theme';
 import { useAuthStore } from '@/stores/auth.store';
+import { useProfileStore } from '@/stores/profile.store';
 import { supabase } from '@/lib/supabase/client';
 import { FloatingTabBar } from '@/components/ui/FloatingTabBar';
+import type { UserRole } from '@/constants/enums';
 
 // Auth screens
 import WelcomeScreen from '@/app/(auth)/index';
@@ -25,7 +26,7 @@ import RegisterScreen from '@/app/(auth)/register';
 import HomeownerDashboard from '@/app/(homeowner)/index';
 import HomeownerProjects from '@/app/(homeowner)/projects';
 import HomeownerMessages from '@/app/(homeowner)/messages';
-import HomeownerNotifications from '@/app/(homeowner)/notifications';
+import NotificationsScreen from '@/app/notifications';
 import HomeownerProfile from '@/app/(homeowner)/profile';
 import HomeownerSettings from '@/app/(homeowner)/settings';
 import SearchScreen from '@/app/(homeowner)/search';
@@ -34,13 +35,6 @@ import BrowseIdeasScreen from '@/app/(homeowner)/browse-ideas';
 import ScheduleScreen from '@/app/(homeowner)/schedule';
 import InspirationDetailScreen from '@/app/(homeowner)/inspiration-detail';
 import NewsDetailScreen from '@/app/(homeowner)/news-detail';
-import ProjectDetailViewScreen from '@/app/(homeowner)/project-detail-view';
-import DetailMilestonesScreen from '@/app/(homeowner)/project/detail/milestones';
-import DetailMessagesScreen from '@/app/(homeowner)/project/detail/messages';
-import DetailQuoteScreen from '@/app/(homeowner)/project/detail/quote';
-import DetailPermitsScreen from '@/app/(homeowner)/project/detail/permits';
-import DetailChangeOrdersScreen from '@/app/(homeowner)/project/detail/change-orders';
-import DetailReviewScreen from '@/app/(homeowner)/project/detail/review';
 import ChatScreen from '@/app/(homeowner)/chat';
 import EditProfileScreen from '@/app/(homeowner)/edit-profile';
 import MyReviewsScreen from '@/app/(homeowner)/my-reviews';
@@ -78,6 +72,7 @@ import ProjectQuote from '@/app/(homeowner)/project/[id]/quote';
 import ProjectReview from '@/app/(homeowner)/project/[id]/review';
 import ProjectMaterials from '@/app/(homeowner)/project/[id]/materials';
 import ProjectSchedule from '@/app/(homeowner)/project/[id]/schedule';
+import ProjectWarranties from '@/app/(homeowner)/project/[id]/warranties';
 
 // Supplier navigator
 import { SupplierNavigator } from '@/navigation/SupplierNavigator';
@@ -101,6 +96,8 @@ import JobMessages from '@/app/(company)/job/[id]/messages';
 import JobMilestones from '@/app/(company)/job/[id]/milestones';
 import JobQuoteBuilder from '@/app/(company)/job/[id]/quote-builder';
 import JobMaterials from '@/app/(company)/job/[id]/materials';
+import JobWarranties from '@/app/(company)/job/[id]/warranties';
+import JobReview from '@/app/(company)/job/[id]/review';
 
 const Stack = createStackNavigator();
 const Tab = createBottomTabNavigator();
@@ -264,6 +261,7 @@ function ProjectDetailNavigator() {
       <ProjectDetailStack.Screen name="Review" component={ProjectReview} />
       <ProjectDetailStack.Screen name="Materials" component={ProjectMaterials} />
       <ProjectDetailStack.Screen name="ProjectSchedule" component={ProjectSchedule} />
+      <ProjectDetailStack.Screen name="Warranties" component={ProjectWarranties} />
     </ProjectDetailStack.Navigator>
   );
 }
@@ -276,20 +274,13 @@ function HomeownerNavigator() {
       <HomeownerStack.Screen name="DIYCreate" component={DIYCreateNavigator} />
       <HomeownerStack.Screen name="ProjectDetail" component={ProjectDetailNavigator} />
       <HomeownerStack.Screen name="Settings" component={HomeownerSettings} />
-      <HomeownerStack.Screen name="Notifications" component={HomeownerNotifications} />
+      <HomeownerStack.Screen name="Notifications" component={NotificationsScreen} />
       <HomeownerStack.Screen name="Search" component={SearchScreen} />
       <HomeownerStack.Screen name="FindPro" component={FindProScreen} />
       <HomeownerStack.Screen name="BrowseIdeas" component={BrowseIdeasScreen} />
       <HomeownerStack.Screen name="Schedule" component={ScheduleScreen} />
       <HomeownerStack.Screen name="InspirationDetail" component={InspirationDetailScreen} />
       <HomeownerStack.Screen name="NewsDetail" component={NewsDetailScreen} />
-      <HomeownerStack.Screen name="ProjectDetailView" component={ProjectDetailViewScreen} />
-      <HomeownerStack.Screen name="DetailMilestones" component={DetailMilestonesScreen} />
-      <HomeownerStack.Screen name="DetailMessages" component={DetailMessagesScreen} />
-      <HomeownerStack.Screen name="DetailQuote" component={DetailQuoteScreen} />
-      <HomeownerStack.Screen name="DetailPermits" component={DetailPermitsScreen} />
-      <HomeownerStack.Screen name="DetailChangeOrders" component={DetailChangeOrdersScreen} />
-      <HomeownerStack.Screen name="DetailReview" component={DetailReviewScreen} />
       <HomeownerStack.Screen name="DIYGuide" component={DIYGuideScreen} />
       <HomeownerStack.Screen name="Chat" component={ChatScreen} />
       <HomeownerStack.Screen name="EditProfile" component={EditProfileScreen} />
@@ -311,6 +302,8 @@ function JobDetailNavigator() {
       <JobDetailStack.Screen name="JobMilestones" component={JobMilestones} />
       <JobDetailStack.Screen name="QuoteBuilder" component={JobQuoteBuilder} />
       <JobDetailStack.Screen name="JobMaterials" component={JobMaterials} />
+      <JobDetailStack.Screen name="JobWarranties" component={JobWarranties} />
+      <JobDetailStack.Screen name="JobReview" component={JobReview} />
     </JobDetailStack.Navigator>
   );
 }
@@ -323,36 +316,108 @@ function CompanyNavigator() {
       <CompanyStack.Screen name="BusinessOnboarding" component={BusinessOnboarding} />
       <CompanyStack.Screen name="LicenseOnboarding" component={LicenseOnboarding} />
       <CompanyStack.Screen name="InsuranceOnboarding" component={InsuranceOnboarding} />
+      <CompanyStack.Screen name="Notifications" component={NotificationsScreen} />
       <CompanyStack.Screen name="JobDetail" component={JobDetailNavigator} />
     </CompanyStack.Navigator>
   );
 }
 
 export function RootNavigator() {
-  const { session, role, hydrated, setSession, setHydrated } = useAuthStore();
+  const { session, role, hydrated, setSession, setHydrated, setRole } = useAuthStore();
+  const updateProfile = useProfileStore((state) => state.updateProfile);
+  const resetProfile = useProfileStore((state) => state.resetProfile);
+
+  const applySession = useCallback(async (nextSession: typeof session) => {
+    setSession(nextSession);
+    if (!nextSession?.user?.id) {
+      resetProfile();
+      setHydrated(true);
+      return;
+    }
+
+    const metadataRole = nextSession.user.user_metadata?.role as UserRole | undefined;
+    let userResult: any = await supabase
+      .from('users')
+      .select('role, full_name, phone, avatar_url, address, city, province, postal_code')
+      .eq('id', nextSession.user.id)
+      .maybeSingle();
+
+    if (userResult.error && /column .*(avatar_url|address|postal_code).* does not exist/i.test(userResult.error.message ?? '')) {
+      userResult = await supabase
+        .from('users')
+        .select('role, full_name, phone, avatar_url')
+        .eq('id', nextSession.user.id)
+        .maybeSingle();
+    }
+
+    if (userResult.error && /column .*avatar_url.* does not exist/i.test(userResult.error.message ?? '')) {
+      userResult = await supabase
+        .from('users')
+        .select('role, full_name, phone')
+        .eq('id', nextSession.user.id)
+        .maybeSingle();
+    }
+
+    if (userResult.error && /column .* does not exist/i.test(userResult.error.message ?? '')) {
+      userResult = await supabase
+        .from('users')
+        .select('role')
+        .eq('id', nextSession.user.id)
+        .maybeSingle();
+    }
+
+    const data = userResult.data;
+    if (data) {
+      updateProfile({
+        displayName: data.full_name ?? '',
+        phone: data.phone ?? '',
+        avatarUri: data.avatar_url ?? null,
+        address: data.address ?? '',
+        city: data.city ?? '',
+        province: data.province ?? '',
+      });
+    }
+    setRole(((data?.role as UserRole | undefined) ?? metadataRole ?? null));
+    setHydrated(true);
+  }, [resetProfile, setHydrated, setRole, setSession, updateProfile]);
 
   useEffect(() => {
     const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, newSession) => {
-      setSession(newSession);
-      setHydrated(true);
+      applySession(newSession);
     });
     supabase.auth.getSession().then(({ data: { session: existingSession } }) => {
-      setSession(existingSession);
-      setHydrated(true);
+      applySession(existingSession);
     });
     return () => subscription.unsubscribe();
-  }, []);
+  }, [applySession]);
 
   if (!hydrated) return null;
+
+  const resolvedRole = role === 'homeowner' || role === 'company' || role === 'supplier' || role === 'admin'
+    ? role
+    : null;
+  if (session && !resolvedRole) {
+    return (
+      <View style={roleFallbackStyles.container}>
+        <Text style={roleFallbackStyles.title}>Account setup incomplete</Text>
+        <Text style={roleFallbackStyles.body}>
+          Your account role is missing. Sign out and sign in again, or contact support if this keeps happening.
+        </Text>
+        <TouchableOpacity style={roleFallbackStyles.button} onPress={() => supabase.auth.signOut()}>
+          <Text style={roleFallbackStyles.buttonText}>Sign Out</Text>
+        </TouchableOpacity>
+      </View>
+    );
+  }
 
   return (
     <NavigationContainer theme={{ dark: true, colors: { primary: '#FF6B00', background: '#000000', card: '#000000', text: '#FFFFFF', border: 'transparent', notification: '#FF6B00' }, fonts: { regular: { fontFamily: 'System', fontWeight: '400' }, medium: { fontFamily: 'System', fontWeight: '500' }, bold: { fontFamily: 'System', fontWeight: '700' }, heavy: { fontFamily: 'System', fontWeight: '900' } } }}>
       <Stack.Navigator screenOptions={{ headerShown: false }}>
         {!session ? (
           <Stack.Screen name="Auth" component={AuthNavigator} />
-        ) : role === 'homeowner' ? (
+        ) : resolvedRole === 'homeowner' ? (
           <Stack.Screen name="Homeowner" component={HomeownerNavigator} />
-        ) : role === 'supplier' ? (
+        ) : resolvedRole === 'supplier' ? (
           <Stack.Screen name="Supplier" component={SupplierNavigator} />
         ) : (
           <Stack.Screen name="Company" component={CompanyNavigator} />
@@ -361,3 +426,24 @@ export function RootNavigator() {
     </NavigationContainer>
   );
 }
+
+const roleFallbackStyles = StyleSheet.create({
+  container: {
+    flex: 1,
+    backgroundColor: '#000',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: 24,
+  },
+  title: { color: '#fff', fontSize: 22, fontWeight: '800', textAlign: 'center', marginBottom: 10 },
+  body: { color: 'rgba(255,255,255,0.65)', fontSize: 15, lineHeight: 22, textAlign: 'center', marginBottom: 20 },
+  button: {
+    minHeight: 48,
+    paddingHorizontal: 28,
+    borderRadius: 14,
+    backgroundColor: '#FF6B00',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  buttonText: { color: '#000', fontSize: 15, fontWeight: '800' },
+});

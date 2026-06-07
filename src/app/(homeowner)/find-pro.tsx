@@ -3,7 +3,7 @@ import { StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import Ionicons from 'react-native-vector-icons/Ionicons';
 import { useNavigation } from '@react-navigation/native';
-import { GradientBackground } from '@/components/ui';
+import { GlassButton, GradientBackground } from '@/components/ui';
 import { Colors } from '@/constants/theme';
 
 export default function FindProScreen() {
@@ -19,11 +19,22 @@ export default function FindProScreen() {
           <View style={{ width: 36 }} />
         </View>
         <View style={styles.empty}>
-          <Ionicons name="construct-outline" size={48} color={Colors.text.tertiary} />
-          <Text style={styles.emptyTitle}>Coming soon</Text>
+          <Ionicons name="people-outline" size={48} color={Colors.text.tertiary} />
+          <Text style={styles.emptyTitle}>Get Matched With a Pro</Text>
           <Text style={styles.emptySub}>
-            WalkerAI automatically matches you with vetted contractors based on your project. Direct contractor browsing is on the roadmap.
+            WalkerAI matches each project with vetted contractors based on scope, location, trade type, and schedule.
           </Text>
+          <GlassButton
+            label="Start a Project"
+            onPress={() => navigation.navigate('ProjectCreate')}
+            variant="primary"
+            size="md"
+            haptic
+            style={styles.primaryButton}
+          />
+          <TouchableOpacity style={styles.secondaryLink} onPress={() => navigation.navigate('Projects')}>
+            <Text style={styles.secondaryText}>View existing projects</Text>
+          </TouchableOpacity>
         </View>
       </SafeAreaView>
     </GradientBackground>
@@ -38,4 +49,7 @@ const styles = StyleSheet.create({
   empty: { flex: 1, alignItems: 'center', justifyContent: 'center', paddingHorizontal: 32, gap: 10 },
   emptyTitle: { fontSize: 16, fontWeight: '600', color: '#fff' },
   emptySub: { fontSize: 13, color: Colors.text.tertiary, textAlign: 'center', lineHeight: 20 },
+  primaryButton: { marginTop: 12, alignSelf: 'center' },
+  secondaryLink: { paddingVertical: 10, paddingHorizontal: 8 },
+  secondaryText: { fontSize: 13, fontWeight: '600', color: Colors.text.secondary },
 });

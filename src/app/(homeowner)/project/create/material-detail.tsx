@@ -14,10 +14,15 @@ import { useNavigation, useRoute } from '@react-navigation/native';
 import Ionicons from 'react-native-vector-icons/Ionicons';
 import { useProjectWizardStore, type MaterialOverride } from '@/stores/project-wizard.store';
 import { lookupMaterialPrice } from '@/data/pricing-reference';
+import {
+  parseMaterialDetailRouteParams,
+  type MaterialDetailRouteParams,
+  type MaterialQualityTier,
+} from '@/lib/material-detail-route';
 import { GradientBackground } from '@/components/ui';
-import { Colors, Radius, Spacing, Typography } from '@/constants/theme';
+import { Colors, Radius, Spacing } from '@/constants/theme';
 
-type QualityTier = 'budget' | 'mid-range' | 'luxury';
+type QualityTier = MaterialQualityTier;
 
 const TIERS: { id: QualityTier; label: string; icon: string; color: string; description: string; example: string }[] = [
   {
@@ -59,17 +64,48 @@ const TIER_PRICE_KEY: Record<QualityTier, 'low' | 'avg' | 'high'> = {
 export default function MaterialDetailScreen() {
   const navigation = useNavigation<any>();
   const route = useRoute<any>();
-  const { materialIndex, materialName, quantity, unit } = route.params as {
-    materialIndex: number;
-    materialName: string;
-    quantity: number;
-    unit: string;
-  };
+  const params = parseMaterialDetailRouteParams(route.params);
+
+  if (!params) {
+    return (
+      <GradientBackground>
+        <SafeAreaView style={styles.safe}>
+          <View style={styles.header}>
+            <TouchableOpacity style={styles.backBtn} onPress={() => navigation.goBack()}>
+              <Ionicons name="chevron-back" size={22} color="#fff" />
+            </TouchableOpacity>
+            <View style={styles.headerCenter}>
+              <Text style={styles.headerTitle}>Material unavailable</Text>
+              <Text style={styles.headerSub}>Open this from the project brief.</Text>
+            </View>
+            <View style={{ width: 64 }} />
+          </View>
+
+          <View style={styles.emptyState}>
+            <View style={styles.emptyIcon}>
+              <Ionicons name="construct-outline" size={28} color={Colors.text.secondary} />
+            </View>
+            <Text style={styles.emptyTitle}>Material details unavailable</Text>
+            <Text style={styles.emptyText}>
+              This material preference could not be opened. Go back to the project brief and choose a material again.
+            </Text>
+          </View>
+        </SafeAreaView>
+      </GradientBackground>
+    );
+  }
+
+  return <MaterialDetailEditor params={params} />;
+}
+
+function MaterialDetailEditor({ params }: { params: MaterialDetailRouteParams }) {
+  const navigation = useNavigation<any>();
+  const { materialIndex, materialName, materialQualityTier, quantity, unit } = params;
 
   const { materialOverrides, setMaterialOverride } = useProjectWizardStore();
   const existing = materialOverrides[materialIndex] ?? {};
 
-  const [tier, setTier] = useState<QualityTier>(existing.quality_tier ?? 'mid-range');
+  const [tier, setTier] = useState<QualityTier>(existing.quality_tier ?? materialQualityTier ?? 'mid-range');
 
   const priceData = lookupMaterialPrice(materialName);
   const [brand, setBrand] = useState(existing.brand_preference ?? '');
@@ -238,4 +274,35 @@ const styles = StyleSheet.create({
 
   saveFullBtn: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, backgroundColor: '#FF6B00', borderRadius: Radius.card, paddingVertical: 16, marginTop: 28 },
   saveFullBtnText: { fontSize: 16, fontWeight: '700', color: '#000' },
+  emptyState: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: 28,
+    paddingBottom: 80,
+  },
+  emptyIcon: {
+    width: 64,
+    height: 64,
+    borderRadius: 20,
+    backgroundColor: Colors.glass.surface,
+    borderWidth: 1,
+    borderColor: Colors.glass.border,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: 16,
+  },
+  emptyTitle: {
+    fontSize: 20,
+    fontWeight: '700',
+    color: '#fff',
+    marginBottom: 8,
+    textAlign: 'center',
+  },
+  emptyText: {
+    fontSize: 14,
+    color: Colors.text.secondary,
+    lineHeight: 20,
+    textAlign: 'center',
+  },
 });

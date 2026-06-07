@@ -1,4 +1,4 @@
-import React, { useRef, useState } from 'react';
+import React, { useState } from 'react';
 import {
   Dimensions,
   FlatList,
@@ -24,9 +24,32 @@ const HERO_HEIGHT = SCREEN_HEIGHT * 0.5;
 export default function InspirationDetailScreen() {
   const navigation = useNavigation<any>();
   const route = useRoute<any>();
-  const item: InspirationItem = route.params?.item;
-  const [saved, setSaved] = useState(false);
+  const item = route.params?.item as InspirationItem | undefined;
   const [activeIndex, setActiveIndex] = useState(0);
+
+  if (!item) {
+    return (
+      <GradientBackground>
+        <SafeAreaView style={styles.emptySafe}>
+          <View style={styles.emptyHeader}>
+            <AnimatedPressable style={styles.iconBtn} haptic onPress={() => navigation.goBack()}>
+              <Ionicons name="arrow-back" size={20} color="#fff" />
+            </AnimatedPressable>
+          </View>
+
+          <View style={styles.emptyState}>
+            <View style={styles.emptyIcon}>
+              <Ionicons name="images-outline" size={28} color={Colors.text.secondary} />
+            </View>
+            <Text style={styles.emptyTitle}>Inspiration unavailable</Text>
+            <Text style={styles.emptyText}>
+              This design concept could not be opened. Go back and choose another idea.
+            </Text>
+          </View>
+        </SafeAreaView>
+      </GradientBackground>
+    );
+  }
 
   const images = item.images?.length ? item.images : [item.imageUrl];
   const similar = ALL_INSPIRATION_ITEMS.filter((i) => i.id !== item.id).slice(0, 6);
@@ -65,17 +88,7 @@ export default function InspirationDetailScreen() {
               <AnimatedPressable style={styles.iconBtn} haptic onPress={() => navigation.goBack()}>
                 <Ionicons name="arrow-back" size={20} color="#fff" />
               </AnimatedPressable>
-              <AnimatedPressable
-                style={styles.iconBtn}
-                haptic
-                onPress={() => setSaved(!saved)}
-              >
-                <Ionicons
-                  name={saved ? 'heart' : 'heart-outline'}
-                  size={20}
-                  color={saved ? '#EF4444' : '#fff'}
-                />
-              </AnimatedPressable>
+              <View style={styles.iconBtnSpacer} />
             </SafeAreaView>
 
             {/* Page dots */}
@@ -99,12 +112,6 @@ export default function InspirationDetailScreen() {
               </Text>
             </View>
             <Text style={styles.title}>{item.title}</Text>
-            <View style={styles.savesRow}>
-              <Ionicons name="heart" size={14} color="rgba(255,255,255,0.5)" />
-              <Text style={styles.savesText}>
-                {(saved ? item.saves + 1 : item.saves).toLocaleString()} saves
-              </Text>
-            </View>
 
             {/* Similar Ideas */}
             <Text style={styles.sectionTitle}>Similar Ideas</Text>
@@ -171,6 +178,10 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
+  iconBtnSpacer: {
+    width: 40,
+    height: 40,
+  },
 
   // Page dots
   dotsContainer: {
@@ -210,9 +221,7 @@ const styles = StyleSheet.create({
     marginBottom: 12,
   },
   pillText: { fontSize: 11, fontWeight: '700', letterSpacing: 0.3, textTransform: 'uppercase' },
-  title: { fontSize: 26, fontWeight: '700', color: '#fff', letterSpacing: -0.3, marginBottom: 8 },
-  savesRow: { flexDirection: 'row', alignItems: 'center', gap: 6, marginBottom: 28 },
-  savesText: { fontSize: 13, color: Colors.text.secondary },
+  title: { fontSize: 26, fontWeight: '700', color: '#fff', letterSpacing: -0.3, marginBottom: 28 },
   sectionTitle: {
     fontSize: 17,
     fontWeight: '700',
@@ -249,5 +258,41 @@ const styles = StyleSheet.create({
     fontSize: 12,
     fontWeight: '600',
     color: '#fff',
+  },
+  emptySafe: {
+    flex: 1,
+  },
+  emptyHeader: {
+    paddingHorizontal: 16,
+    paddingTop: 8,
+  },
+  emptyState: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: 28,
+    paddingBottom: 80,
+  },
+  emptyIcon: {
+    width: 64,
+    height: 64,
+    borderRadius: 20,
+    backgroundColor: Colors.surface.default,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: 16,
+  },
+  emptyTitle: {
+    fontSize: 20,
+    fontWeight: '700',
+    color: '#fff',
+    marginBottom: 8,
+    textAlign: 'center',
+  },
+  emptyText: {
+    fontSize: 14,
+    color: Colors.text.secondary,
+    lineHeight: 20,
+    textAlign: 'center',
   },
 });

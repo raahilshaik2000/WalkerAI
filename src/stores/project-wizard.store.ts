@@ -10,11 +10,23 @@ export interface MaterialOverride {
   contractor_notes?: string;
 }
 
+export interface SurfaceSelection {
+  surfaceId: string;
+  surfaceLabel: string;
+  material: string;
+  colorName: string;
+  colorHex: string;
+  answerId?: string;
+}
+
 export interface UploadedPhoto {
   id: string;
   uri: string;           // local URI (for display)
   url: string;           // Supabase public URL (set after upload)
   base64?: string;       // base64-encoded image data (no data: prefix)
+  fileName?: string;
+  extension?: string;
+  contentType?: string;
   storagePath?: string;
   status: 'pending' | 'uploading' | 'done' | 'error';
   progress: number;
@@ -63,6 +75,22 @@ export interface RoomMeasurements {
   wallTileArea?: string;
 }
 
+export interface RoomScanData {
+  roomDimensions?: {
+    length?: number;
+    width?: number;
+    height?: number;
+    area?: number;
+  };
+  walls?: unknown[];
+  doors?: unknown[];
+  windows?: unknown[];
+  objects?: unknown[];
+  usdzFilePath?: string;
+  isMock?: boolean;
+  [key: string]: unknown;
+}
+
 interface ProjectWizardState {
   // Step 1
   address: string;
@@ -86,9 +114,13 @@ interface ProjectWizardState {
 
   // Step 3 – optional manual measurements
   measurements: RoomMeasurements | null;
+  roomScanData: RoomScanData | null;
 
   // Step 6 – material detail overrides keyed by material index
   materialOverrides: Record<number, MaterialOverride>;
+
+  // Step 5 – finish customizer selections keyed by room surface
+  surfaceSelections: Record<string, SurfaceSelection>;
 
   // DB
   projectId: string | null;
@@ -108,7 +140,9 @@ interface ProjectWizardState {
   nextQuestion: (nextQuestionId?: string | null) => void;
   setSelectedRender: (renderId: string | null) => void;
   setMeasurements: (measurements: RoomMeasurements | null) => void;
+  setRoomScanData: (scanData: RoomScanData | null) => void;
   setMaterialOverride: (index: number, override: MaterialOverride) => void;
+  setSurfaceSelection: (selection: SurfaceSelection) => void;
   setProjectId: (id: string) => void;
   setStep: (step: ProjectWizardState['step']) => void;
   reset: () => void;
@@ -117,7 +151,7 @@ interface ProjectWizardState {
 const initialState: Omit<ProjectWizardState,
   | 'setAddress' | 'setRoomType' | 'addPhoto' | 'updatePhoto' | 'removePhoto'
   | 'setAnalysisResult' | 'setQuestions' | 'setAnswer' | 'nextQuestion'
-  | 'setSelectedRender' | 'setMeasurements' | 'setMaterialOverride' | 'setProjectId' | 'setStep' | 'reset'
+  | 'setSelectedRender' | 'setMeasurements' | 'setRoomScanData' | 'setMaterialOverride' | 'setSurfaceSelection' | 'setProjectId' | 'setStep' | 'reset'
 > = {
   address: '',
   coordinates: null,
@@ -125,12 +159,14 @@ const initialState: Omit<ProjectWizardState,
   photos: [],
   roomType: null,
   measurements: null,
+  roomScanData: null,
   analysisResult: null,
   questions: [],
   answers: {},
   currentQuestionIndex: 0,
   selectedRenderId: null,
   materialOverrides: {},
+  surfaceSelections: {},
   projectId: null,
   step: 1,
 };
@@ -179,9 +215,16 @@ export const useProjectWizardStore = create<ProjectWizardState>()((set, get) => 
 
   setMeasurements: (measurements) => set({ measurements }),
 
+  setRoomScanData: (roomScanData) => set({ roomScanData }),
+
   setMaterialOverride: (index, override) =>
     set((state) => ({
       materialOverrides: { ...state.materialOverrides, [index]: { ...state.materialOverrides[index], ...override } },
+    })),
+
+  setSurfaceSelection: (selection) =>
+    set((state) => ({
+      surfaceSelections: { ...state.surfaceSelections, [selection.surfaceId]: selection },
     })),
 
   setProjectId: (projectId) => set({ projectId }),

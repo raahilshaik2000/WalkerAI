@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import {
   ActivityIndicator,
   Image,
+  Platform,
   ScrollView,
   StyleSheet,
   Text,
@@ -14,42 +15,91 @@ import { useNavigation } from '@react-navigation/native';
 import ReactNativeHapticFeedback from 'react-native-haptic-feedback';
 import { supabase } from '@/lib/supabase/client';
 import { useProjectWizardStore } from '@/stores/project-wizard.store';
+import {
+  shouldGenerateImagePreview,
+  shouldLoadExistingImagePreviews,
+  visualPreviewUnavailableMessage,
+} from '@/lib/visual-preview';
 import { Colors, Radius, Spacing, Typography } from '@/constants/theme';
+import { USDZViewer } from '@/components/room-scan';
+import { RoomMaterialCustomizer } from '@/components/project/RoomMaterialCustomizer';
 import { GlassButton, GlassCard, GradientBackground, WizardHeader } from '@/components/ui';
 
 interface Render {
   id: string;
   url: string;
   style_params: Record<string, string>;
+  selected?: boolean | null;
 }
 
 export default function RendersStep() {
   const navigation = useNavigation<any>();
-  const { projectId, analysisResult, answers, setSelectedRender } = useProjectWizardStore();
+  const {
+    projectId,
+    answers,
+    roomType,
+    roomScanData,
+    surfaceSelections,
+    setSelectedRender,
+    setSurfaceSelection,
+  } = useProjectWizardStore();
 
   const [renders, setRenders] = useState<Render[]>([]);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
+  const [renderError, setRenderError] = useState<string | null>(null);
+  const hasRoomModel = !!roomScanData;
+  const subtitle = hasRoomModel
+    ? 'Use your measured room model as the visual reference, then choose finishes for the contractor brief.'
+    : renders.length > 0
+    ? 'Select a style reference, then choose finishes for the contractor brief.'
+    : 'Choose finishes here so your project brief captures material preferences. Generated image previews are optional and not required.';
+  const primaryLabel = renders.length > 0 && !hasRoomModel
+    ? 'Save Preview & Build Brief'
+    : 'Continue to Project Brief';
 
   useEffect(() => {
     const generate = async () => {
+      if (!shouldLoadExistingImagePreviews(projectId, roomScanData)) {
+        setRenders([]);
+        setSelectedId(null);
+        setRenderError(projectId ? null : 'Project is missing. Continue to the brief or restart project creation.');
+        setLoading(false);
+        return;
+      }
+
+      if (!projectId) {
+        setRenderError('Project is missing. Continue to the brief or restart project creation.');
+        setLoading(false);
+        return;
+      }
       try {
-        const { data, error } = await supabase.functions.invoke('generate-render', {
-          body: { project_id: projectId, analysis: analysisResult, questionnaire_answers: answers },
-        });
-        if (!error && Array.isArray(data?.renders) && data.renders.length > 0) {
-          setRenders(data.renders);
+        setRenderError(null);
+        const { data: existingRenders, error: existingError } = await supabase
+          .from('renders')
+          .select('id, url, style_params, selected')
+          .eq('project_id', projectId)
+          .order('created_at', { ascending: true });
+        if (existingError) throw existingError;
+
+        if (Array.isArray(existingRenders) && existingRenders.length > 0) {
+          const typedRenders = existingRenders as Render[];
+          setRenders(typedRenders);
+          setSelectedId(typedRenders.find((render) => render.selected)?.id ?? typedRenders[0]?.id ?? null);
+          return;
         }
-        // fallback: data.renders === [] or error — show "coming soon" card
-      } catch {
-        // Silently fall through — renders are optional, brief generation works without them
+
+        if (!shouldGenerateImagePreview(projectId, roomScanData)) {
+          setRenderError(null);
+        }
+      } catch (err) {
+        setRenderError(visualPreviewUnavailableMessage(err instanceof Error ? err.message : 'Render generation failed.'));
       } finally {
         setLoading(false);
       }
     };
     generate();
-  }, []);
+  }, [projectId, roomScanData]);
 
   const handleSelect = (renderId: string) => {
     ReactNativeHapticFeedback.trigger('impactLight');
@@ -57,24 +107,54 @@ export default function RendersStep() {
   };
 
   const handleNext = async () => {
-    if (!selectedId && renders.length > 0) return;
+    if (!projectId) {
+      setSelectedRender(null);
+      useProjectWizardStore.getState().setStep(6);
+      navigation.navigate('Address');
+      return;
+    }
 
-    // Update DB with selected render
-    if (selectedId) {
-      await supabase
+    if (!roomScanData && !selectedId && renders.length > 0) return;
+
+    if (!roomScanData && selectedId) {
+      const { error: clearError } = await supabase
+        .from('renders')
+        .update({ selected: false })
+        .eq('project_id', projectId);
+      if (clearError) {
+        setRenderError(`Could not update render selection: ${clearError.message}`);
+        return;
+      }
+
+      const { data: selectedRender, error: selectError } = await supabase
         .from('renders')
         .update({ selected: true })
-        .eq('id', selectedId);
+        .eq('id', selectedId)
+        .eq('project_id', projectId)
+        .select('id')
+        .maybeSingle();
+      if (selectError) {
+        setRenderError(`Could not save selected render: ${selectError.message}`);
+        return;
+      }
+      if (!selectedRender) {
+        setRenderError('Selected render could not be found for this project.');
+        return;
+      }
 
-      await supabase
+      const { error: projectUpdateError } = await supabase
         .from('projects')
         .update({ selected_render_id: selectedId })
         .eq('id', projectId);
+      if (projectUpdateError) {
+        setRenderError(`Could not save project render selection: ${projectUpdateError.message}`);
+        return;
+      }
     }
 
-    setSelectedRender(selectedId);
+    setSelectedRender(roomScanData ? null : selectedId);
     useProjectWizardStore.getState().setStep(6);
-    navigation.navigate('Brief');
+    navigation.navigate('Address');
   };
 
   if (loading) {
@@ -83,8 +163,8 @@ export default function RendersStep() {
         <SafeAreaView style={styles.safe}>
           <View style={styles.loadingCenter}>
             <ActivityIndicator size="large" color={Colors.accent} />
-            <Text style={styles.loadingText}>Generating AI renders…</Text>
-            <Text style={styles.loadingSubtext}>This usually takes 15–30 seconds</Text>
+            <Text style={styles.loadingText}>Checking visual previews…</Text>
+            <Text style={styles.loadingSubtext}>Your finish selections and brief can continue without generated images</Text>
           </View>
         </SafeAreaView>
       </GradientBackground>
@@ -101,14 +181,32 @@ export default function RendersStep() {
           <WizardHeader currentStep={5} />
 
           <Text style={styles.stepLabel}>STEP 5 OF 8</Text>
-          <Text style={styles.title}>AI Renovation Renders</Text>
-          <Text style={styles.subtitle}>
-            {renders.length > 0
-              ? 'Select your favourite style to include in your project brief.'
-              : 'Visualise your renovation before it begins. Select a style to continue.'}
-          </Text>
+          <Text style={styles.title}>Optional Visual Preview</Text>
+          <Text style={styles.subtitle}>{subtitle}</Text>
 
-          {renders.length > 0 ? (
+          {roomScanData ? (
+            <GlassCard style={styles.modelCard}>
+              <View style={styles.modelHeader}>
+                <View>
+                  <Text style={styles.modelTitle}>Measured Room Model</Text>
+                  <Text style={styles.modelSubtitle}>
+                    {Platform.OS === 'ios' ? '3D scan reference' : 'Scan reference'}
+                  </Text>
+                </View>
+                <View style={styles.modelBadge}>
+                  <Ionicons name="cube-outline" size={14} color={Colors.accent} />
+                  <Text style={styles.modelBadgeText}>Measured</Text>
+                </View>
+              </View>
+              <View style={styles.modelViewer}>
+                <USDZViewer
+                  filePath={typeof roomScanData.usdzFilePath === 'string' ? roomScanData.usdzFilePath : null}
+                  scanData={roomScanData}
+                  style={styles.modelViewerInner}
+                />
+              </View>
+            </GlassCard>
+          ) : renders.length > 0 ? (
             <View style={styles.rendersGrid}>
               {renders.map((render) => {
                 const isSelected = selectedId === render.id;
@@ -145,17 +243,26 @@ export default function RendersStep() {
           ) : (
             <GlassCard style={styles.emptyCard}>
               <Ionicons name="color-palette-outline" size={40} color={Colors.text.tertiary} style={{ alignSelf: 'center', marginBottom: 10 }} />
-              <Text style={styles.emptyTitle}>Renders unavailable</Text>
+              <Text style={styles.emptyTitle}>Finish preview ready</Text>
               <Text style={styles.emptyNote}>
-                Render generation requires a render API key. Your project brief will be generated without a visual preview.
+                {renderError
+                  ? `${renderError}. The project brief can still continue from photos, measurements, and material preferences.`
+                  : 'Generated image previews are skipped for now. Use the finish customizer below to capture cabinet, countertop, tile, fixture, and color preferences.'}
               </Text>
             </GlassCard>
           )}
 
+          <RoomMaterialCustomizer
+            roomType={roomType}
+            selections={surfaceSelections}
+            answers={answers}
+            onSelect={setSurfaceSelection}
+          />
+
           <GlassButton
-            label="Generate Project Brief"
+            label={primaryLabel}
             onPress={handleNext}
-            disabled={renders.length > 0 && !selectedId}
+            disabled={renders.length > 0 && !hasRoomModel && !selectedId}
             fullWidth
             size="lg"
           />
@@ -179,6 +286,35 @@ const styles = StyleSheet.create({
   emptyCard: { marginBottom: Spacing.lg, alignItems: 'center', paddingVertical: Spacing.lg },
   emptyTitle: { ...Typography.h3, marginBottom: 8, textAlign: 'center' },
   emptyNote: { ...Typography.bodySecondary, textAlign: 'center', lineHeight: 20 },
+  modelCard: { marginBottom: Spacing.lg, padding: 14 },
+  modelHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: 12,
+    marginBottom: 12,
+  },
+  modelTitle: { ...Typography.h3 },
+  modelSubtitle: { ...Typography.caption, marginTop: 2 },
+  modelBadge: {
+    minHeight: 28,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 5,
+    borderRadius: Radius.pill,
+    borderWidth: 1,
+    borderColor: 'rgba(255, 107, 0, 0.25)',
+    backgroundColor: 'rgba(255, 107, 0, 0.08)',
+    paddingHorizontal: 10,
+  },
+  modelBadgeText: { fontSize: 12, fontWeight: '700', color: Colors.accent },
+  modelViewer: {
+    height: 260,
+    borderRadius: Radius.item,
+    overflow: 'hidden',
+    backgroundColor: Colors.bg.primary,
+  },
+  modelViewerInner: { borderRadius: Radius.item },
   rendersGrid: { gap: 16, marginBottom: Spacing.lg },
   renderCard: {
     borderRadius: Radius.card,

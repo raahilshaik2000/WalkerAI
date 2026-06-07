@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import {
   Alert,
   Image,
+  Linking,
   ScrollView,
   StyleSheet,
   Text,
@@ -14,8 +15,10 @@ import { useNavigation } from '@react-navigation/native'
 import { useRoute } from '@react-navigation/native';
 import { launchImageLibrary } from 'react-native-image-picker';
 import { supabase } from '@/lib/supabase/client';
-import { uploadFile } from '@/lib/supabase/storage';
+import { documentKindFromPath } from '@/lib/document-preview';
+import { getSignedUrl, getUploadMetadata, uploadFile } from '@/lib/supabase/storage';
 import { Colors, Radius, Spacing, Typography } from '@/constants/theme';
+import { getRequiredStringParam } from '@/lib/navigation-params';
 import { GlassCard, GradientBackground, StatusBadge } from '@/components/ui';
 
 interface Permit {
@@ -37,43 +40,84 @@ const STATUS_VARIANT: Record<string, any> = {
 
 export default function PermitsScreen() {
   const route = useRoute<any>();
-  const projectId = route.params?.id;
+  const projectId = getRequiredStringParam(route.params, 'id');
   const navigation = useNavigation<any>();
   const [permits, setPermits] = useState<Permit[]>([]);
   const [loading, setLoading] = useState(true);
+  const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  const [previewUrls, setPreviewUrls] = useState<Record<string, string>>({});
 
   useEffect(() => {
     const fetchPermits = async () => {
-      const { data } = await supabase
+      if (!projectId) {
+        setErrorMessage('Project is missing. Reopen permits from the project page.');
+        setLoading(false);
+        return;
+      }
+
+      const { data, error } = await supabase
         .from('permits')
         .select('id, permit_type, status, document_url')
         .eq('project_id', projectId);
-      setPermits(data ?? []);
+      if (error) {
+        setErrorMessage(`Could not load permits: ${error.message}`);
+        setLoading(false);
+        return;
+      }
+
+      const rows = (data ?? []) as Permit[];
+      setPermits(rows);
+      setErrorMessage(null);
       setLoading(false);
+
+      const previews: Record<string, string> = {};
+      await Promise.all(rows.map(async (permit) => {
+        if (!permit.document_url) return;
+        if (/^https?:\/\//i.test(permit.document_url)) {
+          previews[permit.id] = permit.document_url;
+          return;
+        }
+        try {
+          previews[permit.id] = await getSignedUrl('permits', permit.document_url, 3600);
+        } catch {
+          // Keep the permit visible even if the private preview URL cannot be minted.
+        }
+      }));
+      setPreviewUrls(previews);
     };
     fetchPermits();
   }, [projectId]);
 
-const handleUploadDoc = async (permit: Permit) => {
+  const handleUploadDoc = async (permit: Permit) => {
+    if (!projectId) {
+      Alert.alert('Missing project', 'Please reopen permits from the project page.');
+      return;
+    }
     const result = await launchImageLibrary({
       mediaType: 'photo',
       quality: 0.8,
       selectionLimit: 1,
+      assetRepresentationMode: 'compatible',
     });
     if (result.didCancel || !result.assets || !result.assets[0]) return;
 
     try {
-      const path = `${projectId}/${permit.id}-${Date.now()}.jpg`;
-      const { publicUrl } = await uploadFile('permits', path, result.assets[0].uri ?? '', 'image/jpeg');
+      const upload = getUploadMetadata(result.assets[0]);
+      const path = `${projectId}/${permit.id}-${Date.now()}.${upload.extension}`;
+      const { storagePath } = await uploadFile('permits', path, upload.uri, upload.contentType);
 
-      await supabase
+      const { error } = await supabase
         .from('permits')
-        .update({ document_url: publicUrl })
-        .eq('id', permit.id);
+        .update({ document_url: storagePath })
+        .eq('id', permit.id)
+        .eq('project_id', projectId);
+      if (error) throw error;
 
-      setPermits((prev) => prev.map((p) => p.id === permit.id ? { ...p, document_url: publicUrl } : p));
-    } catch {
-      Alert.alert('Upload failed', 'Please try again.');
+      const signedUrl = await getSignedUrl('permits', storagePath, 3600);
+      setPermits((prev) => prev.map((p) => p.id === permit.id ? { ...p, document_url: storagePath } : p));
+      setPreviewUrls((prev) => ({ ...prev, [permit.id]: signedUrl }));
+    } catch (err) {
+      Alert.alert('Upload failed', err instanceof Error ? err.message : 'Please try again.');
     }
   };
 
@@ -89,7 +133,13 @@ const handleUploadDoc = async (permit: Permit) => {
             <View style={{ width: 48 }} />
           </View>
 
-          {permits.length === 0 && !loading && (
+          {errorMessage && !loading && (
+            <GlassCard>
+              <Text style={styles.emptyText}>{errorMessage}</Text>
+            </GlassCard>
+          )}
+
+          {!errorMessage && permits.length === 0 && !loading && (
             <GlassCard>
               <Text style={styles.emptyText}>
                 No permits required for this project. Your contractor will advise if any permits become necessary during construction.
@@ -100,6 +150,8 @@ const handleUploadDoc = async (permit: Permit) => {
           {permits.map((permit) => {
             const stepIndex = PERMIT_STATUS_ORDER.indexOf(permit.status);
             const isPassed = permit.status === 'passed';
+            const previewUrl = previewUrls[permit.id];
+            const documentKind = documentKindFromPath(permit.document_url);
 
             return (
               <GlassCard key={permit.id} style={styles.permitCard}>
@@ -133,11 +185,29 @@ const handleUploadDoc = async (permit: Permit) => {
                 </View>
 
                 {/* Document */}
-                {permit.document_url ? (
-                  <Image source={{ uri: permit.document_url }} style={styles.docPreview} resizeMode="cover" />
+                {previewUrl && documentKind === 'image' ? (
+                  <Image source={{ uri: previewUrl }} style={styles.docPreview} resizeMode="cover" />
+                ) : previewUrl ? (
+                  <TouchableOpacity
+                    style={styles.documentRow}
+                    onPress={() => { void Linking.openURL(previewUrl); }}
+                    activeOpacity={0.82}
+                  >
+                    <View style={styles.documentIcon}>
+                      <Text style={styles.documentIconText}>{documentKind === 'pdf' ? 'PDF' : 'DOC'}</Text>
+                    </View>
+                    <View style={styles.documentTextWrap}>
+                      <Text style={styles.documentTitle}>
+                        {documentKind === 'pdf' ? 'Open permit PDF' : 'Open permit document'}
+                      </Text>
+                      <Text style={styles.documentSubtitle}>Stored securely in project permits</Text>
+                    </View>
+                  </TouchableOpacity>
                 ) : (
                   <TouchableOpacity style={styles.uploadArea} onPress={() => handleUploadDoc(permit)} activeOpacity={0.8}>
-                    <Text style={styles.uploadText}>📎 Upload permit document</Text>
+                    <Text style={styles.uploadText}>
+                      {permit.document_url ? 'Preview unavailable - upload replacement' : 'Upload permit photo'}
+                    </Text>
                   </TouchableOpacity>
                 )}
 
@@ -170,6 +240,31 @@ const styles = StyleSheet.create({
   progressLabel: { fontSize: 9, color: Colors.text.tertiary, textAlign: 'center', flex: 1 },
   progressLabelActive: { color: Colors.accent },
   docPreview: { width: '100%', height: 160, borderRadius: Radius.item, marginBottom: 12 },
+  documentRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+    borderRadius: Radius.item,
+    borderWidth: 1,
+    borderColor: Colors.glass.border,
+    backgroundColor: Colors.glass.surface,
+    padding: 12,
+    marginBottom: 12,
+  },
+  documentIcon: {
+    width: 44,
+    height: 44,
+    borderRadius: 12,
+    backgroundColor: 'rgba(255, 107, 0, 0.12)',
+    borderWidth: 1,
+    borderColor: 'rgba(255, 107, 0, 0.28)',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  documentIconText: { color: Colors.accent, fontSize: 11, fontWeight: '800' },
+  documentTextWrap: { flex: 1 },
+  documentTitle: { color: Colors.text.primary, fontSize: 14, fontWeight: '700' },
+  documentSubtitle: { ...Typography.caption, marginTop: 2 },
   uploadArea: {
     borderRadius: Radius.item,
     borderWidth: 1,

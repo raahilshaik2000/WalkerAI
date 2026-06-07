@@ -5,7 +5,7 @@ import Ionicons from 'react-native-vector-icons/Ionicons';
 import { useNavigation } from '@react-navigation/native';
 import { AnimatedPressable } from '@/components/ui';
 import { Colors, Radius, Spacing } from '@/constants/theme';
-import { NewsItem, NEWS_ITEMS } from './data';
+import { NEWS_ITEMS } from './data';
 import { SectionHeader } from './SectionHeader';
 import { useStaggeredEntrance } from './useStaggeredEntrance';
 
@@ -25,7 +25,7 @@ export function NewsAndUpdates() {
       <SectionHeader title="News & Updates" />
 
       <View style={styles.cards}>
-        {NEWS_ITEMS.map((item, i) => (
+        {NEWS_ITEMS.map((item) => (
           <AnimatedPressable key={item.id} style={styles.card} haptic onPress={() => navigation.navigate('NewsDetail', { item })}>
             <View style={[styles.iconWrap, { backgroundColor: item.iconBgColor + '22' }]}>
               <Ionicons name={item.icon as any} size={18} color={item.iconBgColor} />

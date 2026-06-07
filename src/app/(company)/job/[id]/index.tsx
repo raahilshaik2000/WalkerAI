@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useCallback, useState } from 'react';
 import {
   Alert,
   Image,
@@ -9,16 +9,19 @@ import {
   View,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { useNavigation } from '@react-navigation/native'
-import { useRoute } from '@react-navigation/native';
+import { useFocusEffect, useNavigation, useRoute } from '@react-navigation/native';
 import ReactNativeHapticFeedback from 'react-native-haptic-feedback';
 import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
 import Ionicons from 'react-native-vector-icons/Ionicons';
 import { supabase } from '@/lib/supabase/client';
+import { formatSupabaseFunctionError } from '@/lib/supabase/functions';
+import { isStripePayoutLocallyReady } from '@/lib/payouts';
+import { getRequiredStringParam } from '@/lib/navigation-params';
 import { useAuthStore } from '@/stores/auth.store';
 import { Colors, Radius, Spacing, Typography } from '@/constants/theme';
 import { GlassButton, GlassCard, GradientBackground, StatusBadge, CardSkeleton } from '@/components/ui';
 import { formatStatusLabel, formatCad } from '@/lib/formatters';
+import { readPersistedSurfaceSelections, surfaceSelectionSourceLabel } from '@/lib/room-customizer';
 import {
   TradeActionTile,
   TradeMetricStrip,
@@ -50,6 +53,7 @@ interface Slot {
   estimated_cost_min: number | null;
   estimated_cost_max: number | null;
   status: string;
+  assigned_company_id: string | null;
 }
 
 interface JobBrief {
@@ -60,17 +64,55 @@ interface JobBrief {
   status: string;
   ai_cost_min: number | null;
   ai_cost_max: number | null;
+  assigned_company_id: string | null;
   ai_analysis: Record<string, unknown> | null;
-  questionnaire_answers: Record<string, string> | null;
+  questionnaire_answers: Record<string, unknown> | null;
   materials: Array<{ item: string; quantity: number; unit: string; quality_tier: string }>;
   scope_of_work: Array<{ phase: string; description: string; sort_order: number }>;
   renders: Array<{ url: string; selected: boolean }>;
   dispatch_expires_at: string | null;
 }
 
+interface CompanyPayoutProfile {
+  id: string;
+  stripe_account_id: string | null;
+  stripe_details_submitted?: boolean | null;
+  stripe_payouts_enabled?: boolean | null;
+  stripe_transfers_active?: boolean | null;
+}
+
+async function fetchCompanyPayoutProfile(userId: string): Promise<CompanyPayoutProfile | null> {
+  const withReadiness = await supabase
+    .from('companies')
+    .select('id, stripe_account_id, stripe_details_submitted, stripe_payouts_enabled, stripe_transfers_active')
+    .eq('user_id', userId)
+    .order('created_at', { ascending: false })
+    .limit(1)
+    .maybeSingle();
+
+  if (!withReadiness.error) {
+    return withReadiness.data as CompanyPayoutProfile | null;
+  }
+
+  if (!/column .* does not exist/i.test(withReadiness.error.message)) {
+    throw withReadiness.error;
+  }
+
+  const legacyProfile = await supabase
+    .from('companies')
+    .select('id, stripe_account_id')
+    .eq('user_id', userId)
+    .order('created_at', { ascending: false })
+    .limit(1)
+    .maybeSingle();
+
+  if (legacyProfile.error) throw legacyProfile.error;
+  return legacyProfile.data as CompanyPayoutProfile | null;
+}
+
 export default function JobBriefScreen() {
   const route = useRoute<any>();
-  const projectId = route.params?.id;
+  const projectId = getRequiredStringParam(route.params, 'id');
   const slotId: string | undefined = route.params?.slot;
   const navigation = useNavigation<any>();
   const { user } = useAuthStore();
@@ -79,55 +121,114 @@ export default function JobBriefScreen() {
   const [loading, setLoading] = useState(true);
   const [accepting, setAccepting] = useState(false);
   const [alreadyAccepted, setAlreadyAccepted] = useState(false);
-  const [hasStripe, setHasStripe] = useState(false);
+  const [unavailable, setUnavailable] = useState(false);
+  const [payoutReady, setPayoutReady] = useState(false);
+  const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  const finishSelections = readPersistedSurfaceSelections(job?.questionnaire_answers);
 
-  useEffect(() => {
-    const fetchJob = async () => {
-      const [{ data: projectData }, { data: slotData }, { data: companyData }] = await Promise.all([
+  const fetchJob = useCallback(async () => {
+    if (!projectId || !user?.id) {
+      setErrorMessage('Job is missing. Reopen this invite from the job feed.');
+      setJob(null);
+      setLoading(false);
+      return;
+    }
+
+    try {
+      setErrorMessage(null);
+      const [projectResult, slotResult, companyData] = await Promise.all([
         supabase
           .from('projects')
           .select(`
-            id, address, city, room_type, status, ai_cost_min, ai_cost_max,
+            id, address, city, room_type, status, assigned_company_id, ai_cost_min, ai_cost_max,
             ai_analysis, questionnaire_answers, dispatch_expires_at,
             materials ( item, quantity, unit, quality_tier ),
             scope_of_work ( phase, description, sort_order ),
             renders ( url, selected )
           `)
           .eq('id', projectId)
-          .single(),
+          .maybeSingle(),
         slotId
           ? supabase
               .from('project_slots')
-              .select('id, trade_type, description, estimated_cost_min, estimated_cost_max, status')
+              .select('id, trade_type, description, estimated_cost_min, estimated_cost_max, status, assigned_company_id')
               .eq('id', slotId)
-              .single()
-          : Promise.resolve({ data: null }),
-        supabase
-          .from('companies')
-          .select('stripe_account_id')
-          .eq('user_id', user?.id)
-          .single(),
+              .maybeSingle()
+          : Promise.resolve({ data: null, error: null }),
+        fetchCompanyPayoutProfile(user.id),
       ]);
+
+      if (projectResult.error) throw projectResult.error;
+      if (slotResult.error) throw slotResult.error;
+      if (!projectResult.data) throw new Error('Job not found or no longer available.');
+      if (slotId && !slotResult.data) throw new Error('This trade slot is no longer available.');
+      if (!companyData) throw new Error('Company profile is missing. Complete contractor onboarding before accepting jobs.');
+
+      const projectData = projectResult.data;
+      const slotData = slotResult.data;
 
       setJob(projectData as JobBrief);
       if (slotData) setSlot(slotData as Slot);
-      setHasStripe(!!companyData?.stripe_account_id);
-      // Already accepted if the slot is filled OR project is past dispatching
-      const slotFilled = slotData ? (slotData as Slot).status === 'filled' || (slotData as Slot).status === 'scheduled' : false;
-      setAlreadyAccepted(slotFilled || projectData?.status !== 'dispatching');
+      setPayoutReady(isStripePayoutLocallyReady(companyData));
+      const companyId = companyData?.id;
+      const slotInfo = slotData as Slot | null;
+      const projectInfo = projectData as JobBrief | null;
+
+      if (slotInfo) {
+        const slotClaimed = slotInfo.status === 'filled' || slotInfo.status === 'scheduled';
+        setAlreadyAccepted(slotClaimed && slotInfo.assigned_company_id === companyId);
+        setUnavailable(slotClaimed && slotInfo.assigned_company_id !== companyId);
+      } else {
+        const projectClaimed = projectInfo?.status !== 'dispatching';
+        const directlyAssigned = projectInfo?.assigned_company_id === companyId;
+        let acceptedByDispatch = false;
+
+        if (projectClaimed && !directlyAssigned) {
+          const { data: acceptedDispatch, error: acceptedDispatchError } = await supabase
+            .from('dispatch_logs')
+            .select('id')
+            .eq('project_id', projectId)
+            .eq('company_id', companyId)
+            .eq('response', 'accepted')
+            .limit(1)
+            .maybeSingle();
+          if (acceptedDispatchError) throw acceptedDispatchError;
+          acceptedByDispatch = !!acceptedDispatch;
+        }
+
+        const acceptedByCurrentCompany = directlyAssigned || acceptedByDispatch;
+        setAlreadyAccepted(!!projectClaimed && acceptedByCurrentCompany);
+        setUnavailable(!!projectClaimed && !acceptedByCurrentCompany);
+      }
       setLoading(false);
-    };
-    fetchJob();
-  }, [projectId, slotId]);
+    } catch (err) {
+      setErrorMessage(err instanceof Error ? err.message : 'Could not load this job.');
+      setJob(null);
+      setSlot(null);
+      setAlreadyAccepted(false);
+      setUnavailable(false);
+      setLoading(false);
+    }
+  }, [projectId, slotId, user?.id]);
+
+  useFocusEffect(
+    useCallback(() => {
+      fetchJob();
+    }, [fetchJob])
+  );
 
   const handleAccept = async () => {
-    if (!hasStripe) {
+    if (!projectId) {
+      Alert.alert('Missing job', 'Reopen this invite from the job feed and try again.');
+      return;
+    }
+    if (!payoutReady) {
       Alert.alert(
-        'Set up payouts first',
-        'You need to connect your bank account before accepting jobs. Set up Stripe payouts in your profile.',
+        'Finish payout setup first',
+        'Stripe payouts must be active before you can accept jobs. Finish Stripe onboarding in your profile.',
         [
           { text: 'Not now', style: 'cancel' },
-          { text: 'Set up Payouts', onPress: () => navigation.navigate('CompanyTabs', { screen: 'Profile' }) },
+          { text: 'Set up Payouts', onPress: () => navigation.navigate('CompanyTabs', { screen: 'CompanyProfile' }) },
         ]
       );
       return;
@@ -140,23 +241,38 @@ export default function JobBriefScreen() {
 
       const { data, error } = await supabase.functions.invoke('accept-job', { body });
 
-      if (error) throw error;
+      if (error) throw new Error(await formatSupabaseFunctionError(error));
 
       if (data?.code === 'SLOT_FILLED' || data?.code === 'JOB_FILLED') {
-        Alert.alert('Slot taken', 'Another contractor claimed this slot just before you. Keep an eye out for the next one!');
-        setAlreadyAccepted(true);
+        Alert.alert('Job taken', 'Another contractor claimed this work just before you. Keep an eye out for the next one.');
+        setAlreadyAccepted(false);
+        setUnavailable(true);
         return;
       }
 
       ReactNativeHapticFeedback.trigger('notificationSuccess');
       setAlreadyAccepted(true);
+      setUnavailable(false);
+      fetchJob();
+      const shouldStartQuote = !!slotId || !!data?.needs_quote;
+      const actions = shouldStartQuote
+        ? [
+            { text: 'Start Quote', onPress: () => navigation.navigate('QuoteBuilder', { id: projectId, slot: slotId }) },
+            { text: 'Verify Materials', onPress: () => navigation.navigate('JobMaterials', { id: projectId }) },
+          ]
+        : [
+            { text: 'Verify Materials', onPress: () => navigation.navigate('JobMaterials', { id: projectId }) },
+            { text: 'View Job', onPress: () => undefined },
+          ];
       Alert.alert(
         slotId ? 'Slot accepted!' : 'Job accepted!',
-        'The homeowner has been notified. Verify material quantities and await schedule confirmation.',
-        [{ text: 'Verify Materials', onPress: () => navigation.navigate('JobMaterials', { id: projectId }) }]
+        shouldStartQuote
+          ? 'The homeowner has been notified. Submit your trade quote, then verify material quantities.'
+          : 'The homeowner has been notified. A pending quote was created from the AI price, so verify material quantities next.',
+        actions
       );
     } catch (err) {
-      const msg = err instanceof Error ? err.message : 'Failed to accept job.';
+      const msg = await formatSupabaseFunctionError(err, 'Failed to accept job.');
       if (msg.includes('lock') || msg.includes('RACE')) {
         Alert.alert('Try again', 'Another contractor is claiming this slot right now. Try again.');
       } else {
@@ -185,14 +301,14 @@ export default function JobBriefScreen() {
       <GradientBackground>
         <SafeAreaView style={styles.safe}>
           <View style={styles.center}>
-            <Text style={Typography.h2}>Job not found</Text>
+            <Text style={Typography.h2}>{errorMessage ?? 'Job not found'}</Text>
           </View>
         </SafeAreaView>
       </GradientBackground>
     );
   }
 
-  const selectedRender = job.renders?.find((r) => r.selected);
+  const selectedRender = job.renders?.find((r) => r.selected) ?? job.renders?.[0];
 
   return (
     <GradientBackground glow="top-right">
@@ -277,6 +393,26 @@ export default function JobBriefScreen() {
             </TradePanel>
           )}
 
+          {finishSelections.length > 0 && (
+            <TradeSection title="Homeowner finish selections">
+              <TradePanel style={styles.card}>
+                {finishSelections.map((selection, i) => (
+                  <View
+                    key={selection.surfaceId}
+                    style={[styles.finishRow, i < finishSelections.length - 1 && styles.finishRowBorder]}
+                  >
+                    <View style={[styles.finishSwatch, { backgroundColor: selection.colorHex }]} />
+                    <View style={styles.finishText}>
+                      <Text style={styles.finishLabel}>{selection.surfaceLabel}</Text>
+                      <Text style={styles.finishValue}>{selection.material} · {selection.colorName}</Text>
+                      <Text style={styles.finishSource}>{surfaceSelectionSourceLabel(selection.source)}</Text>
+                    </View>
+                  </View>
+                ))}
+              </TradePanel>
+            </TradeSection>
+          )}
+
           {/* Scope of work */}
           {job.scope_of_work && job.scope_of_work.length > 0 && (
             <TradeSection title="Scope of work">
@@ -310,7 +446,11 @@ export default function JobBriefScreen() {
           )}
 
           {/* Accept CTA */}
-          {!alreadyAccepted ? (
+          {unavailable ? (
+            <GlassCard style={[styles.card, styles.acceptedCard]}>
+              <Text style={styles.acceptedText}>Job no longer available</Text>
+            </GlassCard>
+          ) : !alreadyAccepted ? (
             <>
               <GlassButton
                 label="Accept This Job"
@@ -325,7 +465,7 @@ export default function JobBriefScreen() {
                 By accepting, you agree to submit a detailed quote within 48 hours.
               </Text>
             </>
-          ) : job.status !== 'dispatching' ? (
+          ) : alreadyAccepted ? (
             <>
               <GlassCard style={[styles.card, styles.acceptedCard]}>
                 <View style={styles.acceptedRow}>
@@ -335,24 +475,29 @@ export default function JobBriefScreen() {
               </GlassCard>
               <View style={styles.actionGrid}>
                 {[
+                  { label: 'Quote', iconName: 'file-document-edit-outline', route: 'QuoteBuilder', meta: 'Build quote' },
                   { label: 'Payments', iconName: 'cash-multiple', route: 'JobMilestones', meta: 'Milestones' },
                   { label: 'Materials', iconName: 'cube-outline', route: 'JobMaterials', meta: 'Verify counts' },
                   { label: 'Messages', iconName: 'chat-outline', route: 'JobMessages', meta: 'Project thread' },
                   { label: 'Changes', iconName: 'pencil-outline', route: 'JobChangeOrders', meta: 'Change orders' },
+                  { label: 'Warranties', iconName: 'shield-check-outline', route: 'JobWarranties', meta: 'Closeout docs' },
+                  ...(job.status === 'completed'
+                    ? [{ label: 'Review', iconName: 'star-outline', route: 'JobReview', meta: 'Homeowner' }]
+                    : []),
                 ].map((item) => (
                   <TradeActionTile
                     key={item.route}
                     label={item.label}
                     icon={item.iconName}
                     meta={item.meta}
-                    onPress={() => navigation.navigate(item.route as any, { id: projectId })}
+                    onPress={() => navigation.navigate(item.route as any, { id: projectId, slot: slotId })}
                   />
                 ))}
               </View>
             </>
           ) : (
             <GlassCard style={[styles.card, styles.acceptedCard]}>
-              <Text style={styles.acceptedText}>Job no longer available</Text>
+              <Text style={styles.acceptedText}>Refresh this job to see the latest availability.</Text>
             </GlassCard>
           )}
         </ScrollView>
@@ -386,6 +531,19 @@ const styles = StyleSheet.create({
   costRange: { fontSize: 26, fontWeight: '700', color: Colors.success, letterSpacing: -0.5, marginBottom: 4 },
   costNote: { ...Typography.caption },
   analysisText: { ...Typography.bodySecondary, lineHeight: 22 },
+  finishRow: { flexDirection: 'row', alignItems: 'center', gap: 10, paddingVertical: 9 },
+  finishRowBorder: { borderBottomWidth: 1, borderBottomColor: Colors.glass.border },
+  finishSwatch: {
+    width: 22,
+    height: 22,
+    borderRadius: 11,
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.24)',
+  },
+  finishText: { flex: 1 },
+  finishLabel: { fontSize: 12, fontWeight: '700', color: Colors.text.primary },
+  finishValue: { ...Typography.caption, marginTop: 2 },
+  finishSource: { fontSize: 11, color: Colors.text.tertiary, marginTop: 2 },
   scopeRow: { flexDirection: 'row', alignItems: 'flex-start', gap: 10, marginBottom: 10 },
   phaseTag: {
     backgroundColor: 'rgba(255, 107, 0, 0.12)',

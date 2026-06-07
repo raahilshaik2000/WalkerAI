@@ -19,7 +19,7 @@ import { Colors, Typography, Spacing } from '@/constants/theme';
 const ScanModule = Platform.OS === 'ios'
   ? NativeModules.RoomPlanModule
   : NativeModules.RoomScanModule;
-const scanEmitter = new NativeEventEmitter(ScanModule);
+const scanEmitter = ScanModule ? new NativeEventEmitter(ScanModule) : null;
 
 type SupportStatus = 'checking' | 'supported' | 'unsupported';
 
@@ -35,12 +35,14 @@ export default function RoomScanScreen() {
   }, []);
 
   useEffect(() => {
+    if (!scanEmitter) return undefined;
+
     const completedSub = scanEmitter.addListener('onScanCompleted', (data) => {
       setIsScanning(false);
       navigation.replace('RoomResults', { scanData: data, fromWizard });
     });
 
-    const errorSub = scanEmitter.addListener('onScanError', (data) => {
+    const errorSub = scanEmitter.addListener('onScanError', () => {
       setIsScanning(false);
       // Could show an alert here, for now just go back
       navigation.goBack();
@@ -55,9 +57,14 @@ export default function RoomScanScreen() {
       errorSub.remove();
       cancelSub.remove();
     };
-  }, [navigation]);
+  }, [fromWizard, navigation]);
 
   async function checkSupport() {
+    if (!ScanModule?.checkDeviceSupport) {
+      setSupportStatus('unsupported');
+      return;
+    }
+
     try {
       const result = await ScanModule.checkDeviceSupport();
       setSupportStatus(result.supported ? 'supported' : 'unsupported');
@@ -67,6 +74,11 @@ export default function RoomScanScreen() {
   }
 
   async function handleStartScan() {
+    if (!ScanModule?.startScan) {
+      setSupportStatus('unsupported');
+      return;
+    }
+
     try {
       setIsScanning(true);
       await ScanModule.startScan();

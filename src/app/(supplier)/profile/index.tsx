@@ -1,26 +1,80 @@
 import { useCallback, useEffect, useState } from 'react';
-import { ActivityIndicator, Alert, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { ActivityIndicator, Alert, AppState, RefreshControl, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import { useFocusEffect, useNavigation } from '@react-navigation/native';
 import Ionicons from 'react-native-vector-icons/Ionicons';
 import { supabase } from '@/lib/supabase/client';
+import { isStripePayoutLocallyReady } from '@/lib/payouts';
 import { useAuthStore } from '@/stores/auth.store';
-import { Colors, Radius, Spacing, Typography } from '@/constants/theme';
+import { Colors, Spacing } from '@/constants/theme';
 import { GlassCard, GradientBackground } from '@/components/ui';
 import type { Supplier } from '@/types/database.types';
 
+function supplierCategories(supplier: Supplier): string[] {
+  return Array.isArray(supplier.categories) ? supplier.categories : [];
+}
+
+function nextSupplierOnboardingRoute(supplier: Supplier | null): string | null {
+  if (!supplier) return 'SupplierBusinessOnboarding';
+  if (!supplier.license_number) return 'SupplierLicenseOnboarding';
+  if (supplierCategories(supplier).length === 0) return 'SupplierCategoriesOnboarding';
+  return null;
+}
+
 export default function SupplierProfile() {
+  const navigation = useNavigation<any>();
   const { user, setSession } = useAuthStore();
   const [supplier, setSupplier] = useState<Supplier | null>(null);
   const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
+  const [errorMessage, setErrorMessage] = useState<string | null>(null);
+
+  const loadSupplierProfile = useCallback(async ({ showSpinner = false } = {}) => {
+    if (showSpinner) setLoading(true);
+    if (!user) {
+      setSupplier(null);
+      setErrorMessage('You need to be signed in to view your supplier profile.');
+      setLoading(false);
+      setRefreshing(false);
+      return;
+    }
+    const { data, error } = await supabase
+      .from('suppliers')
+      .select('*')
+      .eq('user_id', user.id)
+      .order('created_at', { ascending: false })
+      .limit(1)
+      .maybeSingle();
+    if (error) {
+      setSupplier(null);
+      setErrorMessage(error.message);
+      setLoading(false);
+      setRefreshing(false);
+      return;
+    }
+    setSupplier(data);
+    setErrorMessage(null);
+    setLoading(false);
+    setRefreshing(false);
+  }, [user]);
+
+  useFocusEffect(
+    useCallback(() => {
+      loadSupplierProfile({ showSpinner: true });
+    }, [loadSupplierProfile])
+  );
 
   useEffect(() => {
-    (async () => {
-      if (!user) return;
-      const { data } = await supabase.from('suppliers').select('*').eq('user_id', user.id).single();
-      setSupplier(data);
-      setLoading(false);
-    })();
-  }, [user]);
+    const subscription = AppState.addEventListener('change', (state) => {
+      if (state === 'active') loadSupplierProfile();
+    });
+    return () => subscription.remove();
+  }, [loadSupplierProfile]);
+
+  const onRefresh = () => {
+    setRefreshing(true);
+    loadSupplierProfile();
+  };
 
   const signOut = () => {
     Alert.alert('Sign out', 'Are you sure?', [
@@ -30,13 +84,37 @@ export default function SupplierProfile() {
   };
 
   if (loading) return <View style={styles.center}><ActivityIndicator color={Colors.accent} size="large" /></View>;
+  const payoutReady = isStripePayoutLocallyReady(supplier);
+  const setupRoute = nextSupplierOnboardingRoute(supplier);
 
   return (
     <GradientBackground>
       <SafeAreaView style={styles.safe}>
-        <ScrollView contentContainerStyle={styles.scroll} showsVerticalScrollIndicator={false}>
+        <ScrollView
+          contentContainerStyle={styles.scroll}
+          showsVerticalScrollIndicator={false}
+          refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={Colors.accent} />}
+        >
+          {errorMessage ? (
+            <GlassCard style={styles.infoCard}>
+              <Text style={styles.sectionTitle}>Profile unavailable</Text>
+              <Text style={styles.emptyBody}>{errorMessage}</Text>
+              <TouchableOpacity style={styles.setupBtn} onPress={() => loadSupplierProfile({ showSpinner: true })} activeOpacity={0.8}>
+                <Text style={styles.setupBtnText}>Try Again</Text>
+              </TouchableOpacity>
+            </GlassCard>
+          ) : !supplier ? (
+            <GlassCard style={styles.infoCard}>
+              <Text style={styles.sectionTitle}>Supplier setup</Text>
+              <Text style={styles.emptyBody}>Create your supplier profile before managing orders, catalog items, or payouts.</Text>
+              <TouchableOpacity style={styles.setupBtn} onPress={() => navigation.navigate('SupplierBusinessOnboarding')} activeOpacity={0.8}>
+                <Text style={styles.setupBtnText}>Start Setup</Text>
+              </TouchableOpacity>
+            </GlassCard>
+          ) : null}
+
           {/* Avatar & name */}
-          <View style={styles.avatarRow}>
+          {supplier && <View style={styles.avatarRow}>
             <View style={styles.avatar}>
               <Text style={styles.avatarText}>{supplier?.business_name?.[0]?.toUpperCase() ?? 'S'}</Text>
             </View>
@@ -48,6 +126,14 @@ export default function SupplierProfile() {
                   <Ionicons name="checkmark-circle" size={14} color="#34D399" />
                   <Text style={styles.verifiedText}>Verified Supplier</Text>
                 </View>
+              ) : setupRoute ? (
+                <TouchableOpacity
+                  style={styles.continueSetupBtn}
+                  onPress={() => navigation.navigate(setupRoute)}
+                  activeOpacity={0.8}
+                >
+                  <Text style={styles.continueSetupText}>Continue Setup</Text>
+                </TouchableOpacity>
               ) : (
                 <View style={styles.pendingBadge}>
                   <Ionicons name="time-outline" size={14} color={Colors.accent} />
@@ -55,7 +141,7 @@ export default function SupplierProfile() {
                 </View>
               )}
             </View>
-          </View>
+          </View>}
 
           {/* Stats */}
           {supplier?.verified && (
@@ -69,7 +155,7 @@ export default function SupplierProfile() {
                 <Text style={styles.statLabel} numberOfLines={1}>Reviews</Text>
               </GlassCard>
               <GlassCard style={styles.statCard}>
-                <Text style={styles.statValue} numberOfLines={1}>{supplier.fulfillment_rate ? `${supplier.fulfillment_rate.toFixed(0)}%` : '—'}</Text>
+                <Text style={styles.statValue} numberOfLines={1}>{supplier.fulfillment_rate != null ? `${supplier.fulfillment_rate.toFixed(0)}%` : '—'}</Text>
                 <Text style={styles.statLabel} numberOfLines={1}>On-time</Text>
               </GlassCard>
               <GlassCard style={styles.statCard}>
@@ -80,12 +166,20 @@ export default function SupplierProfile() {
           )}
 
           {/* Business info */}
-          <GlassCard style={styles.infoCard}>
+          {supplier && <GlassCard style={styles.infoCard}>
             <Text style={styles.sectionTitle}>Business Details</Text>
             <InfoRow icon="location-outline" label={`${supplier?.city ?? ''}, ${supplier?.province ?? ''}`} />
             <InfoRow icon="radio-outline" label={`${supplier?.service_radius_km ?? 100} km service radius`} />
             {supplier?.license_number && <InfoRow icon="document-outline" label={`License: ${supplier.license_number}`} />}
-          </GlassCard>
+            <InfoRow
+              icon={payoutReady ? 'card-outline' : 'alert-circle-outline'}
+              label={payoutReady
+                ? 'Stripe payouts active'
+                : supplier.stripe_account_id
+                ? 'Stripe onboarding incomplete'
+                : 'Stripe payouts not connected'}
+            />
+          </GlassCard>}
 
           {/* Categories */}
           {supplier?.categories && supplier.categories.length > 0 && (
@@ -144,6 +238,11 @@ const styles = StyleSheet.create({
   statLabel: { fontSize: 9, color: Colors.text.tertiary, textAlign: 'center' },
   infoCard: { padding: Spacing.md, gap: 2 },
   sectionTitle: { fontSize: 12, color: Colors.text.tertiary, textTransform: 'uppercase', letterSpacing: 1, marginBottom: 8 },
+  emptyBody: { fontSize: 14, color: Colors.text.secondary, lineHeight: 20 },
+  setupBtn: { alignSelf: 'flex-start', backgroundColor: Colors.accent, paddingHorizontal: 18, paddingVertical: 10, borderRadius: 20, marginTop: 12 },
+  setupBtnText: { fontSize: 14, fontWeight: '700', color: '#fff' },
+  continueSetupBtn: { alignSelf: 'flex-start', backgroundColor: Colors.accent, paddingHorizontal: 14, paddingVertical: 8, borderRadius: 16, marginTop: 8 },
+  continueSetupText: { fontSize: 12, fontWeight: '700', color: '#fff' },
   catWrap: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginTop: 4 },
   catChip: { paddingVertical: 6, paddingHorizontal: 12, borderRadius: 16, backgroundColor: 'rgba(255,107,0,0.12)', borderWidth: 1, borderColor: 'rgba(255,107,0,0.3)' },
   catChipText: { fontSize: 12, color: Colors.accent, fontWeight: '600' },
