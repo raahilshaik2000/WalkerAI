@@ -23,6 +23,7 @@ import {
 import { Colors, Radius, Spacing, Typography } from '@/constants/theme';
 import { USDZViewer } from '@/components/room-scan';
 import { RoomMaterialCustomizer } from '@/components/project/RoomMaterialCustomizer';
+import { RoomCustomizer3D } from '@/components/project/RoomCustomizer3D';
 import { GlassButton, GlassCard, GradientBackground, WizardHeader } from '@/components/ui';
 
 interface Render {
@@ -252,12 +253,22 @@ export default function RendersStep() {
             </GlassCard>
           )}
 
-          <RoomMaterialCustomizer
-            roomType={roomType}
-            selections={surfaceSelections}
-            answers={answers}
-            onSelect={setSurfaceSelection}
-          />
+          {Platform.OS === 'ios' && roomScanData ? (
+            <RoomCustomizer3D
+              roomType={roomType}
+              scanData={roomScanData}
+              selections={surfaceSelections}
+              answers={answers}
+              onSelect={setSurfaceSelection}
+            />
+          ) : (
+            <RoomMaterialCustomizer
+              roomType={roomType}
+              selections={surfaceSelections}
+              answers={answers}
+              onSelect={setSurfaceSelection}
+            />
+          )}
 
           <GlassButton
             label={primaryLabel}
