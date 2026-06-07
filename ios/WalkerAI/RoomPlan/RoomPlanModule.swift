@@ -37,7 +37,7 @@ class RoomPlanModule: RCTEventEmitter {
     rejecter reject: @escaping RCTPromiseRejectBlock
   ) {
     #if targetEnvironment(simulator)
-    resolve(["supported": false, "reason": "Room scanning requires a device with a LiDAR scanner. Simulators are not supported."])
+    resolve(["supported": true, "reason": "Simulator uses mock room scan data for development and QA."])
     return
     #else
     if #available(iOS 16.0, *) {

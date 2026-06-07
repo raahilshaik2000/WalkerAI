@@ -5,6 +5,9 @@ const corsHeaders = {
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 };
 
+const MAX_DISPATCH_ROUNDS = 4;
+const DISPATCH_WINDOW_MS = 2 * 60 * 60 * 1000;
+
 /**
  * expand-dispatch — called by pg_cron every 2 hours.
  * Finds projects that are still 'dispatching' with expired dispatch windows
@@ -36,20 +39,72 @@ Deno.serve(async (req) => {
     const results = [];
 
     for (const project of expiredProjects) {
-      // Mark all pending dispatches as 'timeout'
-      await supabase
+      // Mark all pending dispatches as timed out for this project. The slot
+      // itself remains dispatching so dispatch-slots can widen the radius and
+      // invite companies that have not already seen that specific slot.
+      const { error: timeoutError } = await supabase
         .from('dispatch_logs')
-        .update({ response: 'timeout' })
+        .update({ response: 'timeout', responded_at: new Date().toISOString() })
         .eq('project_id', project.id)
         .eq('response', 'pending');
+      if (timeoutError) throw timeoutError;
 
       const nextRound = (project.dispatch_round ?? 1) + 1;
 
-      // Re-invoke dispatch-job with the next round
+      if (nextRound > MAX_DISPATCH_ROUNDS) {
+        const { data: projectOwner, error: ownerError } = await supabase
+          .from('projects')
+          .select('homeowner_id')
+          .eq('id', project.id)
+          .single();
+        if (ownerError) throw ownerError;
+
+        const { error: notificationError } = await supabase.from('notifications').insert({
+          user_id: projectOwner.homeowner_id,
+          type: 'dispatch_no_match',
+          payload: {
+            project_id: project.id,
+            message: 'We could not find an available contractor after widening the search. Your project brief is still saved and ready to send again.',
+            deep_link: `/(homeowner)/project/${project.id}`,
+          },
+        });
+        if (notificationError) console.warn('dispatch_no_match notification failed:', notificationError.message);
+
+        const { error: projectUpdateError } = await supabase
+          .from('projects')
+          .update({
+            status: 'brief_ready',
+            dispatch_round: MAX_DISPATCH_ROUNDS,
+            dispatch_expires_at: null,
+          })
+          .eq('id', project.id);
+        if (projectUpdateError) throw projectUpdateError;
+
+        results.push({
+          project_id: project.id,
+          next_round: nextRound,
+          result: { dispatched: 0, max_rounds_reached: true },
+        });
+        continue;
+      }
+
+      // Re-invoke the current trade-slot dispatcher with the next radius round.
       const { data: dispatchResult, error: dispatchError } = await supabase.functions.invoke(
-        'dispatch-job',
+        'dispatch-slots',
         { body: { project_id: project.id, round: nextRound } }
       );
+
+      if (!dispatchError && (!dispatchResult?.success || !dispatchResult?.dispatched)) {
+        const nextExpiresAt = new Date(Date.now() + DISPATCH_WINDOW_MS).toISOString();
+        const { error: projectUpdateError } = await supabase
+          .from('projects')
+          .update({
+            dispatch_round: nextRound,
+            dispatch_expires_at: nextExpiresAt,
+          })
+          .eq('id', project.id);
+        if (projectUpdateError) throw projectUpdateError;
+      }
 
       results.push({
         project_id: project.id,

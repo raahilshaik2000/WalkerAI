@@ -5,6 +5,6 @@ ALTER TABLE projects
 ALTER TABLE projects
   ADD CONSTRAINT projects_status_check
   CHECK (status IN (
-    'draft', 'dispatching', 'scheduling', 'accepted', 'quoting',
+    'draft', 'brief_ready', 'dispatching', 'scheduling', 'accepted', 'quoting',
     'active', 'completed', 'cancelled', 'disputed', 'diy_saved'
   ));

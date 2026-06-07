@@ -18,6 +18,92 @@ async function urlToBase64(url: string): Promise<string> {
   return btoa(binary);
 }
 
+type VisionMediaType = 'image/jpeg' | 'image/png' | 'image/webp' | 'image/gif';
+type PhotoBase64Payload = string | {
+  data?: unknown;
+  base64?: unknown;
+  media_type?: unknown;
+  content_type?: unknown;
+};
+
+function cleanBase64(data: string): string {
+  return data.replace(/^data:[^;]+;base64,/, '');
+}
+
+function visionMediaTypeFor(value: unknown): VisionMediaType {
+  if (typeof value !== 'string') return 'image/jpeg';
+  const normalized = value.trim().toLowerCase();
+  if (normalized === 'image/jpg') return 'image/jpeg';
+  if (
+    normalized === 'image/jpeg' ||
+    normalized === 'image/png' ||
+    normalized === 'image/webp' ||
+    normalized === 'image/gif'
+  ) {
+    return normalized;
+  }
+  return 'image/jpeg';
+}
+
+function normalizePhotoPayload(payload: PhotoBase64Payload): { data: string; mediaType: VisionMediaType } | null {
+  if (typeof payload === 'string') {
+    return { data: cleanBase64(payload), mediaType: visionMediaTypeFor(null) };
+  }
+
+  const rawData = typeof payload.data === 'string'
+    ? payload.data
+    : typeof payload.base64 === 'string'
+      ? payload.base64
+      : null;
+
+  if (!rawData) return null;
+
+  return {
+    data: cleanBase64(rawData),
+    mediaType: visionMediaTypeFor(payload.media_type ?? payload.content_type),
+  };
+}
+
+function fallbackAnalysis(roomType: string, reason: string): Record<string, unknown> {
+  const isBathroom = roomType === 'bathroom';
+  return {
+    room_type: roomType,
+    existing_materials: isBathroom
+      ? {
+        cabinets: { type: 'unknown vanity/cabinetry', condition: 'fair', estimated_age_years: 0 },
+        countertops: { material: 'unknown vanity top', condition: 'unknown' },
+        flooring: { material: 'unknown bathroom flooring', condition: 'unknown' },
+        fixtures: ['bathroom fixtures to verify on site'],
+        appliances: [],
+      }
+      : {
+        cabinets: { type: 'unknown kitchen cabinetry', condition: 'fair', estimated_age_years: 0 },
+        countertops: { material: 'unknown countertop material', condition: 'unknown' },
+        flooring: { material: 'unknown kitchen flooring', condition: 'unknown' },
+        fixtures: ['kitchen fixtures to verify on site'],
+        appliances: ['appliances to verify on site'],
+      },
+    layout: {
+      estimated_sqft: 0,
+      has_island: false,
+      plumbing_wall_visible: false,
+      window_count: 0,
+    },
+    structural_concerns: [],
+    ai_observations: `Photos were uploaded, but automated visual analysis was unavailable (${reason}). The project can continue using homeowner answers, measurements, and contractor verification.`,
+    analysis_fallback: true,
+  };
+}
+
+function parseProviderJson(text: string): Record<string, unknown> {
+  try {
+    return JSON.parse(text.trim());
+  } catch {
+    const stripped = text.replace(/```json\n?/g, '').replace(/```\n?/g, '').trim();
+    return JSON.parse(stripped);
+  }
+}
+
 Deno.serve(async (req) => {
   if (req.method === 'OPTIONS') return new Response('ok', { headers: corsHeaders });
 
@@ -70,16 +156,34 @@ Deno.serve(async (req) => {
       });
     }
 
-    const anthropic = new Anthropic({ apiKey: Deno.env.get('ANTHROPIC_API_KEY')! });
+    const anthropicApiKey = Deno.env.get('ANTHROPIC_API_KEY');
+    const roomType = project.room_type ?? 'kitchen';
+
+    if (!anthropicApiKey) {
+      const analysis = fallbackAnalysis(roomType, 'missing Anthropic API key');
+      await adminClient
+        .from('projects')
+        .update({ ai_analysis: analysis })
+        .eq('id', project_id);
+
+      return new Response(
+        JSON.stringify({ success: true, analysis, fallback: true }),
+        { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      );
+    }
+
+    const anthropic = new Anthropic({ apiKey: anthropicApiKey });
 
     const imageBlocks: Anthropic.ImageBlockParam[] = [];
 
     if (hasBase64s) {
       // Base64 sent directly from the client — no fetching needed
-      for (const b64 of (photo_base64s as string[]).slice(0, 8)) {
+      for (const payload of (photo_base64s as PhotoBase64Payload[]).slice(0, 8)) {
+        const normalized = normalizePhotoPayload(payload);
+        if (!normalized) continue;
         imageBlocks.push({
           type: 'image',
-          source: { type: 'base64', media_type: 'image/jpeg', data: b64 },
+          source: { type: 'base64', media_type: normalized.mediaType, data: normalized.data },
         });
       }
     } else {
@@ -101,18 +205,18 @@ Deno.serve(async (req) => {
       throw new Error('Failed to load any photos for analysis.');
     }
 
-    const roomType = project.room_type ?? 'kitchen';
-
-    const response = await anthropic.messages.create({
-      model: 'claude-sonnet-4-6',
-      max_tokens: 2000,
-      messages: [{
-        role: 'user',
-        content: [
-          ...imageBlocks,
-          {
-            type: 'text',
-            text: `Analyze these ${roomType} renovation photos and return a valid JSON object with this exact structure:
+    let analysis: Record<string, unknown>;
+    try {
+      const response = await anthropic.messages.create({
+        model: Deno.env.get('ANTHROPIC_VISION_MODEL') ?? 'claude-3-5-sonnet-20241022',
+        max_tokens: 2000,
+        messages: [{
+          role: 'user',
+          content: [
+            ...imageBlocks,
+            {
+              type: 'text',
+              text: `Analyze these ${roomType} renovation photos and return a valid JSON object with this exact structure:
 {
   "room_type": "${roomType}",
   "existing_materials": {
@@ -133,21 +237,17 @@ Deno.serve(async (req) => {
 }
 
 Return ONLY the JSON object, no markdown, no explanation.`,
-          },
-        ],
-      }],
-    });
+            },
+          ],
+        }],
+      });
 
-    const content = response.content[0];
-    if (content.type !== 'text') throw new Error('Unexpected response type from Claude');
-
-    let analysis: Record<string, unknown>;
-    try {
-      analysis = JSON.parse(content.text.trim());
-    } catch {
-      // Claude sometimes wraps in markdown — strip it
-      const stripped = content.text.replace(/```json\n?/g, '').replace(/```\n?/g, '').trim();
-      analysis = JSON.parse(stripped);
+      const content = response.content[0];
+      if (content.type !== 'text') throw new Error('Unexpected response type from Claude');
+      analysis = parseProviderJson(content.text);
+    } catch (analysisError) {
+      console.error('Anthropic analysis failed, using fallback:', analysisError);
+      analysis = fallbackAnalysis(roomType, analysisError instanceof Error ? analysisError.message : 'provider error');
     }
 
     // Persist to projects.ai_analysis

@@ -37,12 +37,34 @@ Deno.serve(async (req) => {
 
     const { quote_id, project_id: pid } = await req.json();
 
-    // Accept either a direct quote_id or a project_id (find the pending quote automatically)
-    const quoteQuery = quote_id
-      ? adminClient.from('quotes').select(`id, total_amount, status, project_id, project:projects ( id, homeowner_id )`).eq('id', quote_id).single()
-      : adminClient.from('quotes').select(`id, total_amount, status, project_id, project:projects ( id, homeowner_id )`).eq('project_id', pid).eq('status', 'pending').single();
+    const quoteSelect = `
+      id, total_amount, status, project_id, stripe_payment_intent_id, stripe_transfer_group,
+      project:projects ( id, homeowner_id )
+    `;
 
-    const { data: quote, error: quoteError } = await quoteQuery;
+    let quote: any = null;
+    let quoteError: any = null;
+
+    // Accept either a direct quote_id or a project_id (find the newest pending quote automatically).
+    if (quote_id) {
+      const result = await adminClient
+        .from('quotes')
+        .select(quoteSelect)
+        .eq('id', quote_id)
+        .single();
+      quote = result.data;
+      quoteError = result.error;
+    } else {
+      const result = await adminClient
+        .from('quotes')
+        .select(quoteSelect)
+        .eq('project_id', pid)
+        .eq('status', 'pending')
+        .order('submitted_at', { ascending: false })
+        .limit(1);
+      quote = result.data?.[0] ?? null;
+      quoteError = result.error;
+    }
 
     if (quoteError || !quote) {
       return new Response(JSON.stringify({ error: 'Quote not found' }), {
@@ -50,7 +72,14 @@ Deno.serve(async (req) => {
       });
     }
 
-    const project = quote.project as { id: string; homeowner_id: string };
+    const project = Array.isArray(quote.project)
+      ? quote.project[0]
+      : quote.project as { id: string; homeowner_id: string } | null;
+    if (!project) {
+      return new Response(JSON.stringify({ error: 'Quote project not found' }), {
+        status: 404, headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      });
+    }
 
     // Only homeowner can pay
     if (project.homeowner_id !== user.id) {
@@ -65,12 +94,21 @@ Deno.serve(async (req) => {
       });
     }
 
+    const quoteId = quote.id;
+
+    if (!Number.isFinite(quote.total_amount) || quote.total_amount <= 0) {
+      return new Response(JSON.stringify({ error: 'Quote total must be greater than zero' }), {
+        status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      });
+    }
+
     // Get or create Stripe customer for homeowner
-    const { data: userData } = await adminClient
+    const { data: userData, error: userError } = await adminClient
       .from('users')
       .select('stripe_customer_id, email')
       .eq('id', user.id)
       .single();
+    if (userError) throw userError;
 
     let customerId = userData?.stripe_customer_id;
     if (!customerId) {
@@ -79,10 +117,38 @@ Deno.serve(async (req) => {
         metadata: { supabase_user_id: user.id },
       });
       customerId = customer.id;
-      await adminClient
+      const { error: customerUpdateError } = await adminClient
         .from('users')
         .update({ stripe_customer_id: customerId })
         .eq('id', user.id);
+      if (customerUpdateError) throw customerUpdateError;
+    }
+
+    if (quote.stripe_payment_intent_id) {
+      const existingPaymentIntent = await stripe.paymentIntents.retrieve(quote.stripe_payment_intent_id);
+
+      if (existingPaymentIntent.status === 'succeeded') {
+        return new Response(JSON.stringify({ error: 'Payment has already succeeded for this quote' }), {
+          status: 409, headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        });
+      }
+
+      if (
+        !['canceled', 'requires_capture'].includes(existingPaymentIntent.status)
+        && existingPaymentIntent.amount === quote.total_amount
+        && existingPaymentIntent.currency === 'cad'
+        && existingPaymentIntent.client_secret
+      ) {
+        return new Response(
+          JSON.stringify({
+            success: true,
+            client_secret: existingPaymentIntent.client_secret,
+            payment_intent_id: existingPaymentIntent.id,
+            reused: true,
+          }),
+          { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        );
+      }
     }
 
     // Create PaymentIntent — funds captured to WalkerAI platform immediately
@@ -94,7 +160,7 @@ Deno.serve(async (req) => {
       transfer_group: `project_${project.id}`,
       metadata: {
         project_id: project.id,
-        quote_id,
+        quote_id: quoteId,
         homeowner_id: user.id,
       },
       description: `WalkerAI — Renovation Project ${project.id}`,
@@ -103,14 +169,24 @@ Deno.serve(async (req) => {
     // Store payment intent ID on quote so the stripe-webhook can look it up later.
     // Do NOT set status='approved' or project status='active' here — that happens
     // in stripe-webhook on payment_intent.succeeded, which is the authoritative event.
-    const quoteId = quote_id ?? quote.id;
-    await adminClient
+    const { data: updatedQuote, error: quoteUpdateError } = await adminClient
       .from('quotes')
       .update({
         stripe_payment_intent_id: paymentIntent.id,
         stripe_transfer_group: `project_${project.id}`,
       })
-      .eq('id', quoteId);
+      .eq('id', quoteId)
+      .eq('status', 'pending')
+      .select('id')
+      .maybeSingle();
+
+    if (quoteUpdateError) throw quoteUpdateError;
+    if (!updatedQuote) {
+      await stripe.paymentIntents.cancel(paymentIntent.id);
+      return new Response(JSON.stringify({ error: 'Quote is no longer pending payment' }), {
+        status: 409, headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      });
+    }
 
     return new Response(
       JSON.stringify({

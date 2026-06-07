@@ -6,6 +6,43 @@ const corsHeaders = {
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 };
 
+function stripeReadiness(account: Stripe.Account) {
+  return {
+    stripe_account_id: account.id,
+    stripe_details_submitted: account.details_submitted,
+    stripe_payouts_enabled: account.payouts_enabled,
+    stripe_transfers_active: account.capabilities?.transfers === 'active',
+    stripe_onboarding_checked_at: new Date().toISOString(),
+  };
+}
+
+function isMissingColumnError(error: { message?: string } | null | undefined) {
+  return !!error?.message && /column .* does not exist/i.test(error.message);
+}
+
+async function updateStripeReadiness(
+  adminClient: ReturnType<typeof createClient>,
+  table: 'companies' | 'suppliers',
+  ownerId: string,
+  readiness: ReturnType<typeof stripeReadiness>,
+) {
+  const result = await adminClient
+    .from(table)
+    .update(readiness)
+    .eq('id', ownerId);
+
+  if (!isMissingColumnError(result.error)) {
+    if (result.error) throw result.error;
+    return;
+  }
+
+  const fallback = await adminClient
+    .from(table)
+    .update({ stripe_account_id: readiness.stripe_account_id })
+    .eq('id', ownerId);
+  if (fallback.error) throw fallback.error;
+}
+
 Deno.serve(async (req) => {
   if (req.method === 'OPTIONS') return new Response('ok', { headers: corsHeaders });
 
@@ -35,41 +72,57 @@ Deno.serve(async (req) => {
       });
     }
 
-    // Get company record for this user
-    const { data: company, error: coError } = await adminClient
-      .from('companies')
+    let requestedRole = 'company';
+    try {
+      const body = await req.json();
+      if (body?.role === 'supplier') requestedRole = 'supplier';
+    } catch {
+      // Existing company callers send no body.
+    }
+
+    const table = requestedRole === 'supplier' ? 'suppliers' : 'companies';
+    const idField = requestedRole === 'supplier' ? 'supplier_id' : 'company_id';
+
+    const { data: accountOwner, error: ownerError } = await adminClient
+      .from(table)
       .select('id, stripe_account_id')
       .eq('user_id', user.id)
-      .single();
+      .order('created_at', { ascending: false })
+      .limit(1)
+      .maybeSingle();
 
-    if (coError || !company) {
-      return new Response(JSON.stringify({ error: 'Company not found' }), {
+    if (ownerError) throw ownerError;
+
+    if (!accountOwner) {
+      return new Response(JSON.stringify({ error: `${requestedRole === 'supplier' ? 'Supplier' : 'Company'} not found` }), {
         status: 404, headers: { ...corsHeaders, 'Content-Type': 'application/json' },
       });
     }
 
-    let accountId: string = company.stripe_account_id;
+    let accountId = accountOwner.stripe_account_id as string | null;
+    let account: Stripe.Account;
 
     // Create a Stripe Express account if none exists yet
     if (!accountId) {
-      const account = await stripe.accounts.create({
+      account = await stripe.accounts.create({
         type: 'express',
         country: 'CA',
         capabilities: {
           transfers: { requested: true },
         },
         metadata: {
-          company_id: company.id,
+          [idField]: accountOwner.id,
+          role: requestedRole,
           supabase_user_id: user.id,
         },
       });
       accountId = account.id;
-
-      await adminClient
-        .from('companies')
-        .update({ stripe_account_id: accountId })
-        .eq('id', company.id);
+    } else {
+      account = await stripe.accounts.retrieve(accountId);
     }
+
+    const readiness = stripeReadiness(account);
+    await updateStripeReadiness(adminClient, table, accountOwner.id, readiness);
 
     // Create a fresh account link every time (links expire after a few minutes)
     const accountLink = await stripe.accountLinks.create({
@@ -80,7 +133,13 @@ Deno.serve(async (req) => {
     });
 
     return new Response(
-      JSON.stringify({ success: true, url: accountLink.url }),
+      JSON.stringify({
+        success: true,
+        url: accountLink.url,
+        payout_ready: readiness.stripe_details_submitted
+          && readiness.stripe_payouts_enabled
+          && readiness.stripe_transfers_active,
+      }),
       { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
     );
 

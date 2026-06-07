@@ -6,6 +6,92 @@ const corsHeaders = {
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 };
 
+function stripeReadiness(account: Stripe.Account) {
+  return {
+    stripe_details_submitted: account.details_submitted,
+    stripe_payouts_enabled: account.payouts_enabled,
+    stripe_transfers_active: account.capabilities?.transfers === 'active',
+    stripe_onboarding_checked_at: new Date().toISOString(),
+  };
+}
+
+function isMissingColumnError(error: { message?: string } | null | undefined) {
+  return !!error?.message && /column .* does not exist/i.test(error.message);
+}
+
+async function updateStripeReadiness(
+  adminClient: ReturnType<typeof createClient>,
+  table: 'companies' | 'suppliers',
+  id: string,
+  readiness: ReturnType<typeof stripeReadiness> & { stripe_account_id: string },
+) {
+  const result = await adminClient
+    .from(table)
+    .update(readiness)
+    .eq('id', id);
+
+  if (!isMissingColumnError(result.error)) {
+    if (result.error) throw result.error;
+    return;
+  }
+
+  const fallback = await adminClient
+    .from(table)
+    .update({ stripe_account_id: readiness.stripe_account_id })
+    .eq('id', id);
+  if (fallback.error) throw fallback.error;
+}
+
+async function assertStripePayoutReady(
+  stripe: Stripe,
+  adminClient: ReturnType<typeof createClient>,
+  companyId: string,
+  stripeAccountId: string | null,
+): Promise<void> {
+  if (!stripeAccountId) {
+    throw new Error('Contractor has not completed Stripe onboarding');
+  }
+
+  const account = await stripe.accounts.retrieve(stripeAccountId);
+  const readiness = { stripe_account_id: account.id, ...stripeReadiness(account) };
+  await updateStripeReadiness(adminClient, 'companies', companyId, readiness);
+
+  if (!readiness.stripe_details_submitted || !readiness.stripe_payouts_enabled || !readiness.stripe_transfers_active) {
+    throw new Error('Contractor must finish Stripe payout onboarding before milestone payment can be released');
+  }
+}
+
+async function hasMilestoneProgressEvidence(
+  adminClient: ReturnType<typeof createClient>,
+  projectId: string,
+  milestoneId: string,
+): Promise<boolean> {
+  const [photoResult, messageResult] = await Promise.all([
+    adminClient
+      .from('project_photos')
+      .select('id')
+      .eq('project_id', projectId)
+      .like('storage_path', `${projectId}/milestones/${milestoneId}/%`)
+      .limit(1),
+    adminClient
+      .from('messages')
+      .select('id')
+      .eq('project_id', projectId)
+      .not('attachment_url', 'is', null)
+      .ilike('body', `%milestone:${milestoneId}%`)
+      .limit(1),
+  ]);
+
+  if (photoResult.error) {
+    throw new Error(`Failed to verify milestone progress photos: ${photoResult.error.message}`);
+  }
+  if (messageResult.error) {
+    throw new Error(`Failed to verify milestone progress messages: ${messageResult.error.message}`);
+  }
+
+  return (photoResult.data?.length ?? 0) > 0 || (messageResult.data?.length ?? 0) > 0;
+}
+
 Deno.serve(async (req) => {
   if (req.method === 'OPTIONS') {
     return new Response('ok', { headers: corsHeaders });
@@ -49,12 +135,12 @@ Deno.serve(async (req) => {
       .select(`
         id, title, amount, status, sort_order, stripe_transfer_id,
         quote:quotes (
-          id, total_amount, commission_rate, stripe_payment_intent_id,
+          id, total_amount, status, commission_rate, stripe_payment_intent_id, company_id,
           project:projects (
-            id, homeowner_id, assigned_company_id, province,
-            company:companies (
-              id, user_id, stripe_account_id, province
-            )
+            id, homeowner_id, province, status
+          ),
+          company:companies (
+            id, user_id, stripe_account_id, province
           )
         )
       `)
@@ -68,27 +154,43 @@ Deno.serve(async (req) => {
       });
     }
 
-    const quote = milestone.quote as {
+    const quote = (Array.isArray(milestone.quote) ? milestone.quote[0] : milestone.quote) as {
       id: string;
       total_amount: number;
+      status: string;
       commission_rate: number;
       stripe_payment_intent_id: string;
+      company_id: string;
       project: {
         id: string;
         homeowner_id: string;
-        assigned_company_id: string;
         province: string;
-        company: {
-          id: string;
-          user_id: string;
-          stripe_account_id: string;
-          province: string;
-        };
+        status: string;
       };
-    };
+      company: {
+        id: string;
+        user_id: string;
+        stripe_account_id: string;
+        province: string;
+      };
+    } | null;
 
-    const project = quote.project;
-    const company = project.company;
+    const project = Array.isArray(quote?.project) ? quote?.project[0] : quote?.project;
+    const company = Array.isArray(quote?.company) ? quote?.company[0] : quote?.company;
+
+    if (!quote || !project || !company) {
+      return new Response(JSON.stringify({ error: 'Milestone context is incomplete' }), {
+        status: 404,
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      });
+    }
+
+    if (quote.status !== 'approved') {
+      return new Response(
+        JSON.stringify({ error: 'Quote must be funded before milestone payment can be released' }),
+        { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      );
+    }
 
     // Authorization: only the homeowner can release milestones
     if (project.homeowner_id !== user.id) {
@@ -96,6 +198,75 @@ Deno.serve(async (req) => {
         status: 403,
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
       });
+    }
+
+    // Check no active dispute on the project
+    const { data: dispute, error: disputeError } = await adminClient
+      .from('disputes')
+      .select('id')
+      .eq('project_id', project.id)
+      .in('status', ['open', 'under_review'])
+      .limit(1)
+      .maybeSingle();
+
+    if (disputeError) {
+      throw new Error(`Failed to check project disputes: ${disputeError.message}`);
+    }
+
+    if (dispute) {
+      return new Response(
+        JSON.stringify({ error: 'Cannot release payment while a dispute is active' }),
+        { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      );
+    }
+
+    // Determine if this is the final milestone for this quote. Project completion
+    // is checked separately across every approved quote in the project.
+    const { data: allMilestones, error: allMilestonesError } = await adminClient
+      .from('milestones')
+      .select('id, amount, status')
+      .eq('quote_id', quote.id);
+
+    if (allMilestonesError) {
+      throw new Error(`Failed to load quote milestones: ${allMilestonesError.message}`);
+    }
+
+    const remainingMilestones = (allMilestones ?? []).filter(
+      (m: { id: string; status: string; amount: number }) =>
+        m.id !== milestone_id && m.status !== 'paid' && m.status !== 'homeowner_approved'
+    );
+    const isFinalQuoteMilestone = remainingMilestones.length === 0;
+
+    if (milestone.status === 'paid' && !milestone.stripe_transfer_id) {
+      return new Response(
+        JSON.stringify({ error: 'Milestone is marked paid but is missing a Stripe transfer id' }),
+        { status: 409, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      );
+    }
+
+    if (milestone.stripe_transfer_id) {
+      const isFinalProjectMilestone = await allApprovedProjectMilestonesReleased(adminClient, project.id);
+      if (isFinalProjectMilestone && project.status !== 'completed') {
+        await completeProjectAndNotify(
+          adminClient,
+          project.id,
+          project.homeowner_id,
+          company.user_id,
+          'Milestone already paid but project completion repair failed',
+        );
+      }
+
+      return new Response(
+        JSON.stringify({
+          success: true,
+          already_released: true,
+          transfer_id: milestone.stripe_transfer_id,
+          is_final_milestone: isFinalQuoteMilestone,
+          is_final_quote_milestone: isFinalQuoteMilestone,
+          is_final_project_milestone: isFinalProjectMilestone,
+        }),
+        { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      );
     }
 
     // Validate milestone is ready for release
@@ -106,47 +277,22 @@ Deno.serve(async (req) => {
       );
     }
 
-    if (milestone.stripe_transfer_id) {
+    const hasProgressEvidence = await hasMilestoneProgressEvidence(adminClient, project.id, milestone_id);
+    if (!hasProgressEvidence) {
       return new Response(
-        JSON.stringify({ error: 'Milestone payment already released' }),
+        JSON.stringify({ error: 'Progress photo evidence is required before milestone payment can be released' }),
         { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       );
     }
-
-    // Check no active dispute on the project
-    const { data: dispute } = await adminClient
-      .from('disputes')
-      .select('id')
-      .eq('project_id', project.id)
-      .in('status', ['open', 'under_review'])
-      .single();
-
-    if (dispute) {
-      return new Response(
-        JSON.stringify({ error: 'Cannot release payment while a dispute is active' }),
-        { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-      );
-    }
-
-    // Determine if this is the final milestone
-    const { data: allMilestones } = await adminClient
-      .from('milestones')
-      .select('id, status')
-      .eq('quote_id', quote.id);
-
-    const remainingMilestones = (allMilestones ?? []).filter(
-      (m: { id: string; status: string }) => m.id !== milestone_id && m.status !== 'paid' && m.status !== 'homeowner_approved'
-    );
-    const isFinalMilestone = remainingMilestones.length === 0;
 
     // Calculate transfer amount
     const commissionRate = quote.commission_rate ?? 0.10;
     let transferAmount: number;
 
-    if (isFinalMilestone) {
+    if (isFinalQuoteMilestone) {
       // On final milestone: deduct entire commission from the total remaining
       const totalPaid = (allMilestones ?? [])
-        .filter((m: { id: string; status: string }) => m.status === 'paid' || m.status === 'homeowner_approved')
+        .filter((m: { id: string; status: string; amount: number }) => m.status === 'paid' || m.status === 'homeowner_approved')
         .reduce((sum: number, m: { amount: number }) => sum + m.amount, 0);
 
       const totalCommission = Math.round(quote.total_amount * commissionRate);
@@ -158,31 +304,43 @@ Deno.serve(async (req) => {
       transferAmount = Math.round(milestone.amount * (1 - commissionRate));
     }
 
-    if (!company.stripe_account_id) {
+    try {
+      await assertStripePayoutReady(stripe, adminClient, company.id, company.stripe_account_id);
+    } catch (err) {
       return new Response(
-        JSON.stringify({ error: 'Contractor has not completed Stripe onboarding' }),
+        JSON.stringify({ error: err instanceof Error ? err.message : 'Contractor has not completed Stripe onboarding' }),
+        { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      );
+    }
+
+    if (transferAmount <= 0) {
+      return new Response(
+        JSON.stringify({ error: 'Calculated contractor payout must be greater than zero' }),
         { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       );
     }
 
     // Create Stripe transfer to company's Connect account
     // Funds move from WalkerAI platform balance to company
-    const transfer = await stripe.transfers.create({
-      amount: transferAmount, // CAD cents
-      currency: 'cad',
-      destination: company.stripe_account_id,
-      metadata: {
-        project_id: project.id,
-        milestone_id,
-        quote_id: quote.id,
-        commission_rate: commissionRate.toString(),
-        is_final_milestone: isFinalMilestone.toString(),
+    const transfer = await stripe.transfers.create(
+      {
+        amount: transferAmount, // CAD cents
+        currency: 'cad',
+        destination: company.stripe_account_id,
+        metadata: {
+          project_id: project.id,
+          milestone_id,
+          quote_id: quote.id,
+          commission_rate: commissionRate.toString(),
+          is_final_milestone: isFinalQuoteMilestone.toString(),
+        },
+        description: `WalkerAI Milestone Release — ${milestone.title}`,
       },
-      description: `WalkerAI Milestone Release — ${milestone.title}`,
-    });
+      { idempotencyKey: `milestone-release-${milestone_id}` }
+    );
 
     // Update milestone status
-    await adminClient
+    let updateMilestoneResult = await adminClient
       .from('milestones')
       .update({
         status: 'paid',
@@ -192,8 +350,23 @@ Deno.serve(async (req) => {
       })
       .eq('id', milestone_id);
 
+    if (isMissingColumnError(updateMilestoneResult.error)) {
+      updateMilestoneResult = await adminClient
+        .from('milestones')
+        .update({
+          status: 'paid',
+          stripe_transfer_id: transfer.id,
+        })
+        .eq('id', milestone_id);
+    }
+
+    const updateMilestoneError = updateMilestoneResult.error;
+    if (updateMilestoneError) {
+      throw new Error(`Transfer created but milestone update failed: ${updateMilestoneError.message}`);
+    }
+
     // Notify company
-    await adminClient.from('notifications').insert({
+    const { error: companyNotificationError } = await adminClient.from('notifications').insert({
       user_id: company.user_id,
       type: 'milestone_paid',
       payload: {
@@ -201,39 +374,27 @@ Deno.serve(async (req) => {
         milestone_id,
         milestone_title: milestone.title,
         amount: transferAmount,
-        is_final: isFinalMilestone,
+        is_final: isFinalQuoteMilestone,
         deep_link: `/(company)/job/${project.id}/milestones`,
       },
     });
 
-    // If final milestone — trigger project completion + review flow
-    if (isFinalMilestone) {
-      await adminClient
-        .from('projects')
-        .update({ status: 'completed', completed_at: new Date().toISOString() })
-        .eq('id', project.id);
+    if (companyNotificationError) {
+      console.warn('Milestone paid but company notification failed:', companyNotificationError.message);
+    }
 
-      // Prompt both parties to leave reviews
-      await adminClient.from('notifications').insert([
-        {
-          user_id: project.homeowner_id,
-          type: 'project_complete',
-          payload: {
-            project_id: project.id,
-            message: 'Your renovation is complete! Please leave a review.',
-            deep_link: `/(homeowner)/project/${project.id}`,
-          },
-        },
-        {
-          user_id: company.user_id,
-          type: 'project_complete',
-          payload: {
-            project_id: project.id,
-            message: 'Project complete. Leave a review for this homeowner.',
-            deep_link: `/(company)/job/${project.id}`,
-          },
-        },
-      ]);
+    const isFinalProjectMilestone = await allApprovedProjectMilestonesReleased(adminClient, project.id);
+
+    // If this was the final outstanding milestone across all approved trade
+    // quotes, trigger project completion + review flow.
+    if (isFinalProjectMilestone) {
+      await completeProjectAndNotify(
+        adminClient,
+        project.id,
+        project.homeowner_id,
+        company.user_id,
+        'Final milestone paid but project completion update failed',
+      );
     }
 
     // Calculate HST on commission (WalkerAI owes this to CRA)
@@ -248,7 +409,9 @@ Deno.serve(async (req) => {
         transfer_amount_cad_cents: transferAmount,
         commission_amount_cad_cents: commissionAmount,
         hst_on_commission_cents: hstOwed,
-        is_final_milestone: isFinalMilestone,
+        is_final_milestone: isFinalQuoteMilestone,
+        is_final_quote_milestone: isFinalQuoteMilestone,
+        is_final_project_milestone: isFinalProjectMilestone,
       }),
       { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
     );
@@ -276,4 +439,180 @@ async function getHSTRate(
 ): Promise<number> {
   const { data } = await adminClient.rpc('canadian_tax_rate', { province_code: province });
   return (data as number) ?? 0.05;
+}
+
+async function completeProjectAndNotify(
+  adminClient: ReturnType<typeof createClient>,
+  projectId: string,
+  homeownerId: string,
+  fallbackCompanyUserId: string,
+  updateErrorPrefix: string,
+) {
+  const { error: projectUpdateError } = await adminClient
+    .from('projects')
+    .update({ status: 'completed', completed_at: new Date().toISOString() })
+    .eq('id', projectId);
+
+  if (projectUpdateError) {
+    throw new Error(`${updateErrorPrefix}: ${projectUpdateError.message}`);
+  }
+
+  const companyUserIds = new Set<string>();
+  if (fallbackCompanyUserId) companyUserIds.add(fallbackCompanyUserId);
+
+  const { data: approvedQuoteCompanies, error: approvedQuoteCompaniesError } = await adminClient
+    .from('quotes')
+    .select('companies(user_id)')
+    .eq('project_id', projectId)
+    .eq('status', 'approved');
+
+  if (approvedQuoteCompaniesError) {
+    console.warn('Project completed but approved company review lookup failed:', approvedQuoteCompaniesError.message);
+  } else {
+    for (const row of approvedQuoteCompanies ?? []) {
+      const company = Array.isArray((row as any).companies)
+        ? (row as any).companies[0]
+        : (row as any).companies;
+      if (company?.user_id) companyUserIds.add(company.user_id);
+    }
+  }
+
+  const notifications = [
+    {
+      user_id: homeownerId,
+      type: 'project_complete',
+      payload: {
+        project_id: projectId,
+        message: 'Your renovation is complete! Please leave a review.',
+        deep_link: `/(homeowner)/project/${projectId}`,
+      },
+    },
+    ...Array.from(companyUserIds).map((userId) => ({
+      user_id: userId,
+      type: 'project_complete',
+      payload: {
+        project_id: projectId,
+        message: 'Project complete. Leave a review for this homeowner.',
+        deep_link: `/(company)/job/${projectId}`,
+      },
+    })),
+  ];
+
+  const { error: completionNotificationError } = await adminClient.from('notifications').insert(notifications);
+
+  if (completionNotificationError) {
+    console.warn('Project completed but review notifications failed:', completionNotificationError.message);
+  }
+}
+
+async function allFilledSlotsHaveApprovedQuotes(
+  adminClient: ReturnType<typeof createClient>,
+  projectId: string,
+): Promise<boolean> {
+  const { data: slots, error: slotsError } = await adminClient
+    .from('project_slots')
+    .select('id, assigned_company_id, status')
+    .eq('project_id', projectId)
+    .order('created_at', { ascending: true });
+
+  if (slotsError) {
+    throw new Error(`Failed to load project slots: ${slotsError.message}`);
+  }
+
+  const requiredSlots = (slots ?? []) as Array<{ id: string; assigned_company_id: string | null; status: string | null }>;
+  if (requiredSlots.length === 0) return true;
+
+  const allSlotsAssigned = requiredSlots.every((slot) => (
+    !!slot.assigned_company_id && ['filled', 'scheduled'].includes(slot.status ?? '')
+  ));
+  if (!allSlotsAssigned) return false;
+
+  const requiredCompanyIds = requiredSlots
+    .map((slot) => slot.assigned_company_id)
+    .filter((id): id is string => Boolean(id));
+
+  const approvedQuoteResult = await adminClient
+    .from('quotes')
+    .select('slot_id, company_id')
+    .eq('project_id', projectId)
+    .eq('status', 'approved')
+    .in('company_id', requiredCompanyIds);
+
+  if (isMissingColumnError(approvedQuoteResult.error)) {
+    const legacyQuoteResult = await adminClient
+      .from('quotes')
+      .select('company_id')
+      .eq('project_id', projectId)
+      .eq('status', 'approved')
+      .in('company_id', requiredCompanyIds);
+
+    if (legacyQuoteResult.error) {
+      throw new Error(`Failed to load approved slot quotes: ${legacyQuoteResult.error.message}`);
+    }
+
+    const approvedCompanyIds = new Set(
+      ((legacyQuoteResult.data ?? []) as Array<{ company_id: string | null }>)
+        .map((quote) => quote.company_id)
+        .filter((id): id is string => Boolean(id))
+    );
+
+    return requiredSlots.every((slot) => (
+      !!slot.assigned_company_id && approvedCompanyIds.has(slot.assigned_company_id)
+    ));
+  }
+
+  if (approvedQuoteResult.error) {
+    throw new Error(`Failed to load approved slot quotes: ${approvedQuoteResult.error.message}`);
+  }
+
+  const quotes = (approvedQuoteResult.data ?? []) as Array<{ slot_id: string | null; company_id: string | null }>;
+  const approvedSlotIds = new Set(quotes.map((quote) => quote.slot_id).filter((id): id is string => Boolean(id)));
+  const companySlotCounts = requiredSlots.reduce<Record<string, number>>((counts, slot) => {
+    if (slot.assigned_company_id) counts[slot.assigned_company_id] = (counts[slot.assigned_company_id] ?? 0) + 1;
+    return counts;
+  }, {});
+  const legacyApprovedCompanyIds = new Set(
+    quotes
+      .filter((quote) => !quote.slot_id && quote.company_id && companySlotCounts[quote.company_id] === 1)
+      .map((quote) => quote.company_id as string)
+  );
+
+  return requiredSlots.every((slot) => (
+    approvedSlotIds.has(slot.id)
+    || (!!slot.assigned_company_id && legacyApprovedCompanyIds.has(slot.assigned_company_id))
+  ));
+}
+
+async function allApprovedProjectMilestonesReleased(
+  adminClient: ReturnType<typeof createClient>,
+  projectId: string
+): Promise<boolean> {
+  const allSlotCompaniesFunded = await allFilledSlotsHaveApprovedQuotes(adminClient, projectId);
+  if (!allSlotCompaniesFunded) return false;
+
+  const { data: approvedQuotes, error: quoteError } = await adminClient
+    .from('quotes')
+    .select('id')
+    .eq('project_id', projectId)
+    .eq('status', 'approved');
+
+  if (quoteError) {
+    throw new Error(`Failed to load approved project quotes: ${quoteError.message}`);
+  }
+
+  const quoteIds = (approvedQuotes ?? []).map((quote: { id: string }) => quote.id);
+  if (quoteIds.length === 0) return false;
+
+  const { data: projectMilestones, error: milestoneError } = await adminClient
+    .from('milestones')
+    .select('id, status')
+    .in('quote_id', quoteIds);
+
+  if (milestoneError) {
+    throw new Error(`Failed to load approved project milestones: ${milestoneError.message}`);
+  }
+
+  const milestones = (projectMilestones ?? []) as Array<{ id: string; status: string }>;
+  return milestones.length > 0
+    && milestones.every((m) => m.status === 'paid' || m.status === 'homeowner_approved');
 }

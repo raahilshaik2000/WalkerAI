@@ -1,5 +1,4 @@
 import { createClient } from 'jsr:@supabase/supabase-js@2';
-import OpenAI from 'npm:openai@4';
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -10,6 +9,32 @@ interface StyleParams {
   design_style: string;
   material_tier: string;
   room_type: string;
+}
+
+function answerValue(answers: Record<string, unknown> | null | undefined, ...keys: string[]): string {
+  for (const key of keys) {
+    const value = answers?.[key];
+    if (typeof value === 'string' && value.trim()) return value.toLowerCase();
+  }
+  return '';
+}
+
+function extractDesignStyle(answers: Record<string, unknown> | null | undefined): string {
+  const styleAnswer = answerValue(answers, 'k_style', 'b_style', 'style');
+  if (styleAnswer.includes('traditional')) return 'traditional';
+  if (styleAnswer.includes('transitional')) return 'transitional';
+  if (styleAnswer.includes('farmhouse')) return 'farmhouse';
+  if (styleAnswer.includes('industrial')) return 'industrial';
+  if (styleAnswer.includes('contemporary')) return 'contemporary';
+  if (styleAnswer.includes('modern')) return 'modern';
+  return 'modern';
+}
+
+function extractMaterialTier(answers: Record<string, unknown> | null | undefined): string {
+  const tierAnswer = answerValue(answers, 'k_tier', 'b_tier', 'quality_tier');
+  if (tierAnswer.includes('luxury')) return 'luxury';
+  if (tierAnswer.includes('mid')) return 'mid-range';
+  return 'budget';
 }
 
 async function callReimagineHome(
@@ -78,26 +103,46 @@ Deno.serve(async (req) => {
       });
     }
 
-    const { project_id, analysis, questionnaire_answers } = await req.json();
+    const { project_id, questionnaire_answers } = await req.json();
+    if (!project_id || typeof project_id !== 'string') {
+      return new Response(JSON.stringify({ error: 'project_id is required' }), {
+        status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      });
+    }
 
     // Load project + photos
-    const { data: project } = await adminClient
+    const { data: project, error: projectError } = await adminClient
       .from('projects')
       .select('id, room_type, homeowner_id')
       .eq('id', project_id)
       .single();
 
-    if (!project || project.homeowner_id !== user.id) {
+    if (projectError || !project || project.homeowner_id !== user.id) {
       return new Response(JSON.stringify({ error: 'Not found' }), {
         status: 404, headers: { ...corsHeaders, 'Content-Type': 'application/json' },
       });
     }
 
-    const { data: photos } = await adminClient
+    const { data: existingRenders, error: existingRendersError } = await adminClient
+      .from('renders')
+      .select('id, url, style_params, selected')
+      .eq('project_id', project_id)
+      .order('created_at', { ascending: true });
+    if (existingRendersError) throw existingRendersError;
+
+    if (existingRenders && existingRenders.length > 0) {
+      return new Response(
+        JSON.stringify({ success: true, renders: existingRenders, fallback: false, cached: true }),
+        { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      );
+    }
+
+    const { data: photos, error: photosError } = await adminClient
       .from('project_photos')
       .select('url')
       .eq('project_id', project_id)
       .limit(1);
+    if (photosError) throw photosError;
 
     if (!photos || photos.length === 0) {
       return new Response(JSON.stringify({ error: 'No photos found' }), {
@@ -108,23 +153,30 @@ Deno.serve(async (req) => {
     const primaryPhotoUrl = photos[0].url;
     const apiKey = Deno.env.get('REIMAGINE_API_KEY');
 
-    // Derive style from questionnaire answers
-    const styleMap: Record<string, string> = {
-      modern: 'modern', traditional: 'traditional',
-      transitional: 'transitional', contemporary: 'contemporary',
-    };
+    if (!apiKey) {
+      return new Response(
+        JSON.stringify({
+          success: true,
+          renders: [],
+          fallback: true,
+          reason: 'No image-based render provider is configured',
+        }),
+        { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      );
+    }
+
+    // Derive style from the fixed questionnaire answer IDs used by the app.
+    const selectedStyle = extractDesignStyle(questionnaire_answers);
+    const selectedTier = extractMaterialTier(questionnaire_answers);
     const qualityTierMap: Record<string, string> = {
       budget: 'budget', 'mid-range': 'standard', luxury: 'luxury',
     };
 
-    const designStyles = ['modern', 'traditional', 'transitional', 'contemporary'];
-    const qualityTiers = ['budget', 'mid-range', 'luxury'];
-
     // Generate up to 3 renders (different styles)
     const renderConfigs: StyleParams[] = [
       {
-        design_style: styleMap[questionnaire_answers?.style ?? 'modern'] ?? 'modern',
-        material_tier: qualityTierMap[questionnaire_answers?.quality_tier ?? 'mid-range'] ?? 'standard',
+        design_style: selectedStyle,
+        material_tier: qualityTierMap[selectedTier] ?? 'standard',
         room_type: project.room_type,
       },
       {
@@ -136,92 +188,30 @@ Deno.serve(async (req) => {
 
     const savedRenders: Array<{ id: string; url: string; style_params: StyleParams }> = [];
 
-    if (apiKey) {
-      // REimagineHome path — best quality for room renders
-      for (const config of renderConfigs) {
-        let renderUrl: string | null = null;
-        for (let attempt = 0; attempt < 2; attempt++) {
-          try {
-            renderUrl = await callReimagineHome(primaryPhotoUrl, config, apiKey);
-            break;
-          } catch (e) {
-            console.warn(`REimagineHome attempt ${attempt + 1} failed:`, e);
-          }
-        }
-        if (!renderUrl) continue;
-
-        const { data: saved } = await adminClient
-          .from('renders')
-          .insert({ project_id, url: renderUrl, style_params: config, selected: false })
-          .select('id, url, style_params')
-          .single();
-        if (saved) savedRenders.push(saved);
-      }
-    } else {
-      // DALL-E 3 fallback — uses existing OpenAI key
-      const openai = new OpenAI({ apiKey: Deno.env.get('OPENAI_API_KEY')! });
-      const style = questionnaire_answers?.style ?? 'modern';
-      const qualityTier = questionnaire_answers?.quality_tier ?? 'mid-range';
-      const detectedMaterials = analysis?.detected_materials
-        ? Object.values(analysis.detected_materials).join(', ')
-        : 'standard finishes';
-
-      const dalleConfigs = [
-        { style, qualityTier, label: 'primary' },
-        { style: 'contemporary', qualityTier, label: 'contemporary' },
-      ];
-
-      for (const cfg of dalleConfigs) {
+    // Image-based render path only. Avoid text-only generated room renders; they
+    // can misrepresent the homeowner's actual space and should not drive scope.
+    for (const config of renderConfigs) {
+      let renderUrl: string | null = null;
+      for (let attempt = 0; attempt < 2; attempt++) {
         try {
-          const prompt = `A photorealistic ${cfg.style} ${project.room_type} renovation render. ` +
-            `Quality tier: ${cfg.qualityTier}. ` +
-            `Existing detected materials: ${detectedMaterials}. ` +
-            `Clean, professional interior design photo, bright lighting, sharp details. ` +
-            `Do not include people. 16:9 wide angle shot showing the full room.`;
-
-          const imgResponse = await openai.images.generate({
-            model: 'dall-e-3',
-            prompt,
-            n: 1,
-            size: '1792x1024',
-            quality: 'standard',
-          });
-
-          const imageUrl = imgResponse.data[0]?.url;
-          if (!imageUrl) continue;
-
-          // Download and upload to Supabase storage so URL is permanent
-          const imgBuffer = await fetch(imageUrl).then((r) => r.arrayBuffer());
-          const storagePath = `${project_id}/render_${cfg.label}_${Date.now()}.png`;
-
-          await adminClient.storage
-            .from('renders')
-            .upload(storagePath, imgBuffer, { contentType: 'image/png', upsert: true });
-
-          const { data: publicUrlData } = adminClient.storage
-            .from('renders')
-            .getPublicUrl(storagePath);
-
-          const publicUrl = publicUrlData?.publicUrl;
-          if (!publicUrl) continue;
-
-          const styleParams: StyleParams = {
-            design_style: cfg.style,
-            material_tier: cfg.qualityTier,
-            room_type: project.room_type,
-          };
-
-          const { data: saved } = await adminClient
-            .from('renders')
-            .insert({ project_id, url: publicUrl, style_params: styleParams, selected: false })
-            .select('id, url, style_params')
-            .single();
-
-          if (saved) savedRenders.push(saved);
+          renderUrl = await callReimagineHome(primaryPhotoUrl, config, apiKey);
+          break;
         } catch (e) {
-          console.warn(`DALL-E render failed for ${cfg.label}:`, e);
+          console.warn(`REimagineHome attempt ${attempt + 1} failed:`, e);
         }
       }
+      if (!renderUrl) continue;
+
+      const { data: saved, error: saveError } = await adminClient
+        .from('renders')
+        .insert({ project_id, url: renderUrl, style_params: config, selected: false })
+        .select('id, url, style_params')
+        .single();
+      if (saveError) {
+        console.warn(`Failed to save REimagineHome render: ${saveError.message}`);
+        continue;
+      }
+      if (saved) savedRenders.push(saved);
     }
 
     return new Response(
@@ -229,6 +219,7 @@ Deno.serve(async (req) => {
         success: true,
         renders: savedRenders,
         fallback: savedRenders.length === 0,
+        reason: savedRenders.length === 0 ? 'Image-based render provider did not return a preview' : undefined,
       }),
       { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
     );
