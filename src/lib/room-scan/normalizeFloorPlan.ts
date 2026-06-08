@@ -38,8 +38,15 @@ export interface NormalizedFloorPlan {
   quality: 'good' | 'fallback' | 'empty';
 }
 
-const SNAP_TOLERANCE_M = 0.18;
+// Tolerance for clustering parallel walls onto the same axis line. RoomPlan
+// scans can drift several centimetres per face, especially in low light, so
+// 22cm is a reasonable balance between snapping noisy walls together and
+// preserving genuinely-close-but-distinct walls.
+const SNAP_TOLERANCE_M = 0.22;
 const MIN_WALL_LENGTH_M = 0.35;
+// When deciding whether a wall is horizontal-leaning vs vertical-leaning,
+// a wall within ~10 degrees of an axis is treated as that axis.
+const AXIS_ANGLE_BIAS = Math.tan((10 * Math.PI) / 180);
 
 function normalizeAngle(angle: number) {
   let a = angle % Math.PI;
@@ -57,11 +64,6 @@ function inferAngle(wall: RawScanSurface, walls: RawScanSurface[]) {
   return sameZ >= sameX ? 0 : Math.PI / 2;
 }
 
-function snapValue(value: number, values: number[]) {
-  const nearest = values.find((v) => Math.abs(v - value) <= SNAP_TOLERANCE_M);
-  return nearest ?? value;
-}
-
 function segmentFromWall(wall: RawScanSurface, walls: RawScanSurface[]): NormalizedSegment | null {
   if (!Number.isFinite(wall.width) || wall.width < MIN_WALL_LENGTH_M) return null;
 
@@ -69,7 +71,18 @@ function segmentFromWall(wall: RawScanSurface, walls: RawScanSurface[]): Normali
   const half = wall.width / 2;
   const dx = Math.cos(angle) * half;
   const dy = Math.sin(angle) * half;
-  const isHorizontal = Math.abs(Math.sin(angle)) < Math.abs(Math.cos(angle));
+
+  // A wall is "horizontal" in the floor plan if its length direction is
+  // closer to the world X axis than the Z axis. Bias slightly toward axis
+  // alignment (10 degrees of tolerance) so a wall that drifted a few
+  // degrees off-axis still snaps to horizontal/vertical instead of being
+  // treated as diagonal.
+  const tan = Math.tan(angle);
+  const isHorizontal = Math.abs(tan) <= 1
+    ? true
+    : Math.abs(1 / tan) > AXIS_ANGLE_BIAS
+      ? false
+      : Math.abs(Math.cos(angle)) >= Math.abs(Math.sin(angle));
 
   return {
     id: wall.id,
@@ -84,73 +97,146 @@ function segmentFromWall(wall: RawScanSurface, walls: RawScanSurface[]): Normali
   };
 }
 
-function mergeCloseSegments(segments: NormalizedSegment[]) {
+// Cluster a list of scalar coordinates: any two values within tolerance get
+// represented by their average. Returns a map from original value to its
+// cluster representative. Used to snap parallel walls onto shared axis lines.
+function buildClusterMap(values: number[], tolerance: number): Map<number, number> {
+  const map = new Map<number, number>();
+  if (values.length === 0) return map;
+
+  const sorted = [...values].sort((a, b) => a - b);
+  let bucket: number[] = [sorted[0]];
+
+  const flushBucket = () => {
+    const rep = bucket.reduce((sum, v) => sum + v, 0) / bucket.length;
+    for (const v of bucket) map.set(v, rep);
+    bucket = [];
+  };
+
+  for (let i = 1; i < sorted.length; i++) {
+    const v = sorted[i];
+    if (v - bucket[bucket.length - 1] <= tolerance) {
+      bucket.push(v);
+    } else {
+      flushBucket();
+      bucket.push(v);
+    }
+  }
+  flushBucket();
+  return map;
+}
+
+function snapToNearest(value: number, candidates: number[], tolerance: number): number {
+  let best = value;
+  let bestDist = tolerance;
+  for (const c of candidates) {
+    const d = Math.abs(c - value);
+    if (d <= bestDist) {
+      bestDist = d;
+      best = c;
+    }
+  }
+  return best;
+}
+
+// Force every segment onto its own axis line AND snap its endpoints to the
+// canonical axis-line positions of the perpendicular walls. This is what
+// makes a horizontal wall actually touch the two vertical walls it meets
+// instead of stopping just short of them.
+function snapSegmentsToGrid(segments: NormalizedSegment[]): NormalizedSegment[] {
+  const horizontals = segments.filter((s) => s.isHorizontal);
+  const verticals = segments.filter((s) => !s.isHorizontal);
+
+  // Cluster horizontal walls by their y, vertical walls by their x. The
+  // representative of each cluster becomes the axis line for that group.
+  const horizontalYs = horizontals.map((s) => s.y1);
+  const verticalXs = verticals.map((s) => s.x1);
+  const horizontalYClusters = buildClusterMap(horizontalYs, SNAP_TOLERANCE_M);
+  const verticalXClusters = buildClusterMap(verticalXs, SNAP_TOLERANCE_M);
+
+  const canonicalYs = Array.from(new Set(horizontalYClusters.values()));
+  const canonicalXs = Array.from(new Set(verticalXClusters.values()));
+
+  return segments.map((seg) => {
+    if (seg.isHorizontal) {
+      const y = horizontalYClusters.get(seg.y1) ?? seg.y1;
+      const x1 = snapToNearest(seg.x1, canonicalXs, SNAP_TOLERANCE_M * 1.5);
+      const x2 = snapToNearest(seg.x2, canonicalXs, SNAP_TOLERANCE_M * 1.5);
+      return { ...seg, y1: y, y2: y, x1, x2 };
+    }
+    const x = verticalXClusters.get(seg.x1) ?? seg.x1;
+    const y1 = snapToNearest(seg.y1, canonicalYs, SNAP_TOLERANCE_M * 1.5);
+    const y2 = snapToNearest(seg.y2, canonicalYs, SNAP_TOLERANCE_M * 1.5);
+    return { ...seg, x1: x, x2: x, y1, y2 };
+  });
+}
+
+// After snapping, if RoomPlan returned two near-duplicate walls for the
+// same physical wall (common when a long wall is detected as two pieces)
+// merge them into a single longer segment.
+function mergeCollinear(segments: NormalizedSegment[]): NormalizedSegment[] {
   const merged: NormalizedSegment[] = [];
 
   for (const seg of segments) {
-    const existing = merged.find((candidate) => {
-      if (candidate.isHorizontal !== seg.isHorizontal) return false;
-      const axisDist = seg.isHorizontal
-        ? Math.abs(candidate.y1 - seg.y1)
-        : Math.abs(candidate.x1 - seg.x1);
-      const centerDist = Math.hypot(
-        (candidate.x1 + candidate.x2 - seg.x1 - seg.x2) / 2,
-        (candidate.y1 + candidate.y2 - seg.y1 - seg.y2) / 2,
-      );
-      return axisDist <= SNAP_TOLERANCE_M && centerDist <= Math.max(candidate.length, seg.length) * 0.35;
+    const sameLine = merged.find((existing) => {
+      if (existing.isHorizontal !== seg.isHorizontal) return false;
+      if (existing.isHorizontal) {
+        if (Math.abs(existing.y1 - seg.y1) > SNAP_TOLERANCE_M) return false;
+        const existingMin = Math.min(existing.x1, existing.x2);
+        const existingMax = Math.max(existing.x1, existing.x2);
+        const segMin = Math.min(seg.x1, seg.x2);
+        const segMax = Math.max(seg.x1, seg.x2);
+        const gap = Math.max(0, segMin - existingMax, existingMin - segMax);
+        return gap <= SNAP_TOLERANCE_M * 1.5;
+      }
+      if (Math.abs(existing.x1 - seg.x1) > SNAP_TOLERANCE_M) return false;
+      const existingMin = Math.min(existing.y1, existing.y2);
+      const existingMax = Math.max(existing.y1, existing.y2);
+      const segMin = Math.min(seg.y1, seg.y2);
+      const segMax = Math.max(seg.y1, seg.y2);
+      const gap = Math.max(0, segMin - existingMax, existingMin - segMax);
+      return gap <= SNAP_TOLERANCE_M * 1.5;
     });
 
-    if (!existing) {
+    if (!sameLine) {
       merged.push({ ...seg });
       continue;
     }
 
-    if (seg.length > existing.length) {
-      Object.assign(existing, seg, {
-        confidence: Math.max(existing.confidence, seg.confidence),
-      });
+    if (sameLine.isHorizontal) {
+      const newX1 = Math.min(sameLine.x1, sameLine.x2, seg.x1, seg.x2);
+      const newX2 = Math.max(sameLine.x1, sameLine.x2, seg.x1, seg.x2);
+      sameLine.x1 = newX1;
+      sameLine.x2 = newX2;
+      sameLine.length = Math.abs(newX2 - newX1);
+    } else {
+      const newY1 = Math.min(sameLine.y1, sameLine.y2, seg.y1, seg.y2);
+      const newY2 = Math.max(sameLine.y1, sameLine.y2, seg.y1, seg.y2);
+      sameLine.y1 = newY1;
+      sameLine.y2 = newY2;
+      sameLine.length = Math.abs(newY2 - newY1);
     }
+    sameLine.confidence = Math.max(sameLine.confidence, seg.confidence);
   }
 
   return merged;
 }
 
-function snapSegments(segments: NormalizedSegment[]) {
-  const verticalXs = segments.filter((s) => !s.isHorizontal).map((s) => s.x1).sort((a, b) => a - b);
-  const horizontalYs = segments.filter((s) => s.isHorizontal).map((s) => s.y1).sort((a, b) => a - b);
-
-  return segments.map((seg) => {
-    if (seg.isHorizontal) {
-      const y = snapValue(seg.y1, horizontalYs);
-      return { ...seg, y1: y, y2: y };
-    }
-    const x = snapValue(seg.x1, verticalXs);
-    return { ...seg, x1: x, x2: x };
-  });
-}
-
-function buildCorners(segments: NormalizedSegment[]) {
-  const points: Array<{ x: number; y: number }> = [];
-  const horizontals = segments.filter((s) => s.isHorizontal);
-  const verticals = segments.filter((s) => !s.isHorizontal);
-
-  for (const h of horizontals) {
-    const hx1 = Math.min(h.x1, h.x2) - SNAP_TOLERANCE_M;
-    const hx2 = Math.max(h.x1, h.x2) + SNAP_TOLERANCE_M;
-    for (const v of verticals) {
-      const vy1 = Math.min(v.y1, v.y2) - SNAP_TOLERANCE_M;
-      const vy2 = Math.max(v.y1, v.y2) + SNAP_TOLERANCE_M;
-      if (v.x1 >= hx1 && v.x1 <= hx2 && h.y1 >= vy1 && h.y1 <= vy2) {
-        points.push({ x: v.x1, y: h.y1 });
-      }
-    }
+// Build the room outline polygon from the snapped segment endpoints. Each
+// wall contributes its two endpoints; we then dedupe nearby endpoints (the
+// shared corners between adjacent walls) and order them around the room
+// centroid so the polygon draws as a clean outline.
+function buildCornersFromEndpoints(segments: NormalizedSegment[]): Array<{ x: number; y: number }> {
+  const endpoints: Array<{ x: number; y: number }> = [];
+  for (const seg of segments) {
+    endpoints.push({ x: seg.x1, y: seg.y1 });
+    endpoints.push({ x: seg.x2, y: seg.y2 });
   }
 
   const unique: Array<{ x: number; y: number }> = [];
-  for (const point of points) {
-    if (!unique.some((p) => Math.hypot(p.x - point.x, p.y - point.y) < SNAP_TOLERANCE_M)) {
-      unique.push(point);
-    }
+  for (const p of endpoints) {
+    const existing = unique.find((q) => Math.hypot(p.x - q.x, p.y - q.y) <= SNAP_TOLERANCE_M);
+    if (!existing) unique.push(p);
   }
 
   if (unique.length < 3) return [];
@@ -184,8 +270,12 @@ export function normalizeFloorPlan(walls: RawScanSurface[]): NormalizedFloorPlan
     };
   }
 
-  const segments = snapSegments(mergeCloseSegments(initial));
-  const corners = buildCorners(segments);
+  const snapped = snapSegmentsToGrid(initial);
+  const segments = mergeCollinear(snapped).filter((s) => {
+    const len = s.isHorizontal ? Math.abs(s.x2 - s.x1) : Math.abs(s.y2 - s.y1);
+    return len >= MIN_WALL_LENGTH_M;
+  });
+  const corners = buildCornersFromEndpoints(segments);
   const bounds = boundsFromSegments(segments);
 
   const fallbackCorners = [

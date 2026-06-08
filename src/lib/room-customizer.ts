@@ -254,7 +254,13 @@ export function defaultSurfaceSelections(
 ) {
   return getCustomizableSurfaces(roomType).reduce<Record<string, SurfaceSelection>>((acc, surface) => {
     const answerId = answerForSurface(roomType, surface.id, answers);
-    const first = surface.options.find((option) => option.answerId === answerId) ?? surface.options[0];
+    // Only try to match against the user's questionnaire answer when one
+    // exists. Without this guard, .find(opt => opt.answerId === undefined)
+    // returns the first option that has no answerId set, which is rarely
+    // the intended visual default.
+    const first = (typeof answerId === 'string' && answerId.length > 0)
+      ? (surface.options.find((option) => option.answerId === answerId) ?? surface.options[0])
+      : surface.options[0];
     acc[surface.id] = {
       surfaceId: surface.id,
       surfaceLabel: surface.label,

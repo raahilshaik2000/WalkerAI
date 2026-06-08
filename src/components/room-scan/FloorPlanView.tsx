@@ -43,7 +43,10 @@ interface FloorPlanViewProps {
 
 type WallSegment = NormalizedSegment;
 
-const WALL_THICKNESS = 0.18;
+// Real interior walls are 4–6 inches (0.10–0.15m). Going thinner here both
+// matches reality and lets corners render cleanly without overpowering
+// small rooms.
+const WALL_THICKNESS = 0.11;
 const WALL_COLOR = '#FFFFFF';
 const DIM_COLOR = '#FF6B00';
 const DOOR_COLOR = '#34D399';
@@ -59,8 +62,9 @@ export function FloorPlanView({ walls, doors, windows, size }: FloorPlanViewProp
 
     const { segments, corners, bounds } = normalized;
 
-    // Add generous padding for dimension lines
-    const pad = Math.max(bounds.roomW, bounds.roomH) * 0.35;
+    // Padding holds the dimension labels. 18% of the larger dimension is
+    // enough room without making the plan feel small inside its container.
+    const pad = Math.max(bounds.roomW, bounds.roomH) * 0.18;
     const vbX = bounds.minX - pad;
     const vbY = bounds.minY - pad;
     const vbW = bounds.roomW + pad * 2;
@@ -84,10 +88,13 @@ export function FloorPlanView({ walls, doors, windows, size }: FloorPlanViewProp
   }
 
   const { segments, corners, viewBox, bounds, scale } = plan;
-  const fontSize = scale * 0.055;
-  const dimOffset = scale * 0.12;
-  const arrowSize = scale * 0.04;
-  const t = WALL_THICKNESS * (scale / 5); // scale wall thickness
+  const fontSize = scale * 0.05;
+  const dimOffset = scale * 0.09;
+  const arrowSize = scale * 0.035;
+  // Render wall thickness in world units so it matches the scale of the
+  // plan exactly. No additional scale-up factor — chunky walls were one of
+  // the things that made the previous plan look terrible.
+  const t = WALL_THICKNESS;
 
   return (
     <View style={[styles.container, { width: size, height: size }]}>
