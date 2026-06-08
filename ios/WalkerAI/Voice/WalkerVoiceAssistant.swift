@@ -57,10 +57,26 @@ class WalkerVoiceAssistant: NSObject, AVSpeechSynthesizerDelegate {
         return
       }
 
+      // Configure the shared AVAudioSession for TTS output. Without this, a
+      // prior call to listenOnce() leaves the session in `.record` mode (no
+      // playback), and the initial state on a real device may also block
+      // speaker output — both cause TTS to be silent even though the
+      // synthesizer "completes" the utterance.
+      let session = AVAudioSession.sharedInstance()
+      do {
+        try session.setCategory(.playback, mode: .spokenAudio, options: [.duckOthers, .mixWithOthers])
+        try session.setActive(true, options: [])
+      } catch {
+        // Non-fatal — try to speak anyway. If audio is silent we'll see it
+        // in the resolve callback (didCancel) and surface to JS.
+        NSLog("[WalkerVoice] Failed to configure audio session for playback: \(error.localizedDescription)")
+      }
+
       let utterance = AVSpeechUtterance(string: trimmedText)
       utterance.voice = AVSpeechSynthesisVoice(language: "en-CA") ?? AVSpeechSynthesisVoice(language: "en-US")
       utterance.rate = AVSpeechUtteranceDefaultSpeechRate * 0.92
       utterance.pitchMultiplier = 1.0
+      utterance.volume = 1.0
       self.speechSynthesizer.speak(utterance)
     }
   }

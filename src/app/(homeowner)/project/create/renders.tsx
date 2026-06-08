@@ -185,14 +185,16 @@ export default function RendersStep() {
           <Text style={styles.title}>Optional Visual Preview</Text>
           <Text style={styles.subtitle}>{subtitle}</Text>
 
-          {roomScanData ? (
+          {/* When the 3D customizer is shown (iOS + scan data) it already
+             includes a rotatable 3D scene, so the read-only scan reference
+             would be redundant. Only show the standalone scan reference on
+             Android or when no customizer is available. */}
+          {roomScanData && Platform.OS !== 'ios' ? (
             <GlassCard style={styles.modelCard}>
               <View style={styles.modelHeader}>
                 <View>
                   <Text style={styles.modelTitle}>Measured Room Model</Text>
-                  <Text style={styles.modelSubtitle}>
-                    {Platform.OS === 'ios' ? '3D scan reference' : 'Scan reference'}
-                  </Text>
+                  <Text style={styles.modelSubtitle}>Scan reference</Text>
                 </View>
                 <View style={styles.modelBadge}>
                   <Ionicons name="cube-outline" size={14} color={Colors.accent} />
@@ -207,7 +209,7 @@ export default function RendersStep() {
                 />
               </View>
             </GlassCard>
-          ) : renders.length > 0 ? (
+          ) : !roomScanData && renders.length > 0 ? (
             <View style={styles.rendersGrid}>
               {renders.map((render) => {
                 const isSelected = selectedId === render.id;

@@ -26,12 +26,13 @@ RCT_EXPORT_VIEW_PROPERTY(onSurfaceTap, RCTBubblingEventBlock)
 RCT_EXPORT_METHOD(setSurfaceMaterial:(nonnull NSNumber *)reactTag
                                 surfaceId:(NSString *)surfaceId
                                  colorHex:(NSString *)colorHex
+                             materialName:(NSString *)materialName
                                 roughness:(nonnull NSNumber *)roughness
                                 metalness:(nonnull NSNumber *)metalness)
 {
   [self.bridge.uiManager addUIBlock:^(RCTUIManager *uiManager, NSDictionary<NSNumber *,UIView *> *viewRegistry) {
     UIView *view = viewRegistry[reactTag];
-    SEL selector = NSSelectorFromString(@"setSurfaceMaterial:colorHex:roughness:metalness:");
+    SEL selector = NSSelectorFromString(@"setSurfaceMaterial:colorHex:materialName:roughness:metalness:");
     if ([view respondsToSelector:selector]) {
       NSMethodSignature *signature = [view methodSignatureForSelector:selector];
       NSInvocation *invocation = [NSInvocation invocationWithMethodSignature:signature];
@@ -39,10 +40,12 @@ RCT_EXPORT_METHOD(setSurfaceMaterial:(nonnull NSNumber *)reactTag
       invocation.selector = selector;
       NSString *sid = surfaceId ?: @"";
       NSString *cx = colorHex ?: @"";
+      NSString *mn = materialName ?: @"";
       [invocation setArgument:&sid atIndex:2];
       [invocation setArgument:&cx atIndex:3];
-      [invocation setArgument:&roughness atIndex:4];
-      [invocation setArgument:&metalness atIndex:5];
+      [invocation setArgument:&mn atIndex:4];
+      [invocation setArgument:&roughness atIndex:5];
+      [invocation setArgument:&metalness atIndex:6];
       [invocation invoke];
     }
   }];

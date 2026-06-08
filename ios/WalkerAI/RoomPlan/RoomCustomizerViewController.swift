@@ -9,12 +9,50 @@ private func surfaceIdFromNodeName(_ name: String?) -> String? {
   return String(name.dropFirst(SURFACE_NAME_PREFIX.count))
 }
 
+// MARK: - Texture Pattern Hints (derived from material name on the JS side)
+
+private enum TexturePattern {
+  case flat
+  case granite       // dense speckle, multi-tone
+  case marble        // soft veining
+  case quartz        // fine speckle on cleaner base
+  case wood          // horizontal grain stripes
+  case tile          // grid lines for tile surfaces
+  case mosaic        // small dense grid
+  case terrazzo      // multi-color chips
+  case stone         // larger irregular speckle
+  case metal         // brushed lines for fixtures
+}
+
+private func patternForMaterialName(_ name: String) -> TexturePattern {
+  let m = name.lowercased()
+  if m.contains("granite") { return .granite }
+  if m.contains("marble") || m.contains("quartzite") { return .marble }
+  if m.contains("quartz") || m.contains("porcelain slab") { return .quartz }
+  if m.contains("terrazzo") { return .terrazzo }
+  if m.contains("stone") || m.contains("travertine") { return .stone }
+  if m.contains("hardwood") || m.contains("oak") || m.contains("walnut")
+      || m.contains("maple") || m.contains("vinyl plank") || m.contains("engineered") {
+    return .wood
+  }
+  if m.contains("mosaic") || m.contains("zellige") { return .mosaic }
+  if m.contains("tile") || m.contains("subway") { return .tile }
+  if m.contains("chrome") || m.contains("nickel") || m.contains("brass") || m.contains("matte black") {
+    return .metal
+  }
+  return .flat
+}
+
 class RoomCustomizerViewController: UIViewController {
 
   private var sceneView: SCNView!
   private var measurementData: String?
   private var roomTypeRaw: String?
-  private var surfaceNodes: [String: SCNNode] = [:]
+  // Surfaces with multiple physical pieces (e.g. each wall in the room is its
+  // own node but they all share the "walls" surface id) need to be stored as
+  // an array so setSurfaceMaterial can update every one of them.
+  private var surfaceNodes: [String: [SCNNode]] = [:]
+  private var textureCache: [String: UIImage] = [:]
 
   weak var bridgeView: RoomCustomizerView?
 
@@ -104,13 +142,11 @@ class RoomCustomizerViewController: UIViewController {
   }
 
   private func addWalls(_ walls: [[String: Any]], to scene: SCNScene, height: Double) {
-    var index = 0
     for wall in walls {
       guard let w = wall["width"] as? Double,
             let h = wall["height"] as? Double,
             let center = wall["center"] as? [String: Double],
             let cx = center["x"], let cy = center["y"], let cz = center["z"] else {
-        index += 1
         continue
       }
       let angle = wall["angle"] as? Double ?? 0
@@ -126,8 +162,6 @@ class RoomCustomizerViewController: UIViewController {
       node.eulerAngles.y = -Float(angle)
       registerSurface(node, surfaceId: "walls")
       scene.rootNode.addChildNode(node)
-
-      index += 1
     }
     _ = height // reserved for future ceiling support
   }
@@ -174,7 +208,7 @@ class RoomCustomizerViewController: UIViewController {
       scene.rootNode.addChildNode(node)
     }
 
-    // Upper cabinets
+    // Upper cabinets (same surface id as base — pick "cabinets" once, both update)
     do {
       let geo = SCNBox(width: CGFloat(runWidth), height: upperHeight, length: upperDepth, chamferRadius: 0.01)
       let mat = SCNMaterial()
@@ -184,7 +218,7 @@ class RoomCustomizerViewController: UIViewController {
       let node = SCNNode(geometry: geo)
       let upperBackZ = -(width / 2) + 0.04 + Double(upperDepth) / 2
       node.position = SCNVector3(0, Float(upperOffsetY + upperHeight / 2), Float(upperBackZ))
-      registerSurface(node, surfaceId: "cabinets")  // upper cabinets share cabinets category for V1
+      registerSurface(node, surfaceId: "cabinets")
       scene.rootNode.addChildNode(node)
     }
 
@@ -280,19 +314,37 @@ class RoomCustomizerViewController: UIViewController {
 
   private func registerSurface(_ node: SCNNode, surfaceId: String) {
     node.name = "\(SURFACE_NAME_PREFIX)\(surfaceId)"
-    surfaceNodes[surfaceId] = node
+    var list = surfaceNodes[surfaceId] ?? []
+    list.append(node)
+    surfaceNodes[surfaceId] = list
   }
 
-  func setSurfaceMaterial(surfaceId: String, colorHex: String, roughness: Double, metalness: Double) {
-    guard let node = surfaceNodes[surfaceId],
-          let geometry = node.geometry,
+  func setSurfaceMaterial(surfaceId: String, colorHex: String, materialName: String, roughness: Double, metalness: Double) {
+    guard let nodes = surfaceNodes[surfaceId], !nodes.isEmpty,
           let color = colorFromHex(colorHex) else { return }
+
+    let pattern = patternForMaterialName(materialName)
+    let textureKey = "\(materialName.lowercased())|\(colorHex.lowercased())"
+    let texture: UIImage? = (pattern == .flat) ? nil : (textureCache[textureKey] ?? generateTexture(pattern: pattern, baseColor: color))
+    if let texture = texture {
+      textureCache[textureKey] = texture
+    }
+
     DispatchQueue.main.async {
-      let mat = SCNMaterial()
-      mat.diffuse.contents = color
-      mat.roughness.contents = roughness
-      mat.metalness.contents = metalness
-      geometry.materials = [mat]
+      for node in nodes {
+        guard let geometry = node.geometry else { continue }
+        let mat = SCNMaterial()
+        if let texture = texture {
+          mat.diffuse.contents = texture
+          mat.diffuse.wrapS = .repeat
+          mat.diffuse.wrapT = .repeat
+        } else {
+          mat.diffuse.contents = color
+        }
+        mat.roughness.contents = roughness
+        mat.metalness.contents = metalness
+        geometry.materials = [mat]
+      }
     }
   }
 
@@ -304,6 +356,184 @@ class RoomCustomizerViewController: UIViewController {
     let g = CGFloat((value >> 8) & 0xff) / 255.0
     let b = CGFloat(value & 0xff) / 255.0
     return UIColor(red: r, green: g, blue: b, alpha: 1.0)
+  }
+
+  // MARK: - Procedural Texture Generation
+  //
+  // Each generator returns a tileable UIImage sized 256x256 that shifts the
+  // surface from "flat color" to "actually looks like a real material".
+  // Lightweight: drawn once per (material + color) and cached, then SceneKit
+  // reuses the GPU texture across taps.
+
+  private func generateTexture(pattern: TexturePattern, baseColor: UIColor) -> UIImage? {
+    let size = CGSize(width: 256, height: 256)
+    UIGraphicsBeginImageContextWithOptions(size, true, 1.0)
+    defer { UIGraphicsEndImageContext() }
+    guard let ctx = UIGraphicsGetCurrentContext() else { return nil }
+
+    // Always start with base color
+    ctx.setFillColor(baseColor.cgColor)
+    ctx.fill(CGRect(origin: .zero, size: size))
+
+    switch pattern {
+    case .flat:
+      break
+    case .granite:
+      drawSpeckle(ctx, size: size, count: 1400, minRadius: 0.6, maxRadius: 2.4,
+                  alphaRange: 0.12...0.42, includeLight: true, includeDark: true)
+    case .marble:
+      drawMarbleVeins(ctx, size: size, veinCount: 6)
+      drawSpeckle(ctx, size: size, count: 250, minRadius: 0.4, maxRadius: 1.0,
+                  alphaRange: 0.06...0.18, includeLight: true, includeDark: false)
+    case .quartz:
+      drawSpeckle(ctx, size: size, count: 700, minRadius: 0.4, maxRadius: 1.1,
+                  alphaRange: 0.08...0.22, includeLight: true, includeDark: true)
+    case .wood:
+      drawWoodGrain(ctx, size: size, baseColor: baseColor)
+    case .tile:
+      drawTileGrid(ctx, size: size, tileSize: 64)
+    case .mosaic:
+      drawTileGrid(ctx, size: size, tileSize: 24)
+    case .terrazzo:
+      drawTerrazzo(ctx, size: size)
+    case .stone:
+      drawSpeckle(ctx, size: size, count: 500, minRadius: 1.0, maxRadius: 3.5,
+                  alphaRange: 0.10...0.32, includeLight: true, includeDark: true)
+    case .metal:
+      drawBrushedMetal(ctx, size: size)
+    }
+
+    return UIGraphicsGetImageFromCurrentImageContext()
+  }
+
+  private func drawSpeckle(
+    _ ctx: CGContext, size: CGSize, count: Int,
+    minRadius: CGFloat, maxRadius: CGFloat,
+    alphaRange: ClosedRange<CGFloat>, includeLight: Bool, includeDark: Bool
+  ) {
+    for _ in 0..<count {
+      let x = CGFloat.random(in: 0...size.width)
+      let y = CGFloat.random(in: 0...size.height)
+      let r = CGFloat.random(in: minRadius...maxRadius)
+      let alpha = CGFloat.random(in: alphaRange)
+      let useLight: Bool
+      if includeLight && includeDark {
+        useLight = Bool.random()
+      } else {
+        useLight = includeLight
+      }
+      let tone: CGFloat = useLight ? CGFloat.random(in: 0.78...0.97) : CGFloat.random(in: 0.05...0.22)
+      ctx.setFillColor(UIColor(white: tone, alpha: alpha).cgColor)
+      ctx.fillEllipse(in: CGRect(x: x - r, y: y - r, width: r * 2, height: r * 2))
+    }
+  }
+
+  private func drawMarbleVeins(_ ctx: CGContext, size: CGSize, veinCount: Int) {
+    for _ in 0..<veinCount {
+      ctx.setStrokeColor(UIColor(white: 0.25, alpha: CGFloat.random(in: 0.18...0.35)).cgColor)
+      ctx.setLineWidth(CGFloat.random(in: 0.5...1.6))
+      var x = CGFloat.random(in: 0...size.width)
+      var y = CGFloat.random(in: 0...size.height)
+      ctx.move(to: CGPoint(x: x, y: y))
+      for _ in 0..<14 {
+        x += CGFloat.random(in: -22...22)
+        y += CGFloat.random(in: -22...22)
+        ctx.addLine(to: CGPoint(x: x, y: y))
+      }
+      ctx.strokePath()
+    }
+  }
+
+  private func drawWoodGrain(_ ctx: CGContext, size: CGSize, baseColor: UIColor) {
+    var r: CGFloat = 0, g: CGFloat = 0, b: CGFloat = 0, a: CGFloat = 0
+    baseColor.getRed(&r, green: &g, blue: &b, alpha: &a)
+    // Long horizontal stripes with subtle variation
+    var y: CGFloat = 0
+    while y < size.height {
+      let stripeHeight = CGFloat.random(in: 1.5...5.0)
+      let toneShift = CGFloat.random(in: -0.12...0.08)
+      let stripeColor = UIColor(
+        red: max(0, min(1, r + toneShift)),
+        green: max(0, min(1, g + toneShift * 0.8)),
+        blue: max(0, min(1, b + toneShift * 0.6)),
+        alpha: 1.0
+      )
+      ctx.setFillColor(stripeColor.cgColor)
+      ctx.fill(CGRect(x: 0, y: y, width: size.width, height: stripeHeight))
+      y += stripeHeight
+    }
+    // Knots / darker streaks
+    for _ in 0..<25 {
+      let startX = CGFloat.random(in: 0...size.width)
+      let startY = CGFloat.random(in: 0...size.height)
+      let length = CGFloat.random(in: 30...110)
+      ctx.setStrokeColor(UIColor(white: 0.15, alpha: CGFloat.random(in: 0.06...0.18)).cgColor)
+      ctx.setLineWidth(CGFloat.random(in: 0.4...1.0))
+      ctx.move(to: CGPoint(x: startX, y: startY))
+      ctx.addLine(to: CGPoint(x: startX + length, y: startY + CGFloat.random(in: -2...2)))
+      ctx.strokePath()
+    }
+  }
+
+  private func drawTileGrid(_ ctx: CGContext, size: CGSize, tileSize: CGFloat) {
+    let groutColor = UIColor(white: 0.2, alpha: 0.55)
+    ctx.setStrokeColor(groutColor.cgColor)
+    ctx.setLineWidth(2.0)
+    var x: CGFloat = 0
+    while x <= size.width {
+      ctx.move(to: CGPoint(x: x, y: 0))
+      ctx.addLine(to: CGPoint(x: x, y: size.height))
+      x += tileSize
+    }
+    var y: CGFloat = 0
+    while y <= size.height {
+      ctx.move(to: CGPoint(x: 0, y: y))
+      ctx.addLine(to: CGPoint(x: size.width, y: y))
+      y += tileSize
+    }
+    ctx.strokePath()
+    // Slight variation in each tile so they don't look identical
+    var ix: CGFloat = 0
+    while ix < size.width {
+      var iy: CGFloat = 0
+      while iy < size.height {
+        let dim = CGFloat.random(in: -0.06...0.06)
+        ctx.setFillColor(UIColor(white: dim < 0 ? 0.1 : 0.9, alpha: abs(dim)).cgColor)
+        ctx.fill(CGRect(x: ix + 1, y: iy + 1, width: tileSize - 2, height: tileSize - 2))
+        iy += tileSize
+      }
+      ix += tileSize
+    }
+  }
+
+  private func drawTerrazzo(_ ctx: CGContext, size: CGSize) {
+    let chipColors: [UIColor] = [
+      UIColor(white: 0.95, alpha: 0.65),
+      UIColor(white: 0.10, alpha: 0.55),
+      UIColor(red: 0.85, green: 0.55, blue: 0.30, alpha: 0.55),
+      UIColor(red: 0.55, green: 0.65, blue: 0.55, alpha: 0.50),
+    ]
+    for _ in 0..<260 {
+      let x = CGFloat.random(in: 0...size.width)
+      let y = CGFloat.random(in: 0...size.height)
+      let w = CGFloat.random(in: 3...10)
+      let h = CGFloat.random(in: 3...10)
+      ctx.setFillColor(chipColors.randomElement()!.cgColor)
+      let path = UIBezierPath(roundedRect: CGRect(x: x, y: y, width: w, height: h), cornerRadius: 1.5)
+      ctx.addPath(path.cgPath)
+      ctx.fillPath()
+    }
+  }
+
+  private func drawBrushedMetal(_ ctx: CGContext, size: CGSize) {
+    for _ in 0..<600 {
+      let y = CGFloat.random(in: 0...size.height)
+      ctx.setStrokeColor(UIColor(white: Bool.random() ? 0.95 : 0.4, alpha: CGFloat.random(in: 0.08...0.22)).cgColor)
+      ctx.setLineWidth(CGFloat.random(in: 0.3...0.8))
+      ctx.move(to: CGPoint(x: 0, y: y))
+      ctx.addLine(to: CGPoint(x: size.width, y: y + CGFloat.random(in: -0.4...0.4)))
+      ctx.strokePath()
+    }
   }
 
   // MARK: - Hit Testing
@@ -441,10 +671,11 @@ class RoomCustomizerView: UIView {
     onSurfaceTap?(["surfaceId": surfaceId])
   }
 
-  @objc func setSurfaceMaterial(_ surfaceId: String, colorHex: String, roughness: NSNumber, metalness: NSNumber) {
+  @objc func setSurfaceMaterial(_ surfaceId: String, colorHex: String, materialName: String, roughness: NSNumber, metalness: NSNumber) {
     viewController?.setSurfaceMaterial(
       surfaceId: surfaceId,
       colorHex: colorHex,
+      materialName: materialName,
       roughness: roughness.doubleValue,
       metalness: metalness.doubleValue
     )

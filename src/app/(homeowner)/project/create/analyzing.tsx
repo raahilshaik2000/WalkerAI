@@ -167,23 +167,27 @@ export default function AnalyzingScreen() {
           analysis = analyzeData.analysis;
         }
 
-        // Edge function already saves ai_analysis — just sync the detected room_type
+        // Respect the homeowner's explicit room type choice. Claude can
+        // misclassify a bathroom as a kitchen and vice versa, which then
+        // corrupts the questionnaire, customizer, and pricing downstream.
+        // Only fall back to Claude's detection if the user never chose one.
         const detectedRoomType = analysis.room_type === 'bathroom' ? 'bathroom' : 'kitchen';
+        const effectiveRoomType = roomType ?? detectedRoomType;
         const { error: roomTypeError } = await supabase
           .from('projects')
-          .update({ room_type: detectedRoomType })
+          .update({ room_type: effectiveRoomType })
           .eq('id', pid);
         if (roomTypeError) {
           throw new Error(`Room type sync failed: ${roomTypeError.message}`);
         }
 
-        useProjectWizardStore.getState().setRoomType(detectedRoomType as any);
+        useProjectWizardStore.getState().setRoomType(effectiveRoomType as any);
         setAnalysisResult(analysis);
 
         // The pricing engine depends on canonical question IDs (k_tier,
         // b_tier, etc.). Keep the active flow on the fixed set until dynamic
         // questions can emit the same schema.
-        setQuestions(getQuestionsForRoomType(detectedRoomType));
+        setQuestions(getQuestionsForRoomType(effectiveRoomType));
         useProjectWizardStore.getState().setStep(4);
         navigation.navigate('Questionnaire');
       } catch (err: any) {

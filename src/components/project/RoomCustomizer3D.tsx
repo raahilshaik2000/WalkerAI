@@ -89,23 +89,19 @@ export function RoomCustomizer3D({ roomType, scanData, selections, answers = {},
     const tag = findNodeHandle(nativeRef.current as React.Component | null);
     if (tag == null) return;
     const { roughness, metalness } = pbrForMaterial(option.material);
+    const args = [surfaceId, option.colorHex, option.material, roughness, metalness];
     const manager = (UIManager as unknown as Record<string, { Commands?: Record<string, number> }>)[
       'RoomCustomizerView'
     ];
     const commandId = manager?.Commands?.setSurfaceMaterial;
     if (typeof commandId === 'number') {
-      UIManager.dispatchViewManagerCommand(tag, commandId, [
-        surfaceId,
-        option.colorHex,
-        roughness,
-        metalness,
-      ]);
+      UIManager.dispatchViewManagerCommand(tag, commandId, args);
     } else {
       // Fabric / new arch: dispatch by method name
       UIManager.dispatchViewManagerCommand(
         tag,
         'setSurfaceMaterial' as unknown as number,
-        [surfaceId, option.colorHex, roughness, metalness],
+        args,
       );
     }
   }, []);
@@ -289,7 +285,7 @@ const styles = StyleSheet.create({
   },
   badgeText: { fontSize: 11, fontWeight: '700', color: Colors.accent },
   viewerWrap: {
-    height: 320,
+    height: 480,
     borderRadius: Radius.item,
     overflow: 'hidden',
     backgroundColor: Colors.bg.primary,
