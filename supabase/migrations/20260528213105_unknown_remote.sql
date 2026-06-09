@@ -1,0 +1,6 @@
+-- Placeholder for remote-only migration 20260528213105
+-- Applied to live Supabase out-of-band between May 28-29 2026
+-- (likely via Dashboard SQL editor or one-off CLI run).
+-- Original SQL preserved in supabase_migrations.schema_migrations on the
+-- remote DB. Marked as applied locally via supabase migration repair so
+-- the CLI's migration history is consistent.

@@ -261,8 +261,15 @@ BEGIN
       RAISE EXCEPTION 'Contractors cannot change homeowner signatures';
     END IF;
 
+    -- The CLI's SQL splitter mis-parses CASE inside IF conditions, so this
+    -- is written as plain boolean logic with the same semantics:
+    --   homeowner-signed -> contractor co-sign moves to 'approved'
+    --   not signed        -> contractor signs first, status stays 'proposed'
     IF NEW.signed_by_company IS TRUE
-      AND NEW.status = CASE WHEN OLD.signed_by_homeowner THEN 'approved' ELSE 'proposed' END
+      AND (
+        (OLD.signed_by_homeowner IS TRUE AND NEW.status = 'approved')
+        OR (OLD.signed_by_homeowner IS NOT TRUE AND NEW.status = 'proposed')
+      )
     THEN
       RETURN NEW;
     END IF;
