@@ -45,7 +45,10 @@ function StarRow({ value, onChange }: { value: number; onChange: (value: number)
 }
 
 function isMissingColumnError(error: { message?: string } | null | undefined) {
-  return !!error?.message && /column .* does not exist/i.test(error.message);
+  const message = error?.message;
+  if (!message) return false;
+  return /column .* does not exist/i.test(message)
+    || /could not find the .* column of/i.test(message);
 }
 
 export default function CompanyHomeownerReviewScreen() {

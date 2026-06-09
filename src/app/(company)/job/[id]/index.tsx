@@ -94,7 +94,12 @@ async function fetchCompanyPayoutProfile(userId: string): Promise<CompanyPayoutP
     return withReadiness.data as CompanyPayoutProfile | null;
   }
 
-  if (!/column .* does not exist/i.test(withReadiness.error.message)) {
+  // Tolerate both Postgres ("column ... does not exist") and PostgREST
+  // ("Could not find the 'X' column of 'Y' in the schema cache") formats.
+  const errMsg = withReadiness.error.message;
+  const isMissingCol = /column .* does not exist/i.test(errMsg)
+    || /could not find the .* column of/i.test(errMsg);
+  if (!isMissingCol) {
     throw withReadiness.error;
   }
 

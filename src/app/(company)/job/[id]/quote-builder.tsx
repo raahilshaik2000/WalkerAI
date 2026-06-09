@@ -59,7 +59,10 @@ function invalidMoneyInputs(items: Array<{ amount: string }>): string[] {
 }
 
 function isMissingColumnError(error: { message?: string } | null | undefined) {
-  return !!error?.message && /column .* does not exist/i.test(error.message);
+  const message = error?.message;
+  if (!message) return false;
+  return /column .* does not exist/i.test(message)
+    || /could not find the .* column of/i.test(message);
 }
 
 function lineItemType(description: string, index: number): 'labour' | 'material' | 'other' {

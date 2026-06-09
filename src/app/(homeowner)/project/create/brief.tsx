@@ -67,7 +67,14 @@ const TIER_BADGE_VARIANT = {
 type QuantityEstimate = ReturnType<typeof calculateQuantities>;
 
 function isMissingColumnError(message?: string | null) {
-  return !!message && /column .* does not exist/i.test(message);
+  if (!message) return false;
+  // Postgres returns "column ... does not exist". PostgREST wraps the same
+  // condition as "Could not find the '<col>' column of '<table>' in the
+  // schema cache". We need to swallow both so optional schema-add fields
+  // (like ai_confidence_score) don't surface as hard failures when the
+  // migration hasn't been applied yet.
+  return /column .* does not exist/i.test(message)
+    || /could not find the .* column of/i.test(message);
 }
 
 function positiveMeasurement(value?: string | null) {

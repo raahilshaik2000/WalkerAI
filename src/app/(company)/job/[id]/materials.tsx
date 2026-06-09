@@ -60,7 +60,9 @@ function parseQuantity(raw: string): number | null {
 }
 
 function isMissingColumnError(message?: string | null) {
-  return !!message && /column .* does not exist/i.test(message);
+  if (!message) return false;
+  return /column .* does not exist/i.test(message)
+    || /could not find the .* column of/i.test(message);
 }
 
 async function fetchProjectMaterials(projectId: string): Promise<{ data: Material[] | null; error: any }> {

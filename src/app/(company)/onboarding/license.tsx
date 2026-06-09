@@ -19,7 +19,10 @@ import { Colors, Radius, Spacing, Typography } from '@/constants/theme';
 import { GlassButton, GlassCard, GlassInput, GradientBackground } from '@/components/ui';
 
 function isMissingColumnError(error: { message?: string } | null | undefined) {
-  return !!error?.message && /column .* does not exist/i.test(error.message);
+  const message = error?.message;
+  if (!message) return false;
+  return /column .* does not exist/i.test(message)
+    || /could not find the .* column of/i.test(message);
 }
 
 export default function LicenseOnboardingScreen() {

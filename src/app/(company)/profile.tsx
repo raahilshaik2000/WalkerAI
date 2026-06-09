@@ -75,7 +75,11 @@ function getJoinedProjectStatus(row: any) {
 }
 
 function isMissingColumnError(message?: string | null) {
-  return !!message && /column .* does not exist/i.test(message);
+  if (!message) return false;
+  // Match both Postgres ("column ... does not exist") and PostgREST
+  // ("Could not find the 'X' column of 'Y' in the schema cache") formats.
+  return /column .* does not exist/i.test(message)
+    || /could not find the .* column of/i.test(message);
 }
 
 async function fetchCompanyProfile(userId: string) {

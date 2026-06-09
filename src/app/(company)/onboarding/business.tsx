@@ -20,7 +20,10 @@ import { AddressAutocomplete, type AddressResult } from '@/components/ui/Address
 import { normalizeCanadianProvince } from '@/lib/canada';
 
 function isMissingColumnError(error: { message?: string } | null | undefined) {
-  return !!error?.message && /column .* does not exist/i.test(error.message);
+  const message = error?.message;
+  if (!message) return false;
+  return /column .* does not exist/i.test(message)
+    || /could not find the .* column of/i.test(message);
 }
 
 function withoutKeys<T extends Record<string, unknown>>(payload: T, keys: string[]) {
