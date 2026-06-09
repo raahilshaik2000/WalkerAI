@@ -2,6 +2,8 @@
 -- The existing homeowner review policy covers homeowner -> contractor reviews;
 -- this closes the completion notification path for contractor -> homeowner.
 
+DROP POLICY IF EXISTS "reviews_company_insert_project_homeowner" ON public.reviews;
+
 CREATE POLICY "reviews_company_insert_project_homeowner" ON public.reviews
   FOR INSERT TO authenticated
   WITH CHECK (
