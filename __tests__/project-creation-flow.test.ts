@@ -59,7 +59,7 @@ describe('project creation flow guards', () => {
     );
 
     expect(questionnaireSource).toContain('const voiceAvailable = isProjectVoiceAvailable();');
-    expect(questionnaireSource).toContain('disabled={voiceBusy || !voiceAvailable}');
+    expect(questionnaireSource).toContain('disabled={voiceBusy || !voiceAvailable || !!pendingVoiceMatch}');
     expect(questionnaireSource).toContain('Voice unavailable on this device');
     expect(questionnaireSource).toContain('Tap an answer manually to continue.');
 

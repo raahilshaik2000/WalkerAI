@@ -1,7 +1,6 @@
 import { useRef, useEffect, useState } from 'react';
 import {
   Animated,
-  Alert,
   ScrollView,
   StyleSheet,
   Text,
@@ -38,9 +37,20 @@ export default function QuestionnaireStep() {
   const slideAnim = useRef(new Animated.Value(0)).current;
   const [voiceBusy, setVoiceBusy] = useState(false);
   const [voiceTranscript, setVoiceTranscript] = useState('');
+  // pendingVoiceMatch lets the user confirm before we apply a recognized
+  // answer. Without it, a misrecognition silently selects the wrong option
+  // and the user has to notice + correct it themselves.
+  const [pendingVoiceMatch, setPendingVoiceMatch] = useState<{ transcript: string; optionId: string; optionLabel: string } | null>(null);
+  const [voiceError, setVoiceError] = useState<string | null>(null);
 
   const question = questions[currentQuestionIndex];
   const voiceAvailable = isProjectVoiceAvailable();
+
+  const resetVoiceFeedback = () => {
+    setPendingVoiceMatch(null);
+    setVoiceError(null);
+    setVoiceTranscript('');
+  };
 
   const animateTransition = (callback: () => void) => {
     Animated.parallel([
@@ -62,22 +72,14 @@ export default function QuestionnaireStep() {
   };
 
   const handleVoiceAnswer = async () => {
-    if (!question || voiceBusy) return;
+    if (!question || voiceBusy || !voiceAvailable) return;
 
-    if (!voiceAvailable) {
-      Alert.alert(
-        'Voice answers unavailable',
-        'Voice answers are available on iPhone in this version. You can still answer manually here.'
-      );
-      return;
-    }
-
+    resetVoiceFeedback();
     setVoiceBusy(true);
-    setVoiceTranscript('');
     try {
       const permissions = await requestProjectVoicePermissions();
       if (!permissions.speech || !permissions.microphone) {
-        Alert.alert('Permission needed', 'Enable microphone and speech recognition permissions to answer by voice.');
+        setVoiceError('Microphone and speech recognition permissions are required. Enable them in Settings to answer by voice.');
         return;
       }
 
@@ -87,23 +89,43 @@ export default function QuestionnaireStep() {
 
       const matchedOptionId = matchTranscriptToQuestionOption(transcript, question);
       if (!matchedOptionId) {
-        Alert.alert(
-          'Could not match answer',
+        setVoiceError(
           transcript
-            ? `I heard "${transcript}", but could not match it to one of the options. Please try again or tap an answer.`
-            : 'I did not hear an answer. Please try again or tap an answer.'
+            ? `Heard "${transcript}" but it did not match any option. Try again or tap an answer.`
+            : 'No speech detected. Try again or tap an answer.'
         );
         return;
       }
 
-      ReactNativeHapticFeedback.trigger('notificationSuccess');
-      setAnswer(question.id, matchedOptionId);
+      const matchedOption = question.options.find((o) => o.id === matchedOptionId);
+      if (!matchedOption) {
+        setVoiceError('Match failed. Please tap an answer.');
+        return;
+      }
+
+      // Confirmation step: don't silently apply a recognition match. Show
+      // the user what we heard and what we'd select, let them confirm or
+      // retry. This is the single biggest reliability improvement for voice
+      // because misrecognitions become recoverable instead of silent.
+      ReactNativeHapticFeedback.trigger('impactLight');
+      setPendingVoiceMatch({
+        transcript,
+        optionId: matchedOptionId,
+        optionLabel: matchedOption.label,
+      });
     } catch (err) {
-      Alert.alert('Voice answer failed', err instanceof Error ? err.message : 'Please try again or answer manually.');
+      setVoiceError(err instanceof Error ? err.message : 'Voice answer failed. Try again or answer manually.');
     } finally {
       setVoiceBusy(false);
       await stopProjectVoice();
     }
+  };
+
+  const confirmVoiceMatch = () => {
+    if (!pendingVoiceMatch) return;
+    ReactNativeHapticFeedback.trigger('notificationSuccess');
+    setAnswer(question.id, pendingVoiceMatch.optionId);
+    resetVoiceFeedback();
   };
 
   const handleNext = () => {
@@ -165,7 +187,7 @@ export default function QuestionnaireStep() {
               style={[styles.voiceCard, voiceBusy && styles.voiceCardActive, !voiceAvailable && styles.voiceCardDisabled]}
               onPress={handleVoiceAnswer}
               activeOpacity={0.85}
-              disabled={voiceBusy || !voiceAvailable}
+              disabled={voiceBusy || !voiceAvailable || !!pendingVoiceMatch}
             >
               <View style={[styles.voiceIcon, voiceBusy && styles.voiceIconActive, !voiceAvailable && styles.voiceIconDisabled]}>
                 <Ionicons
@@ -176,17 +198,76 @@ export default function QuestionnaireStep() {
               </View>
               <View style={styles.voiceTextWrap}>
                 <Text style={styles.voiceTitle}>
-                  {voiceBusy ? 'Listening for your answer…' : voiceAvailable ? 'Answer with voice' : 'Voice unavailable on this device'}
+                  {voiceBusy
+                    ? 'Listening for your answer…'
+                    : pendingVoiceMatch
+                      ? 'Confirm your answer'
+                      : voiceAvailable
+                        ? 'Answer with voice'
+                        : 'Voice unavailable on this device'}
                 </Text>
                 <Text style={styles.voiceSub} numberOfLines={2}>
-                  {voiceTranscript
-                    ? `Heard: ${voiceTranscript}`
-                    : voiceAvailable
-                      ? 'WalkerAI will read the question and select the closest matching option.'
-                      : 'Tap an answer manually to continue.'}
+                  {pendingVoiceMatch
+                    ? `Heard "${pendingVoiceMatch.transcript}"`
+                    : voiceError
+                      ? voiceError
+                      : voiceTranscript
+                        ? `Heard: ${voiceTranscript}`
+                        : voiceAvailable
+                          ? 'WalkerAI will read the question and select the closest matching option.'
+                          : 'Tap an answer manually to continue.'}
                 </Text>
               </View>
             </TouchableOpacity>
+
+            {/* Pending confirmation row: user verifies the match before
+               we apply it. Tapping confirm sets the answer; tapping retry
+               starts a fresh listen pass. */}
+            {pendingVoiceMatch && (
+              <View style={styles.voiceConfirmRow}>
+                <View style={styles.voiceConfirmInner}>
+                  <Text style={styles.voiceConfirmLabel}>I would pick:</Text>
+                  <Text style={styles.voiceConfirmOption} numberOfLines={2}>{pendingVoiceMatch.optionLabel}</Text>
+                </View>
+                <View style={styles.voiceConfirmActions}>
+                  <TouchableOpacity
+                    style={[styles.voiceActionBtn, styles.voiceActionRetry]}
+                    onPress={() => {
+                      resetVoiceFeedback();
+                      handleVoiceAnswer();
+                    }}
+                    activeOpacity={0.85}
+                  >
+                    <Ionicons name="refresh-outline" size={16} color={Colors.text.primary} />
+                    <Text style={styles.voiceActionRetryText}>Try again</Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity
+                    style={[styles.voiceActionBtn, styles.voiceActionConfirm]}
+                    onPress={confirmVoiceMatch}
+                    activeOpacity={0.85}
+                  >
+                    <Ionicons name="checkmark" size={16} color="#000" />
+                    <Text style={styles.voiceActionConfirmText}>Confirm</Text>
+                  </TouchableOpacity>
+                </View>
+              </View>
+            )}
+
+            {/* Inline retry when nothing matched. Avoids the modal Alert
+               that interrupted the wizard flow before. */}
+            {!pendingVoiceMatch && voiceError && !voiceBusy && (
+              <TouchableOpacity
+                style={styles.voiceRetryInline}
+                onPress={() => {
+                  resetVoiceFeedback();
+                  handleVoiceAnswer();
+                }}
+                activeOpacity={0.85}
+              >
+                <Ionicons name="refresh-outline" size={14} color={Colors.accent} />
+                <Text style={styles.voiceRetryInlineText}>Try again</Text>
+              </TouchableOpacity>
+            )}
 
             {/* Options */}
             <View style={styles.optionsContainer}>
@@ -285,6 +366,55 @@ const styles = StyleSheet.create({
   voiceTextWrap: { flex: 1 },
   voiceTitle: { fontSize: 14, fontWeight: '700', color: Colors.text.primary, marginBottom: 3 },
   voiceSub: { ...Typography.caption, lineHeight: 17 },
+  voiceConfirmRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+    paddingHorizontal: 14,
+    paddingVertical: 12,
+    borderRadius: Radius.item,
+    borderWidth: 1,
+    borderColor: 'rgba(255, 107, 0, 0.32)',
+    backgroundColor: 'rgba(255, 107, 0, 0.08)',
+    marginTop: -4,
+    marginBottom: Spacing.md,
+  },
+  voiceConfirmInner: { flex: 1, gap: 2 },
+  voiceConfirmLabel: { ...Typography.caption, color: Colors.text.tertiary },
+  voiceConfirmOption: { fontSize: 14, fontWeight: '700', color: Colors.text.primary, lineHeight: 18 },
+  voiceConfirmActions: { flexDirection: 'row', gap: 8 },
+  voiceActionBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    paddingHorizontal: 10,
+    paddingVertical: 8,
+    borderRadius: Radius.pill,
+    minHeight: 32,
+  },
+  voiceActionRetry: {
+    backgroundColor: 'rgba(255, 255, 255, 0.08)',
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.14)',
+  },
+  voiceActionRetryText: { fontSize: 12, fontWeight: '600', color: Colors.text.primary },
+  voiceActionConfirm: { backgroundColor: Colors.accent },
+  voiceActionConfirmText: { fontSize: 12, fontWeight: '700', color: '#000' },
+  voiceRetryInline: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    alignSelf: 'flex-start',
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderRadius: Radius.pill,
+    backgroundColor: 'rgba(255, 107, 0, 0.10)',
+    borderWidth: 1,
+    borderColor: 'rgba(255, 107, 0, 0.28)',
+    marginTop: -6,
+    marginBottom: Spacing.md,
+  },
+  voiceRetryInlineText: { fontSize: 12, fontWeight: '700', color: Colors.accent },
   optionsContainer: {
     gap: 10,
     marginBottom: Spacing.lg,
