@@ -173,12 +173,19 @@ export default function AnalyzingScreen() {
         // Only fall back to Claude's detection if the user never chose one.
         const detectedRoomType = analysis.room_type === 'bathroom' ? 'bathroom' : 'kitchen';
         const effectiveRoomType = roomType ?? detectedRoomType;
+        // Combine room_type + ai_analysis into a single update so we don't
+        // do two round-trips. ai_analysis persistence is best-effort on the
+        // server side too (it races a 10s cap before returning), so writing
+        // it here from the client closes that loop.
         const { error: roomTypeError } = await supabase
           .from('projects')
-          .update({ room_type: effectiveRoomType })
+          .update({ room_type: effectiveRoomType, ai_analysis: analysis })
           .eq('id', pid);
         if (roomTypeError) {
-          throw new Error(`Room type sync failed: ${roomTypeError.message}`);
+          // Don't hard-fail on this — the analysis is already in the wizard
+          // store, the user can still proceed to the questionnaire. Log
+          // the failure for visibility.
+          console.warn('[analyzing] room_type + ai_analysis sync failed:', roomTypeError.message);
         }
 
         useProjectWizardStore.getState().setRoomType(effectiveRoomType as any);

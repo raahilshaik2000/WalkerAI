@@ -250,11 +250,30 @@ Return ONLY the JSON object, no markdown, no explanation.`,
       analysis = fallbackAnalysis(roomType, analysisError instanceof Error ? analysisError.message : 'provider error');
     }
 
-    // Persist to projects.ai_analysis
-    await adminClient
-      .from('projects')
-      .update({ ai_analysis: analysis })
-      .eq('id', project_id);
+    // Persist to projects.ai_analysis. The client also writes the analysis
+    // into the projects + wizard store on its end, so this server-side
+    // write is a redundancy. If the database connection times out (common
+    // under load), don't fail the whole call — just log and return the
+    // analysis so the homeowner can continue.
+    try {
+      const dbWritePromise = adminClient
+        .from('projects')
+        .update({ ai_analysis: analysis })
+        .eq('id', project_id);
+
+      // Cap the DB write at 10s. If it doesn't finish in that window,
+      // the analysis still comes back successfully and the client persists
+      // it directly.
+      await Promise.race([
+        dbWritePromise,
+        new Promise((resolve) => setTimeout(() => resolve(null), 10000)),
+      ]);
+    } catch (persistError) {
+      console.warn(
+        'ai_analysis persist failed (non-fatal — client will retry):',
+        persistError instanceof Error ? persistError.message : persistError,
+      );
+    }
 
     return new Response(
       JSON.stringify({ success: true, analysis }),

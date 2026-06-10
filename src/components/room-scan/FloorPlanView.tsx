@@ -102,51 +102,69 @@ export function FloorPlanView({ walls, doors, windows, size }: FloorPlanViewProp
         {/* Grid */}
         <GridPattern bounds={bounds} scale={scale} />
 
-        {/* Room floor fill */}
-        {corners.length >= 3 && (
-          <Polygon
-            points={corners.map(c => `${c.x},${c.y}`).join(' ')}
-            fill={FLOOR_FILL}
-            stroke="none"
-          />
-        )}
-
-        {/* Walls as thick rectangles */}
-        {segments.map((seg) => (
-          <G key={seg.id}>
-            {seg.isHorizontal ? (
+        {/* Closed-polygon room rendering. Instead of drawing each wall as
+           its own rectangle (which leaves gaps at corners when LiDAR
+           positions don't perfectly align), draw the floor as a filled
+           polygon and the walls as a single thick stroked polygon along
+           the same corners. Guarantees a closed shape every time, even
+           if individual wall positions disagree by a few centimetres. */}
+        {corners.length >= 3 ? (
+          <>
+            {/* Floor fill */}
+            <Polygon
+              points={corners.map(c => `${c.x},${c.y}`).join(' ')}
+              fill={FLOOR_FILL}
+              stroke="none"
+            />
+            {/* Walls as a thick continuous stroke around the floor */}
+            <Polygon
+              points={corners.map(c => `${c.x},${c.y}`).join(' ')}
+              fill="none"
+              stroke={WALL_COLOR}
+              strokeWidth={t}
+              strokeLinejoin="round"
+              strokeLinecap="round"
+            />
+          </>
+        ) : (
+          // Fallback: no closed corners detected. Draw individual wall
+          // rectangles + corner fills as before.
+          <>
+            {segments.map((seg) => (
+              <G key={seg.id}>
+                {seg.isHorizontal ? (
+                  <Rect
+                    x={seg.x1}
+                    y={seg.y1 - t / 2}
+                    width={seg.length}
+                    height={t}
+                    fill={WALL_COLOR}
+                    rx={t * 0.15}
+                  />
+                ) : (
+                  <Rect
+                    x={seg.x1 - t / 2}
+                    y={seg.y1}
+                    width={t}
+                    height={seg.length}
+                    fill={WALL_COLOR}
+                    rx={t * 0.15}
+                  />
+                )}
+              </G>
+            ))}
+            {corners.map((corner, i) => (
               <Rect
-                x={seg.x1}
-                y={seg.y1 - t / 2}
-                width={seg.length}
+                key={`corner_${i}`}
+                x={corner.x - t / 2}
+                y={corner.y - t / 2}
+                width={t}
                 height={t}
                 fill={WALL_COLOR}
-                rx={t * 0.15}
               />
-            ) : (
-              <Rect
-                x={seg.x1 - t / 2}
-                y={seg.y1}
-                width={t}
-                height={seg.length}
-                fill={WALL_COLOR}
-                rx={t * 0.15}
-              />
-            )}
-          </G>
-        ))}
-
-        {/* Corner fills — fill gaps where walls meet */}
-        {corners.map((corner, i) => (
-          <Rect
-            key={`corner_${i}`}
-            x={corner.x - t / 2}
-            y={corner.y - t / 2}
-            width={t}
-            height={t}
-            fill={WALL_COLOR}
-          />
-        ))}
+            ))}
+          </>
+        )}
 
         {/* Doors — gap in wall + swing arc */}
         {doors.map((door) => {
