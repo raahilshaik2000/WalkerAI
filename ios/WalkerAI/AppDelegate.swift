@@ -2,9 +2,10 @@ import UIKit
 import React
 import React_RCTAppDelegate
 import ReactAppDependencyProvider
+import UserNotifications
 
 @main
-class AppDelegate: UIResponder, UIApplicationDelegate {
+class AppDelegate: UIResponder, UIApplicationDelegate, UNUserNotificationCenterDelegate {
   var window: UIWindow?
 
   var reactNativeDelegate: ReactNativeDelegate?
@@ -29,8 +30,69 @@ class AppDelegate: UIResponder, UIApplicationDelegate {
       launchOptions: launchOptions
     )
 
-    // TODO: RNSplashScreen.show() - requires bridging header setup
+    // Wire up notification handling. JS calls into the WalkerPush native
+    // module after sign-in to request permission and register for remote
+    // notifications. Apple then invokes didRegisterForRemoteNotifications-
+    // WithDeviceToken below; we post a notification that the JS-side
+    // event emitter listens for and forwards to the push library.
+    UNUserNotificationCenter.current().delegate = self
+
     return true
+  }
+
+  // MARK: - APNs Registration
+
+  func application(
+    _ application: UIApplication,
+    didRegisterForRemoteNotificationsWithDeviceToken deviceToken: Data
+  ) {
+    // Apple gives us raw bytes; the APNs HTTP/2 endpoint wants the hex form.
+    let token = deviceToken.map { String(format: "%02.2hhx", $0) }.joined()
+    NSLog("[Push] APNs token received: \(token)")
+    NotificationCenter.default.post(
+      name: Notification.Name("WalkerAPNsTokenReceived"),
+      object: nil,
+      userInfo: ["token": token]
+    )
+  }
+
+  func application(
+    _ application: UIApplication,
+    didFailToRegisterForRemoteNotificationsWithError error: Error
+  ) {
+    NSLog("[Push] APNs registration failed: \(error.localizedDescription)")
+    NotificationCenter.default.post(
+      name: Notification.Name("WalkerAPNsRegistrationFailed"),
+      object: nil,
+      userInfo: ["error": error.localizedDescription]
+    )
+  }
+
+  // MARK: - UNUserNotificationCenterDelegate
+
+  // Show notifications even when the app is in the foreground.
+  func userNotificationCenter(
+    _ center: UNUserNotificationCenter,
+    willPresent notification: UNNotification,
+    withCompletionHandler completionHandler:
+      @escaping (UNNotificationPresentationOptions) -> Void
+  ) {
+    completionHandler([.banner, .sound, .badge, .list])
+  }
+
+  // Forward notification taps to JS so it can deep-link into the relevant screen.
+  func userNotificationCenter(
+    _ center: UNUserNotificationCenter,
+    didReceive response: UNNotificationResponse,
+    withCompletionHandler completionHandler: @escaping () -> Void
+  ) {
+    let userInfo = response.notification.request.content.userInfo
+    NotificationCenter.default.post(
+      name: Notification.Name("WalkerNotificationTapped"),
+      object: nil,
+      userInfo: ["data": userInfo]
+    )
+    completionHandler()
   }
 }
 
