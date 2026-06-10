@@ -225,7 +225,10 @@ Deno.serve(async (req) => {
     let analysis: Record<string, unknown>;
     try {
       const response = await anthropic.messages.create({
-        model: Deno.env.get('ANTHROPIC_VISION_MODEL') ?? 'claude-3-5-sonnet-20241022',
+        // claude-3-5-sonnet-20241022 was retired by Anthropic. Default to
+        // Sonnet 4.6 (current model family as of Q2 2026 — best vision
+        // quality per cost for renovation photo analysis).
+        model: Deno.env.get('ANTHROPIC_VISION_MODEL') ?? 'claude-sonnet-4-6',
         max_tokens: 2000,
         messages: [{
           role: 'user',
