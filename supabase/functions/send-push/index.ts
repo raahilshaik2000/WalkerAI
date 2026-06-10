@@ -1,4 +1,5 @@
 import { createClient } from 'jsr:@supabase/supabase-js@2';
+import { SignJWT, importPKCS8 } from 'npm:jose@5';
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -12,17 +13,14 @@ interface PushPayload {
   payload: Record<string, unknown>;
 }
 
-interface ExpoPushMessage {
-  to: string;
-  title: string;
-  body: string;
-  data: Record<string, unknown>;
-  sound: string;
-  priority: 'default' | 'normal' | 'high';
-  ttl?: number;
-  badge?: number;
-  channelId?: string;
-}
+// Apple-specific response codes that mean the token is dead and should be
+// marked inactive in device_tokens so we stop trying to deliver to it.
+const DEAD_TOKEN_REASONS = new Set([
+  'BadDeviceToken',
+  'Unregistered',
+  'DeviceTokenNotForTopic',
+  'TopicDisallowed',
+]);
 
 Deno.serve(async (req) => {
   if (req.method === 'OPTIONS') {
@@ -37,6 +35,7 @@ Deno.serve(async (req) => {
   try {
     const { notification_id, user_id, type, payload }: PushPayload = await req.json();
 
+    // ── Preference check ────────────────────────────────────────────
     const preferenceKey = notificationPreferenceKey(type);
     if (preferenceKey) {
       const { data: prefs, error: prefsError } = await supabase
@@ -62,7 +61,7 @@ Deno.serve(async (req) => {
       }
     }
 
-    // Get active device tokens for this user
+    // ── Active device tokens ────────────────────────────────────────
     const { data: tokens, error: tokenError } = await supabase
       .from('device_tokens')
       .select('token, platform')
@@ -79,67 +78,116 @@ Deno.serve(async (req) => {
           push_error: 'NO_ACTIVE_DEVICE_TOKENS',
         })
         .eq('id', notification_id);
-
-      // No tokens — user has no devices registered, that's fine.
-      return new Response(JSON.stringify({ sent: 0 }), {
+      return new Response(JSON.stringify({ sent: 0, skipped: 'no_tokens' }), {
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
       });
     }
 
-    // Build notification content based on type
-    const { title, body, priority, ttl } = buildNotificationContent(type, payload);
-
-    // Build Expo push messages (one per device token)
-    const messages: ExpoPushMessage[] = tokens.map((t: { token: string; platform: string }) => ({
-      to: t.token,
-      title,
-      body,
-      data: {
-        type,
-        notification_id,
-        deep_link: payload.deep_link as string ?? '/',
-        ...payload,
-      },
-      sound: 'default',
-      priority,
-      ...(ttl && { ttl }),
-      channelId: 'default',
-    }));
-
-    // Send to Expo Push API (batch up to 100 per request)
-    const BATCH_SIZE = 100;
-    const invalidTokens: string[] = [];
-
-    for (let i = 0; i < messages.length; i += BATCH_SIZE) {
-      const batch = messages.slice(i, i + BATCH_SIZE);
-
-      const response = await fetch('https://exp.host/--/api/v2/push/send', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json', 'Accept-Encoding': 'gzip, deflate' },
-        body: JSON.stringify(batch),
+    const iosTokens = tokens.filter((t) => t.platform === 'ios').map((t) => t.token);
+    if (iosTokens.length === 0) {
+      // No iOS tokens. Android/web pushes aren't wired yet.
+      await supabase
+        .from('notifications')
+        .update({
+          push_sent: false,
+          push_sent_at: new Date().toISOString(),
+          push_error: 'NO_IOS_TOKENS',
+        })
+        .eq('id', notification_id);
+      return new Response(JSON.stringify({ sent: 0, skipped: 'no_ios_tokens' }), {
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
       });
-
-      if (!response.ok) {
-        console.error('Expo Push API error:', response.status, await response.text());
-        continue;
-      }
-
-      const result = await response.json();
-      const ticketData = result.data as Array<{ status: string; details?: { error?: string } }>;
-
-      // Process tickets — check for invalid tokens
-      for (let j = 0; j < ticketData.length; j++) {
-        const ticket = ticketData[j];
-        if (ticket.status === 'error') {
-          const errorCode = ticket.details?.error;
-          if (errorCode === 'DeviceNotRegistered') {
-            invalidTokens.push(batch[j].to);
-          }
-        }
-      }
     }
 
-    // Deactivate invalid tokens
+    // ── Build the message ───────────────────────────────────────────
+    const content = buildNotificationContent(type, payload);
+
+    // ── APNs auth setup ─────────────────────────────────────────────
+    const apnsKey = Deno.env.get('APNS_KEY');
+    const apnsKeyId = Deno.env.get('APNS_KEY_ID');
+    const apnsTeamId = Deno.env.get('APNS_TEAM_ID');
+    const apnsBundleId = Deno.env.get('APNS_BUNDLE_ID') ?? 'com.walkerai.app';
+    const useProduction = (Deno.env.get('APNS_USE_PRODUCTION') ?? 'true').toLowerCase() !== 'false';
+
+    if (!apnsKey || !apnsKeyId || !apnsTeamId) {
+      // Mark as failed but don't 500 — the notification row exists, the user
+      // just won't get a push until secrets are configured.
+      await supabase
+        .from('notifications')
+        .update({
+          push_sent: false,
+          push_sent_at: new Date().toISOString(),
+          push_error: 'APNS_NOT_CONFIGURED',
+        })
+        .eq('id', notification_id);
+      return new Response(
+        JSON.stringify({ error: 'APNS_NOT_CONFIGURED', detail: 'APNS_KEY, APNS_KEY_ID, APNS_TEAM_ID secrets required' }),
+        { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      );
+    }
+
+    const jwt = await buildApnsJwt({ key: apnsKey, keyId: apnsKeyId, teamId: apnsTeamId });
+    const apnsHost = useProduction ? 'api.push.apple.com' : 'api.sandbox.push.apple.com';
+
+    // ── Deliver ─────────────────────────────────────────────────────
+    const invalidTokens: string[] = [];
+    let delivered = 0;
+    let errored = 0;
+
+    const apsPayload = {
+      aps: {
+        alert: { title: content.title, body: content.body },
+        sound: 'default',
+        ...(content.priority === 'high' && { 'interruption-level': 'time-sensitive' as const }),
+      },
+      type,
+      ...payload,
+    };
+    const body = JSON.stringify(apsPayload);
+
+    // Send concurrently — each fetch is independent. Limit to 32 at a time so
+    // we don't overwhelm the function's event loop on large fan-outs.
+    const CONCURRENCY = 32;
+    for (let i = 0; i < iosTokens.length; i += CONCURRENCY) {
+      const chunk = iosTokens.slice(i, i + CONCURRENCY);
+      await Promise.all(chunk.map(async (token) => {
+        try {
+          const res = await fetch(`https://${apnsHost}/3/device/${token}`, {
+            method: 'POST',
+            headers: {
+              'authorization': `bearer ${jwt}`,
+              'apns-topic': apnsBundleId,
+              'apns-push-type': 'alert',
+              'apns-priority': content.priority === 'high' ? '10' : '5',
+              ...(content.ttl && { 'apns-expiration': String(Math.floor(Date.now() / 1000) + content.ttl) }),
+              'content-type': 'application/json',
+            },
+            body,
+          });
+          if (res.status === 200) {
+            delivered += 1;
+            return;
+          }
+          errored += 1;
+          let reason = '';
+          try {
+            const errBody = await res.json();
+            reason = (errBody as { reason?: string }).reason ?? '';
+          } catch {
+            reason = `HTTP_${res.status}`;
+          }
+          console.error(`APNs ${res.status} for token ${token.substring(0, 8)}...: ${reason}`);
+          if (DEAD_TOKEN_REASONS.has(reason)) {
+            invalidTokens.push(token);
+          }
+        } catch (err) {
+          errored += 1;
+          console.error(`APNs network error for token ${token.substring(0, 8)}...:`, err);
+        }
+      }));
+    }
+
+    // Mark dead tokens inactive so we don't keep trying.
     if (invalidTokens.length > 0) {
       await supabase
         .from('device_tokens')
@@ -147,14 +195,18 @@ Deno.serve(async (req) => {
         .in('token', invalidTokens);
     }
 
-    // Mark notification as push-sent
+    // Update notification row with the result.
     await supabase
       .from('notifications')
-      .update({ push_sent: true, push_sent_at: new Date().toISOString(), push_error: null })
+      .update({
+        push_sent: delivered > 0,
+        push_sent_at: new Date().toISOString(),
+        push_error: delivered === 0 && errored > 0 ? `ALL_TOKENS_FAILED:${errored}` : null,
+      })
       .eq('id', notification_id);
 
     return new Response(
-      JSON.stringify({ sent: messages.length - invalidTokens.length, invalid: invalidTokens.length }),
+      JSON.stringify({ sent: delivered, failed: errored, invalid: invalidTokens.length }),
       { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
     );
 
@@ -167,6 +219,27 @@ Deno.serve(async (req) => {
   }
 });
 
+// ── APNs JWT (ES256) ──────────────────────────────────────────────────
+// Apple wants a short-lived JWT signed by the .p8 private key we generated
+// in their developer portal. The token is bound to a team (iss claim) +
+// signing key (kid header). Refreshed once per function invocation; Apple
+// lets us reuse for up to ~60 min before requiring a new one.
+async function buildApnsJwt(params: { key: string; keyId: string; teamId: string }): Promise<string> {
+  // The APNS_KEY secret can be the raw .p8 contents (including header/footer)
+  // or just the base64 body without headers. Normalize either form.
+  const pem = params.key.includes('BEGIN PRIVATE KEY')
+    ? params.key
+    : `-----BEGIN PRIVATE KEY-----\n${params.key}\n-----END PRIVATE KEY-----`;
+  const privateKey = await importPKCS8(pem, 'ES256');
+  const now = Math.floor(Date.now() / 1000);
+  return await new SignJWT({})
+    .setProtectedHeader({ alg: 'ES256', kid: params.keyId })
+    .setIssuer(params.teamId)
+    .setIssuedAt(now)
+    .sign(privateKey);
+}
+
+// ── Notification content + preferences (unchanged from previous version) ──
 function buildNotificationContent(
   type: string,
   payload: Record<string, unknown>
@@ -284,13 +357,14 @@ function buildNotificationContent(
         body: 'No contractor accepted yet. We\'re widening the search area.',
         priority: 'normal',
       };
-    case 'warranty_expiring':
+    case 'warranty_expiring': {
       const daysLeft = payload.days_left as number ?? 30;
       return {
         title: `Warranty Expires in ${daysLeft} Days`,
         body: 'Review your warranty details before coverage lapses.',
         priority: 'normal',
       };
+    }
     default:
       return {
         title: 'WalkerAI',

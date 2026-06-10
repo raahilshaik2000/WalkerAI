@@ -1,4 +1,4 @@
-import React, { useEffect, useState, useCallback } from 'react';
+import React, { useEffect, useRef, useState, useCallback } from 'react';
 import {
   Modal,
   Pressable,
@@ -7,7 +7,7 @@ import {
   TouchableOpacity,
   View,
 } from 'react-native';
-import { NavigationContainer } from '@react-navigation/native';
+import { NavigationContainer, createNavigationContainerRef, CommonActions } from '@react-navigation/native';
 import { createStackNavigator } from '@react-navigation/stack';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import Ionicons from 'react-native-vector-icons/Ionicons';
@@ -16,6 +16,10 @@ import { useProfileStore } from '@/stores/profile.store';
 import { supabase } from '@/lib/supabase/client';
 import { FloatingTabBar } from '@/components/ui/FloatingTabBar';
 import type { UserRole } from '@/constants/enums';
+import { initPushForUser, deactivatePushForUser, setPushDeepLinkHandler } from '@/lib/push';
+
+// Shared navigation ref so the push module can deep-link without prop-drilling.
+const navigationRef = createNavigationContainerRef();
 
 // Auth screens
 import WelcomeScreen from '@/app/(auth)/index';
@@ -391,6 +395,39 @@ export function RootNavigator() {
     return () => subscription.unsubscribe();
   }, [applySession]);
 
+  // Push notification wiring. Effect runs once on mount to teach the push
+  // service how to deep-link. A separate effect handles per-session init/
+  // deactivate so signing out properly deactivates this device's APNs token.
+  useEffect(() => {
+    setPushDeepLinkHandler((route) => {
+      if (!route || !navigationRef.isReady()) return;
+      // CommonActions.navigate bypasses the strict per-stack typing the
+      // direct navigationRef.navigate enforces; routes come from a runtime
+      // string lookup, so static types don't help here anyway.
+      navigationRef.dispatch(CommonActions.navigate({ name: route.name, params: route.params }));
+    });
+  }, []);
+
+  const lastPushUserId = useRef<string | null>(null);
+  useEffect(() => {
+    if (!hydrated) return;
+    const currentUserId = session?.user?.id ?? null;
+    const previousUserId = lastPushUserId.current;
+    if (currentUserId && currentUserId !== previousUserId) {
+      // New session (sign-in or session resume). Register APNs.
+      initPushForUser(currentUserId, role).catch((err) => {
+        console.warn('[push] initPushForUser failed:', err);
+      });
+    } else if (!currentUserId && previousUserId) {
+      // Signed out — mark this device's tokens inactive so push doesn't
+      // continue delivering to a device whose user is gone.
+      deactivatePushForUser(previousUserId).catch((err) => {
+        console.warn('[push] deactivatePushForUser failed:', err);
+      });
+    }
+    lastPushUserId.current = currentUserId;
+  }, [hydrated, session?.user?.id, role]);
+
   if (!hydrated) return null;
 
   const resolvedRole = role === 'homeowner' || role === 'company' || role === 'supplier' || role === 'admin'
@@ -411,7 +448,7 @@ export function RootNavigator() {
   }
 
   return (
-    <NavigationContainer theme={{ dark: true, colors: { primary: '#FF6B00', background: '#000000', card: '#000000', text: '#FFFFFF', border: 'transparent', notification: '#FF6B00' }, fonts: { regular: { fontFamily: 'System', fontWeight: '400' }, medium: { fontFamily: 'System', fontWeight: '500' }, bold: { fontFamily: 'System', fontWeight: '700' }, heavy: { fontFamily: 'System', fontWeight: '900' } } }}>
+    <NavigationContainer ref={navigationRef} theme={{ dark: true, colors: { primary: '#FF6B00', background: '#000000', card: '#000000', text: '#FFFFFF', border: 'transparent', notification: '#FF6B00' }, fonts: { regular: { fontFamily: 'System', fontWeight: '400' }, medium: { fontFamily: 'System', fontWeight: '500' }, bold: { fontFamily: 'System', fontWeight: '700' }, heavy: { fontFamily: 'System', fontWeight: '900' } } }}>
       <Stack.Navigator screenOptions={{ headerShown: false }}>
         {!session ? (
           <Stack.Screen name="Auth" component={AuthNavigator} />
