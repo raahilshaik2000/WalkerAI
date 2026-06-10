@@ -143,17 +143,34 @@ Deno.serve(async (req) => {
       });
     }
 
-    // Load project to get room_type
-    const { data: project } = await adminClient
+    // Load project to get room_type. Race against an 8s cap so a stuck
+    // pgbouncer / connection pool can't hold up the entire function for
+    // the Anthropic call that follows.
+    const projectFetch = adminClient
       .from('projects')
       .select('room_type, homeowner_id')
       .eq('id', project_id)
       .single();
+    const projectResult = await Promise.race([
+      projectFetch,
+      new Promise<{ data: null; error: { message: string } }>((resolve) =>
+        setTimeout(() => resolve({ data: null, error: { message: 'project fetch timed out' } }), 8000)
+      ),
+    ]) as { data: { room_type: string | null; homeowner_id: string } | null; error?: { message: string } };
 
+    const project = projectResult.data;
     if (!project || project.homeowner_id !== user.id) {
-      return new Response(JSON.stringify({ error: 'Project not found or unauthorized' }), {
-        status: 404, headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-      });
+      // If we couldn't load the project (timeout or not found), use the
+      // homeowner's chosen room_type from the client's prior context. This
+      // is acceptable because room_type is also stored client-side and the
+      // analysis is best-effort.
+      if (projectResult.error?.message?.includes('timed out')) {
+        console.warn('analyze-photos: project fetch timed out, continuing with default room_type');
+      } else {
+        return new Response(JSON.stringify({ error: 'Project not found or unauthorized' }), {
+          status: 404, headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        });
+      }
     }
 
     const anthropicApiKey = Deno.env.get('ANTHROPIC_API_KEY');

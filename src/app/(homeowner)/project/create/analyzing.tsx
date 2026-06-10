@@ -15,7 +15,6 @@ import { uploadBase64 } from '@/lib/supabase/storage';
 import {
   buildPhotoAnalysisPayload,
   buildProjectAnalysisFallback,
-  isMissingAnalysisFunctionError,
 } from '@/lib/project-analysis';
 
 import { useProjectWizardStore } from '@/stores/project-wizard.store';
@@ -148,22 +147,29 @@ export default function AnalyzingScreen() {
         // Wait for photo uploads to finish alongside the edge function call.
         await uploadPromise;
 
+        // Photo analysis is best-effort context for the brief, NOT a
+        // blocker. If Claude is slow, the function times out, or the
+        // database connection inside the function is contended, we still
+        // want the homeowner to be able to continue to the questionnaire.
+        // Fall back to a placeholder analysis on any error instead of
+        // hard-stopping the wizard.
         let analysis: AIAnalysis;
-        if (analyzeError) {
-          const analysisMessage = await formatSupabaseFunctionError(analyzeError);
-          if (!isMissingAnalysisFunctionError(analysisMessage)) {
-            throw new Error(`Analysis failed: ${analysisMessage}`);
-          }
+        if (analyzeError || !analyzeData?.analysis) {
+          const analysisMessage = analyzeError
+            ? await formatSupabaseFunctionError(analyzeError)
+            : 'No analysis returned from server.';
+          console.warn('[analyzing] photo analysis fell back:', analysisMessage);
           analysis = buildProjectAnalysisFallback(roomType || 'kitchen', analysisMessage);
+          // Try to persist the fallback so subsequent screens have it, but
+          // don't fail the flow if this write also has issues.
           const { error: fallbackError } = await supabase
             .from('projects')
             .update({ ai_analysis: analysis })
             .eq('id', pid);
           if (fallbackError) {
-            throw new Error(`Analysis fallback failed: ${fallbackError.message}`);
+            console.warn('[analyzing] fallback persist failed:', fallbackError.message);
           }
         } else {
-          if (!analyzeData?.analysis) throw new Error('No analysis returned from server.');
           analysis = analyzeData.analysis;
         }
 
