@@ -406,100 +406,270 @@ class RoomCustomizerViewController: UIViewController {
     return UIGraphicsGetImageFromCurrentImageContext()
   }
 
+  // V2 procedural texture generators. Each material is built in layers
+  // (base variation -> mid features -> fine grain -> highlights/shadows)
+  // to look closer to real photography than the original single-pass
+  // primitive splat that V1 used.
+
   private func drawSpeckle(
     _ ctx: CGContext, size: CGSize, count: Int,
     minRadius: CGFloat, maxRadius: CGFloat,
     alphaRange: ClosedRange<CGFloat>, includeLight: Bool, includeDark: Bool
   ) {
-    for _ in 0..<count {
-      let x = CGFloat.random(in: 0...size.width)
-      let y = CGFloat.random(in: 0...size.height)
-      let r = CGFloat.random(in: minRadius...maxRadius)
-      let alpha = CGFloat.random(in: alphaRange)
-      let useLight: Bool
-      if includeLight && includeDark {
-        useLight = Bool.random()
-      } else {
-        useLight = includeLight
+    // Layer 1: large soft cloud variation so the base isn't dead flat.
+    for _ in 0..<14 {
+      let cx = CGFloat.random(in: 0...size.width)
+      let cy = CGFloat.random(in: 0...size.height)
+      let radius = CGFloat.random(in: 50...140)
+      let useLight = Bool.random()
+      let tone: CGFloat = useLight ? CGFloat.random(in: 0.72...0.92) : CGFloat.random(in: 0.08...0.28)
+      let gradient = CGGradient(
+        colorsSpace: CGColorSpaceCreateDeviceRGB(),
+        colors: [
+          UIColor(white: tone, alpha: 0.08).cgColor,
+          UIColor(white: tone, alpha: 0.0).cgColor,
+        ] as CFArray,
+        locations: [0.0, 1.0]
+      )!
+      ctx.drawRadialGradient(
+        gradient,
+        startCenter: CGPoint(x: cx, y: cy), startRadius: 0,
+        endCenter: CGPoint(x: cx, y: cy), endRadius: radius,
+        options: []
+      )
+    }
+
+    // Layer 2: small specks (the original behaviour but with cluster bias
+    // so they form little groups instead of being uniformly scattered).
+    let clusterCount = max(8, count / 40)
+    for _ in 0..<clusterCount {
+      let cx = CGFloat.random(in: 0...size.width)
+      let cy = CGFloat.random(in: 0...size.height)
+      let groupSize = count / clusterCount
+      for _ in 0..<groupSize {
+        // Bivariate normal-ish around (cx, cy). Average two uniforms for
+        // poor-man's Gaussian shape — tightens the cluster without
+        // costing trig.
+        let dx = (CGFloat.random(in: -1...1) + CGFloat.random(in: -1...1)) * 18
+        let dy = (CGFloat.random(in: -1...1) + CGFloat.random(in: -1...1)) * 18
+        let x = cx + dx
+        let y = cy + dy
+        let r = CGFloat.random(in: minRadius...maxRadius)
+        let alpha = CGFloat.random(in: alphaRange)
+        let useLight = includeLight && (includeDark ? Bool.random() : true)
+        let tone: CGFloat = useLight
+          ? CGFloat.random(in: 0.78...0.97)
+          : CGFloat.random(in: 0.05...0.22)
+        ctx.setFillColor(UIColor(white: tone, alpha: alpha).cgColor)
+        ctx.fillEllipse(in: CGRect(x: x - r, y: y - r, width: r * 2, height: r * 2))
       }
-      let tone: CGFloat = useLight ? CGFloat.random(in: 0.78...0.97) : CGFloat.random(in: 0.05...0.22)
-      ctx.setFillColor(UIColor(white: tone, alpha: alpha).cgColor)
-      ctx.fillEllipse(in: CGRect(x: x - r, y: y - r, width: r * 2, height: r * 2))
     }
   }
 
   private func drawMarbleVeins(_ ctx: CGContext, size: CGSize, veinCount: Int) {
-    for _ in 0..<veinCount {
-      ctx.setStrokeColor(UIColor(white: 0.25, alpha: CGFloat.random(in: 0.18...0.35)).cgColor)
-      ctx.setLineWidth(CGFloat.random(in: 0.5...1.6))
-      var x = CGFloat.random(in: 0...size.width)
-      var y = CGFloat.random(in: 0...size.height)
-      ctx.move(to: CGPoint(x: x, y: y))
-      for _ in 0..<14 {
-        x += CGFloat.random(in: -22...22)
-        y += CGFloat.random(in: -22...22)
-        ctx.addLine(to: CGPoint(x: x, y: y))
+    // Layer 1: faint soft background veining so the marble feels layered.
+    for _ in 0..<3 {
+      let startY = CGFloat.random(in: 0...size.height)
+      let path = UIBezierPath()
+      path.move(to: CGPoint(x: -10, y: startY))
+      let segments = 5
+      var currentX: CGFloat = -10
+      var currentY: CGFloat = startY
+      for _ in 0..<segments {
+        let nextX = currentX + size.width / CGFloat(segments) + CGFloat.random(in: -20...20)
+        let nextY = currentY + CGFloat.random(in: -40...40)
+        let ctrl1 = CGPoint(x: currentX + CGFloat.random(in: 20...60), y: currentY + CGFloat.random(in: -20...20))
+        let ctrl2 = CGPoint(x: nextX - CGFloat.random(in: 20...60), y: nextY + CGFloat.random(in: -20...20))
+        path.addCurve(to: CGPoint(x: nextX, y: nextY), controlPoint1: ctrl1, controlPoint2: ctrl2)
+        currentX = nextX
+        currentY = nextY
       }
+      ctx.setStrokeColor(UIColor(white: 0.55, alpha: CGFloat.random(in: 0.06...0.12)).cgColor)
+      ctx.setLineWidth(CGFloat.random(in: 6...14))
+      ctx.addPath(path.cgPath)
+      ctx.strokePath()
+    }
+
+    // Layer 2: primary veins as smooth Bezier curves. Real marble veins
+    // are smooth and meandering, not the jagged polylines V1 produced.
+    for _ in 0..<veinCount {
+      let path = UIBezierPath()
+      let startX = CGFloat.random(in: -10...size.width)
+      let startY = CGFloat.random(in: 0...size.height)
+      path.move(to: CGPoint(x: startX, y: startY))
+      var currentX = startX
+      var currentY = startY
+      for _ in 0..<6 {
+        let nextX = currentX + CGFloat.random(in: 30...75)
+        let nextY = currentY + CGFloat.random(in: -22...22)
+        let ctrl1 = CGPoint(
+          x: currentX + CGFloat.random(in: 10...30),
+          y: currentY + CGFloat.random(in: -25...25)
+        )
+        let ctrl2 = CGPoint(
+          x: nextX - CGFloat.random(in: 10...30),
+          y: nextY + CGFloat.random(in: -25...25)
+        )
+        path.addCurve(to: CGPoint(x: nextX, y: nextY), controlPoint1: ctrl1, controlPoint2: ctrl2)
+        currentX = nextX
+        currentY = nextY
+      }
+      ctx.setStrokeColor(UIColor(white: 0.22, alpha: CGFloat.random(in: 0.22...0.38)).cgColor)
+      ctx.setLineWidth(CGFloat.random(in: 0.6...1.8))
+      ctx.addPath(path.cgPath)
+      ctx.strokePath()
+
+      // Layer 3: thinner shadow vein offset slightly for depth.
+      ctx.setStrokeColor(UIColor(white: 0.40, alpha: CGFloat.random(in: 0.10...0.20)).cgColor)
+      ctx.setLineWidth(0.4)
+      let shadowPath = path.copy() as! UIBezierPath
+      shadowPath.apply(CGAffineTransform(translationX: 1.5, y: 1.5))
+      ctx.addPath(shadowPath.cgPath)
       ctx.strokePath()
     }
   }
 
   private func drawWoodGrain(_ ctx: CGContext, size: CGSize, baseColor: UIColor) {
-    var r: CGFloat = 0, g: CGFloat = 0, b: CGFloat = 0, a: CGFloat = 0
-    baseColor.getRed(&r, green: &g, blue: &b, alpha: &a)
-    // Long horizontal stripes with subtle variation
+    var br: CGFloat = 0, bg: CGFloat = 0, bb: CGFloat = 0, ba: CGFloat = 0
+    baseColor.getRed(&br, green: &bg, blue: &bb, alpha: &ba)
+
+    // Layer 1: dense small-grained stripes for the underlying grain feel.
     var y: CGFloat = 0
     while y < size.height {
-      let stripeHeight = CGFloat.random(in: 1.5...5.0)
-      let toneShift = CGFloat.random(in: -0.12...0.08)
+      let stripeHeight = CGFloat.random(in: 0.4...1.5)
+      let toneShift = CGFloat.random(in: -0.06...0.06)
       let stripeColor = UIColor(
-        red: max(0, min(1, r + toneShift)),
-        green: max(0, min(1, g + toneShift * 0.8)),
-        blue: max(0, min(1, b + toneShift * 0.6)),
+        red: max(0, min(1, br + toneShift)),
+        green: max(0, min(1, bg + toneShift * 0.85)),
+        blue: max(0, min(1, bb + toneShift * 0.70)),
         alpha: 1.0
       )
       ctx.setFillColor(stripeColor.cgColor)
       ctx.fill(CGRect(x: 0, y: y, width: size.width, height: stripeHeight))
       y += stripeHeight
     }
-    // Knots / darker streaks
-    for _ in 0..<25 {
-      let startX = CGFloat.random(in: 0...size.width)
+
+    // Layer 2: a few much wider tonal bands so the grain has long-range
+    // variation matching real planks (light vs dark heartwood zones).
+    for _ in 0..<6 {
+      let bandY = CGFloat.random(in: 0...size.height)
+      let bandHeight = CGFloat.random(in: 12...36)
+      let toneShift = CGFloat.random(in: -0.10...0.05)
+      let gradient = CGGradient(
+        colorsSpace: CGColorSpaceCreateDeviceRGB(),
+        colors: [
+          UIColor(red: 0, green: 0, blue: 0, alpha: 0).cgColor,
+          UIColor(white: toneShift < 0 ? 0.15 : 0.85, alpha: 0.16).cgColor,
+          UIColor(red: 0, green: 0, blue: 0, alpha: 0).cgColor,
+        ] as CFArray,
+        locations: [0.0, 0.5, 1.0]
+      )!
+      ctx.saveGState()
+      ctx.clip(to: CGRect(x: 0, y: bandY - bandHeight / 2, width: size.width, height: bandHeight))
+      ctx.drawLinearGradient(
+        gradient,
+        start: CGPoint(x: 0, y: bandY - bandHeight / 2),
+        end: CGPoint(x: 0, y: bandY + bandHeight / 2),
+        options: []
+      )
+      ctx.restoreGState()
+    }
+
+    // Layer 3: knots — elliptical with rings around them so they look like
+    // tree-eyes, not random dark blobs.
+    let knotCount = Int.random(in: 2...5)
+    for _ in 0..<knotCount {
+      let kx = CGFloat.random(in: 20...(size.width - 20))
+      let ky = CGFloat.random(in: 20...(size.height - 20))
+      let kw = CGFloat.random(in: 8...18)
+      let kh = kw * CGFloat.random(in: 0.55...0.8)
+      // Outer rings (multiple concentric)
+      for r in 0..<3 {
+        let inset = CGFloat(r) * 2.5
+        ctx.setStrokeColor(UIColor(white: 0.10, alpha: 0.22 - CGFloat(r) * 0.05).cgColor)
+        ctx.setLineWidth(0.8)
+        ctx.strokeEllipse(in: CGRect(x: kx - kw - inset, y: ky - kh - inset, width: (kw + inset) * 2, height: (kh + inset) * 2))
+      }
+      // Core
+      ctx.setFillColor(UIColor(white: 0.08, alpha: 0.55).cgColor)
+      ctx.fillEllipse(in: CGRect(x: kx - kw / 2, y: ky - kh / 2, width: kw, height: kh))
+    }
+
+    // Layer 4: long subtle grain streaks running with the wood.
+    for _ in 0..<60 {
+      let startX = CGFloat.random(in: -20...size.width)
       let startY = CGFloat.random(in: 0...size.height)
-      let length = CGFloat.random(in: 30...110)
-      ctx.setStrokeColor(UIColor(white: 0.15, alpha: CGFloat.random(in: 0.06...0.18)).cgColor)
-      ctx.setLineWidth(CGFloat.random(in: 0.4...1.0))
+      let length = CGFloat.random(in: 60...180)
+      ctx.setStrokeColor(UIColor(white: 0.08, alpha: CGFloat.random(in: 0.05...0.12)).cgColor)
+      ctx.setLineWidth(CGFloat.random(in: 0.3...0.7))
       ctx.move(to: CGPoint(x: startX, y: startY))
-      ctx.addLine(to: CGPoint(x: startX + length, y: startY + CGFloat.random(in: -2...2)))
+      ctx.addLine(to: CGPoint(x: startX + length, y: startY + CGFloat.random(in: -1.5...1.5)))
       ctx.strokePath()
     }
   }
 
   private func drawTileGrid(_ ctx: CGContext, size: CGSize, tileSize: CGFloat) {
-    let groutColor = UIColor(white: 0.2, alpha: 0.55)
-    ctx.setStrokeColor(groutColor.cgColor)
-    ctx.setLineWidth(2.0)
+    // Grout: darker recessed channel between tiles. Drawn first so tile
+    // highlights land on top.
+    let groutWidth: CGFloat = max(1.5, tileSize * 0.04)
+    ctx.setFillColor(UIColor(white: 0.18, alpha: 0.72).cgColor)
     var x: CGFloat = 0
     while x <= size.width {
-      ctx.move(to: CGPoint(x: x, y: 0))
-      ctx.addLine(to: CGPoint(x: x, y: size.height))
+      ctx.fill(CGRect(x: x - groutWidth / 2, y: 0, width: groutWidth, height: size.height))
       x += tileSize
     }
     var y: CGFloat = 0
     while y <= size.height {
-      ctx.move(to: CGPoint(x: 0, y: y))
-      ctx.addLine(to: CGPoint(x: size.width, y: y))
+      ctx.fill(CGRect(x: 0, y: y - groutWidth / 2, width: size.width, height: groutWidth))
       y += tileSize
     }
-    ctx.strokePath()
-    // Slight variation in each tile so they don't look identical
+
+    // Per-tile variation: each tile gets a subtle warm/cool tone shift,
+    // an inner highlight gradient, and a soft edge shadow toward the
+    // grout. Makes each square look hand-laid instead of uniform.
     var ix: CGFloat = 0
     while ix < size.width {
       var iy: CGFloat = 0
       while iy < size.height {
-        let dim = CGFloat.random(in: -0.06...0.06)
-        ctx.setFillColor(UIColor(white: dim < 0 ? 0.1 : 0.9, alpha: abs(dim)).cgColor)
-        ctx.fill(CGRect(x: ix + 1, y: iy + 1, width: tileSize - 2, height: tileSize - 2))
+        let tileRect = CGRect(
+          x: ix + groutWidth / 2 + 0.5,
+          y: iy + groutWidth / 2 + 0.5,
+          width: tileSize - groutWidth - 1,
+          height: tileSize - groutWidth - 1
+        )
+
+        // Tonal jitter (color, not just brightness)
+        let toneShift = CGFloat.random(in: -0.05...0.05)
+        let warmth = CGFloat.random(in: -0.03...0.03)
+        let tint: UIColor
+        if toneShift < 0 {
+          tint = UIColor(red: 0.1 + warmth, green: 0.1, blue: 0.1 - warmth, alpha: abs(toneShift))
+        } else {
+          tint = UIColor(red: 0.95 + warmth, green: 0.95, blue: 0.95 - warmth, alpha: toneShift)
+        }
+        ctx.setFillColor(tint.cgColor)
+        ctx.fill(tileRect)
+
+        // Highlight gradient: light from upper-left
+        let gradient = CGGradient(
+          colorsSpace: CGColorSpaceCreateDeviceRGB(),
+          colors: [
+            UIColor(white: 1.0, alpha: 0.08).cgColor,
+            UIColor(white: 0.0, alpha: 0.0).cgColor,
+            UIColor(white: 0.0, alpha: 0.08).cgColor,
+          ] as CFArray,
+          locations: [0.0, 0.55, 1.0]
+        )!
+        ctx.saveGState()
+        ctx.clip(to: tileRect)
+        ctx.drawLinearGradient(
+          gradient,
+          start: CGPoint(x: tileRect.minX, y: tileRect.minY),
+          end: CGPoint(x: tileRect.maxX, y: tileRect.maxY),
+          options: []
+        )
+        ctx.restoreGState()
+
         iy += tileSize
       }
       ix += tileSize
@@ -508,31 +678,89 @@ class RoomCustomizerViewController: UIViewController {
 
   private func drawTerrazzo(_ ctx: CGContext, size: CGSize) {
     let chipColors: [UIColor] = [
-      UIColor(white: 0.95, alpha: 0.65),
-      UIColor(white: 0.10, alpha: 0.55),
-      UIColor(red: 0.85, green: 0.55, blue: 0.30, alpha: 0.55),
-      UIColor(red: 0.55, green: 0.65, blue: 0.55, alpha: 0.50),
+      UIColor(white: 0.96, alpha: 0.78),
+      UIColor(white: 0.10, alpha: 0.62),
+      UIColor(red: 0.85, green: 0.55, blue: 0.30, alpha: 0.68),
+      UIColor(red: 0.55, green: 0.65, blue: 0.55, alpha: 0.60),
+      UIColor(red: 0.78, green: 0.36, blue: 0.20, alpha: 0.55),
+      UIColor(white: 0.45, alpha: 0.50),
     ]
-    for _ in 0..<260 {
+
+    // Background micro-grit so the matrix between chips looks polished
+    // concrete-ish instead of dead flat.
+    for _ in 0..<400 {
       let x = CGFloat.random(in: 0...size.width)
       let y = CGFloat.random(in: 0...size.height)
-      let w = CGFloat.random(in: 3...10)
-      let h = CGFloat.random(in: 3...10)
-      ctx.setFillColor(chipColors.randomElement()!.cgColor)
-      let path = UIBezierPath(roundedRect: CGRect(x: x, y: y, width: w, height: h), cornerRadius: 1.5)
+      ctx.setFillColor(UIColor(white: CGFloat.random(in: 0.4...0.9), alpha: 0.06).cgColor)
+      ctx.fillEllipse(in: CGRect(x: x, y: y, width: 0.6, height: 0.6))
+    }
+
+    // Chips: rotated rounded rects, color from the palette, with a thin
+    // dark border for the polished-edge effect real terrazzo has.
+    for _ in 0..<300 {
+      let x = CGFloat.random(in: 0...size.width)
+      let y = CGFloat.random(in: 0...size.height)
+      let w = CGFloat.random(in: 3...12)
+      let h = CGFloat.random(in: 3...12)
+      let rotation = CGFloat.random(in: 0...(.pi * 2))
+      let color = chipColors.randomElement()!
+      ctx.saveGState()
+      ctx.translateBy(x: x, y: y)
+      ctx.rotate(by: rotation)
+      let path = UIBezierPath(
+        roundedRect: CGRect(x: -w / 2, y: -h / 2, width: w, height: h),
+        cornerRadius: CGFloat.random(in: 0.8...2.0)
+      )
+      ctx.setFillColor(color.cgColor)
       ctx.addPath(path.cgPath)
       ctx.fillPath()
+      // Edge highlight
+      ctx.setStrokeColor(UIColor(white: 0.0, alpha: 0.20).cgColor)
+      ctx.setLineWidth(0.4)
+      ctx.addPath(path.cgPath)
+      ctx.strokePath()
+      ctx.restoreGState()
     }
   }
 
   private func drawBrushedMetal(_ ctx: CGContext, size: CGSize) {
-    for _ in 0..<600 {
+    // Horizontal anisotropic streaks at varying densities. Real brushed
+    // metal has thousands of micro-scratches that catch light unevenly;
+    // we approximate with two passes of dense fine lines + a few wider
+    // reflection bands.
+    for _ in 0..<1400 {
       let y = CGFloat.random(in: 0...size.height)
-      ctx.setStrokeColor(UIColor(white: Bool.random() ? 0.95 : 0.4, alpha: CGFloat.random(in: 0.08...0.22)).cgColor)
-      ctx.setLineWidth(CGFloat.random(in: 0.3...0.8))
+      let tone: CGFloat = Bool.random() ? CGFloat.random(in: 0.86...0.98) : CGFloat.random(in: 0.30...0.48)
+      ctx.setStrokeColor(UIColor(white: tone, alpha: CGFloat.random(in: 0.05...0.18)).cgColor)
+      ctx.setLineWidth(CGFloat.random(in: 0.25...0.6))
       ctx.move(to: CGPoint(x: 0, y: y))
-      ctx.addLine(to: CGPoint(x: size.width, y: y + CGFloat.random(in: -0.4...0.4)))
+      ctx.addLine(to: CGPoint(x: size.width, y: y + CGFloat.random(in: -0.3...0.3)))
       ctx.strokePath()
+    }
+
+    // Wider reflection bands give the impression of light catching the
+    // surface non-uniformly. Real brushed steel does this in macro view.
+    for _ in 0..<3 {
+      let cy = CGFloat.random(in: 0...size.height)
+      let bandHeight = CGFloat.random(in: 14...32)
+      let gradient = CGGradient(
+        colorsSpace: CGColorSpaceCreateDeviceRGB(),
+        colors: [
+          UIColor(white: 1.0, alpha: 0.0).cgColor,
+          UIColor(white: 1.0, alpha: 0.08).cgColor,
+          UIColor(white: 1.0, alpha: 0.0).cgColor,
+        ] as CFArray,
+        locations: [0.0, 0.5, 1.0]
+      )!
+      ctx.saveGState()
+      ctx.clip(to: CGRect(x: 0, y: cy - bandHeight / 2, width: size.width, height: bandHeight))
+      ctx.drawLinearGradient(
+        gradient,
+        start: CGPoint(x: 0, y: cy - bandHeight / 2),
+        end: CGPoint(x: 0, y: cy + bandHeight / 2),
+        options: []
+      )
+      ctx.restoreGState()
     }
   }
 
