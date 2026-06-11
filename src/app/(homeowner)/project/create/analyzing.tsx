@@ -163,7 +163,7 @@ export default function AnalyzingScreen() {
         // Upload photos to storage IN PARALLEL with AI call
         const uploadPromise = Promise.all(
           localPhotos.map(async (photo, i) => {
-            if (!photo.base64) return;
+            if (!photo.base64) return false;
             try {
               const extension = photo.extension ?? 'jpg';
               const contentType = photo.contentType ?? 'image/jpeg';
@@ -176,9 +176,12 @@ export default function AnalyzingScreen() {
               });
               if (photoInsertError) {
                 console.warn('[analyzing] photo metadata insert failed:', photoInsertError.message);
+                return false;
               }
+              return true;
             } catch (photoError) {
-              console.warn('[analyzing] photo upload failed, continuing with base64 analysis:', errorMessage(photoError));
+              console.warn('[analyzing] photo upload failed:', errorMessage(photoError));
+              return false;
             }
           })
         );
@@ -207,12 +210,15 @@ export default function AnalyzingScreen() {
         });
 
         // Wait for photo uploads to finish alongside the edge function call.
-        // These rows improve the project record, but the homeowner should not
-        // be blocked from answering the questionnaire if storage or photo
-        // metadata writes are temporarily slow.
-        await uploadPromise.catch((uploadError) => {
+        // At least one saved project_photos row is required so contractors can
+        // preview the job before accepting it.
+        const uploadedPhotoResults = await uploadPromise.catch((uploadError) => {
           console.warn('[analyzing] photo upload batch failed:', errorMessage(uploadError));
+          return [] as boolean[];
         });
+        if (!uploadedPhotoResults.some(Boolean)) {
+          throw new Error('Project photos could not be saved. Please check your connection and try uploading the photos again.');
+        }
 
         // Photo analysis is best-effort context for the brief, NOT a
         // blocker. If Claude is slow, the function times out, or the

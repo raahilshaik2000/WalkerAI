@@ -392,21 +392,10 @@ Rules:
       status: 'brief_ready',
     };
 
-    let projectUpdateResult = await adminClient
+    const projectUpdateResult = await adminClient
       .from('projects')
       .update(projectUpdatePayload)
       .eq('id', project_id);
-
-    if (projectUpdateResult.error?.message?.includes('projects_status_check')) {
-      projectUpdateResult = await adminClient
-        .from('projects')
-        .update({
-          ai_cost_min: brief.ai_cost_min,
-          ai_cost_max: brief.ai_cost_max,
-          questionnaire_answers,
-        })
-        .eq('id', project_id);
-    }
 
     if (projectUpdateResult.error) throw projectUpdateResult.error;
 

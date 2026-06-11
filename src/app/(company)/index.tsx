@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useState } from 'react';
 import {
+  Image,
   RefreshControl,
   ScrollView,
   StyleSheet,
@@ -39,6 +40,8 @@ interface DispatchedJob {
     ai_cost_min: number | null;
     ai_cost_max: number | null;
     dispatch_expires_at: string | null;
+    renders?: Array<{ url: string; selected: boolean }> | null;
+    project_photos?: Array<{ url: string; storage_path?: string | null }> | null;
   };
   slot?: {
     id: string;
@@ -96,6 +99,13 @@ function projectStatusVariant(status: string): 'active' | 'completed' | 'pending
   return 'neutral';
 }
 
+function getProjectCoverImage(project?: DispatchedJob['project'] | null) {
+  const selectedRender = project?.renders?.find((render) => render.selected);
+  const firstPhoto = [...(project?.project_photos ?? [])]
+    .sort((a, b) => String(a.storage_path ?? '').localeCompare(String(b.storage_path ?? '')))[0];
+  return selectedRender?.url ?? project?.renders?.[0]?.url ?? firstPhoto?.url ?? null;
+}
+
 export default function CompanyJobFeed() {
   const navigation = useNavigation<any>();
   const { user } = useAuthStore();
@@ -144,7 +154,11 @@ export default function CompanyJobFeed() {
           .from('dispatch_logs')
           .select(`
             project_id, slot_id, dispatched_at, response,
-            project:projects ( id, address, city, room_type, ai_cost_min, ai_cost_max, dispatch_expires_at, status ),
+            project:projects (
+              id, address, city, room_type, ai_cost_min, ai_cost_max, dispatch_expires_at, status,
+              renders ( url, selected ),
+              project_photos ( url, storage_path )
+            ),
             slot:project_slots ( id, trade_type, estimated_cost_min, estimated_cost_max )
           `)
           .eq('company_id', co.id)
@@ -154,7 +168,11 @@ export default function CompanyJobFeed() {
           .from('dispatch_logs')
           .select(`
             project_id, slot_id, dispatched_at, response,
-            project:projects ( id, address, city, room_type, status )
+            project:projects (
+              id, address, city, room_type, status,
+              renders ( url, selected ),
+              project_photos ( url, storage_path )
+            )
           `)
           .eq('company_id', co.id)
           .eq('response', 'accepted')
@@ -445,6 +463,7 @@ export default function CompanyJobFeed() {
                 {jobs.map((job) => {
                   const project = job.project as DispatchedJob['project'];
                   const slot = Array.isArray(job.slot) ? job.slot[0] : job.slot;
+                  const coverImage = getProjectCoverImage(project);
                   const tradeLabel = formatTrade(slot?.trade_type);
                   const timeLeft = timeRemaining(project.dispatch_expires_at);
                   const estimateMin = slot?.estimated_cost_min ?? project.ai_cost_min;
@@ -457,6 +476,9 @@ export default function CompanyJobFeed() {
                       haptic
                     >
                       <TradePanel style={styles.jobCard}>
+                        {coverImage ? (
+                          <Image source={{ uri: coverImage }} style={styles.jobPreview} resizeMode="cover" />
+                        ) : null}
                         <View style={styles.jobHeader}>
                           <View style={styles.jobIcon}>
                             <Icon name={project.room_type === 'kitchen' ? 'countertop-outline' : 'shower'} size={20} color={Colors.warning} />
@@ -556,6 +578,13 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   jobCard: { marginBottom: 12 },
+  jobPreview: {
+    width: '100%',
+    height: 150,
+    borderRadius: Radius.item,
+    marginBottom: 12,
+    backgroundColor: Colors.surface.default,
+  },
   skeletonSpacing: { marginBottom: 12 },
   pendingJobContent: { flex: 1 },
   urgencyRow: { flexDirection: 'row', alignItems: 'center', gap: 5, marginBottom: 4 },

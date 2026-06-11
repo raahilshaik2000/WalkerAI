@@ -70,6 +70,7 @@ interface JobBrief {
   materials: Array<{ item: string; quantity: number; unit: string; quality_tier: string }>;
   scope_of_work: Array<{ phase: string; description: string; sort_order: number }>;
   renders: Array<{ url: string; selected: boolean }>;
+  project_photos: Array<{ url: string; storage_path?: string | null }>;
   dispatch_expires_at: string | null;
 }
 
@@ -149,7 +150,8 @@ export default function JobBriefScreen() {
             ai_analysis, questionnaire_answers, dispatch_expires_at,
             materials ( item, quantity, unit, quality_tier ),
             scope_of_work ( phase, description, sort_order ),
-            renders ( url, selected )
+            renders ( url, selected ),
+            project_photos ( url, storage_path )
           `)
           .eq('id', projectId)
           .maybeSingle(),
@@ -294,7 +296,7 @@ export default function JobBriefScreen() {
         <SafeAreaView style={styles.safe}>
           <ScrollView contentContainerStyle={styles.scroll}>
             <CardSkeleton />
-            <CardSkeleton style={{ marginTop: 12 }} />
+            <CardSkeleton style={styles.skeletonSpacing} />
           </ScrollView>
         </SafeAreaView>
       </GradientBackground>
@@ -314,6 +316,9 @@ export default function JobBriefScreen() {
   }
 
   const selectedRender = job.renders?.find((r) => r.selected) ?? job.renders?.[0];
+  const firstProjectPhoto = [...(job.project_photos ?? [])]
+    .sort((a, b) => String(a.storage_path ?? '').localeCompare(String(b.storage_path ?? '')))[0];
+  const heroImageUrl = selectedRender?.url ?? firstProjectPhoto?.url ?? null;
 
   return (
     <GradientBackground glow="top-right">
@@ -332,7 +337,7 @@ export default function JobBriefScreen() {
               <View style={styles.slotBannerIcon}>
                 <Ionicons name="construct-outline" size={18} color="#FF6B00" />
               </View>
-              <View style={{ flex: 1 }}>
+              <View style={styles.slotBannerBody}>
                 <Text style={styles.slotBannerTrade}>{TRADE_LABELS[slot.trade_type] ?? slot.trade_type} Slot</Text>
                 {slot.description ? (
                   <Text style={styles.slotBannerDesc} numberOfLines={2}>{slot.description}</Text>
@@ -346,9 +351,9 @@ export default function JobBriefScreen() {
             </View>
           )}
 
-          {/* Hero render */}
-          {selectedRender ? (
-            <Image source={{ uri: selectedRender.url }} style={styles.heroImage} resizeMode="cover" />
+          {/* Hero image */}
+          {heroImageUrl ? (
+            <Image source={{ uri: heroImageUrl }} style={styles.heroImage} resizeMode="cover" />
           ) : (
             <View style={styles.heroFallback}>
               <Icon
@@ -515,6 +520,7 @@ const styles = StyleSheet.create({
   safe: { flex: 1 },
   scroll: { flexGrow: 1, paddingHorizontal: Spacing.sm, paddingTop: Spacing.sm, paddingBottom: Spacing.xl },
   center: { flex: 1, alignItems: 'center', justifyContent: 'center' },
+  skeletonSpacing: { marginTop: 12 },
   header: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: Spacing.md },
   heroImage: { width: '100%', height: 200, borderRadius: Radius.card, marginBottom: Spacing.md },
   heroFallback: {
@@ -589,6 +595,7 @@ const styles = StyleSheet.create({
     backgroundColor: 'rgba(255,107,0,0.12)',
     alignItems: 'center', justifyContent: 'center', flexShrink: 0,
   },
+  slotBannerBody: { flex: 1 },
   slotBannerTrade: { fontSize: 14, fontWeight: '700', color: '#FF6B00' },
   slotBannerDesc: { fontSize: 12, color: Colors.text.secondary, marginTop: 2, lineHeight: 16 },
   slotBannerCost: { fontSize: 13, fontWeight: '700', color: Colors.success, flexShrink: 0 },

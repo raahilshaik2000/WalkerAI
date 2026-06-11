@@ -94,8 +94,8 @@ Deno.serve(async (req) => {
       });
     }
 
-    if (!['brief_ready', 'dispatching'].includes(project.status)) {
-      return new Response(JSON.stringify({ error: 'Project must be brief-ready before contractor dispatch can start' }), {
+    if (!['draft', 'brief_ready', 'dispatching'].includes(project.status)) {
+      return new Response(JSON.stringify({ error: 'Project must have a generated brief before contractor dispatch can start' }), {
         status: 409,
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
       });

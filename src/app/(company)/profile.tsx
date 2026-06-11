@@ -487,7 +487,7 @@ export default function CompanyProfileScreen() {
 
 const styles = StyleSheet.create({
   safe: { flex: 1 },
-  scroll: { flexGrow: 1, paddingHorizontal: Spacing.sm, paddingTop: Spacing.sm, paddingBottom: Spacing.xl },
+  scroll: { flexGrow: 1, paddingHorizontal: Spacing.sm, paddingTop: Spacing.sm, paddingBottom: 140 },
   pageTitle: { ...Typography.h1, marginBottom: Spacing.md },
   card: { marginBottom: Spacing.sm },
   identityRow: { flexDirection: 'row', alignItems: 'flex-start', gap: 14, marginBottom: 12 },
