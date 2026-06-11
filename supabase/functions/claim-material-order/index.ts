@@ -167,13 +167,13 @@ Deno.serve(async (req) => {
     // Load the order to verify it is still open
     let orderResult = await adminClient
       .from('material_orders')
-      .select('id, status, category, quality_tier, project_id, offered_price, final_price, materials(item), projects:project_id(lat, lng)')
+      .select('id, status, category, quality_tier, project_id, offered_price, final_price, materials!material_orders_material_id_fkey(item), projects:project_id(lat, lng)')
       .eq('id', order_id)
       .single();
     if (isMissingColumnError(orderResult.error)) {
       orderResult = await adminClient
         .from('material_orders')
-        .select('id, status, quality_tier, project_id, offered_price, final_price, materials(item)')
+        .select('id, status, quality_tier, project_id, offered_price, final_price, materials!material_orders_material_id_fkey(item)')
         .eq('id', order_id)
         .single();
     }

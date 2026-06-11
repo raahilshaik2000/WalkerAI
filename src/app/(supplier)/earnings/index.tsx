@@ -56,7 +56,7 @@ export default function SupplierEarnings() {
     }
     const { data, error } = await supabase
       .from('material_orders')
-      .select('*, material:materials(item)')
+      .select('*, material:materials!material_orders_material_id_fkey(item)')
       .eq('accepted_supplier_id', sup.id)
       .in('status', ['confirmed', 'paid'])
       .order('confirmed_at', { ascending: false });

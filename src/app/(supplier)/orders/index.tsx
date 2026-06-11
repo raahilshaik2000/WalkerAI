@@ -122,7 +122,7 @@ export default function SupplierOrderFeed() {
 
     const { data, error } = await supabase
       .from('material_orders')
-      .select('*, material:materials(*)')
+      .select('*, material:materials!material_orders_material_id_fkey(*)')
       .eq('status', 'open')
       .order('delivery_deadline', { ascending: true });
 

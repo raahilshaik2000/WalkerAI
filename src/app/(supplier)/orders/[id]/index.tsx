@@ -70,7 +70,7 @@ export default function SupplierOrderDetail() {
     const [orderResult, supplierResult] = await Promise.all([
       supabase
           .from('material_orders')
-          .select('*, material:materials(*)')
+          .select('*, material:materials!material_orders_material_id_fkey(*)')
           .eq('id', orderId)
           .maybeSingle(),
       user?.id

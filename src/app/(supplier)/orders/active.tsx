@@ -111,7 +111,7 @@ export default function SupplierActiveOrders() {
     setSupplierId(sup.id);
     const { data, error } = await supabase
       .from('material_orders')
-      .select('*, material:materials(*)')
+      .select('*, material:materials!material_orders_material_id_fkey(*)')
       .eq('accepted_supplier_id', sup.id)
       .not('status', 'in', '("open","cancelled")')
       .order('created_at', { ascending: false });

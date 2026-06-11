@@ -72,7 +72,7 @@ export default function MaterialsScreen() {
       .select(`
         id, status, quantity_needed, unit, quality_tier, offered_price, final_price,
         delivery_deadline, tracking_number, carrier, delivery_photo_url,
-        material:materials(item, quantity, unit, quality_tier),
+        material:materials!material_orders_material_id_fkey(item, quantity, unit, quality_tier),
         accepted_supplier:suppliers!accepted_supplier_id(business_name, rating)
       `)
       .eq('project_id', projectId)
