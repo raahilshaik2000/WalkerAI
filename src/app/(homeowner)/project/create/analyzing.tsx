@@ -34,6 +34,73 @@ const ANALYSIS_STEPS = [
   'Generating renovation questionnaire…',
 ];
 
+const PROJECT_CREATE_ATTEMPTS = 3;
+
+function sleep(ms: number) {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+function generateUuid() {
+  const cryptoApi = globalThis.crypto as { randomUUID?: () => string } | undefined;
+  if (typeof cryptoApi?.randomUUID === 'function') return cryptoApi.randomUUID();
+
+  return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, (char) => {
+    const value = Math.floor(Math.random() * 16);
+    const nibble = char === 'x' ? value : 8 + (value % 4);
+    return nibble.toString(16);
+  });
+}
+
+function errorMessage(error: unknown, fallback = 'Something went wrong. Please try again.') {
+  const err = error as { message?: string; details?: string; hint?: string; code?: string } | null;
+  return err?.message || err?.details || err?.hint || err?.code || fallback;
+}
+
+async function ensureDraftProjectId(params: {
+  existingProjectId: string | null;
+  userId: string;
+  roomType: string;
+}) {
+  const { existingProjectId, userId, roomType } = params;
+  if (existingProjectId) return existingProjectId;
+
+  const draftProjectId = generateUuid();
+  let lastError: unknown = null;
+
+  for (let attempt = 1; attempt <= PROJECT_CREATE_ATTEMPTS; attempt += 1) {
+    const { data: project, error } = await supabase
+      .from('projects')
+      .upsert(
+        {
+          id: draftProjectId,
+          homeowner_id: userId,
+          room_type: roomType,
+          status: 'draft',
+        },
+        { onConflict: 'id', ignoreDuplicates: false },
+      )
+      .select('id')
+      .maybeSingle();
+
+    if (!error && project?.id) return project.id as string;
+
+    lastError = error ?? new Error('No project id returned.');
+    console.warn(`[analyzing] draft project upsert attempt ${attempt} failed:`, errorMessage(lastError));
+    if (attempt < PROJECT_CREATE_ATTEMPTS) await sleep(700 * attempt);
+  }
+
+  const { data: recoveredProject, error: recoveryError } = await supabase
+    .from('projects')
+    .select('id')
+    .eq('id', draftProjectId)
+    .eq('homeowner_id', userId)
+    .maybeSingle();
+
+  if (!recoveryError && recoveredProject?.id) return recoveredProject.id as string;
+
+  throw new Error(`Project creation failed: ${errorMessage(recoveryError ?? lastError, 'The database did not confirm the draft project.')}`);
+}
+
 export default function AnalyzingScreen() {
   const navigation = useNavigation<any>();
   const { user } = useAuthStore();
@@ -75,27 +142,18 @@ export default function AnalyzingScreen() {
 
     const runAnalysis = async () => {
       try {
-        let pid: string = projectId ?? '';
-
         if (!user?.id) {
           throw new Error('You need to be signed in to create a project.');
         }
 
-        if (!pid) {
-          const { data: project, error: createError } = await supabase
-            .from('projects')
-            .insert({
-              homeowner_id: user.id,
-              room_type: roomType || 'kitchen',
-              status: 'draft',
-            })
-            .select('id')
-            .maybeSingle();
+        const selectedRoomType = roomType || 'kitchen';
+        const pid = await ensureDraftProjectId({
+          existingProjectId: projectId,
+          userId: user.id,
+          roomType: selectedRoomType,
+        });
 
-          if (createError || !project) {
-            throw new Error(`Project creation failed: ${createError?.message ?? 'no data'}`);
-          }
-          pid = project.id as string;
+        if (!projectId) {
           useProjectWizardStore.getState().setProjectId(pid);
         }
 
@@ -106,17 +164,21 @@ export default function AnalyzingScreen() {
         const uploadPromise = Promise.all(
           localPhotos.map(async (photo, i) => {
             if (!photo.base64) return;
-            const extension = photo.extension ?? 'jpg';
-            const contentType = photo.contentType ?? 'image/jpeg';
-            const path = `${pid}/${i}_${Date.now()}.${extension}`;
-            const { publicUrl, storagePath } = await uploadBase64('project-photos', path, photo.base64, contentType);
-            const { error: photoInsertError } = await supabase.from('project_photos').insert({
-              project_id: pid,
-              url: publicUrl,
-              storage_path: storagePath,
-            });
-            if (photoInsertError) {
-              throw new Error(`Photo upload metadata failed: ${photoInsertError.message}`);
+            try {
+              const extension = photo.extension ?? 'jpg';
+              const contentType = photo.contentType ?? 'image/jpeg';
+              const path = `${pid}/${i}_${Date.now()}.${extension}`;
+              const { publicUrl, storagePath } = await uploadBase64('project-photos', path, photo.base64, contentType);
+              const { error: photoInsertError } = await supabase.from('project_photos').insert({
+                project_id: pid,
+                url: publicUrl,
+                storage_path: storagePath,
+              });
+              if (photoInsertError) {
+                console.warn('[analyzing] photo metadata insert failed:', photoInsertError.message);
+              }
+            } catch (photoError) {
+              console.warn('[analyzing] photo upload failed, continuing with base64 analysis:', errorMessage(photoError));
             }
           })
         );
@@ -145,7 +207,12 @@ export default function AnalyzingScreen() {
         });
 
         // Wait for photo uploads to finish alongside the edge function call.
-        await uploadPromise;
+        // These rows improve the project record, but the homeowner should not
+        // be blocked from answering the questionnaire if storage or photo
+        // metadata writes are temporarily slow.
+        await uploadPromise.catch((uploadError) => {
+          console.warn('[analyzing] photo upload batch failed:', errorMessage(uploadError));
+        });
 
         // Photo analysis is best-effort context for the brief, NOT a
         // blocker. If Claude is slow, the function times out, or the
