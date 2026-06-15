@@ -20,6 +20,7 @@ import { useAuthStore } from '@/stores/auth.store';
 import type { GcConciergeBooking, GcPaymentRequest, GeneralContractor } from '@/types/database.types';
 import { formatStatusLabel } from '@/lib/formatters';
 import { formatCadCents, formatSignedCadCents } from '@/lib/currency';
+import { formatGcProjectType } from '@/lib/gc-project-type';
 import { getRequiredStringParam } from '@/lib/navigation-params';
 import { Colors, Spacing, Typography } from '@/constants/theme';
 import { GlassButton, GlassCard, GradientBackground, StatusBadge } from '@/components/ui';
@@ -29,6 +30,8 @@ interface CurrentAssignment {
   status: string;
   markup_pct: number;
   concierge_fee_pct: number;
+  project_type: string | null;
+  scope_summary: string | null;
   initiated_by_gc: boolean;
   general_contractor?: Pick<GeneralContractor, 'id' | 'business_name' | 'city' | 'province' | 'rating' | 'total_reviews' | 'concierge_enabled'> | Array<Pick<GeneralContractor, 'id' | 'business_name' | 'city' | 'province' | 'rating' | 'total_reviews' | 'concierge_enabled'>> | null;
 }
@@ -210,7 +213,7 @@ export default function ProjectConciergeScreen() {
         supabase
           .from('general_contractor_projects')
           .select(`
-            id, status, markup_pct, concierge_fee_pct, initiated_by_gc,
+            id, status, markup_pct, concierge_fee_pct, project_type, scope_summary, initiated_by_gc,
             general_contractor:general_contractors ( id, business_name, city, province, rating, total_reviews, concierge_enabled )
           `)
           .eq('project_id', projectId)
@@ -615,6 +618,13 @@ export default function ProjectConciergeScreen() {
                   <Text style={styles.termText}>{Number(currentAssignment.markup_pct).toFixed(0)}% markup</Text>
                   <Text style={styles.termText}>{Number(currentAssignment.concierge_fee_pct).toFixed(0)}% concierge fee</Text>
                 </View>
+                <View style={styles.projectContext}>
+                  <Text style={styles.projectContextLabel}>Project</Text>
+                  <Text style={styles.projectContextValue}>{formatGcProjectType(currentAssignment.project_type)}</Text>
+                  {currentAssignment.scope_summary ? (
+                    <Text style={styles.projectContextSummary}>{currentAssignment.scope_summary}</Text>
+                  ) : null}
+                </View>
                 {currentAssignment.status === 'invited' && currentAssignment.initiated_by_gc ? (
                   <GlassButton
                     label="Confirm GC Management"
@@ -922,6 +932,17 @@ const styles = StyleSheet.create({
     paddingHorizontal: 10,
     paddingVertical: 6,
   },
+  projectContext: {
+    marginTop: 12,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: Colors.surface.border,
+    backgroundColor: Colors.surface.default,
+    padding: 12,
+  },
+  projectContextLabel: { ...Typography.caption, color: Colors.text.tertiary, textTransform: 'uppercase', fontWeight: '800' },
+  projectContextValue: { ...Typography.body, color: Colors.text.primary, fontWeight: '900', marginTop: 4 },
+  projectContextSummary: { ...Typography.bodySecondary, marginTop: 6, lineHeight: 20 },
   inviteButton: { marginTop: Spacing.sm },
   serviceGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginTop: Spacing.sm },
   serviceButton: { flexGrow: 1, minWidth: '47%' },
