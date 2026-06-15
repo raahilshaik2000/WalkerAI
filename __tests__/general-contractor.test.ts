@@ -663,6 +663,10 @@ describe('general contractor account type', () => {
       path.join(repoRoot, 'supabase/migrations/20260615000500_add_external_trade_management.sql'),
       'utf8',
     );
+    const directWriteMigration = fs.readFileSync(
+      path.join(repoRoot, 'supabase/migrations/20260615232959_require_verified_gc_direct_writes.sql'),
+      'utf8',
+    );
     const gcProjectDetail = fs.readFileSync(
       path.join(repoRoot, 'src/app/(general-contractor)/project/[id]/index.tsx'),
       'utf8',
@@ -679,6 +683,8 @@ describe('general contractor account type', () => {
     expect(migration).toContain("fulfillment_type IN ('walker_ai', 'external')");
     expect(migration).toContain('CREATE OR REPLACE FUNCTION public.mark_project_slot_externally_managed');
     expect(migration).toContain('Active GC management is required before marking external trades');
+    expect(directWriteMigration).toContain('CREATE OR REPLACE FUNCTION public.mark_project_slot_externally_managed');
+    expect(directWriteMigration).toContain('Only verified General Contractors can mark external trades');
     expect(migration).toContain("status = 'filled'");
     expect(gcProjectDetail).toContain("supabase.rpc('mark_project_slot_externally_managed'");
     expect(gcProjectDetail).toContain('Mark externally managed');
@@ -696,6 +702,10 @@ describe('general contractor account type', () => {
       path.join(repoRoot, 'supabase/migrations/20260615002100_add_external_trade_documents.sql'),
       'utf8',
     );
+    const directWriteMigration = fs.readFileSync(
+      path.join(repoRoot, 'supabase/migrations/20260615232959_require_verified_gc_direct_writes.sql'),
+      'utf8',
+    );
     const gcProjectDetail = fs.readFileSync(
       path.join(repoRoot, 'src/app/(general-contractor)/project/[id]/index.tsx'),
       'utf8',
@@ -706,6 +716,8 @@ describe('general contractor account type', () => {
     expect(migration).toContain("external_trade_verification_status = CASE");
     expect(migration).toContain("'documents_uploaded'");
     expect(migration).toContain('Active GC management is required before adding external trade documents');
+    expect(directWriteMigration).toContain('CREATE OR REPLACE FUNCTION public.add_external_trade_document');
+    expect(directWriteMigration).toContain('Only verified General Contractors can add external trade documents');
     expect(gcProjectDetail).toContain("uploadFile('company-docs'");
     expect(gcProjectDetail).toContain('Please sign in again before uploading trade documents.');
     expect(gcProjectDetail).toContain('external-trades/${currentUser.id}/${projectId}/${slot.id}-');
@@ -770,6 +782,10 @@ describe('general contractor account type', () => {
       path.join(repoRoot, 'supabase/migrations/20260615000700_allow_gc_permit_management.sql'),
       'utf8',
     );
+    const directWriteMigration = fs.readFileSync(
+      path.join(repoRoot, 'supabase/migrations/20260615232959_require_verified_gc_direct_writes.sql'),
+      'utf8',
+    );
     const navigator = fs.readFileSync(
       path.join(repoRoot, 'src/navigation/GeneralContractorNavigator.tsx'),
       'utf8',
@@ -786,6 +802,12 @@ describe('general contractor account type', () => {
     expect(migration).toContain('permits_gc_managed');
     expect(migration).toContain("gcp.status = 'active'");
     expect(migration).toContain('permits_gc_managed_insert');
+    expect(directWriteMigration).toContain('DROP POLICY IF EXISTS "permits_gc_managed"');
+    expect(directWriteMigration).toContain('DROP POLICY IF EXISTS "permits_gc_managed_insert"');
+    expect(directWriteMigration).toContain('DROP POLICY IF EXISTS "permits_gc_managed_update"');
+    expect(directWriteMigration).toMatch(/permits_gc_managed[\s\S]*gc\.verified IS TRUE/);
+    expect(directWriteMigration).toMatch(/permits_gc_managed_insert[\s\S]*gc\.verified IS TRUE/);
+    expect(directWriteMigration).toMatch(/permits_gc_managed_update[\s\S]*gc\.verified IS TRUE/);
     expect(navigator).toContain('GeneralContractorPermits');
     expect(gcProjectDetail).toContain("navigation.navigate('GeneralContractorPermits'");
     expect(gcPermits).toContain("select('id, status')");
