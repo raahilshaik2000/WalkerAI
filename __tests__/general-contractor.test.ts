@@ -244,7 +244,7 @@ describe('general contractor account type', () => {
     expect(dashboard).toContain('homeowner_contact_name, homeowner_contact_email, homeowner_contact_phone');
     expect(dashboard).toContain('projectContact');
     expect(dashboard).toContain('project_type, scope_summary');
-    expect(dashboard).toContain('formatProjectType(assignment.project_type, project?.room_type)');
+    expect(dashboard).toContain('formatGcProjectType(assignment.project_type, project?.room_type)');
     expect(createProject).toContain("supabase.rpc('create_gc_managed_project'");
     expect(createProject).toContain('GC_PROJECT_TYPES.map');
     expect(enums).toContain("'flooring'");
@@ -261,7 +261,7 @@ describe('general contractor account type', () => {
     expect(gcProjectDetail).toContain('Homeowner contact');
     expect(gcProjectDetail).toContain('Waiting for the homeowner to confirm GC management');
     expect(gcProjectDetail).toContain('project_type, scope_summary');
-    expect(gcProjectDetail).toContain('formatProjectType(assignment?.project_type, project?.room_type)');
+    expect(gcProjectDetail).toContain('formatGcProjectType(assignment?.project_type, project?.room_type)');
     expect(contactMigration).toContain('ADD COLUMN IF NOT EXISTS homeowner_contact_name');
     expect(contactMigration).toContain('ADD COLUMN IF NOT EXISTS homeowner_contact_email');
     expect(contactMigration).toContain('ADD COLUMN IF NOT EXISTS homeowner_contact_phone');
@@ -694,6 +694,9 @@ describe('general contractor account type', () => {
 
     expect(navigator).toContain('GeneralContractorAssistant');
     expect(gcProjectDetail).toContain("navigation.navigate('GeneralContractorAssistant'");
+    expect(gcAssistant).toContain(".from('general_contractor_projects')");
+    expect(gcAssistant).toContain(".select('project_type')");
+    expect(gcAssistant).toContain('formatGcProjectType(assignment?.project_type, project?.room_type)');
     expect(gcAssistant).toContain("from('project_slots')");
     expect(gcAssistant).toContain("from('permits')");
     expect(gcAssistant).toContain("from('project_approval_requests')");
@@ -713,8 +716,8 @@ describe('general contractor account type', () => {
     expect(gcApprovals).toContain("eq('requested_by_gc_id', gc.id)");
     expect(gcApprovals).toContain("select('project_id, project_type')");
     expect(gcApprovals).toContain('projectTypeById.get(request.project_id)');
-    expect(gcApprovals).toContain('formatProjectType(request.project_type, project?.room_type)');
-    expect(gcApprovals).toContain('formatProjectType(approval.project_type, project?.room_type)');
+    expect(gcApprovals).toContain('formatGcProjectType(request.project_type, project?.room_type)');
+    expect(gcApprovals).toContain('formatGcProjectType(approval.project_type, project?.room_type)');
     expect(gcApprovals).toContain('Homeowner approval requests');
     expect(gcApprovals).toContain("navigation.navigate('GeneralContractorProjectDetail'");
   });
@@ -734,6 +737,8 @@ describe('general contractor account type', () => {
     expect(migration).toContain('public.general_contractor_projects');
     expect(migration).not.toContain('stripe.transfers');
     expect(gcCompletion).toContain('Request Homeowner Completion Approval');
+    expect(gcCompletion).toContain('id, status, homeowner_id, general_contractor_id, project_type');
+    expect(gcCompletion).toContain('formatGcProjectType(assignment?.project_type, project.room_type)');
     expect(gcCompletion).toContain("metadata: { action: 'complete_project' }");
     expect(gcCompletion).toContain('This does not release escrow funds.');
   });

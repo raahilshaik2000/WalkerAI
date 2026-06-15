@@ -14,6 +14,7 @@ import { supabase } from '@/lib/supabase/client';
 import { useAuthStore } from '@/stores/auth.store';
 import type { GeneralContractor } from '@/types/database.types';
 import { formatCad, formatStatusLabel } from '@/lib/formatters';
+import { formatGcProjectType, gcProjectTypeIcon } from '@/lib/gc-project-type';
 import { nextGeneralContractorOnboardingRoute } from '@/lib/general-contractor';
 import { Colors, Radius, Spacing, Typography } from '@/constants/theme';
 import { GradientBackground, ListItemSkeleton, StatusBadge } from '@/components/ui';
@@ -59,27 +60,6 @@ function projectStatusVariant(status: string): 'active' | 'completed' | 'pending
   if (status === 'draft' || status === 'brief_ready' || status === 'scheduling' || status === 'quoting') return 'pending';
   if (status === 'accepted' || status === 'active') return 'active';
   return 'neutral';
-}
-
-function formatProjectType(projectType?: string | null, roomType?: string | null) {
-  const type = projectType || roomType;
-  if (!type) return 'Renovation Project';
-  const label = type
-    .split('_')
-    .map((part) => `${part.charAt(0).toUpperCase()}${part.slice(1)}`)
-    .join(' ');
-  return type === 'kitchen' || type === 'bathroom' ? `${label} Renovation` : label;
-}
-
-function projectTypeIcon(projectType?: string | null, roomType?: string | null) {
-  const type = projectType || roomType;
-  if (type === 'kitchen') return 'countertop-outline';
-  if (type === 'bathroom') return 'shower';
-  if (type === 'flooring') return 'floor-plan';
-  if (type === 'painting') return 'format-paint';
-  if (type === 'basement') return 'home-floor-b';
-  if (type === 'addition') return 'home-plus-outline';
-  return 'home-edit-outline';
 }
 
 function formatLocation(city?: string | null, address?: string | null) {
@@ -304,10 +284,10 @@ export default function GeneralContractorDashboard() {
                     <TradePanel>
                       <View style={styles.projectRow}>
                         <View style={styles.projectIcon}>
-                          <Icon name={projectTypeIcon(assignment.project_type, project?.room_type)} size={20} color={Colors.success} />
+                          <Icon name={gcProjectTypeIcon(assignment.project_type, project?.room_type)} size={20} color={Colors.success} />
                         </View>
                         <View style={styles.projectContent}>
-                          <Text style={styles.projectTitle}>{formatProjectType(assignment.project_type, project?.room_type)}</Text>
+                          <Text style={styles.projectTitle}>{formatGcProjectType(assignment.project_type, project?.room_type)}</Text>
                           <Text style={styles.projectMeta}>{formatLocation(project?.city, project?.address)}</Text>
                           <Text style={styles.projectTerms}>
                             {Number(assignment.markup_pct).toFixed(0)}% markup · {Number(assignment.concierge_fee_pct).toFixed(0)}% concierge

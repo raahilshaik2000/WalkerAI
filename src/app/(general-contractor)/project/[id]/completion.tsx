@@ -15,6 +15,7 @@ import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
 import { supabase } from '@/lib/supabase/client';
 import { formatCadCents, formatSignedCadCents } from '@/lib/currency';
 import { formatStatusLabel } from '@/lib/formatters';
+import { formatGcProjectType } from '@/lib/gc-project-type';
 import { getRequiredStringParam } from '@/lib/navigation-params';
 import { Colors, Spacing, Typography } from '@/constants/theme';
 import { GlassButton, GlassCard, GradientBackground, StatusBadge } from '@/components/ui';
@@ -67,6 +68,7 @@ interface AssignmentRecord {
   status: string;
   homeowner_id: string;
   general_contractor_id: string;
+  project_type: string | null;
 }
 
 function statusVariant(status: string): 'pending' | 'completed' | 'error' | 'neutral' {
@@ -74,11 +76,6 @@ function statusVariant(status: string): 'pending' | 'completed' | 'error' | 'neu
   if (status === 'rejected' || status === 'cancelled') return 'error';
   if (status === 'pending' || status === 'delivered') return 'pending';
   return 'neutral';
-}
-
-function formatRoom(roomType: string | null) {
-  if (!roomType) return 'Renovation project';
-  return `${roomType.charAt(0).toUpperCase()}${roomType.slice(1)} renovation`;
 }
 
 export default function GeneralContractorCompletionScreen() {
@@ -157,7 +154,7 @@ export default function GeneralContractorCompletionScreen() {
       if (gc?.id) {
         const { data: assignmentRow, error: assignmentError } = await supabase
           .from('general_contractor_projects')
-          .select('id, status, homeowner_id, general_contractor_id')
+          .select('id, status, homeowner_id, general_contractor_id, project_type')
           .eq('project_id', projectId)
           .eq('general_contractor_id', gc.id)
           .maybeSingle();
@@ -273,7 +270,9 @@ export default function GeneralContractorCompletionScreen() {
           ) : (
             <>
               <GlassCard style={styles.card}>
-                <Text style={styles.binderTitle}>{project ? formatRoom(project.room_type) : 'Project'}</Text>
+                <Text style={styles.binderTitle}>
+                  {project ? formatGcProjectType(assignment?.project_type, project.room_type) : 'Project'}
+                </Text>
                 <Text style={styles.bodyText}>{project?.address ?? 'Address pending'}</Text>
                 <View style={styles.summaryGrid}>
                   <SummaryTile label="Status" value={project ? formatStatusLabel(project.status) : 'Unknown'} />

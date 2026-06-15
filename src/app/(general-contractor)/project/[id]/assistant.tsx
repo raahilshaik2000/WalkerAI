@@ -13,6 +13,7 @@ import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
 import { supabase } from '@/lib/supabase/client';
 import { formatCadCents, formatSignedCadCents } from '@/lib/currency';
 import { formatStatusLabel } from '@/lib/formatters';
+import { formatGcProjectType } from '@/lib/gc-project-type';
 import { getRequiredStringParam } from '@/lib/navigation-params';
 import { Colors, Spacing, Typography } from '@/constants/theme';
 import { GlassCard, GradientBackground, StatusBadge } from '@/components/ui';
@@ -68,16 +69,15 @@ interface MessageRow {
   sent_at: string;
 }
 
+interface AssignmentRow {
+  project_type: string | null;
+}
+
 function formatTrade(tradeType: string) {
   return tradeType
     .split('_')
     .map((part) => `${part.charAt(0).toUpperCase()}${part.slice(1)}`)
     .join(' ');
-}
-
-function formatRoom(roomType: string | null) {
-  if (!roomType) return 'Renovation';
-  return `${roomType.charAt(0).toUpperCase()}${roomType.slice(1)} renovation`;
 }
 
 function todayIso() {
@@ -95,6 +95,7 @@ export default function GeneralContractorAssistantScreen() {
   const [paymentRequests, setPaymentRequests] = useState<PaymentRequestRow[]>([]);
   const [materialOrders, setMaterialOrders] = useState<MaterialOrderRow[]>([]);
   const [messages, setMessages] = useState<MessageRow[]>([]);
+  const [assignment, setAssignment] = useState<AssignmentRow | null>(null);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
@@ -102,11 +103,19 @@ export default function GeneralContractorAssistantScreen() {
   const fetchData = useCallback(async () => {
     try {
       setErrorMessage(null);
-      const [projectResult, slotResult, permitResult, approvalResult, paymentResult, materialResult, messageResult] = await Promise.all([
+      const [projectResult, assignmentResult, slotResult, permitResult, approvalResult, paymentResult, materialResult, messageResult] = await Promise.all([
         supabase
           .from('projects')
           .select('id, status, room_type, ai_cost_min, ai_cost_max')
           .eq('id', projectId)
+          .maybeSingle(),
+        supabase
+          .from('general_contractor_projects')
+          .select('project_type')
+          .eq('project_id', projectId)
+          .neq('status', 'removed')
+          .order('updated_at', { ascending: false })
+          .limit(1)
           .maybeSingle(),
         supabase
           .from('project_slots')
@@ -141,6 +150,7 @@ export default function GeneralContractorAssistantScreen() {
       ]);
 
       const loadError = projectResult.error
+        ?? assignmentResult.error
         ?? slotResult.error
         ?? permitResult.error
         ?? approvalResult.error
@@ -150,6 +160,7 @@ export default function GeneralContractorAssistantScreen() {
       if (loadError) throw loadError;
 
       setProject(projectResult.data as ProjectRow | null);
+      setAssignment(assignmentResult.data as AssignmentRow | null);
       setSlots((slotResult.data ?? []) as SlotRow[]);
       setPermits((permitResult.data ?? []) as PermitRow[]);
       setApprovals((approvalResult.data ?? []) as ApprovalRow[]);
@@ -159,6 +170,7 @@ export default function GeneralContractorAssistantScreen() {
     } catch (err) {
       setErrorMessage(err instanceof Error ? err.message : 'Could not generate project assistant summary.');
       setProject(null);
+      setAssignment(null);
       setSlots([]);
       setPermits([]);
       setApprovals([]);
@@ -200,7 +212,7 @@ export default function GeneralContractorAssistantScreen() {
     const timelineImpact = pendingApprovals.reduce((sum, request) => sum + (request.timeline_delta_days ?? 0), 0);
 
     const summary = [
-      `${formatRoom(project?.room_type ?? null)} is currently ${formatStatusLabel(project?.status ?? 'unknown')}.`,
+      `${formatGcProjectType(assignment?.project_type, project?.room_type)} is currently ${formatStatusLabel(project?.status ?? 'unknown')}.`,
       slots.length > 0
         ? `${slots.filter((slot) => ['filled', 'scheduled'].includes(slot.status)).length}/${slots.length} trade slots are assigned or scheduled.`
         : 'No trade slots have been generated yet.',
@@ -236,7 +248,7 @@ export default function GeneralContractorAssistantScreen() {
       pendingCount: pendingApprovals.length + pendingPayments.length,
       riskCount: risks.length,
     };
-  }, [approvals, materialOrders, messages.length, paymentRequests, permits, project?.room_type, project?.status, slots]);
+  }, [approvals, assignment?.project_type, materialOrders, messages.length, paymentRequests, permits, project?.room_type, project?.status, slots]);
 
   return (
     <GradientBackground glow="top-right">

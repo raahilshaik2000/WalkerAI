@@ -16,6 +16,7 @@ import { supabase } from '@/lib/supabase/client';
 import { formatCad, formatStatusLabel } from '@/lib/formatters';
 import { formatSignedCadCents, parseNonNegativeCadToCents, parseSignedCadToCents } from '@/lib/currency';
 import { calculateGcMarkup } from '@/lib/gc-markup';
+import { formatGcProjectType } from '@/lib/gc-project-type';
 import { getRequiredStringParam } from '@/lib/navigation-params';
 import { getUploadMetadata, uploadFile } from '@/lib/supabase/storage';
 import { Colors, Spacing, Typography } from '@/constants/theme';
@@ -99,16 +100,6 @@ function projectStatusVariant(status: string): 'active' | 'completed' | 'pending
   if (status === 'draft' || status === 'brief_ready' || status === 'scheduling' || status === 'quoting') return 'pending';
   if (status === 'accepted' || status === 'active') return 'active';
   return 'neutral';
-}
-
-function formatProjectType(projectType?: string | null, roomType?: string | null) {
-  const type = projectType || roomType;
-  if (!type) return 'Renovation Project';
-  const label = type
-    .split('_')
-    .map((part) => `${part.charAt(0).toUpperCase()}${part.slice(1)}`)
-    .join(' ');
-  return type === 'kitchen' || type === 'bathroom' ? `${label} Renovation` : label;
 }
 
 function formatTrade(tradeType: string) {
@@ -575,7 +566,7 @@ export default function GeneralContractorProjectDetail() {
               <Icon name="arrow-left" size={22} color={Colors.text.secondary} />
             </TouchableOpacity>
             <View style={styles.headerBody}>
-              <Text style={styles.title}>{formatProjectType(assignment?.project_type, project?.room_type)}</Text>
+              <Text style={styles.title}>{formatGcProjectType(assignment?.project_type, project?.room_type)}</Text>
               <Text style={styles.subtitle}>{project?.city || project?.address || 'Managed project'}</Text>
             </View>
             {project?.status ? (

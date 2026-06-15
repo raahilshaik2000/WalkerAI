@@ -15,6 +15,7 @@ import { supabase } from '@/lib/supabase/client';
 import { useAuthStore } from '@/stores/auth.store';
 import { formatCad, formatStatusLabel } from '@/lib/formatters';
 import { formatCadCents } from '@/lib/currency';
+import { formatGcProjectType } from '@/lib/gc-project-type';
 import type { GcConciergeBooking, GcPaymentRequest } from '@/types/database.types';
 import { Colors, Spacing, Typography } from '@/constants/theme';
 import { GradientBackground, GlassButton, GlassCard, StatusBadge } from '@/components/ui';
@@ -66,16 +67,6 @@ type GcProjectAssignmentRow = {
 
 function getProject(row: { project?: ProjectJoin }) {
   return Array.isArray(row.project) ? row.project[0] ?? null : row.project ?? null;
-}
-
-function formatProjectType(projectType?: string | null, roomType?: string | null) {
-  const type = projectType || roomType;
-  if (!type) return 'Renovation Project';
-  const label = type
-    .split('_')
-    .map((part) => `${part.charAt(0).toUpperCase()}${part.slice(1)}`)
-    .join(' ');
-  return type === 'kitchen' || type === 'bathroom' ? `${label} Renovation` : label;
 }
 
 export default function GeneralContractorApprovals() {
@@ -340,7 +331,7 @@ export default function GeneralContractorApprovals() {
                             <View style={styles.cardBody}>
                               <Text style={styles.projectTitle}>{request.title}</Text>
                               <Text style={styles.projectMeta}>
-                                {formatProjectType(request.project_type, project?.room_type)} · {project?.city || project?.address || 'Managed project'}
+                                {formatGcProjectType(request.project_type, project?.room_type)} · {project?.city || project?.address || 'Managed project'}
                               </Text>
                             </View>
                             <StatusBadge label={formatStatusLabel(request.status)} variant={pending ? 'pending' : request.status === 'approved' ? 'completed' : 'error'} dot />
@@ -381,7 +372,7 @@ export default function GeneralContractorApprovals() {
                             <View style={styles.cardBody}>
                               <Text style={styles.projectTitle}>{request.title}</Text>
                               <Text style={styles.projectMeta}>
-                                {formatProjectType(request.project_type, project?.room_type)} · {project?.city || project?.address || 'Managed project'}
+                                {formatGcProjectType(request.project_type, project?.room_type)} · {project?.city || project?.address || 'Managed project'}
                               </Text>
                               <Text style={styles.projectMeta}>
                                 {formatStatusLabel(request.request_kind)} · {formatCadCents(request.amount_cents)}
@@ -417,7 +408,7 @@ export default function GeneralContractorApprovals() {
                           <Icon name={needsHomeowner ? 'clock-alert-outline' : 'clipboard-text-outline'} size={20} color={needsHomeowner ? Colors.warning : Colors.text.secondary} />
                         </View>
                         <View style={styles.cardBody}>
-                          <Text style={styles.projectTitle}>{formatProjectType(approval.project_type, project?.room_type)}</Text>
+                          <Text style={styles.projectTitle}>{formatGcProjectType(approval.project_type, project?.room_type)}</Text>
                           <Text style={styles.projectMeta}>{project?.city || project?.address || 'Managed project'}</Text>
                         </View>
                         <StatusBadge label={formatStatusLabel(approval.status)} variant={needsHomeowner ? 'pending' : approval.status === 'approved' ? 'completed' : 'neutral'} dot />
