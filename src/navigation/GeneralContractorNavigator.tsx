@@ -30,26 +30,42 @@ function icon(name: string, focused: boolean, color: string) {
   return <Ionicons name={focused ? name : `${name}-outline`} size={22} color={color} />;
 }
 
+function projectsTabIcon({ color, focused }: { color: string; focused: boolean }) {
+  return icon('briefcase', focused, color);
+}
+
+function approvalsTabIcon({ color, focused }: { color: string; focused: boolean }) {
+  return icon('checkmark-done-circle', focused, color);
+}
+
+function profileTabIcon({ color, focused }: { color: string; focused: boolean }) {
+  return icon('person', focused, color);
+}
+
+function renderFloatingTabBar(props: React.ComponentProps<typeof FloatingTabBar>) {
+  return <FloatingTabBar {...props} />;
+}
+
 function GeneralContractorTabs() {
   return (
     <Tab.Navigator
-      tabBar={(props) => <FloatingTabBar {...props} />}
+      tabBar={renderFloatingTabBar}
       screenOptions={{ headerShown: false, tabBarShowLabel: false }}
     >
       <Tab.Screen
         name="GeneralContractorProjects"
         component={GeneralContractorDashboard}
-        options={{ tabBarIcon: ({ color, focused }) => icon('briefcase', focused, color) }}
+        options={{ tabBarIcon: projectsTabIcon }}
       />
       <Tab.Screen
         name="GeneralContractorApprovals"
         component={GeneralContractorApprovals}
-        options={{ tabBarIcon: ({ color, focused }) => icon('checkmark-done-circle', focused, color) }}
+        options={{ tabBarIcon: approvalsTabIcon }}
       />
       <Tab.Screen
         name="GeneralContractorProfile"
         component={GeneralContractorProfile}
-        options={{ tabBarIcon: ({ color, focused }) => icon('person', focused, color) }}
+        options={{ tabBarIcon: profileTabIcon }}
       />
     </Tab.Navigator>
   );
