@@ -429,6 +429,10 @@ describe('general contractor account type', () => {
       path.join(repoRoot, 'supabase/migrations/20260615002900_add_gc_project_type.sql'),
       'utf8',
     );
+    const coordinateMigration = fs.readFileSync(
+      path.join(repoRoot, 'supabase/migrations/20260615004400_require_gc_project_coordinates.sql'),
+      'utf8',
+    );
     const homeownerConfirmationMigration = fs.readFileSync(
       path.join(repoRoot, 'supabase/migrations/20260615003200_secure_homeowner_gc_confirmation.sql'),
       'utf8',
@@ -519,6 +523,13 @@ describe('general contractor account type', () => {
     expect(projectTypeMigration).toContain("'flooring', 'painting', 'basement', 'addition', 'other'");
     expect(projectTypeMigration).toContain("CASE WHEN v_project_type IN ('kitchen', 'bathroom') THEN v_project_type ELSE NULL END");
     expect(projectTypeMigration).not.toContain('Project type must be kitchen or bathroom');
+    expect(coordinateMigration).toContain('CREATE OR REPLACE FUNCTION public.create_gc_managed_project');
+    expect(coordinateMigration).toContain('p_lat IS NULL');
+    expect(coordinateMigration).toContain('p_lng IS NULL');
+    expect(coordinateMigration).toContain('p_lat < -90');
+    expect(coordinateMigration).toContain('p_lng > 180');
+    expect(coordinateMigration).toContain('Valid project coordinates are required before creating managed projects');
+    expect(coordinateMigration).toContain("CASE WHEN v_project_type IN ('kitchen', 'bathroom') THEN v_project_type ELSE NULL END");
     expect(homeownerConfirmationMigration).toContain('DROP POLICY IF EXISTS "gc_projects_homeowner_update"');
     expect(homeownerConfirmationMigration).toContain('CREATE OR REPLACE FUNCTION public.confirm_gc_management_assignment');
     expect(homeownerConfirmationMigration).toContain('homeowner_id = (SELECT auth.uid())');
