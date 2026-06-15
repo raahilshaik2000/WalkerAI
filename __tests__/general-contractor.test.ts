@@ -86,12 +86,26 @@ describe('general contractor account type', () => {
       path.join(repoRoot, 'supabase/migrations/20260615000200_allow_homeowners_to_view_verified_gcs.sql'),
       'utf8',
     );
+    const discoveryMigration = fs.readFileSync(
+      path.join(repoRoot, 'supabase/migrations/20260615002500_general_contractors_for_project.sql'),
+      'utf8',
+    );
+    const conciergeScreen = fs.readFileSync(
+      path.join(repoRoot, 'src/app/(homeowner)/project/[id]/concierge.tsx'),
+      'utf8',
+    );
 
     expect(projectDetail).toContain("label: 'Concierge'");
     expect(projectDetail).toContain("screen: 'Concierge'");
     expect(rootNavigator).toContain("name=\"Concierge\"");
     expect(policyMigration).toContain('verified = TRUE');
     expect(policyMigration).toContain('general_contractors_select_own_or_verified');
+    expect(discoveryMigration).toContain('CREATE OR REPLACE FUNCTION public.general_contractors_for_project');
+    expect(discoveryMigration).toContain('ST_DWithin(gc.location, target_project.project_geography, gc.service_radius_km * 1000)');
+    expect(discoveryMigration).toContain('distance_km');
+    expect(conciergeScreen).toContain("supabase.rpc('general_contractors_for_project'");
+    expect(conciergeScreen).toContain('fetchDiscoverableGeneralContractors(projectId)');
+    expect(conciergeScreen).toContain('formatGcDistance(gc)');
   });
 
   it('lets invited GCs activate their project management assignment', () => {

@@ -45,6 +45,7 @@ interface ApprovalRequest {
 }
 
 type ConciergeServiceKind = GcConciergeBooking['service_kind'];
+type DiscoverableGeneralContractor = GeneralContractor & { distance_km?: number | null };
 
 const CONCIERGE_SERVICE_OPTIONS: Array<{ kind: ConciergeServiceKind; label: string; price: string }> = [
   { kind: 'virtual_30', label: '30 min virtual', price: '$99' },
@@ -60,6 +61,39 @@ function getAssignedGc(row: CurrentAssignment | null) {
     : row.general_contractor ?? null;
 }
 
+function isMissingGcDiscoveryRpcError(error: { message?: string; details?: string } | null | undefined) {
+  const text = `${error?.message ?? ''} ${error?.details ?? ''}`.toLowerCase();
+  return text.includes('general_contractors_for_project')
+    || text.includes('function')
+    || text.includes('schema cache');
+}
+
+async function fetchDiscoverableGeneralContractors(projectId: string): Promise<DiscoverableGeneralContractor[]> {
+  const { data, error } = await supabase.rpc('general_contractors_for_project', {
+    p_project_id: projectId,
+  });
+
+  if (!error) return (data ?? []) as DiscoverableGeneralContractor[];
+  if (!isMissingGcDiscoveryRpcError(error)) throw error;
+
+  // Older databases may not have the radius-matching RPC yet. Keep the screen
+  // usable, while new deployments use the server-side service-area filter.
+  const fallback = await supabase
+    .from('general_contractors')
+    .select('*')
+    .eq('verified', true)
+    .order('rating', { ascending: false, nullsFirst: false })
+    .order('created_at', { ascending: false });
+  if (fallback.error) throw fallback.error;
+  return (fallback.data ?? []) as DiscoverableGeneralContractor[];
+}
+
+function formatGcDistance(gc: DiscoverableGeneralContractor): string | null {
+  if (typeof gc.distance_km !== 'number' || !Number.isFinite(gc.distance_km)) return null;
+  if (gc.distance_km < 1) return '<1 km away';
+  return `${Math.round(gc.distance_km)} km away`;
+}
+
 export default function ProjectConciergeScreen() {
   const route = useRoute<any>();
   const projectId = getRequiredStringParam(route.params, 'id');
@@ -68,7 +102,7 @@ export default function ProjectConciergeScreen() {
   const { user } = useAuthStore();
   const [projectHomeownerId, setProjectHomeownerId] = useState<string | null>(null);
   const [currentAssignment, setCurrentAssignment] = useState<CurrentAssignment | null>(null);
-  const [generalContractors, setGeneralContractors] = useState<GeneralContractor[]>([]);
+  const [generalContractors, setGeneralContractors] = useState<DiscoverableGeneralContractor[]>([]);
   const [approvalRequests, setApprovalRequests] = useState<ApprovalRequest[]>([]);
   const [paymentRequests, setPaymentRequests] = useState<GcPaymentRequest[]>([]);
   const [bookingRequests, setBookingRequests] = useState<GcConciergeBooking[]>([]);
@@ -82,6 +116,13 @@ export default function ProjectConciergeScreen() {
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
   const fetchData = useCallback(async () => {
+    if (!projectId) {
+      setErrorMessage('Project is missing. Reopen concierge from your project details.');
+      setLoading(false);
+      setRefreshing(false);
+      return;
+    }
+
     const currentUser = user ?? (await supabase.auth.getUser()).data.user;
     if (!currentUser) {
       setErrorMessage('You need to be signed in to manage concierge support.');
@@ -92,7 +133,7 @@ export default function ProjectConciergeScreen() {
 
     try {
       setErrorMessage(null);
-      const [projectResult, assignmentResult, gcResult, approvalResult, paymentResult, bookingResult] = await Promise.all([
+      const [projectResult, assignmentResult, gcList, approvalResult, paymentResult, bookingResult] = await Promise.all([
         supabase
           .from('projects')
           .select('id, homeowner_id')
@@ -109,12 +150,7 @@ export default function ProjectConciergeScreen() {
           .order('created_at', { ascending: false })
           .limit(1)
           .maybeSingle(),
-        supabase
-          .from('general_contractors')
-          .select('*')
-          .eq('verified', true)
-          .order('rating', { ascending: false, nullsFirst: false })
-          .order('created_at', { ascending: false }),
+        fetchDiscoverableGeneralContractors(projectId),
         supabase
           .from('project_approval_requests')
           .select('id, request_type, title, description, cost_delta, timeline_delta_days, status, response_note')
@@ -134,14 +170,13 @@ export default function ProjectConciergeScreen() {
 
       if (projectResult.error) throw projectResult.error;
       if (assignmentResult.error) throw assignmentResult.error;
-      if (gcResult.error) throw gcResult.error;
       if (approvalResult.error) throw approvalResult.error;
       if (paymentResult.error) throw paymentResult.error;
       if (bookingResult.error) throw bookingResult.error;
 
       setProjectHomeownerId(projectResult.data?.homeowner_id ?? null);
       setCurrentAssignment(assignmentResult.data as CurrentAssignment | null);
-      setGeneralContractors((gcResult.data ?? []) as GeneralContractor[]);
+      setGeneralContractors(gcList);
       setApprovalRequests((approvalResult.data ?? []) as ApprovalRequest[]);
       setPaymentRequests((paymentResult.data ?? []) as GcPaymentRequest[]);
       setBookingRequests((bookingResult.data ?? []) as GcConciergeBooking[]);
@@ -729,6 +764,7 @@ export default function ProjectConciergeScreen() {
                     <Text style={styles.gcName}>{gc.business_name}</Text>
                     <Text style={styles.gcMeta}>
                       {[gc.city, gc.province].filter(Boolean).join(', ') || 'Location pending'}
+                      {formatGcDistance(gc) ? ` · ${formatGcDistance(gc)}` : ''}
                       {gc.rating != null ? ` · ${gc.rating.toFixed(1)} (${gc.total_reviews})` : ' · New'}
                     </Text>
                   </View>
