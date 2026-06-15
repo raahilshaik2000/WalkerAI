@@ -257,10 +257,9 @@ export default function GeneralContractorProjectDetail() {
           text: 'Accept',
           onPress: async () => {
             setAccepting(true);
-            const { error } = await supabase
-              .from('general_contractor_projects')
-              .update({ status: 'active' })
-              .eq('id', assignment.id);
+            const { error } = await supabase.rpc('accept_gc_management_invite', {
+              p_assignment_id: assignment.id,
+            });
             if (error) {
               Alert.alert('Could not accept invite', error.message);
             } else {

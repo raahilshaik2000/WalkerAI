@@ -142,10 +142,23 @@ describe('general contractor account type', () => {
       path.join(repoRoot, 'src/app/(general-contractor)/project/[id]/index.tsx'),
       'utf8',
     );
+    const activationMigration = fs.readFileSync(
+      path.join(repoRoot, 'supabase/migrations/20260615003000_secure_gc_assignment_activation.sql'),
+      'utf8',
+    );
 
     expect(gcProjectDetail).toContain('Accept Management Invite');
-    expect(gcProjectDetail).toContain("update({ status: 'active' })");
+    expect(gcProjectDetail).toContain("supabase.rpc('accept_gc_management_invite'");
+    expect(gcProjectDetail).toContain('p_assignment_id: assignment.id');
+    expect(gcProjectDetail).not.toContain("update({ status: 'active' })");
     expect(gcProjectDetail).toContain('GC management terms');
+    expect(activationMigration).toContain('DROP POLICY IF EXISTS "gc_projects_participant_update"');
+    expect(activationMigration).toContain('CREATE POLICY "gc_projects_homeowner_update"');
+    expect(activationMigration).toContain('CREATE OR REPLACE FUNCTION public.accept_gc_management_invite');
+    expect(activationMigration).toContain('v_assignment.initiated_by_gc IS TRUE');
+    expect(activationMigration).toContain('Homeowner confirmation is required for GC-created projects');
+    expect(activationMigration).toContain("v_assignment.status <> 'invited'");
+    expect(activationMigration).toContain("SET status = 'active'");
   });
 
   it('adds generic homeowner approval requests for GC recommendations', () => {
