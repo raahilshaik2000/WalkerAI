@@ -16,7 +16,7 @@ import { useRoute } from '@react-navigation/native';
 import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
 import Ionicons from 'react-native-vector-icons/Ionicons';
 import { supabase } from '@/lib/supabase/client';
-import { parseNonNegativeCadToCents } from '@/lib/currency';
+import { formatCadCents, parseNonNegativeCadToCents } from '@/lib/currency';
 import { isValidIsoDate, normalizeOptionalIsoDate } from '@/lib/dates';
 import { getRequiredStringParam } from '@/lib/navigation-params';
 import { useAuthStore } from '@/stores/auth.store';
@@ -441,6 +441,14 @@ export default function QuoteBuilderScreen() {
   };
 
   const quoteTotalCents = totalCents(lineItems);
+  const milestoneTotalCents = totalCents(milestones);
+  const milestoneBalanceCents = quoteTotalCents - milestoneTotalCents;
+  const milestoneTotalsMatch = quoteTotalCents > 0 && Math.abs(milestoneBalanceCents) <= 1;
+  const milestoneBalanceLabel = milestoneTotalsMatch
+    ? 'Balanced'
+    : milestoneBalanceCents >= 0
+    ? `${formatCadCents(milestoneBalanceCents)} remaining`
+    : `${formatCadCents(Math.abs(milestoneBalanceCents))} over`;
   const totalDollars = quoteTotalCents / 100;
   const splitLabel = milestones.length === 3 ? 'Split total 30/40/30' : 'Split total evenly';
 
@@ -522,6 +530,22 @@ export default function QuoteBuilderScreen() {
                   {splitLabel}
                 </Text>
               </TouchableOpacity>
+              <View style={styles.milestoneSummary}>
+                <View style={styles.milestoneSummaryRow}>
+                  <Text style={styles.milestoneSummaryLabel}>Quote total</Text>
+                  <Text style={styles.milestoneSummaryValue}>{formatCadCents(quoteTotalCents)}</Text>
+                </View>
+                <View style={styles.milestoneSummaryRow}>
+                  <Text style={styles.milestoneSummaryLabel}>Milestones</Text>
+                  <Text style={styles.milestoneSummaryValue}>{formatCadCents(milestoneTotalCents)}</Text>
+                </View>
+                <View style={styles.milestoneSummaryRow}>
+                  <Text style={styles.milestoneSummaryLabel}>Balance</Text>
+                  <Text style={[styles.milestoneSummaryValue, milestoneTotalsMatch ? styles.milestoneBalanced : styles.milestoneMismatch]}>
+                    {milestoneBalanceLabel}
+                  </Text>
+                </View>
+              </View>
               {milestones.map((m, i) => (
                 <View key={m.id} style={styles.milestoneInput}>
                   <Text style={styles.milestoneNum}>{i + 1}</Text>
@@ -584,7 +608,7 @@ export default function QuoteBuilderScreen() {
               label={`Submit Quote — $${totalDollars.toLocaleString('en-CA', { minimumFractionDigits: 2 })}`}
               onPress={handleSubmit}
               loading={submitting}
-              disabled={totalDollars <= 0}
+              disabled={totalDollars <= 0 || !milestoneTotalsMatch}
               fullWidth
               size="lg"
               haptic
@@ -619,6 +643,19 @@ const styles = StyleSheet.create({
   },
   splitBtnText: { color: Colors.accent, fontSize: 13, fontWeight: '700' },
   splitBtnTextDisabled: { color: Colors.text.tertiary },
+  milestoneSummary: {
+    borderWidth: 1,
+    borderColor: Colors.glass.border,
+    borderRadius: Radius.item,
+    padding: 12,
+    marginBottom: 14,
+    gap: 8,
+  },
+  milestoneSummaryRow: { flexDirection: 'row', justifyContent: 'space-between', gap: 12 },
+  milestoneSummaryLabel: { ...Typography.caption },
+  milestoneSummaryValue: { ...Typography.caption, color: Colors.text.primary, fontWeight: '800', textAlign: 'right' },
+  milestoneBalanced: { color: Colors.success },
+  milestoneMismatch: { color: Colors.warning },
   lineItemRow: {
     flexDirection: 'row',
     alignItems: 'center',

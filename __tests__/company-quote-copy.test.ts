@@ -57,5 +57,9 @@ describe('company quote copy', () => {
     expect(source).toContain(`const splitLabel = milestones.length === 3 ? 'Split total 30/40/30' : 'Split total evenly';`);
     expect(source).toContain('onPress={applyDefaultMilestoneSplit}');
     expect(source).toContain('Enter line item amounts before splitting milestones.');
+    expect(source).toContain('const milestoneBalanceCents = quoteTotalCents - milestoneTotalCents;');
+    expect(source).toContain('const milestoneTotalsMatch = quoteTotalCents > 0 && Math.abs(milestoneBalanceCents) <= 1;');
+    expect(source).toContain('<Text style={styles.milestoneSummaryLabel}>Balance</Text>');
+    expect(source).toContain('disabled={totalDollars <= 0 || !milestoneTotalsMatch}');
   });
 });
