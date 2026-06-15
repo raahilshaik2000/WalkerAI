@@ -313,6 +313,10 @@ describe('general contractor account type', () => {
       path.join(repoRoot, 'supabase/migrations/20260615003200_secure_homeowner_gc_confirmation.sql'),
       'utf8',
     );
+    const homeownerRemovalMigration = fs.readFileSync(
+      path.join(repoRoot, 'supabase/migrations/20260615003700_remove_gc_management_assignment.sql'),
+      'utf8',
+    );
     const navigator = fs.readFileSync(
       path.join(repoRoot, 'src/navigation/GeneralContractorNavigator.tsx'),
       'utf8',
@@ -365,7 +369,11 @@ describe('general contractor account type', () => {
     expect(createProject).not.toContain(".from('general_contractor_projects')\n        .update");
     expect(homeownerConcierge).toContain('Confirm GC Management');
     expect(homeownerConcierge).toContain("supabase.rpc('confirm_gc_management_assignment'");
+    expect(homeownerConcierge).toContain('Remove GC Management');
+    expect(homeownerConcierge).toContain("supabase.rpc('remove_gc_management_assignment'");
+    expect(homeownerConcierge).toContain('Pending GC recommendations will no longer apply project changes');
     expect(homeownerConcierge).not.toContain(".from('general_contractor_projects')\n              .update({ status: 'active' })");
+    expect(homeownerConcierge).not.toContain(".from('general_contractor_projects')\n              .update({ status: 'removed' })");
     expect(homeownerConcierge).toContain('project_type, scope_summary');
     expect(homeownerConcierge).toContain('formatGcProjectType(currentAssignment.project_type)');
     expect(homeownerConcierge).toContain('currentAssignment.scope_summary');
@@ -397,6 +405,11 @@ describe('general contractor account type', () => {
     expect(homeownerConfirmationMigration).toContain('v_assignment.initiated_by_gc IS NOT TRUE');
     expect(homeownerConfirmationMigration).toContain("v_assignment.status <> 'invited'");
     expect(homeownerConfirmationMigration).toContain("SET status = 'active'");
+    expect(homeownerRemovalMigration).toContain('CREATE OR REPLACE FUNCTION public.remove_gc_management_assignment');
+    expect(homeownerRemovalMigration).toContain('homeowner_id = (SELECT auth.uid())');
+    expect(homeownerRemovalMigration).toContain("v_assignment.status NOT IN ('invited', 'active')");
+    expect(homeownerRemovalMigration).toContain("SET status = 'removed'");
+    expect(homeownerRemovalMigration).toContain('GRANT EXECUTE ON FUNCTION public.remove_gc_management_assignment(UUID) TO authenticated');
   });
 
   it('counts real GC homeowner actions on the dashboard approval metric', () => {

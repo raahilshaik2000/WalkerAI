@@ -570,6 +570,38 @@ export default function ProjectConciergeScreen() {
     );
   };
 
+  const handleRemoveGcManagement = async () => {
+    const currentUser = user ?? (await supabase.auth.getUser()).data.user;
+    if (!currentUser?.id || projectHomeownerId !== currentUser.id || !currentAssignment?.id) {
+      Alert.alert('Not allowed', 'Only the homeowner can remove GC management from this project.');
+      return;
+    }
+
+    Alert.alert(
+      'Remove GC management?',
+      'This removes the GC from the project. Pending GC recommendations will no longer apply project changes, and you can invite another GC afterward.',
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Remove',
+          style: 'destructive',
+          onPress: async () => {
+            setRespondingId(currentAssignment.id);
+            const { error } = await supabase.rpc('remove_gc_management_assignment', {
+              p_assignment_id: currentAssignment.id,
+            });
+            if (error) {
+              Alert.alert('Could not remove GC', error.message);
+            } else {
+              await fetchData();
+            }
+            setRespondingId(null);
+          },
+        },
+      ],
+    );
+  };
+
   const assignedGc = getAssignedGc(currentAssignment);
 
   return (
@@ -645,6 +677,17 @@ export default function ProjectConciergeScreen() {
                   />
                 ) : currentAssignment.status === 'invited' ? (
                   <Text style={styles.waitingText}>Waiting for the GC to accept your invite.</Text>
+                ) : null}
+                {currentAssignment.status !== 'completed' ? (
+                  <GlassButton
+                    label="Remove GC Management"
+                    onPress={handleRemoveGcManagement}
+                    loading={respondingId === currentAssignment.id}
+                    fullWidth
+                    size="sm"
+                    variant="destructive"
+                    style={styles.removeAssignmentButton}
+                  />
                 ) : null}
               </GlassCard>
 
@@ -953,6 +996,7 @@ const styles = StyleSheet.create({
   projectContextValue: { ...Typography.body, color: Colors.text.primary, fontWeight: '900', marginTop: 4 },
   projectContextSummary: { ...Typography.bodySecondary, marginTop: 6, lineHeight: 20 },
   inviteButton: { marginTop: Spacing.sm },
+  removeAssignmentButton: { marginTop: Spacing.sm },
   serviceGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginTop: Spacing.sm },
   serviceButton: { flexGrow: 1, minWidth: '47%' },
   waitingText: { ...Typography.caption, color: Colors.warning, marginTop: Spacing.sm, fontWeight: '700' },
