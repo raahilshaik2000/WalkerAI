@@ -1,11 +1,14 @@
-import fs from 'fs';
-import path from 'path';
 import {
   isGeneralContractorSetupComplete,
   nextGeneralContractorOnboardingRoute,
 } from '../src/lib/general-contractor';
 import { resolveNotificationRoute } from '../src/lib/notifications/navigation';
 
+declare const require: (moduleName: string) => any;
+declare const __dirname: string;
+
+const fs = require('fs');
+const path = require('path');
 const repoRoot = path.join(__dirname, '..');
 
 describe('general contractor account type', () => {
@@ -48,5 +51,23 @@ describe('general contractor account type', () => {
     expect(migration).toContain('CREATE TABLE IF NOT EXISTS public.general_contractors');
     expect(migration).toContain('CREATE TABLE IF NOT EXISTS public.general_contractor_projects');
     expect(migration).toContain('homeowner_id = (SELECT auth.uid())');
+  });
+
+  it('adds homeowner project concierge entry and verified GC browsing policy', () => {
+    const projectDetail = fs.readFileSync(
+      path.join(repoRoot, 'src/app/(homeowner)/project/[id]/index.tsx'),
+      'utf8',
+    );
+    const rootNavigator = fs.readFileSync(path.join(repoRoot, 'src/navigation/RootNavigator.tsx'), 'utf8');
+    const policyMigration = fs.readFileSync(
+      path.join(repoRoot, 'supabase/migrations/20260615000200_allow_homeowners_to_view_verified_gcs.sql'),
+      'utf8',
+    );
+
+    expect(projectDetail).toContain("label: 'Concierge'");
+    expect(projectDetail).toContain("screen: 'Concierge'");
+    expect(rootNavigator).toContain("name=\"Concierge\"");
+    expect(policyMigration).toContain('verified = TRUE');
+    expect(policyMigration).toContain('general_contractors_select_own_or_verified');
   });
 });

@@ -281,6 +281,7 @@ export default function ProjectDetailScreen() {
     { label: 'Messages',   icon: '💬', screen: 'Messages'   },
     { label: 'Quote',      icon: '📄', screen: 'Quote'      },
     { label: 'Materials',  icon: '📦', screen: 'Materials'  },
+    { label: 'Concierge',  icon: '🧭', screen: 'Concierge'  },
     ...(shouldShowScheduleAction
       ? [{ label: 'Schedule', icon: '📅', screen: 'ProjectSchedule' }]
       : []),
