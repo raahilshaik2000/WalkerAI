@@ -15,7 +15,7 @@ import { supabase } from '@/lib/supabase/client';
 import { useAuthStore } from '@/stores/auth.store';
 import { formatCad, formatStatusLabel } from '@/lib/formatters';
 import { formatCadCents } from '@/lib/currency';
-import type { GcConciergeBooking } from '@/types/database.types';
+import type { GcConciergeBooking, GcPaymentRequest } from '@/types/database.types';
 import { Colors, Spacing, Typography } from '@/constants/theme';
 import { GradientBackground, GlassButton, GlassCard, StatusBadge } from '@/components/ui';
 import { TradeEmptyState, TradeScreenHeader } from '@/components/company/TradeUI';
@@ -52,6 +52,10 @@ interface RecommendationApprovalRow {
   project?: ProjectJoin;
 }
 
+type PaymentRequestRow = GcPaymentRequest & {
+  project?: ProjectJoin;
+};
+
 function getProject(row: { project?: ProjectJoin }) {
   return Array.isArray(row.project) ? row.project[0] ?? null : row.project ?? null;
 }
@@ -66,6 +70,7 @@ export default function GeneralContractorApprovals() {
   const { user } = useAuthStore();
   const [approvals, setApprovals] = useState<ApprovalRow[]>([]);
   const [recommendationRequests, setRecommendationRequests] = useState<RecommendationApprovalRow[]>([]);
+  const [paymentRequests, setPaymentRequests] = useState<PaymentRequestRow[]>([]);
   const [bookingRequests, setBookingRequests] = useState<GcConciergeBooking[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
@@ -92,11 +97,12 @@ export default function GeneralContractorApprovals() {
       if (!gc?.id) {
         setApprovals([]);
         setRecommendationRequests([]);
+        setPaymentRequests([]);
         setBookingRequests([]);
         return;
       }
 
-      const [assignmentResult, bookingResult, recommendationResult] = await Promise.all([
+      const [assignmentResult, bookingResult, recommendationResult, paymentResult] = await Promise.all([
         supabase
           .from('general_contractor_projects')
           .select('project_id')
@@ -115,14 +121,25 @@ export default function GeneralContractorApprovals() {
           `)
           .eq('requested_by_gc_id', gc.id)
           .order('created_at', { ascending: false }),
+        supabase
+          .from('gc_payment_requests')
+          .select(`
+            id, project_id, general_contractor_id, homeowner_id, request_kind, title, description,
+            amount_cents, status, response_note, created_at, responded_at, cancelled_at,
+            project:projects ( room_type, city, address )
+          `)
+          .eq('general_contractor_id', gc.id)
+          .order('created_at', { ascending: false }),
       ]);
       const assignments = assignmentResult.data;
       const assignmentError = assignmentResult.error;
       if (assignmentError) throw assignmentError;
       if (bookingResult.error) throw bookingResult.error;
       if (recommendationResult.error) throw recommendationResult.error;
+      if (paymentResult.error) throw paymentResult.error;
       setBookingRequests((bookingResult.data ?? []) as GcConciergeBooking[]);
       setRecommendationRequests((recommendationResult.data ?? []) as RecommendationApprovalRow[]);
+      setPaymentRequests((paymentResult.data ?? []) as PaymentRequestRow[]);
 
       const projectIds = (assignments ?? []).map((row) => row.project_id).filter(Boolean);
       if (projectIds.length === 0) {
@@ -144,6 +161,7 @@ export default function GeneralContractorApprovals() {
       setErrorMessage(err instanceof Error ? err.message : 'Could not load approvals.');
       setApprovals([]);
       setRecommendationRequests([]);
+      setPaymentRequests([]);
       setBookingRequests([]);
     } finally {
       setLoading(false);
@@ -208,7 +226,7 @@ export default function GeneralContractorApprovals() {
             <GlassCard style={styles.card}>
               <Text style={styles.bodyText}>Loading approvals...</Text>
             </GlassCard>
-          ) : approvals.length === 0 && recommendationRequests.length === 0 && bookingRequests.length === 0 ? (
+          ) : approvals.length === 0 && recommendationRequests.length === 0 && paymentRequests.length === 0 && bookingRequests.length === 0 ? (
             <TradeEmptyState
               icon="clipboard-check-outline"
               title="No approval requests"
@@ -307,6 +325,51 @@ export default function GeneralContractorApprovals() {
                             {request.cost_delta != null ? ` · ${formatCad(request.cost_delta)}` : ''}
                             {request.timeline_delta_days != null ? ` · ${request.timeline_delta_days > 0 ? '+' : ''}${request.timeline_delta_days} days` : ''}
                           </Text>
+                        </View>
+                      </TouchableOpacity>
+                    );
+                  })}
+                </GlassCard>
+              ) : null}
+
+              {paymentRequests.length > 0 ? (
+                <GlassCard style={styles.card}>
+                  <Text style={styles.sectionTitle}>Payment requests</Text>
+                  {paymentRequests.map((request) => {
+                    const project = getProject(request);
+                    const pending = request.status === 'pending';
+                    return (
+                      <TouchableOpacity
+                        key={request.id}
+                        activeOpacity={0.85}
+                        onPress={() => navigation.navigate('GeneralContractorPayments', { id: request.project_id })}
+                      >
+                        <View style={styles.bookingItem}>
+                          <View style={styles.cardHeader}>
+                            <View style={styles.iconWrap}>
+                              <Icon
+                                name={pending ? 'cash-clock' : request.status === 'approved' ? 'cash-check' : 'cash-remove'}
+                                size={20}
+                                color={pending ? Colors.warning : request.status === 'approved' ? Colors.success : Colors.error}
+                              />
+                            </View>
+                            <View style={styles.cardBody}>
+                              <Text style={styles.projectTitle}>{request.title}</Text>
+                              <Text style={styles.projectMeta}>
+                                {formatRoom(project?.room_type)} · {project?.city || project?.address || 'Managed project'}
+                              </Text>
+                              <Text style={styles.projectMeta}>
+                                {formatStatusLabel(request.request_kind)} · {formatCadCents(request.amount_cents)}
+                              </Text>
+                            </View>
+                            <StatusBadge label={formatStatusLabel(request.status)} variant={pending ? 'pending' : request.status === 'approved' ? 'completed' : 'error'} dot />
+                          </View>
+                          {request.description ? <Text style={styles.costText}>{request.description}</Text> : null}
+                          {pending ? (
+                            <Text style={styles.waitingText}>
+                              Waiting for homeowner authorization. Escrow release still happens through milestones.
+                            </Text>
+                          ) : null}
                         </View>
                       </TouchableOpacity>
                     );

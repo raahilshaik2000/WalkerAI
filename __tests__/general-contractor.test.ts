@@ -341,6 +341,10 @@ describe('general contractor account type', () => {
       path.join(repoRoot, 'src/app/(general-contractor)/project/[id]/payments.tsx'),
       'utf8',
     );
+    const gcApprovals = fs.readFileSync(
+      path.join(repoRoot, 'src/app/(general-contractor)/approvals.tsx'),
+      'utf8',
+    );
     const homeownerConcierge = fs.readFileSync(
       path.join(repoRoot, 'src/app/(homeowner)/project/[id]/concierge.tsx'),
       'utf8',
@@ -354,6 +358,10 @@ describe('general contractor account type', () => {
     expect(gcProjectDetail).toContain("navigation.navigate('GeneralContractorPayments'");
     expect(gcPayments).toContain("from('gc_payment_requests').insert");
     expect(gcPayments).toContain('Funds are still released through existing escrow milestones');
+    expect(gcApprovals).toContain("from('gc_payment_requests')");
+    expect(gcApprovals).toContain('Payment requests');
+    expect(gcApprovals).toContain("navigation.navigate('GeneralContractorPayments'");
+    expect(gcApprovals).toContain('Escrow release still happens through milestones');
     expect(homeownerConcierge).toContain("from('gc_payment_requests')");
     expect(homeownerConcierge).toContain("supabase.rpc('respond_to_gc_payment_request'");
     expect(homeownerConcierge).toContain('Approving this records your authorization. It does not bypass milestone escrow release.');
