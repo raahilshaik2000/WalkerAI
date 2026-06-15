@@ -14,6 +14,7 @@ import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
 import { supabase } from '@/lib/supabase/client';
 import { formatCad, formatStatusLabel } from '@/lib/formatters';
 import { formatSignedCadCents, parseSignedCadToCents } from '@/lib/currency';
+import { calculateGcMarkup } from '@/lib/gc-markup';
 import { getRequiredStringParam } from '@/lib/navigation-params';
 import { Colors, Spacing, Typography } from '@/constants/theme';
 import { GradientBackground, GlassButton, GlassCard, GlassInput, StatusBadge } from '@/components/ui';
@@ -319,6 +320,14 @@ export default function GeneralContractorProjectDetail() {
     order.status === 'proposed' && order.signed_by_company && !order.signed_by_homeowner
   )).length;
   const assignedTrades = slots.filter((slot) => !!getCompanyName(slot)).length;
+  const markupSummary = assignment && project
+    ? calculateGcMarkup({
+      baseMinCents: project.ai_cost_min,
+      baseMaxCents: project.ai_cost_max,
+      markupPct: Number(assignment.markup_pct),
+      conciergeFeePct: Number(assignment.concierge_fee_pct),
+    })
+    : null;
 
   return (
     <GradientBackground glow="top-right">
@@ -397,6 +406,42 @@ export default function GeneralContractorProjectDetail() {
                       Waiting for the homeowner to confirm GC management before recommendations can be sent.
                     </Text>
                   ) : null}
+                </GlassCard>
+              ) : null}
+
+              {assignment ? (
+                <GlassCard style={styles.card}>
+                  <Text style={styles.sectionTitle}>Markup engine</Text>
+                  {markupSummary ? (
+                    <>
+                      <BudgetRow
+                        label="AI budget basis"
+                        value={`${formatCad(markupSummary.baseMinCents)} - ${formatCad(markupSummary.baseMaxCents)}`}
+                      />
+                      <BudgetRow
+                        label={`GC markup (${Number(assignment.markup_pct).toFixed(0)}%)`}
+                        value={`${formatCad(markupSummary.markupMinCents)} - ${formatCad(markupSummary.markupMaxCents)}`}
+                      />
+                      <BudgetRow
+                        label={`Concierge fee (${Number(assignment.concierge_fee_pct).toFixed(0)}%)`}
+                        value={`${formatCad(markupSummary.conciergeFeeMinCents)} - ${formatCad(markupSummary.conciergeFeeMaxCents)}`}
+                      />
+                      <BudgetRow
+                        label="Homeowner-facing total"
+                        value={`${formatCad(markupSummary.homeownerTotalMinCents)} - ${formatCad(markupSummary.homeownerTotalMaxCents)}`}
+                        strong
+                      />
+                      <BudgetRow
+                        label="Estimated GC revenue"
+                        value={`${formatCad(markupSummary.gcRevenueMinCents)} - ${formatCad(markupSummary.gcRevenueMaxCents)}`}
+                        positive
+                      />
+                    </>
+                  ) : (
+                    <Text style={styles.bodyText}>
+                      Generate or enter an estimate before WalkerAI can calculate markup, homeowner total, and GC revenue.
+                    </Text>
+                  )}
                 </GlassCard>
               ) : null}
 
@@ -535,6 +580,27 @@ export default function GeneralContractorProjectDetail() {
   );
 }
 
+function BudgetRow({
+  label,
+  value,
+  strong = false,
+  positive = false,
+}: {
+  label: string;
+  value: string;
+  strong?: boolean;
+  positive?: boolean;
+}) {
+  return (
+    <View style={styles.budgetRow}>
+      <Text style={styles.budgetLabel}>{label}</Text>
+      <Text style={[styles.budgetValue, strong && styles.budgetValueStrong, positive && styles.budgetValuePositive]}>
+        {value}
+      </Text>
+    </View>
+  );
+}
+
 const styles = StyleSheet.create({
   safe: { flex: 1 },
   scroll: { flexGrow: 1, paddingHorizontal: Spacing.sm, paddingTop: Spacing.sm, paddingBottom: 120 },
@@ -577,6 +643,18 @@ const styles = StyleSheet.create({
     marginTop: Spacing.sm,
     lineHeight: 18,
   },
+  budgetRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    gap: 12,
+    paddingVertical: 9,
+    borderBottomWidth: 1,
+    borderBottomColor: Colors.glass.border,
+  },
+  budgetLabel: { ...Typography.bodySecondary, flex: 1 },
+  budgetValue: { ...Typography.body, flex: 1, textAlign: 'right' },
+  budgetValueStrong: { fontWeight: '900', color: Colors.text.primary },
+  budgetValuePositive: { color: Colors.success, fontWeight: '800' },
   typeGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginTop: 14, marginBottom: 12 },
   typeChip: {
     borderWidth: 1,

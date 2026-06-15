@@ -143,4 +143,16 @@ describe('general contractor account type', () => {
     expect(homeownerConcierge).toContain('Confirm GC Management');
     expect(gcProjectDetail).toContain('Waiting for the homeowner to confirm GC management');
   });
+
+  it('surfaces the GC markup engine on managed project detail', () => {
+    const gcProjectDetail = fs.readFileSync(
+      path.join(repoRoot, 'src/app/(general-contractor)/project/[id]/index.tsx'),
+      'utf8',
+    );
+
+    expect(gcProjectDetail).toContain("import { calculateGcMarkup } from '@/lib/gc-markup'");
+    expect(gcProjectDetail).toContain('Markup engine');
+    expect(gcProjectDetail).toContain('Homeowner-facing total');
+    expect(gcProjectDetail).toContain('Estimated GC revenue');
+  });
 });
