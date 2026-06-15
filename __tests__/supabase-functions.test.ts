@@ -113,20 +113,20 @@ describe('generate-trade-slots source guards', () => {
 });
 
 describe('dispatch-slots source guards', () => {
-  it('requires a brief-ready or already-dispatching project before notifying contractors', () => {
+  it('allows draft, brief-ready, or already-dispatching projects only after a generated budget exists', () => {
     const source = fs.readFileSync(
       path.join(__dirname, '../supabase/functions/dispatch-slots/index.ts'),
       'utf8',
     );
 
     expect(source).toContain('city, province, status, ai_cost_min, ai_cost_max');
-    expect(source).toContain("if (!['brief_ready', 'dispatching'].includes(project.status))");
-    expect(source).toContain('Project must be brief-ready before contractor dispatch can start');
+    expect(source).toContain("if (!['draft', 'brief_ready', 'dispatching'].includes(project.status))");
+    expect(source).toContain('Project must have a generated brief before contractor dispatch can start');
     expect(source).toMatch(
-      /Project must be brief-ready before contractor dispatch can start[\s\S]*?if \(project\.lat == null \|\| project\.lng == null\)/
+      /Project must have a generated brief before contractor dispatch can start[\s\S]*?if \(project\.lat == null \|\| project\.lng == null\)/
     );
     expect(source).toMatch(
-      /Project must be brief-ready before contractor dispatch can start[\s\S]*?\.from\('dispatch_logs'\)\.insert\(logs\)/
+      /Project must have a generated brief before contractor dispatch can start[\s\S]*?\.from\('dispatch_logs'\)\.insert\(logs\)/
     );
   });
 
