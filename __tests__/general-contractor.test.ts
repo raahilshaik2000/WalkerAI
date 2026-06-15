@@ -266,6 +266,28 @@ describe('general contractor account type', () => {
     expect(migration).toContain('guard_gc_approval_request_updates_trigger');
   });
 
+  it('keeps GC payment and trade negotiation request terms immutable after submission', () => {
+    const migration = fs.readFileSync(
+      path.join(repoRoot, 'supabase/migrations/20260615003600_guard_gc_request_audit_fields.sql'),
+      'utf8',
+    );
+
+    expect(migration).toContain('CREATE OR REPLACE FUNCTION public.guard_gc_payment_request_updates()');
+    expect(migration).toContain('NEW.general_contractor_id IS DISTINCT FROM OLD.general_contractor_id');
+    expect(migration).toContain('NEW.request_kind IS DISTINCT FROM OLD.request_kind');
+    expect(migration).toContain('NEW.amount_cents IS DISTINCT FROM OLD.amount_cents');
+    expect(migration).toContain('GC payment request details cannot be changed after submission');
+    expect(migration).toContain('guard_gc_payment_request_updates_trigger');
+
+    expect(migration).toContain('CREATE OR REPLACE FUNCTION public.guard_gc_trade_negotiation_updates()');
+    expect(migration).toContain('NEW.quote_id IS DISTINCT FROM OLD.quote_id');
+    expect(migration).toContain('NEW.company_id IS DISTINCT FROM OLD.company_id');
+    expect(migration).toContain('NEW.offer_amount_cents IS DISTINCT FROM OLD.offer_amount_cents');
+    expect(migration).toContain('NEW.scope_note IS DISTINCT FROM OLD.scope_note');
+    expect(migration).toContain('GC trade negotiation details cannot be changed after submission');
+    expect(migration).toContain('guard_gc_trade_negotiation_updates_trigger');
+  });
+
   it('supports GC-initiated homeowner-owned draft projects with homeowner confirmation', () => {
     const migration = fs.readFileSync(
       path.join(repoRoot, 'supabase/migrations/20260615000400_add_gc_project_creation_rpc.sql'),
