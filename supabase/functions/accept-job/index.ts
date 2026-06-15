@@ -415,13 +415,26 @@ Deno.serve(async (req) => {
         if (scopeError) warnings.push(`Quote created but scope line items could not be loaded: ${scopeError.message}`);
         if (matsError) warnings.push(`Quote created but material line items could not be loaded: ${matsError.message}`);
 
+        const quoteSummaryLineItem = {
+          quote_id: quote.id,
+          type: 'other',
+          description: 'WalkerAI AI estimate package',
+          quantity: 1,
+          unit_cost: avgCost,
+          total_cost: avgCost,
+          sort_order: 1,
+        };
+
         const lineItems = [
+          quoteSummaryLineItem,
           ...(scope ?? []).map((s: { phase: string; description: string }, i: number) => ({
             quote_id: quote.id,
             type: 'labour',
             description: `[${s.phase}] ${s.description}`,
             quantity: 1,
-            sort_order: i + 1,
+            unit_cost: null,
+            total_cost: null,
+            sort_order: i + 2,
           })),
           ...(mats ?? []).map((m: { item: string; quantity: number; unit: string | null; quality_tier: string | null }, i: number) => ({
             quote_id: quote.id,
@@ -429,15 +442,15 @@ Deno.serve(async (req) => {
             description: m.item,
             quantity: m.quantity ?? 1,
             unit: m.unit,
-            sort_order: (scope?.length ?? 0) + i + 1,
+            unit_cost: null,
+            total_cost: null,
+            sort_order: (scope?.length ?? 0) + i + 2,
           })),
         ];
 
-        if (lineItems.length > 0) {
-          const { error: lineItemError } = await adminClient.from('quote_line_items').insert(lineItems);
-          if (lineItemError) {
-            warnings.push(`Quote created but line item creation failed: ${lineItemError.message}`);
-          }
+        const { error: lineItemError } = await adminClient.from('quote_line_items').insert(lineItems);
+        if (lineItemError) {
+          warnings.push(`Quote created but line item creation failed: ${lineItemError.message}`);
         }
       }
     }

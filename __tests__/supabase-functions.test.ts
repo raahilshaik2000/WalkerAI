@@ -470,6 +470,22 @@ describe('accept-job source guards', () => {
       /async function acceptSlotWithConditionalUpdate[\s\S]*?await assertSlotAcceptanceWindowOpen\(adminClient, slotId\);[\s\S]*?\.from\('dispatch_logs'\)/
     );
   });
+
+  it('creates a priced summary line item for AI-priced whole-project auto quotes', () => {
+    const source = fs.readFileSync(
+      path.join(__dirname, '../supabase/functions/accept-job/index.ts'),
+      'utf8',
+    );
+
+    expect(source).toContain('const quoteSummaryLineItem = {');
+    expect(source).toContain("description: 'WalkerAI AI estimate package'");
+    expect(source).toContain('unit_cost: avgCost');
+    expect(source).toContain('total_cost: avgCost');
+    expect(source).toContain('quoteSummaryLineItem,');
+    expect(source).toContain('unit_cost: null');
+    expect(source).toContain('total_cost: null');
+    expect(source).not.toContain('if (lineItems.length > 0)');
+  });
 });
 
 describe('analyze-photos source guards', () => {
