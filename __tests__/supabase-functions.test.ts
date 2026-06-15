@@ -443,6 +443,19 @@ describe('release-milestone source guards', () => {
 });
 
 describe('claim-material-order source guards', () => {
+  it('uses cached supplier Stripe readiness before live Stripe retrieval when claiming orders', () => {
+    const source = fs.readFileSync(
+      path.join(__dirname, '../supabase/functions/claim-material-order/index.ts'),
+      'utf8',
+    );
+
+    expect(source).toContain('function hasStripeReadinessFields');
+    expect(source).toContain('stripe_details_submitted, stripe_payouts_enabled, stripe_transfers_active');
+    expect(source).toContain('if (record.stripe_details_submitted && record.stripe_payouts_enabled && record.stripe_transfers_active)');
+    expect(source).toContain('await assertStripePayoutReady(supplier)');
+    expect(source).not.toContain('await assertStripePayoutReady(supplier.stripe_account_id)');
+  });
+
   it('falls back safely when the atomic claim RPC is missing', () => {
     const source = fs.readFileSync(
       path.join(__dirname, '../supabase/functions/claim-material-order/index.ts'),
@@ -474,6 +487,19 @@ describe('claim-material-order source guards', () => {
 });
 
 describe('accept-job source guards', () => {
+  it('uses cached company Stripe readiness before live Stripe retrieval when accepting jobs', () => {
+    const source = fs.readFileSync(
+      path.join(__dirname, '../supabase/functions/accept-job/index.ts'),
+      'utf8',
+    );
+
+    expect(source).toContain('function hasStripeReadinessFields');
+    expect(source).toContain('stripe_details_submitted, stripe_payouts_enabled, stripe_transfers_active');
+    expect(source).toContain('if (record.stripe_details_submitted && record.stripe_payouts_enabled && record.stripe_transfers_active)');
+    expect(source).toContain('await assertStripePayoutReady(company)');
+    expect(source).not.toContain('await assertStripePayoutReady(company.stripe_account_id)');
+  });
+
   it('falls back when atomic slot acceptance is missing and normalizes joined project rows', () => {
     const source = fs.readFileSync(
       path.join(__dirname, '../supabase/functions/accept-job/index.ts'),

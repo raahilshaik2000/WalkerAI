@@ -6,9 +6,29 @@ const corsHeaders = {
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 };
 
-async function assertStripePayoutReady(stripeAccountId: string | null): Promise<void> {
-  if (!stripeAccountId) {
+interface StripePayoutRecord {
+  stripe_account_id: string | null;
+  stripe_details_submitted?: boolean | null;
+  stripe_payouts_enabled?: boolean | null;
+  stripe_transfers_active?: boolean | null;
+}
+
+function hasStripeReadinessFields(record: StripePayoutRecord) {
+  return record.stripe_details_submitted != null
+    || record.stripe_payouts_enabled != null
+    || record.stripe_transfers_active != null;
+}
+
+async function assertStripePayoutReady(record: StripePayoutRecord): Promise<void> {
+  if (!record.stripe_account_id) {
     throw new Error('Connect Stripe payouts before claiming material orders');
+  }
+
+  if (hasStripeReadinessFields(record)) {
+    if (record.stripe_details_submitted && record.stripe_payouts_enabled && record.stripe_transfers_active) {
+      return;
+    }
+    throw new Error('Finish Stripe payout onboarding before claiming material orders');
   }
 
   const stripeSecretKey = Deno.env.get('STRIPE_SECRET_KEY');
@@ -17,7 +37,7 @@ async function assertStripePayoutReady(stripeAccountId: string | null): Promise<
   }
 
   const stripe = new Stripe(stripeSecretKey);
-  const account = await stripe.accounts.retrieve(stripeAccountId);
+  const account = await stripe.accounts.retrieve(record.stripe_account_id);
   const transfersActive = account.capabilities?.transfers === 'active';
 
   if (!account.details_submitted || !account.payouts_enabled || !transfersActive) {
@@ -132,7 +152,7 @@ Deno.serve(async (req) => {
     // Verify caller is a verified supplier
     let supplierResult = await adminClient
       .from('suppliers')
-      .select('id, verified, categories, stripe_account_id, lat, lng, service_radius_km')
+      .select('id, verified, categories, stripe_account_id, stripe_details_submitted, stripe_payouts_enabled, stripe_transfers_active, lat, lng, service_radius_km')
       .eq('user_id', user.id)
       .order('created_at', { ascending: false })
       .limit(1)
@@ -156,7 +176,7 @@ Deno.serve(async (req) => {
     }
 
     try {
-      await assertStripePayoutReady(supplier.stripe_account_id);
+      await assertStripePayoutReady(supplier);
     } catch (err) {
       return new Response(
         JSON.stringify({ error: err instanceof Error ? err.message : 'Finish Stripe payout onboarding before claiming material orders' }),
