@@ -460,7 +460,12 @@ describe('general contractor account type', () => {
     expect(migration).toContain('permits_gc_managed_insert');
     expect(navigator).toContain('GeneralContractorPermits');
     expect(gcProjectDetail).toContain("navigation.navigate('GeneralContractorPermits'");
+    expect(gcPermits).toContain("select('id, status')");
+    expect(gcPermits).toContain("assignmentRow?.status !== 'active'");
+    expect(gcPermits).toContain('Permits locked');
+    expect(gcPermits).toContain('The homeowner must confirm active GC management before permits, inspections, or uploaded documents can be managed.');
     expect(gcPermits).toContain("from('permits').insert");
+    expect(gcPermits).toContain("assignment?.status !== 'active'");
     expect(gcPermits).toContain('Upload Document');
     expect(gcPermits).toContain('inspection_scheduled');
     expect(gcPermits).toContain('handleOpenDocument(previewUrl)');

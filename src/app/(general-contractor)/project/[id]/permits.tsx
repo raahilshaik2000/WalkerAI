@@ -28,6 +28,11 @@ interface Permit {
   document_url: string | null;
 }
 
+interface Assignment {
+  id: string;
+  status: string;
+}
+
 const PERMIT_STATUS_OPTIONS = [
   'not_applied',
   'applied',
@@ -53,6 +58,7 @@ export default function GeneralContractorPermitsScreen() {
   const route = useRoute<any>();
   const projectId = getRequiredStringParam(route.params, 'id');
   const [permits, setPermits] = useState<Permit[]>([]);
+  const [assignment, setAssignment] = useState<Assignment | null>(null);
   const [previewUrls, setPreviewUrls] = useState<Record<string, string>>({});
   const [permitType, setPermitType] = useState('');
   const [saving, setSaving] = useState(false);
@@ -64,6 +70,38 @@ export default function GeneralContractorPermitsScreen() {
   const fetchPermits = useCallback(async () => {
     try {
       setErrorMessage(null);
+      const currentUser = (await supabase.auth.getUser()).data.user;
+      if (!currentUser?.id) {
+        setAssignment(null);
+        setPermits([]);
+        setPreviewUrls({});
+        setErrorMessage('You need to be signed in to manage permits.');
+        return;
+      }
+
+      const { data: gc, error: gcError } = await supabase
+        .from('general_contractors')
+        .select('id')
+        .eq('user_id', currentUser.id)
+        .maybeSingle();
+      if (gcError) throw gcError;
+      if (!gc?.id) throw new Error('GC profile not found.');
+
+      const { data: assignmentRow, error: assignmentError } = await supabase
+        .from('general_contractor_projects')
+        .select('id, status')
+        .eq('project_id', projectId)
+        .eq('general_contractor_id', gc.id)
+        .maybeSingle();
+      if (assignmentError) throw assignmentError;
+
+      setAssignment(assignmentRow as Assignment | null);
+      if (assignmentRow?.status !== 'active') {
+        setPermits([]);
+        setPreviewUrls({});
+        return;
+      }
+
       const { data, error } = await supabase
         .from('permits')
         .select('id, permit_type, status, document_url')
@@ -88,6 +126,7 @@ export default function GeneralContractorPermitsScreen() {
       }));
       setPreviewUrls(previews);
     } catch (err) {
+      setAssignment(null);
       setPermits([]);
       setPreviewUrls({});
       setErrorMessage(err instanceof Error ? err.message : 'Could not load permits.');
@@ -109,6 +148,10 @@ export default function GeneralContractorPermitsScreen() {
   };
 
   const handleAddPermit = async () => {
+    if (assignment?.status !== 'active') {
+      Alert.alert('Active GC management required', 'The homeowner must confirm GC management before permits can be managed.');
+      return;
+    }
     if (!permitType.trim()) {
       Alert.alert('Permit type required', 'Enter the permit, inspection, or document type.');
       return;
@@ -131,6 +174,10 @@ export default function GeneralContractorPermitsScreen() {
   };
 
   const handleStatusChange = async (permit: Permit, status: string) => {
+    if (assignment?.status !== 'active') {
+      Alert.alert('Active GC management required', 'The homeowner must confirm GC management before permit statuses can be updated.');
+      return;
+    }
     const { error } = await supabase
       .from('permits')
       .update({ status })
@@ -144,6 +191,10 @@ export default function GeneralContractorPermitsScreen() {
   };
 
   const handleUpload = async (permit: Permit) => {
+    if (assignment?.status !== 'active') {
+      Alert.alert('Active GC management required', 'The homeowner must confirm GC management before permit documents can be uploaded.');
+      return;
+    }
     const result = await launchImageLibrary({
       mediaType: 'photo',
       quality: 0.8,
@@ -181,6 +232,8 @@ export default function GeneralContractorPermitsScreen() {
     }
   };
 
+  const canManagePermits = assignment?.status === 'active';
+
   return (
     <GradientBackground glow="top-right">
       <SafeAreaView style={styles.safe}>
@@ -199,22 +252,31 @@ export default function GeneralContractorPermitsScreen() {
             </View>
           </View>
 
-          <GlassCard style={styles.card}>
-            <Text style={styles.sectionTitle}>Add record</Text>
-            <GlassInput
-              label="Permit / inspection type"
-              value={permitType}
-              onChangeText={setPermitType}
-              containerStyle={styles.inputSpacing}
-            />
-            <GlassButton
-              label="Add Record"
-              onPress={handleAddPermit}
-              loading={saving}
-              size="sm"
-              fullWidth
-            />
-          </GlassCard>
+          {canManagePermits ? (
+            <GlassCard style={styles.card}>
+              <Text style={styles.sectionTitle}>Add record</Text>
+              <GlassInput
+                label="Permit / inspection type"
+                value={permitType}
+                onChangeText={setPermitType}
+                containerStyle={styles.inputSpacing}
+              />
+              <GlassButton
+                label="Add Record"
+                onPress={handleAddPermit}
+                loading={saving}
+                size="sm"
+                fullWidth
+              />
+            </GlassCard>
+          ) : !loading && !errorMessage ? (
+            <GlassCard style={styles.card}>
+              <Text style={styles.sectionTitle}>Permits locked</Text>
+              <Text style={styles.bodyText}>
+                The homeowner must confirm active GC management before permits, inspections, or uploaded documents can be managed.
+              </Text>
+            </GlassCard>
+          ) : null}
 
           {errorMessage ? (
             <GlassCard style={styles.card}>
@@ -247,8 +309,9 @@ export default function GeneralContractorPermitsScreen() {
                     return (
                       <TouchableOpacity
                         key={status}
-                        style={[styles.statusChip, selected && styles.statusChipActive]}
+                        style={[styles.statusChip, selected && styles.statusChipActive, !canManagePermits && styles.statusChipDisabled]}
                         onPress={() => handleStatusChange(permit, status)}
+                        disabled={!canManagePermits}
                         activeOpacity={0.85}
                       >
                         <Text style={[styles.statusChipText, selected && styles.statusChipTextActive]}>
@@ -275,6 +338,7 @@ export default function GeneralContractorPermitsScreen() {
                   label={uploadingId === permit.id ? 'Uploading...' : permit.document_url ? 'Replace Document' : 'Upload Document'}
                   onPress={() => handleUpload(permit)}
                   loading={uploadingId === permit.id}
+                  disabled={!canManagePermits}
                   variant="secondary"
                   size="sm"
                   fullWidth
@@ -326,6 +390,7 @@ const styles = StyleSheet.create({
     borderColor: 'rgba(255,107,0,0.65)',
     backgroundColor: 'rgba(255,107,0,0.14)',
   },
+  statusChipDisabled: { opacity: 0.5 },
   statusChipText: { color: Colors.text.secondary, fontSize: 12, fontWeight: '700', textTransform: 'capitalize' },
   statusChipTextActive: { color: Colors.text.primary },
   docPreview: { width: '100%', height: 150, borderRadius: Radius.item, marginBottom: 12 },
