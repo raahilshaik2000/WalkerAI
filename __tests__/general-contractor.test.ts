@@ -262,6 +262,9 @@ describe('general contractor account type', () => {
     expect(dashboard).toContain('projectContact');
     expect(dashboard).toContain('project_type, scope_summary');
     expect(dashboard).toContain('formatGcProjectType(assignment.project_type, project?.room_type)');
+    expect(dashboard).toContain("const dashboardStatus = assignment.status === 'invited'");
+    expect(dashboard).toContain('label={formatStatusLabel(dashboardStatus)}');
+    expect(dashboard).toContain('variant={projectStatusVariant(dashboardStatus)}');
     expect(createProject).toContain("supabase.rpc('create_gc_managed_project'");
     expect(createProject).toContain('GC_PROJECT_TYPES.map');
     expect(enums).toContain("'flooring'");

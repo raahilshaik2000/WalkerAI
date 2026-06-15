@@ -57,7 +57,7 @@ type GCProjectAssignmentRow = Omit<GCProjectAssignment, 'project'> & {
 function projectStatusVariant(status: string): 'active' | 'completed' | 'pending' | 'dispatching' | 'neutral' {
   if (status === 'completed') return 'completed';
   if (status === 'dispatching') return 'dispatching';
-  if (status === 'draft' || status === 'brief_ready' || status === 'scheduling' || status === 'quoting') return 'pending';
+  if (status === 'draft' || status === 'brief_ready' || status === 'scheduling' || status === 'quoting' || status === 'invited') return 'pending';
   if (status === 'accepted' || status === 'active') return 'active';
   return 'neutral';
 }
@@ -270,6 +270,9 @@ export default function GeneralContractorDashboard() {
             <TradeSection title="Managed projects">
               {assignments.map((assignment) => {
                 const project = assignment.project;
+                const dashboardStatus = assignment.status === 'invited'
+                  ? assignment.status
+                  : project?.status ?? assignment.status;
                 return (
                   <TouchableOpacity
                     key={assignment.id}
@@ -300,8 +303,8 @@ export default function GeneralContractorDashboard() {
                         </View>
                         <View style={styles.projectRight}>
                           <StatusBadge
-                            label={formatStatusLabel(project?.status ?? assignment.status)}
-                            variant={projectStatusVariant(project?.status ?? assignment.status)}
+                            label={formatStatusLabel(dashboardStatus)}
+                            variant={projectStatusVariant(dashboardStatus)}
                             dot
                           />
                           <Icon name="chevron-right" size={18} color={Colors.text.tertiary} />
