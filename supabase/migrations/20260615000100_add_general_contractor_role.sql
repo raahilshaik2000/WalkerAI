@@ -1,6 +1,6 @@
 -- Add General Contractor as a distinct fourth account type.
--- A company may still list "general_contractor" as a trade; this role is for
--- GC/Concierge project management accounts with homeowner approval authority.
+-- Existing company rows may still list "general_contractor" as a legacy trade.
+-- New GC users use this separate concierge/GC role and profile table.
 
 ALTER TABLE public.users
   DROP CONSTRAINT IF EXISTS users_role_check;

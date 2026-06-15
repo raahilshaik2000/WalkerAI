@@ -51,7 +51,7 @@ interface EarningsSummary {
 }
 
 const TRADE_LABELS: Record<string, string> = {
-  general_contractor: 'General Contractor',
+  general_contractor: 'Legacy general contractor',
   plumber: 'Plumber',
   electrician: 'Electrician',
   tile_installer: 'Tile Installer',
@@ -390,7 +390,7 @@ export default function CompanyProfileScreen() {
               <View style={styles.infoRow}>
                 <Text style={styles.infoKey}>Services</Text>
                 <Text style={styles.infoVal}>
-                  {(company.trade_types?.length ? company.trade_types : ['general_contractor'])
+                  {(company.trade_types?.length ? company.trade_types : ['plumber'])
                     .map((trade) => TRADE_LABELS[trade] ?? trade.replace(/_/g, ' '))
                     .join(', ')}
                 </Text>

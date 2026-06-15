@@ -48,6 +48,28 @@ describe('general contractor account type', () => {
     expect(businessOnboarding).toContain("navigation.navigate('GeneralContractorTabs', { screen: 'GeneralContractorProfile' })");
   });
 
+  it('keeps the GC account role out of company trade onboarding defaults', () => {
+    const companyBusinessOnboarding = fs.readFileSync(
+      path.join(repoRoot, 'src/app/(company)/onboarding/business.tsx'),
+      'utf8',
+    );
+    const companyProfile = fs.readFileSync(
+      path.join(repoRoot, 'src/app/(company)/profile.tsx'),
+      'utf8',
+    );
+    const gcRoleMigration = fs.readFileSync(
+      path.join(repoRoot, 'supabase/migrations/20260615000100_add_general_contractor_role.sql'),
+      'utf8',
+    );
+
+    expect(companyBusinessOnboarding).not.toContain("value: 'general_contractor'");
+    expect(companyBusinessOnboarding).toContain("useState<TradeType[]>(['plumber'])");
+    expect(companyProfile).toContain("general_contractor: 'Legacy general contractor'");
+    expect(companyProfile).toContain("company.trade_types?.length ? company.trade_types : ['plumber']");
+    expect(gcRoleMigration).toContain('Existing company rows may still list "general_contractor" as a legacy trade.');
+    expect(gcRoleMigration).toContain('New GC users use this separate concierge/GC role and profile table.');
+  });
+
   it('preloads existing GC document setup fields when onboarding is resumed', () => {
     const licenseOnboarding = fs.readFileSync(
       path.join(repoRoot, 'src/app/(general-contractor)/onboarding/license.tsx'),

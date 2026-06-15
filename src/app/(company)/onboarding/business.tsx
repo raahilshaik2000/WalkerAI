@@ -38,7 +38,6 @@ function parseWholeNumber(value: string): number | null {
 }
 
 const TRADE_OPTIONS = [
-  { value: 'general_contractor', label: 'General contractor' },
   { value: 'plumber', label: 'Plumbing' },
   { value: 'electrician', label: 'Electrical' },
   { value: 'tile_installer', label: 'Tile' },
@@ -63,7 +62,7 @@ export default function BusinessOnboardingScreen() {
   const [serviceRadius, setServiceRadius] = useState('50');
   const [lat, setLat] = useState<number | null>(null);
   const [lng, setLng] = useState<number | null>(null);
-  const [selectedTrades, setSelectedTrades] = useState<TradeType[]>(['general_contractor']);
+  const [selectedTrades, setSelectedTrades] = useState<TradeType[]>(['plumber']);
   const [loading, setLoading] = useState(false);
 
   const toggleTrade = (trade: TradeType) => {
