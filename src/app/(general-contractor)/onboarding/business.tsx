@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import {
   Alert,
   KeyboardAvoidingView,
@@ -61,6 +61,40 @@ export default function GeneralContractorBusinessOnboarding() {
     setLat(result.lat ?? null);
     setLng(result.lng ?? null);
   };
+
+  useEffect(() => {
+    if (!user?.id) return;
+
+    let cancelled = false;
+    const loadExistingProfile = async () => {
+      const { data, error } = await supabase
+        .from('general_contractors')
+        .select(`
+          business_name, address, city, province, postal_code, service_radius_km,
+          default_markup_pct, default_concierge_fee_pct, lat, lng
+        `)
+        .eq('user_id', user.id)
+        .maybeSingle();
+
+      if (cancelled || error || !data) return;
+      setBusinessName(data.business_name ?? '');
+      setAddress(data.address ?? '');
+      setCity(data.city ?? '');
+      setProvince(data.province ?? '');
+      setPostalCode(data.postal_code ?? '');
+      setServiceRadius(data.service_radius_km != null ? String(data.service_radius_km) : '100');
+      setDefaultMarkup(data.default_markup_pct != null ? Number(data.default_markup_pct).toFixed(0) : '15');
+      setConciergeFee(data.default_concierge_fee_pct != null ? Number(data.default_concierge_fee_pct).toFixed(0) : '10');
+      setLat(data.lat ?? null);
+      setLng(data.lng ?? null);
+    };
+
+    loadExistingProfile().catch(() => undefined);
+
+    return () => {
+      cancelled = true;
+    };
+  }, [user?.id]);
 
   const handleNext = async () => {
     if (!businessName.trim() || !city.trim() || !province.trim()) {

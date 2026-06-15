@@ -25,10 +25,20 @@ describe('general contractor account type', () => {
   });
 
   it('keeps GC onboarding separate from company onboarding', () => {
+    const businessOnboarding = fs.readFileSync(
+      path.join(repoRoot, 'src/app/(general-contractor)/onboarding/business.tsx'),
+      'utf8',
+    );
+
     expect(nextGeneralContractorOnboardingRoute(null)).toBe('GeneralContractorBusinessOnboarding');
     expect(nextGeneralContractorOnboardingRoute({ license_number: null, insurance_doc_url: null })).toBe('GeneralContractorLicenseOnboarding');
     expect(nextGeneralContractorOnboardingRoute({ license_number: 'GC-123', insurance_doc_url: null })).toBe('GeneralContractorInsuranceOnboarding');
     expect(isGeneralContractorSetupComplete({ license_number: 'GC-123', insurance_doc_url: 'https://example.com/insurance.pdf' })).toBe(true);
+    expect(businessOnboarding).toContain("from('general_contractors')");
+    expect(businessOnboarding).toContain('business_name, address, city, province, postal_code, service_radius_km');
+    expect(businessOnboarding).toContain('setBusinessName(data.business_name');
+    expect(businessOnboarding).toContain('setDefaultMarkup(data.default_markup_pct');
+    expect(businessOnboarding).toContain('existing?.id');
   });
 
   it('adds the GC role to registration and root routing without falling through to company', () => {
