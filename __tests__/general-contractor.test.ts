@@ -308,4 +308,27 @@ describe('general contractor account type', () => {
     expect(gcMaterials).toContain('Homeowner approval is required before the material preference changes.');
     expect(homeownerConcierge).toContain('Material substitutions approved here update the project material preference fields.');
   });
+
+  it('gives GCs a discovery and scope-change approval workflow instead of bypassing change orders', () => {
+    const navigator = fs.readFileSync(
+      path.join(repoRoot, 'src/navigation/GeneralContractorNavigator.tsx'),
+      'utf8',
+    );
+    const gcProjectDetail = fs.readFileSync(
+      path.join(repoRoot, 'src/app/(general-contractor)/project/[id]/index.tsx'),
+      'utf8',
+    );
+    const gcDiscovery = fs.readFileSync(
+      path.join(repoRoot, 'src/app/(general-contractor)/project/[id]/discovery.tsx'),
+      'utf8',
+    );
+
+    expect(navigator).toContain('GeneralContractorDiscovery');
+    expect(gcProjectDetail).toContain("navigation.navigate('GeneralContractorDiscovery'");
+    expect(gcDiscovery).toContain("from('project_approval_requests').insert");
+    expect(gcDiscovery).toContain("request_type: requestType");
+    expect(gcDiscovery).toContain("value: 'change_order'");
+    expect(gcDiscovery).toContain('No discovery or scope change becomes active until the homeowner approves it.');
+    expect(gcDiscovery).not.toContain("from('change_orders').insert");
+  });
 });
