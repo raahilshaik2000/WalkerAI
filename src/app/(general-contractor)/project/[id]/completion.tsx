@@ -1,0 +1,358 @@
+import { useCallback, useState } from 'react';
+import type { ReactNode } from 'react';
+import {
+  RefreshControl,
+  ScrollView,
+  StyleSheet,
+  Text,
+  TouchableOpacity,
+  View,
+} from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
+import { useFocusEffect, useNavigation, useRoute } from '@react-navigation/native';
+import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
+import { supabase } from '@/lib/supabase/client';
+import { formatCadCents, formatSignedCadCents } from '@/lib/currency';
+import { formatStatusLabel } from '@/lib/formatters';
+import { getRequiredStringParam } from '@/lib/navigation-params';
+import { Colors, Spacing, Typography } from '@/constants/theme';
+import { GlassCard, GradientBackground, StatusBadge } from '@/components/ui';
+
+interface ProjectSummary {
+  id: string;
+  status: string;
+  address: string | null;
+  room_type: string | null;
+  ai_cost_min: number | null;
+  ai_cost_max: number | null;
+}
+
+interface PermitRecord {
+  id: string;
+  permit_type: string;
+  status: string;
+}
+
+interface WarrantyRecord {
+  id: string;
+  expiry_date: string | null;
+}
+
+interface MaterialOrderRecord {
+  id: string;
+  status: string;
+  final_price: number | null;
+}
+
+interface ApprovalRecord {
+  id: string;
+  request_type: string;
+  title: string;
+  status: string;
+  cost_delta: number | null;
+}
+
+interface PaymentRequestRecord {
+  id: string;
+  request_kind: string;
+  title: string;
+  status: string;
+  amount_cents: number;
+}
+
+function statusVariant(status: string): 'pending' | 'completed' | 'error' | 'neutral' {
+  if (status === 'approved' || status === 'passed' || status === 'paid' || status === 'confirmed') return 'completed';
+  if (status === 'rejected' || status === 'cancelled') return 'error';
+  if (status === 'pending' || status === 'delivered') return 'pending';
+  return 'neutral';
+}
+
+function formatRoom(roomType: string | null) {
+  if (!roomType) return 'Renovation project';
+  return `${roomType.charAt(0).toUpperCase()}${roomType.slice(1)} renovation`;
+}
+
+export default function GeneralContractorCompletionScreen() {
+  const navigation = useNavigation<any>();
+  const route = useRoute<any>();
+  const projectId = getRequiredStringParam(route.params, 'id');
+  const [project, setProject] = useState<ProjectSummary | null>(null);
+  const [permits, setPermits] = useState<PermitRecord[]>([]);
+  const [warranties, setWarranties] = useState<WarrantyRecord[]>([]);
+  const [materialOrders, setMaterialOrders] = useState<MaterialOrderRecord[]>([]);
+  const [approvals, setApprovals] = useState<ApprovalRecord[]>([]);
+  const [paymentRequests, setPaymentRequests] = useState<PaymentRequestRecord[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
+  const [errorMessage, setErrorMessage] = useState<string | null>(null);
+
+  const fetchData = useCallback(async () => {
+    try {
+      setErrorMessage(null);
+      const [projectResult, permitResult, warrantyResult, materialResult, approvalResult, paymentResult] = await Promise.all([
+        supabase
+          .from('projects')
+          .select('id, status, address, room_type, ai_cost_min, ai_cost_max')
+          .eq('id', projectId)
+          .maybeSingle(),
+        supabase
+          .from('permits')
+          .select('id, permit_type, status')
+          .eq('project_id', projectId)
+          .order('updated_at', { ascending: false }),
+        supabase
+          .from('warranties')
+          .select('id, expiry_date')
+          .eq('project_id', projectId)
+          .order('created_at', { ascending: false }),
+        supabase
+          .from('material_orders')
+          .select('id, status, final_price')
+          .eq('project_id', projectId)
+          .order('created_at', { ascending: false }),
+        supabase
+          .from('project_approval_requests')
+          .select('id, request_type, title, status, cost_delta')
+          .eq('project_id', projectId)
+          .order('created_at', { ascending: false }),
+        supabase
+          .from('gc_payment_requests')
+          .select('id, request_kind, title, status, amount_cents')
+          .eq('project_id', projectId)
+          .order('created_at', { ascending: false }),
+      ]);
+
+      const loadError = projectResult.error
+        ?? permitResult.error
+        ?? warrantyResult.error
+        ?? materialResult.error
+        ?? approvalResult.error
+        ?? paymentResult.error;
+      if (loadError) throw loadError;
+
+      setProject(projectResult.data as ProjectSummary | null);
+      setPermits((permitResult.data ?? []) as PermitRecord[]);
+      setWarranties((warrantyResult.data ?? []) as WarrantyRecord[]);
+      setMaterialOrders((materialResult.data ?? []) as MaterialOrderRecord[]);
+      setApprovals((approvalResult.data ?? []) as ApprovalRecord[]);
+      setPaymentRequests((paymentResult.data ?? []) as PaymentRequestRecord[]);
+    } catch (err) {
+      setErrorMessage(err instanceof Error ? err.message : 'Could not load completion binder.');
+      setProject(null);
+      setPermits([]);
+      setWarranties([]);
+      setMaterialOrders([]);
+      setApprovals([]);
+      setPaymentRequests([]);
+    } finally {
+      setLoading(false);
+      setRefreshing(false);
+    }
+  }, [projectId]);
+
+  useFocusEffect(
+    useCallback(() => {
+      fetchData();
+    }, [fetchData]),
+  );
+
+  const onRefresh = () => {
+    setRefreshing(true);
+    fetchData();
+  };
+
+  const passedPermits = permits.filter((permit) => permit.status === 'passed').length;
+  const completedMaterials = materialOrders.filter((order) => ['confirmed', 'paid'].includes(order.status)).length;
+  const pendingApprovals = approvals.filter((approval) => approval.status === 'pending').length
+    + paymentRequests.filter((request) => request.status === 'pending').length;
+  const paidMaterials = materialOrders.reduce((sum, order) => sum + (order.final_price ?? 0), 0);
+
+  return (
+    <GradientBackground glow="top-right">
+      <SafeAreaView style={styles.safe}>
+        <ScrollView
+          contentContainerStyle={styles.scroll}
+          showsVerticalScrollIndicator={false}
+          refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={Colors.accent} />}
+        >
+          <View style={styles.header}>
+            <TouchableOpacity onPress={() => navigation.goBack()} style={styles.backButton}>
+              <Icon name="arrow-left" size={22} color={Colors.text.secondary} />
+            </TouchableOpacity>
+            <View style={styles.headerBody}>
+              <Text style={styles.title}>Digital project binder</Text>
+              <Text style={styles.subtitle}>Closeout records assembled from WalkerAI project data.</Text>
+            </View>
+          </View>
+
+          {errorMessage ? (
+            <GlassCard style={styles.card}>
+              <Text style={styles.sectionTitle}>Binder unavailable</Text>
+              <Text style={styles.bodyText}>{errorMessage}</Text>
+            </GlassCard>
+          ) : loading ? (
+            <GlassCard style={styles.card}>
+              <Text style={styles.bodyText}>Loading completion binder...</Text>
+            </GlassCard>
+          ) : (
+            <>
+              <GlassCard style={styles.card}>
+                <Text style={styles.binderTitle}>{project ? formatRoom(project.room_type) : 'Project'}</Text>
+                <Text style={styles.bodyText}>{project?.address ?? 'Address pending'}</Text>
+                <View style={styles.summaryGrid}>
+                  <SummaryTile label="Status" value={project ? formatStatusLabel(project.status) : 'Unknown'} />
+                  <SummaryTile label="Permits passed" value={`${passedPermits}/${permits.length}`} />
+                  <SummaryTile label="Materials complete" value={`${completedMaterials}/${materialOrders.length}`} />
+                  <SummaryTile label="Warranties" value={warranties.length} />
+                  <SummaryTile label="Pending approvals" value={pendingApprovals} warning={pendingApprovals > 0} />
+                </View>
+              </GlassCard>
+
+              <GlassCard style={styles.card}>
+                <Text style={styles.sectionTitle}>Financial closeout</Text>
+                <InfoRow label="AI estimate" value={project?.ai_cost_min && project?.ai_cost_max ? `${formatCadCents(project.ai_cost_min)} - ${formatCadCents(project.ai_cost_max)}` : 'TBD'} />
+                <InfoRow label="Material receipts" value={formatCadCents(paidMaterials)} />
+                <InfoRow label="GC payment requests" value={`${paymentRequests.filter((request) => request.status === 'approved').length}/${paymentRequests.length} approved`} />
+              </GlassCard>
+
+              <BinderSection title="Permits & inspections" emptyText="No permit or inspection records yet.">
+                {permits.map((permit) => (
+                  <RecordRow key={permit.id} title={permit.permit_type} meta={formatStatusLabel(permit.status)} status={permit.status} />
+                ))}
+              </BinderSection>
+
+              <BinderSection title="Warranty package" emptyText="No warranty documents uploaded yet.">
+                {warranties.map((warranty) => (
+                  <RecordRow
+                    key={warranty.id}
+                    title="Warranty document"
+                    meta={warranty.expiry_date ? `Expires ${new Date(warranty.expiry_date).toLocaleDateString('en-CA')}` : 'No expiry provided'}
+                    status="approved"
+                  />
+                ))}
+              </BinderSection>
+
+              <BinderSection title="Material receipts" emptyText="No completed material orders yet.">
+                {materialOrders.map((order) => (
+                  <RecordRow
+                    key={order.id}
+                    title={order.final_price != null ? formatCadCents(order.final_price) : 'Material order'}
+                    meta={formatStatusLabel(order.status)}
+                    status={order.status}
+                  />
+                ))}
+              </BinderSection>
+
+              <BinderSection title="Approvals & changes" emptyText="No approval records yet.">
+                {approvals.slice(0, 8).map((approval) => (
+                  <RecordRow
+                    key={approval.id}
+                    title={approval.title}
+                    meta={`${formatStatusLabel(approval.request_type)}${approval.cost_delta != null ? ` · ${formatSignedCadCents(approval.cost_delta)}` : ''}`}
+                    status={approval.status}
+                  />
+                ))}
+              </BinderSection>
+            </>
+          )}
+        </ScrollView>
+      </SafeAreaView>
+    </GradientBackground>
+  );
+}
+
+function SummaryTile({ label, value, warning = false }: { label: string; value: string | number; warning?: boolean }) {
+  return (
+    <View style={[styles.summaryTile, warning && styles.summaryTileWarning]}>
+      <Text style={styles.summaryValue}>{value}</Text>
+      <Text style={styles.summaryLabel}>{label}</Text>
+    </View>
+  );
+}
+
+function InfoRow({ label, value }: { label: string; value: string }) {
+  return (
+    <View style={styles.infoRow}>
+      <Text style={styles.infoLabel}>{label}</Text>
+      <Text style={styles.infoValue}>{value}</Text>
+    </View>
+  );
+}
+
+function BinderSection({ title, emptyText, children }: { title: string; emptyText: string; children: ReactNode }) {
+  const childCount = Array.isArray(children) ? children.length : children ? 1 : 0;
+  return (
+    <GlassCard style={styles.card}>
+      <Text style={styles.sectionTitle}>{title}</Text>
+      {childCount > 0 ? children : <Text style={styles.bodyText}>{emptyText}</Text>}
+    </GlassCard>
+  );
+}
+
+function RecordRow({ title, meta, status }: { title: string; meta: string; status: string }) {
+  return (
+    <View style={styles.recordRow}>
+      <View style={styles.recordBody}>
+        <Text style={styles.recordTitle}>{title}</Text>
+        <Text style={styles.recordMeta}>{meta}</Text>
+      </View>
+      <StatusBadge label={formatStatusLabel(status)} variant={statusVariant(status)} size="sm" />
+    </View>
+  );
+}
+
+const styles = StyleSheet.create({
+  safe: { flex: 1 },
+  scroll: { flexGrow: 1, paddingHorizontal: Spacing.sm, paddingTop: Spacing.sm, paddingBottom: 120 },
+  header: { flexDirection: 'row', alignItems: 'flex-start', gap: 12, marginBottom: Spacing.md },
+  backButton: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: Colors.surface.default,
+    borderWidth: 1,
+    borderColor: Colors.surface.border,
+  },
+  headerBody: { flex: 1 },
+  title: { ...Typography.h2, marginBottom: 3 },
+  subtitle: { ...Typography.bodySecondary, lineHeight: 21 },
+  card: { marginBottom: Spacing.sm },
+  sectionTitle: { ...Typography.label, marginBottom: 10 },
+  binderTitle: { ...Typography.h3, marginBottom: 4 },
+  bodyText: { ...Typography.bodySecondary, lineHeight: 22 },
+  summaryGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginTop: Spacing.sm },
+  summaryTile: {
+    width: '48%',
+    borderRadius: 14,
+    borderWidth: 1,
+    borderColor: Colors.surface.border,
+    backgroundColor: Colors.surface.default,
+    padding: 12,
+  },
+  summaryTileWarning: { borderColor: 'rgba(245,158,11,0.55)' },
+  summaryValue: { color: Colors.text.primary, fontSize: 18, fontWeight: '900' },
+  summaryLabel: { ...Typography.caption, marginTop: 3 },
+  infoRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    gap: 12,
+    paddingVertical: 10,
+    borderTopWidth: 1,
+    borderTopColor: Colors.glass.border,
+  },
+  infoLabel: { ...Typography.bodySecondary, flex: 1 },
+  infoValue: { ...Typography.body, fontWeight: '800', textAlign: 'right', flex: 1 },
+  recordRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    paddingVertical: 11,
+    borderTopWidth: 1,
+    borderTopColor: Colors.glass.border,
+  },
+  recordBody: { flex: 1 },
+  recordTitle: { ...Typography.body, fontWeight: '800' },
+  recordMeta: { ...Typography.caption, marginTop: 3 },
+});

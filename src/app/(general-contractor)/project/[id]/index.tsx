@@ -558,6 +558,21 @@ export default function GeneralContractorProjectDetail() {
                     </View>
                     <Icon name="chevron-right" size={20} color={Colors.text.tertiary} />
                   </TouchableOpacity>
+                  <View style={styles.controlDivider} />
+                  <TouchableOpacity
+                    style={styles.controlRow}
+                    onPress={() => navigation.navigate('GeneralContractorCompletion', { id: projectId })}
+                    activeOpacity={0.85}
+                  >
+                    <View style={styles.controlIcon}>
+                      <Icon name="folder-check-outline" size={20} color={Colors.accent} />
+                    </View>
+                    <View style={styles.controlBody}>
+                      <Text style={styles.controlTitle}>Completion binder</Text>
+                      <Text style={styles.controlSub}>Review permits, warranties, receipts, and approvals</Text>
+                    </View>
+                    <Icon name="chevron-right" size={20} color={Colors.text.tertiary} />
+                  </TouchableOpacity>
                 </GlassCard>
               ) : null}
 

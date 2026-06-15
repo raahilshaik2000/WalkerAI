@@ -358,4 +358,33 @@ describe('general contractor account type', () => {
     expect(gcMessages).toContain("from('messages').insert");
     expect(gcMessages).toContain("channel(`gc-messages:${projectId}`)");
   });
+
+  it('adds a GC completion binder assembled from real project records', () => {
+    const migration = fs.readFileSync(
+      path.join(repoRoot, 'supabase/migrations/20260615001100_allow_gc_warranty_binder_read.sql'),
+      'utf8',
+    );
+    const navigator = fs.readFileSync(
+      path.join(repoRoot, 'src/navigation/GeneralContractorNavigator.tsx'),
+      'utf8',
+    );
+    const gcProjectDetail = fs.readFileSync(
+      path.join(repoRoot, 'src/app/(general-contractor)/project/[id]/index.tsx'),
+      'utf8',
+    );
+    const gcCompletion = fs.readFileSync(
+      path.join(repoRoot, 'src/app/(general-contractor)/project/[id]/completion.tsx'),
+      'utf8',
+    );
+
+    expect(migration).toContain('warranties_gc_managed_select');
+    expect(navigator).toContain('GeneralContractorCompletion');
+    expect(gcProjectDetail).toContain("navigation.navigate('GeneralContractorCompletion'");
+    expect(gcCompletion).toContain("from('permits')");
+    expect(gcCompletion).toContain("from('warranties')");
+    expect(gcCompletion).toContain("from('material_orders')");
+    expect(gcCompletion).toContain("from('project_approval_requests')");
+    expect(gcCompletion).toContain("from('gc_payment_requests')");
+    expect(gcCompletion).toContain('Digital project binder');
+  });
 });
