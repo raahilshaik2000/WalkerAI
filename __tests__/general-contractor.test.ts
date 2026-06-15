@@ -70,4 +70,15 @@ describe('general contractor account type', () => {
     expect(policyMigration).toContain('verified = TRUE');
     expect(policyMigration).toContain('general_contractors_select_own_or_verified');
   });
+
+  it('lets invited GCs activate their project management assignment', () => {
+    const gcProjectDetail = fs.readFileSync(
+      path.join(repoRoot, 'src/app/(general-contractor)/project/[id]/index.tsx'),
+      'utf8',
+    );
+
+    expect(gcProjectDetail).toContain('Accept Management Invite');
+    expect(gcProjectDetail).toContain("update({ status: 'active' })");
+    expect(gcProjectDetail).toContain('GC management terms');
+  });
 });

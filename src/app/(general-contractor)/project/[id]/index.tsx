@@ -1,5 +1,6 @@
 import { useCallback, useState } from 'react';
 import {
+  Alert,
   RefreshControl,
   ScrollView,
   StyleSheet,
@@ -45,6 +46,14 @@ interface ChangeOrder {
   signed_by_company: boolean;
 }
 
+interface Assignment {
+  id: string;
+  status: string;
+  markup_pct: number;
+  concierge_fee_pct: number;
+  scope_summary: string | null;
+}
+
 function projectStatusVariant(status: string): 'active' | 'completed' | 'pending' | 'dispatching' | 'neutral' {
   if (status === 'completed') return 'completed';
   if (status === 'dispatching') return 'dispatching';
@@ -75,15 +84,23 @@ export default function GeneralContractorProjectDetail() {
   const route = useRoute<any>();
   const projectId = getRequiredStringParam(route.params, 'id');
   const [project, setProject] = useState<ProjectDetail | null>(null);
+  const [assignment, setAssignment] = useState<Assignment | null>(null);
   const [slots, setSlots] = useState<Slot[]>([]);
   const [changeOrders, setChangeOrders] = useState<ChangeOrder[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
+  const [accepting, setAccepting] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
   const fetchData = useCallback(async () => {
     try {
       setErrorMessage(null);
+      const currentUser = (await supabase.auth.getUser()).data.user;
+      const { data: gc, error: gcError } = currentUser?.id
+        ? await supabase.from('general_contractors').select('id').eq('user_id', currentUser.id).maybeSingle()
+        : { data: null, error: null };
+      if (gcError) throw gcError;
+
       const [projectResult, slotResult, changeOrderResult] = await Promise.all([
         supabase
           .from('projects')
@@ -109,9 +126,23 @@ export default function GeneralContractorProjectDetail() {
       setProject(projectResult.data as ProjectDetail | null);
       setSlots((slotResult.data ?? []) as Slot[]);
       setChangeOrders((changeOrderResult.data ?? []) as ChangeOrder[]);
+
+      if (gc?.id) {
+        const { data: assignmentRow, error: assignmentError } = await supabase
+          .from('general_contractor_projects')
+          .select('id, status, markup_pct, concierge_fee_pct, scope_summary')
+          .eq('project_id', projectId)
+          .eq('general_contractor_id', gc.id)
+          .maybeSingle();
+        if (assignmentError) throw assignmentError;
+        setAssignment(assignmentRow as Assignment | null);
+      } else {
+        setAssignment(null);
+      }
     } catch (err) {
       setErrorMessage(err instanceof Error ? err.message : 'Could not load managed project.');
       setProject(null);
+      setAssignment(null);
       setSlots([]);
       setChangeOrders([]);
     } finally {
@@ -129,6 +160,33 @@ export default function GeneralContractorProjectDetail() {
   const onRefresh = () => {
     setRefreshing(true);
     fetchData();
+  };
+
+  const handleAcceptInvite = async () => {
+    if (!assignment?.id) return;
+    Alert.alert(
+      'Accept management invite?',
+      'This activates your GC workspace for the project. The homeowner still approves all major decisions before they take effect.',
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Accept',
+          onPress: async () => {
+            setAccepting(true);
+            const { error } = await supabase
+              .from('general_contractor_projects')
+              .update({ status: 'active' })
+              .eq('id', assignment.id);
+            if (error) {
+              Alert.alert('Could not accept invite', error.message);
+            } else {
+              await fetchData();
+            }
+            setAccepting(false);
+          },
+        },
+      ],
+    );
   };
 
   const estimate = project?.ai_cost_min != null && project.ai_cost_max != null
@@ -187,6 +245,35 @@ export default function GeneralContractorProjectDetail() {
                   GC recommendations do not change scope, spending, trades, payment releases, or schedule until the homeowner approves them.
                 </Text>
               </GlassCard>
+
+              {assignment ? (
+                <GlassCard style={styles.card}>
+                  <View style={styles.assignmentHeader}>
+                    <View>
+                      <Text style={styles.sectionTitle}>GC management terms</Text>
+                      <Text style={styles.bodyText}>
+                        {Number(assignment.markup_pct).toFixed(0)}% markup · {Number(assignment.concierge_fee_pct).toFixed(0)}% concierge fee
+                      </Text>
+                    </View>
+                    <StatusBadge
+                      label={formatStatusLabel(assignment.status)}
+                      variant={assignment.status === 'active' ? 'active' : 'pending'}
+                      dot
+                    />
+                  </View>
+                  {assignment.scope_summary ? <Text style={styles.scopeText}>{assignment.scope_summary}</Text> : null}
+                  {assignment.status === 'invited' ? (
+                    <TouchableOpacity
+                      style={[styles.acceptButton, accepting && styles.acceptButtonDisabled]}
+                      onPress={handleAcceptInvite}
+                      disabled={accepting}
+                      activeOpacity={0.85}
+                    >
+                      <Text style={styles.acceptButtonText}>{accepting ? 'Accepting...' : 'Accept Management Invite'}</Text>
+                    </TouchableOpacity>
+                  ) : null}
+                </GlassCard>
+              ) : null}
 
               <GlassCard style={styles.card}>
                 <Text style={styles.sectionTitle}>Trade plan</Text>
@@ -256,6 +343,22 @@ const styles = StyleSheet.create({
   card: { marginBottom: Spacing.sm },
   sectionTitle: { ...Typography.label, marginBottom: 10 },
   bodyText: { ...Typography.bodySecondary, lineHeight: 22 },
+  assignmentHeader: { flexDirection: 'row', justifyContent: 'space-between', gap: 12, alignItems: 'flex-start' },
+  scopeText: {
+    ...Typography.caption,
+    color: Colors.text.secondary,
+    marginTop: 10,
+  },
+  acceptButton: {
+    minHeight: 48,
+    borderRadius: 14,
+    backgroundColor: Colors.accent,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginTop: Spacing.sm,
+  },
+  acceptButtonDisabled: { opacity: 0.65 },
+  acceptButtonText: { color: Colors.accentFg, fontSize: 15, fontWeight: '800' },
   row: {
     flexDirection: 'row',
     gap: 10,
