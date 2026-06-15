@@ -339,6 +339,12 @@ function buildNotificationContent(
         body: `$${formatCad(payload.amount)} is being deposited to your account.`,
         priority: 'normal',
       };
+    case 'gc_management_invited':
+      return {
+        title: 'GC Management Approval Needed',
+        body: (payload.message as string) ?? 'A General Contractor created a draft project for your approval.',
+        priority: 'high',
+      };
     case 'project_complete':
       return {
         title: 'Project Complete',

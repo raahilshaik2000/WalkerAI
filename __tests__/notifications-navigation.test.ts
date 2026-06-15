@@ -93,6 +93,14 @@ describe('notification navigation', () => {
   });
 
   it('routes homeowner GC workflow notifications to concierge controls', () => {
+    expect(resolveNotificationRoute('gc_management_invited', { project_id: 'project-1' }, 'homeowner')).toEqual({
+      name: 'ProjectDetail',
+      params: {
+        screen: 'Concierge',
+        params: { id: 'project-1' },
+      },
+    });
+
     expect(resolveNotificationRoute('gc_approval_requested', { project_id: 'project-1' }, 'homeowner')).toEqual({
       name: 'ProjectDetail',
       params: {

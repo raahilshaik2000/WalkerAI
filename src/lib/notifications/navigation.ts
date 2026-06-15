@@ -131,6 +131,7 @@ export function resolveNotificationRoute(
   if (!projectId) return null;
 
   switch (type) {
+    case 'gc_management_invited':
     case 'gc_approval_requested':
     case 'gc_payment_requested':
     case 'gc_concierge_booking_responded':

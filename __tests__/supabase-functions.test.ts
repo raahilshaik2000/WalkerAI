@@ -292,6 +292,19 @@ describe('stripe-webhook source guards', () => {
   });
 });
 
+describe('send-push source guards', () => {
+  it('sends GC management invitations as approval prompts, not generic messages', () => {
+    const source = fs.readFileSync(
+      path.join(__dirname, '../supabase/functions/send-push/index.ts'),
+      'utf8',
+    );
+
+    expect(source).toContain("case 'gc_management_invited':");
+    expect(source).toContain("title: 'GC Management Approval Needed'");
+    expect(source).toContain('A General Contractor created a draft project for your approval.');
+  });
+});
+
 describe('create-gc-concierge-payment-intent source guards', () => {
   it('creates Stripe intents only for accepted homeowner-owned concierge bookings', () => {
     const source = fs.readFileSync(

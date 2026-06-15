@@ -168,6 +168,13 @@ const META: Record<string, NotificationDisplayMeta> = {
     color: '#34D399',
     timelineLabel: 'Homeowner responded to a GC recommendation',
   },
+  gc_management_invited: {
+    emoji: '🧭',
+    title: 'GC management approval needed',
+    timelineIcon: 'compass-outline',
+    color: '#A78BFA',
+    timelineLabel: 'GC management approval needed',
+  },
   gc_payment_requested: {
     emoji: '💰',
     title: 'GC payment request',

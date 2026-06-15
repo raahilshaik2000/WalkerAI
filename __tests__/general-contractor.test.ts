@@ -199,6 +199,10 @@ describe('general contractor account type', () => {
       path.join(repoRoot, 'supabase/migrations/20260615002700_create_gc_project_with_contact.sql'),
       'utf8',
     );
+    const notificationMigration = fs.readFileSync(
+      path.join(repoRoot, 'supabase/migrations/20260615002800_gc_project_management_notification.sql'),
+      'utf8',
+    );
     const navigator = fs.readFileSync(
       path.join(repoRoot, 'src/navigation/GeneralContractorNavigator.tsx'),
       'utf8',
@@ -247,6 +251,8 @@ describe('general contractor account type', () => {
     expect(transactionalContactMigration).toContain('p_homeowner_contact_name TEXT DEFAULT NULL');
     expect(transactionalContactMigration).toContain('homeowner_contact_name');
     expect(transactionalContactMigration).toContain('homeowner_contact_phone');
+    expect(notificationMigration).toContain("'gc_management_invited'");
+    expect(notificationMigration).not.toContain("'new_message'");
   });
 
   it('counts real GC homeowner actions on the dashboard approval metric', () => {

@@ -106,6 +106,7 @@ export type NotificationType =
   | 'supplier_paid'
   | 'gc_approval_requested'
   | 'gc_approval_responded'
+  | 'gc_management_invited'
   | 'gc_payment_requested'
   | 'gc_payment_responded'
   | 'gc_concierge_booking_requested'
