@@ -344,6 +344,11 @@ describe('general contractor account type', () => {
     expect(navigator).toContain('GeneralContractorMaterials');
     expect(gcProjectDetail).toContain("navigation.navigate('GeneralContractorMaterials'");
     expect(gcMaterials).toContain("request_type: 'material_substitution'");
+    expect(gcMaterials).toContain("from('supplier_catalog')");
+    expect(gcMaterials).toContain('Supplier catalog reference');
+    expect(gcMaterials).toContain('applyCatalogSuggestion');
+    expect(gcMaterials).toContain('lead_time_days');
+    expect(gcMaterials).toContain('price_per_unit');
     expect(gcMaterials).toContain('Send Material Recommendation');
     expect(gcMaterials).toContain('Homeowner approval is required before the material preference changes.');
     expect(homeownerConcierge).toContain('Material substitutions approved here update the project material preference fields.');

@@ -39,6 +39,18 @@ interface MaterialOrder {
   accepted_supplier?: { business_name: string | null } | Array<{ business_name: string | null }> | null;
 }
 
+interface CatalogSuggestion {
+  id: string;
+  name: string;
+  category: string;
+  unit: string;
+  price_per_unit: number;
+  quality_tier: string;
+  brand: string | null;
+  lead_time_days: number;
+  supplier?: { business_name: string | null; rating: number | null } | Array<{ business_name: string | null; rating: number | null }> | null;
+}
+
 interface Assignment {
   id: string;
   status: string;
@@ -51,9 +63,23 @@ function supplierName(order: MaterialOrder) {
   return supplier?.business_name ?? null;
 }
 
+function catalogSupplierName(item: CatalogSuggestion) {
+  const supplier = Array.isArray(item.supplier) ? item.supplier[0] : item.supplier;
+  return supplier?.business_name ?? 'Supplier catalog';
+}
+
 function formatQuantity(material: Material) {
   const qty = material.quantity == null ? 'TBD' : String(material.quantity);
   return `${qty}${material.unit ? ` ${material.unit}` : ''}`;
+}
+
+function materialCatalogScore(material: Material, item: CatalogSuggestion) {
+  const needle = material.item.toLowerCase();
+  const haystack = [item.name, item.category, item.brand].filter(Boolean).join(' ').toLowerCase();
+  let score = haystack.includes(needle) ? 5 : 0;
+  if (material.quality_tier && item.quality_tier === material.quality_tier) score += 2;
+  if (item.lead_time_days <= 7) score += 1;
+  return score;
 }
 
 export default function GeneralContractorMaterialsScreen() {
@@ -63,6 +89,7 @@ export default function GeneralContractorMaterialsScreen() {
   const [assignment, setAssignment] = useState<Assignment | null>(null);
   const [materials, setMaterials] = useState<Material[]>([]);
   const [orders, setOrders] = useState<MaterialOrder[]>([]);
+  const [catalogSuggestions, setCatalogSuggestions] = useState<CatalogSuggestion[]>([]);
   const [selectedMaterialId, setSelectedMaterialId] = useState<string | null>(null);
   const [productName, setProductName] = useState('');
   const [supplier, setSupplier] = useState('');
@@ -95,7 +122,7 @@ export default function GeneralContractorMaterialsScreen() {
       if (gcError) throw gcError;
       if (!gc?.id) throw new Error('GC profile not found.');
 
-      const [assignmentResult, materialsResult, ordersResult] = await Promise.all([
+      const [assignmentResult, materialsResult, ordersResult, catalogResult] = await Promise.all([
         supabase
           .from('general_contractor_projects')
           .select('id, status, homeowner_id, general_contractor_id')
@@ -113,19 +140,28 @@ export default function GeneralContractorMaterialsScreen() {
           .select('id, material_id, status, final_price, offered_price, accepted_supplier:suppliers!accepted_supplier_id(business_name)')
           .eq('project_id', projectId)
           .order('created_at', { ascending: false }),
+        supabase
+          .from('supplier_catalog')
+          .select('id, name, category, unit, price_per_unit, quality_tier, brand, lead_time_days, supplier:suppliers!supplier_id(business_name, rating)')
+          .eq('in_stock', true)
+          .order('lead_time_days', { ascending: true })
+          .limit(30),
       ]);
       if (assignmentResult.error) throw assignmentResult.error;
       if (materialsResult.error) throw materialsResult.error;
       if (ordersResult.error) throw ordersResult.error;
+      if (catalogResult.error) throw catalogResult.error;
 
       setAssignment(assignmentResult.data as Assignment | null);
       setMaterials((materialsResult.data ?? []) as Material[]);
       setOrders((ordersResult.data ?? []) as MaterialOrder[]);
+      setCatalogSuggestions((catalogResult.data ?? []) as CatalogSuggestion[]);
     } catch (err) {
       setErrorMessage(err instanceof Error ? err.message : 'Could not load materials.');
       setAssignment(null);
       setMaterials([]);
       setOrders([]);
+      setCatalogSuggestions([]);
     } finally {
       setLoading(false);
       setRefreshing(false);
@@ -234,6 +270,25 @@ export default function GeneralContractorMaterialsScreen() {
     }
   };
 
+  const selectedMaterial = materials.find((material) => material.id === selectedMaterialId) ?? null;
+  const selectedCatalogSuggestions = selectedMaterial
+    ? catalogSuggestions
+      .map((item) => ({ item, score: materialCatalogScore(selectedMaterial, item) }))
+      .filter(({ score }) => score > 0)
+      .sort((a, b) => b.score - a.score || a.item.lead_time_days - b.item.lead_time_days)
+      .slice(0, 5)
+      .map(({ item }) => item)
+    : [];
+
+  const applyCatalogSuggestion = (item: CatalogSuggestion) => {
+    const material = selectedMaterial;
+    const total = material?.quantity ? Math.round(Number(material.quantity) * item.price_per_unit) : item.price_per_unit;
+    setProductName([item.brand, item.name].filter(Boolean).join(' - '));
+    setSupplier(catalogSupplierName(item));
+    setQuotedPrice((total / 100).toFixed(2));
+    setLeadTimeDays(String(item.lead_time_days));
+  };
+
   return (
     <GradientBackground glow="top-right">
       <SafeAreaView style={styles.safe}>
@@ -317,6 +372,22 @@ export default function GeneralContractorMaterialsScreen() {
               {assignment?.status === 'active' && selectedMaterialId ? (
                 <GlassCard style={styles.card}>
                   <Text style={styles.sectionTitle}>Recommendation details</Text>
+                  {selectedCatalogSuggestions.length > 0 ? (
+                    <View style={styles.catalogBox}>
+                      <Text style={styles.catalogTitle}>Supplier catalog reference</Text>
+                      {selectedCatalogSuggestions.map((item) => (
+                        <TouchableOpacity key={item.id} style={styles.catalogRow} onPress={() => applyCatalogSuggestion(item)} activeOpacity={0.85}>
+                          <View style={styles.catalogBody}>
+                            <Text style={styles.catalogName}>{item.name}</Text>
+                            <Text style={styles.catalogMeta}>
+                              {catalogSupplierName(item)} · {formatCadCents(item.price_per_unit)}/{item.unit} · {item.lead_time_days}d lead
+                            </Text>
+                          </View>
+                          <Text style={styles.catalogUse}>Use</Text>
+                        </TouchableOpacity>
+                      ))}
+                    </View>
+                  ) : null}
                   <GlassInput
                     label="Replacement product"
                     value={productName}
@@ -427,6 +498,27 @@ const styles = StyleSheet.create({
   materialMeta: { ...Typography.caption, marginTop: 3 },
   preferenceText: { ...Typography.caption, color: Colors.text.secondary, marginTop: 4, lineHeight: 18 },
   orderText: { ...Typography.caption, color: Colors.text.tertiary, marginTop: 4 },
+  catalogBox: {
+    borderWidth: 1,
+    borderColor: Colors.surface.border,
+    backgroundColor: Colors.surface.default,
+    borderRadius: 12,
+    padding: 10,
+    marginBottom: Spacing.sm,
+  },
+  catalogTitle: { ...Typography.caption, color: Colors.text.secondary, fontWeight: '800', marginBottom: 8 },
+  catalogRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    paddingVertical: 8,
+    borderTopWidth: 1,
+    borderTopColor: Colors.glass.border,
+  },
+  catalogBody: { flex: 1 },
+  catalogName: { ...Typography.body, fontWeight: '800' },
+  catalogMeta: { ...Typography.caption, marginTop: 3 },
+  catalogUse: { ...Typography.caption, color: Colors.accent, fontWeight: '900' },
   formInput: { marginBottom: Spacing.sm },
   formRow: { flexDirection: 'row', gap: 8 },
   formHalf: { flex: 1, marginBottom: Spacing.sm },
