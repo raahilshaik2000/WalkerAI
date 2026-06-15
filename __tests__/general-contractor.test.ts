@@ -230,6 +230,23 @@ describe('general contractor account type', () => {
     expect(homeownerConcierge).not.toContain('Any project updates still need to be applied by the appropriate workflow.');
   });
 
+  it('requires active GC management before approved recommendations apply project changes', () => {
+    const migration = fs.readFileSync(
+      path.join(repoRoot, 'supabase/migrations/20260615003400_require_active_gc_for_approval_apply.sql'),
+      'utf8',
+    );
+
+    expect(migration).toContain('CREATE OR REPLACE FUNCTION public.guard_gc_approval_apply_active_assignment()');
+    expect(migration).toContain("NEW.status = 'approved'");
+    expect(migration).toContain("OLD.status = 'pending'");
+    expect(migration).toContain("NEW.request_type IN ('schedule_change', 'material_substitution', 'trade_substitution')");
+    expect(migration).toContain("NEW.metadata->>'action' IN ('update_gc_budget', 'update_gc_terms', 'complete_project')");
+    expect(migration).toContain('FROM public.general_contractor_projects gcp');
+    expect(migration).toContain("gcp.status = 'active'");
+    expect(migration).toContain('Active GC management is required before this approval can apply project changes');
+    expect(migration).toContain('guard_gc_approval_apply_active_assignment_trigger');
+  });
+
   it('supports GC-initiated homeowner-owned draft projects with homeowner confirmation', () => {
     const migration = fs.readFileSync(
       path.join(repoRoot, 'supabase/migrations/20260615000400_add_gc_project_creation_rpc.sql'),
