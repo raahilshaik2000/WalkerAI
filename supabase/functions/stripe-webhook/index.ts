@@ -44,7 +44,7 @@ async function allFilledSlotsHaveApprovedQuotes(
 ): Promise<boolean> {
   const { data: slots, error: slotsError } = await adminClient
     .from('project_slots')
-    .select('id, assigned_company_id, status')
+    .select('id, assigned_company_id, status, fulfillment_type')
     .eq('project_id', projectId)
     .order('created_at', { ascending: true });
 
@@ -52,15 +52,28 @@ async function allFilledSlotsHaveApprovedQuotes(
     throw new Error(`Failed to load project slots: ${slotsError.message}`);
   }
 
-  const requiredSlots = (slots ?? []) as Array<{ id: string; assigned_company_id: string | null; status: string | null }>;
+  const requiredSlots = (slots ?? []) as Array<{
+    id: string;
+    assigned_company_id: string | null;
+    status: string | null;
+    fulfillment_type: string | null;
+  }>;
   if (requiredSlots.length === 0) return true;
 
-  const allSlotsAssigned = requiredSlots.every((slot) => (
+  const externalSlotsReady = requiredSlots
+    .filter((slot) => slot.fulfillment_type === 'external')
+    .every((slot) => ['filled', 'scheduled'].includes(slot.status ?? ''));
+  if (!externalSlotsReady) return false;
+
+  const quoteRequiredSlots = requiredSlots.filter((slot) => slot.fulfillment_type !== 'external');
+  if (quoteRequiredSlots.length === 0) return true;
+
+  const allSlotsAssigned = quoteRequiredSlots.every((slot) => (
     !!slot.assigned_company_id && ['filled', 'scheduled'].includes(slot.status ?? '')
   ));
   if (!allSlotsAssigned) return false;
 
-  const requiredCompanyIds = requiredSlots
+  const requiredCompanyIds = quoteRequiredSlots
     .map((slot) => slot.assigned_company_id)
     .filter((id): id is string => Boolean(id));
 
@@ -89,7 +102,7 @@ async function allFilledSlotsHaveApprovedQuotes(
         .filter((id): id is string => Boolean(id))
     );
 
-    return requiredSlots.every((slot) => (
+    return quoteRequiredSlots.every((slot) => (
       !!slot.assigned_company_id && approvedCompanyIds.has(slot.assigned_company_id)
     ));
   }
@@ -100,7 +113,7 @@ async function allFilledSlotsHaveApprovedQuotes(
 
   const quotes = (approvedQuoteResult.data ?? []) as Array<{ slot_id: string | null; company_id: string | null }>;
   const approvedSlotIds = new Set(quotes.map((quote) => quote.slot_id).filter((id): id is string => Boolean(id)));
-  const companySlotCounts = requiredSlots.reduce<Record<string, number>>((counts, slot) => {
+  const companySlotCounts = quoteRequiredSlots.reduce<Record<string, number>>((counts, slot) => {
     if (slot.assigned_company_id) counts[slot.assigned_company_id] = (counts[slot.assigned_company_id] ?? 0) + 1;
     return counts;
   }, {});
@@ -110,7 +123,7 @@ async function allFilledSlotsHaveApprovedQuotes(
       .map((quote) => quote.company_id as string)
   );
 
-  return requiredSlots.every((slot) => (
+  return quoteRequiredSlots.every((slot) => (
     approvedSlotIds.has(slot.id)
     || (!!slot.assigned_company_id && legacyApprovedCompanyIds.has(slot.assigned_company_id))
   ));

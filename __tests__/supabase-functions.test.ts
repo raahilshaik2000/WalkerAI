@@ -280,6 +280,12 @@ describe('stripe-webhook source guards', () => {
     );
 
     expect(source).toContain('/schema cache/i.test(message)');
+    expect(source).toContain(".select('id, assigned_company_id, status, fulfillment_type')");
+    expect(source).toContain("const externalSlotsReady = requiredSlots");
+    expect(source).toContain("slot.fulfillment_type === 'external'");
+    expect(source).toContain("const quoteRequiredSlots = requiredSlots.filter((slot) => slot.fulfillment_type !== 'external');");
+    expect(source).toContain('if (quoteRequiredSlots.length === 0) return true;');
+    expect(source).toContain('return quoteRequiredSlots.every((slot) => (');
     expect(source).toContain('async function projectHasTradeSlots');
     expect(source).toContain("await updateStripeReadiness(adminClient, 'general_contractors', account.id, readiness);");
     expect(source).toContain("const scheduleRequired = await projectHasTradeSlots(adminClient, project_id);");
