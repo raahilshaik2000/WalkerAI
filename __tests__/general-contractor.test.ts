@@ -62,11 +62,18 @@ describe('general contractor account type', () => {
       path.join(repoRoot, 'supabase/migrations/20260615000100_add_general_contractor_role.sql'),
       'utf8',
     );
+    const locationMigration = fs.readFileSync(
+      path.join(repoRoot, 'supabase/migrations/20260615002400_sync_gc_location.sql'),
+      'utf8',
+    );
 
     expect(migration).toContain("'general_contractor'");
     expect(migration).toContain('CREATE TABLE IF NOT EXISTS public.general_contractors');
     expect(migration).toContain('CREATE TABLE IF NOT EXISTS public.general_contractor_projects');
     expect(migration).toContain('homeowner_id = (SELECT auth.uid())');
+    expect(locationMigration).toContain('CREATE OR REPLACE FUNCTION public.sync_general_contractor_location');
+    expect(locationMigration).toContain('ST_SetSRID(ST_MakePoint(NEW.lng, NEW.lat), 4326)::geography');
+    expect(locationMigration).toContain('CREATE TRIGGER trg_general_contractors_location');
   });
 
   it('adds homeowner project concierge entry and verified GC browsing policy', () => {
