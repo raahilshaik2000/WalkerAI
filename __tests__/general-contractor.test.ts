@@ -38,8 +38,12 @@ describe('general contractor account type', () => {
     expect(businessOnboarding).toContain('business_name, address, city, province, postal_code, service_radius_km');
     expect(businessOnboarding).toContain('setBusinessName(data.business_name');
     expect(businessOnboarding).toContain('setDefaultMarkup(data.default_markup_pct');
+    expect(businessOnboarding).toContain('setConciergeEnabled(data.concierge_enabled === true)');
     expect(businessOnboarding).toContain('existing?.id');
     expect(businessOnboarding).toContain('returnToProfile');
+    expect(businessOnboarding).toContain('Concierge marketplace');
+    expect(businessOnboarding).toContain('concierge_enabled: conciergeEnabled');
+    expect(businessOnboarding).not.toContain('concierge_enabled: true');
     expect(businessOnboarding).toContain("navigation.navigate('GeneralContractorTabs', { screen: 'GeneralContractorProfile' })");
   });
 

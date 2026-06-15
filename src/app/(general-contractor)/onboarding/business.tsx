@@ -5,6 +5,7 @@ import {
   Platform,
   ScrollView,
   StyleSheet,
+  Switch,
   Text,
   TouchableOpacity,
   View,
@@ -46,6 +47,7 @@ export default function GeneralContractorBusinessOnboarding() {
   const [serviceRadius, setServiceRadius] = useState('100');
   const [defaultMarkup, setDefaultMarkup] = useState('15');
   const [conciergeFee, setConciergeFee] = useState('10');
+  const [conciergeEnabled, setConciergeEnabled] = useState(false);
   const [lat, setLat] = useState<number | null>(null);
   const [lng, setLng] = useState<number | null>(null);
   const [loading, setLoading] = useState(false);
@@ -73,7 +75,7 @@ export default function GeneralContractorBusinessOnboarding() {
         .from('general_contractors')
         .select(`
           business_name, address, city, province, postal_code, service_radius_km,
-          default_markup_pct, default_concierge_fee_pct, lat, lng
+          default_markup_pct, default_concierge_fee_pct, concierge_enabled, lat, lng
         `)
         .eq('user_id', user.id)
         .maybeSingle();
@@ -87,6 +89,7 @@ export default function GeneralContractorBusinessOnboarding() {
       setServiceRadius(data.service_radius_km != null ? String(data.service_radius_km) : '100');
       setDefaultMarkup(data.default_markup_pct != null ? Number(data.default_markup_pct).toFixed(0) : '15');
       setConciergeFee(data.default_concierge_fee_pct != null ? Number(data.default_concierge_fee_pct).toFixed(0) : '10');
+      setConciergeEnabled(data.concierge_enabled === true);
       setLat(data.lat ?? null);
       setLng(data.lng ?? null);
     };
@@ -146,7 +149,7 @@ export default function GeneralContractorBusinessOnboarding() {
         lng,
         default_markup_pct: markupPct,
         default_concierge_fee_pct: conciergePct,
-        concierge_enabled: true,
+        concierge_enabled: conciergeEnabled,
       };
 
       const { data: existing, error: existingError } = await supabase
@@ -277,6 +280,21 @@ export default function GeneralContractorBusinessOnboarding() {
                   containerStyle={[styles.inputSpacing, styles.percentInput]}
                 />
               </View>
+
+              <View style={styles.toggleRow}>
+                <View style={styles.toggleBody}>
+                  <Text style={styles.toggleTitle}>Concierge marketplace</Text>
+                  <Text style={styles.toggleSub}>
+                    Allow homeowners to book paid consultations and full concierge services.
+                  </Text>
+                </View>
+                <Switch
+                  value={conciergeEnabled}
+                  onValueChange={setConciergeEnabled}
+                  trackColor={{ false: Colors.surface.border, true: 'rgba(255,107,0,0.45)' }}
+                  thumbColor={conciergeEnabled ? Colors.accent : Colors.text.tertiary}
+                />
+              </View>
             </GlassCard>
 
             <GlassButton label={returnToProfile ? 'Save Changes' : 'Continue'} onPress={handleNext} loading={loading} fullWidth size="lg" />
@@ -314,4 +332,15 @@ const styles = StyleSheet.create({
   cityInput: { flex: 1 },
   provinceInput: { width: 86 },
   percentInput: { flex: 1 },
+  toggleRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+    paddingTop: Spacing.sm,
+    borderTopWidth: 1,
+    borderTopColor: Colors.glass.border,
+  },
+  toggleBody: { flex: 1 },
+  toggleTitle: { ...Typography.body, fontWeight: '800', marginBottom: 3 },
+  toggleSub: { ...Typography.caption, lineHeight: 18 },
 });
