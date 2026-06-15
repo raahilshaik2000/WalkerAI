@@ -218,6 +218,25 @@ describe('general contractor account type', () => {
     expect(gcProjectDetail).toContain("assignment.status === 'invited' && !assignment.initiated_by_gc && gcVerified");
   });
 
+  it('requires current GC verification for project-control request inserts', () => {
+    const migration = fs.readFileSync(
+      path.join(repoRoot, 'supabase/migrations/20260615232614_require_verified_gc_request_inserts.sql'),
+      'utf8',
+    );
+
+    expect(migration).toContain('DROP POLICY IF EXISTS "approval_requests_gc_insert"');
+    expect(migration).toContain('CREATE POLICY "approval_requests_gc_insert"');
+    expect(migration).toContain('DROP POLICY IF EXISTS "gc_payment_requests_gc_insert"');
+    expect(migration).toContain('CREATE POLICY "gc_payment_requests_gc_insert"');
+    expect(migration).toContain('DROP POLICY IF EXISTS "gc_trade_negotiations_gc_insert"');
+    expect(migration).toContain('CREATE POLICY "gc_trade_negotiations_gc_insert"');
+    expect(migration).toMatch(/project_approval_requests[\s\S]*gc\.verified IS TRUE/);
+    expect(migration).toMatch(/gc_payment_requests[\s\S]*gc\.verified IS TRUE/);
+    expect(migration).toMatch(/gc_trade_quote_negotiations[\s\S]*gc\.verified IS TRUE/);
+    expect(migration).toContain("gcp.status = 'active'");
+    expect(migration).toContain("q.status = 'pending'");
+  });
+
   it('adds generic homeowner approval requests for GC recommendations', () => {
     const migration = fs.readFileSync(
       path.join(repoRoot, 'supabase/migrations/20260615000300_add_project_approval_requests.sql'),
