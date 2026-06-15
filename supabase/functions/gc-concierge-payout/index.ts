@@ -105,7 +105,7 @@ Deno.serve(async (req) => {
         id, project_id, homeowner_id, general_contractor_id, title, status,
         payment_status, contractor_payout_cents, stripe_transfer_id,
         general_contractor:general_contractors (
-          id, user_id, stripe_account_id
+          id, user_id, verified, concierge_enabled, stripe_account_id
         )
       `)
       .eq('id', booking_id)
@@ -154,6 +154,9 @@ Deno.serve(async (req) => {
       ? booking.general_contractor[0]
       : booking.general_contractor;
     if (!gc?.id) throw new Error('General contractor context is incomplete');
+    if (gc.verified !== true || gc.concierge_enabled !== true) {
+      throw new Error('General contractor is no longer eligible for concierge payouts');
+    }
 
     await assertStripePayoutReady(stripe, adminClient, gc.id, gc.stripe_account_id ?? null);
 

@@ -424,6 +424,9 @@ describe('create-gc-concierge-payment-intent source guards', () => {
     expect(source).toContain("const { booking_id } = await req.json();");
     expect(source).toContain("booking.homeowner_id !== user.id");
     expect(source).toContain("booking.status !== 'accepted'");
+    expect(source).toContain('general_contractor:general_contractors');
+    expect(source).toContain('gc.verified !== true || gc.concierge_enabled !== true');
+    expect(source).toContain('Concierge booking is no longer available for payment');
     expect(source).toContain("booking.payment_status === 'paid'");
     expect(source).toContain("gc_concierge_booking_id: booking.id");
     expect(source).toContain("payment_status: 'payment_pending'");
@@ -443,6 +446,9 @@ describe('gc-concierge-payout source guards', () => {
     expect(source).toContain('booking.homeowner_id !== user.id');
     expect(source).toContain("booking.status !== 'accepted'");
     expect(source).toContain("booking.payment_status !== 'paid'");
+    expect(source).toContain('verified, concierge_enabled, stripe_account_id');
+    expect(source).toContain('gc.verified !== true || gc.concierge_enabled !== true');
+    expect(source).toContain('General contractor is no longer eligible for concierge payouts');
     expect(source).toContain('assertStripePayoutReady');
     expect(source).toContain('stripe.transfers.create');
     expect(source).toContain("transfer_group: `gc_concierge_${booking.id}`");

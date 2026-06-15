@@ -6,6 +6,13 @@ const corsHeaders = {
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 };
 
+function getGeneralContractor(row: { general_contractor?: unknown }) {
+  const gc = Array.isArray(row.general_contractor)
+    ? row.general_contractor[0]
+    : row.general_contractor;
+  return gc as { id?: string; verified?: boolean | null; concierge_enabled?: boolean | null } | null | undefined;
+}
+
 Deno.serve(async (req) => {
   if (req.method === 'OPTIONS') return new Response('ok', { headers: corsHeaders });
 
@@ -46,7 +53,10 @@ Deno.serve(async (req) => {
       .from('gc_concierge_bookings')
       .select(`
         id, project_id, homeowner_id, general_contractor_id, title, price_cents,
-        status, payment_status, stripe_payment_intent_id
+        status, payment_status, stripe_payment_intent_id,
+        general_contractor:general_contractors (
+          id, verified, concierge_enabled
+        )
       `)
       .eq('id', booking_id)
       .single();
@@ -66,6 +76,13 @@ Deno.serve(async (req) => {
     if (booking.status !== 'accepted') {
       return new Response(JSON.stringify({ error: 'Concierge booking must be accepted before payment' }), {
         status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      });
+    }
+
+    const gc = getGeneralContractor(booking);
+    if (!gc?.id || gc.verified !== true || gc.concierge_enabled !== true) {
+      return new Response(JSON.stringify({ error: 'Concierge booking is no longer available for payment' }), {
+        status: 409, headers: { ...corsHeaders, 'Content-Type': 'application/json' },
       });
     }
 
