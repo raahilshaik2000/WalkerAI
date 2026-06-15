@@ -31,6 +31,8 @@ function parsePercent(value: string, fallback: number): number | null {
 export default function GeneralContractorCreateProject() {
   const navigation = useNavigation<any>();
   const [homeownerEmail, setHomeownerEmail] = useState('');
+  const [homeownerName, setHomeownerName] = useState('');
+  const [homeownerPhone, setHomeownerPhone] = useState('');
   const [roomType, setRoomType] = useState<RoomType>('kitchen');
   const [scopeSummary, setScopeSummary] = useState('');
   const [address, setAddress] = useState('');
@@ -63,6 +65,12 @@ export default function GeneralContractorCreateProject() {
       Alert.alert('Homeowner email required', 'Enter the email for an existing homeowner account.');
       return;
     }
+    const contactName = homeownerName.trim();
+    if (!contactName) {
+      Alert.alert('Homeowner name required', 'Add the homeowner name for this managed project.');
+      return;
+    }
+    const contactPhone = homeownerPhone.trim();
     if (!scopeSummary.trim()) {
       Alert.alert('Scope required', 'Add a short scope summary for the homeowner.');
       return;
@@ -105,6 +113,16 @@ export default function GeneralContractorCreateProject() {
       if (error) throw error;
       if (!data || typeof data !== 'string') throw new Error('Project was not created.');
 
+      const { error: contactError } = await supabase
+        .from('general_contractor_projects')
+        .update({
+          homeowner_contact_name: contactName,
+          homeowner_contact_email: normalizedEmail,
+          homeowner_contact_phone: contactPhone || null,
+        })
+        .eq('project_id', data);
+      if (contactError) throw contactError;
+
       Alert.alert(
         'Project created',
         'The homeowner owns this draft and must confirm GC management before recommendations can be sent.',
@@ -142,6 +160,21 @@ export default function GeneralContractorCreateProject() {
                 autoCapitalize="none"
                 autoCorrect={false}
                 hint="For now, the homeowner must already have a WalkerAI homeowner account."
+                containerStyle={styles.inputSpacing}
+              />
+              <GlassInput
+                label="Homeowner name"
+                value={homeownerName}
+                onChangeText={setHomeownerName}
+                autoCapitalize="words"
+                containerStyle={styles.inputSpacing}
+              />
+              <GlassInput
+                label="Homeowner phone"
+                value={homeownerPhone}
+                onChangeText={setHomeownerPhone}
+                keyboardType="phone-pad"
+                hint="Optional, used only as project contact context."
                 containerStyle={styles.inputSpacing}
               />
 

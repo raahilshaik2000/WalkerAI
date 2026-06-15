@@ -175,6 +175,9 @@ export interface GeneralContractorProject {
   concierge_fee_pct: number;
   markup_pct: number;
   scope_summary: string | null;
+  homeowner_contact_name: string | null;
+  homeowner_contact_email: string | null;
+  homeowner_contact_phone: string | null;
   initiated_by_gc: boolean;
   created_at: string;
   updated_at: string;

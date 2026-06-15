@@ -64,6 +64,9 @@ interface Assignment {
   markup_pct: number;
   concierge_fee_pct: number;
   scope_summary: string | null;
+  homeowner_contact_name: string | null;
+  homeowner_contact_email: string | null;
+  homeowner_contact_phone: string | null;
   initiated_by_gc: boolean;
 }
 
@@ -202,7 +205,11 @@ export default function GeneralContractorProjectDetail() {
       if (gc?.id) {
         const { data: assignmentRow, error: assignmentError } = await supabase
           .from('general_contractor_projects')
-          .select('id, status, homeowner_id, general_contractor_id, markup_pct, concierge_fee_pct, scope_summary, initiated_by_gc')
+          .select(`
+            id, status, homeowner_id, general_contractor_id, markup_pct, concierge_fee_pct,
+            scope_summary, homeowner_contact_name, homeowner_contact_email, homeowner_contact_phone,
+            initiated_by_gc
+          `)
           .eq('project_id', projectId)
           .eq('general_contractor_id', gc.id)
           .maybeSingle();
@@ -559,6 +566,14 @@ export default function GeneralContractorProjectDetail() {
                       dot
                     />
                   </View>
+                  {assignment.homeowner_contact_name || assignment.homeowner_contact_email || assignment.homeowner_contact_phone ? (
+                    <View style={styles.contactPanel}>
+                      <Text style={styles.contactLabel}>Homeowner contact</Text>
+                      {assignment.homeowner_contact_name ? <Text style={styles.contactText}>{assignment.homeowner_contact_name}</Text> : null}
+                      {assignment.homeowner_contact_email ? <Text style={styles.contactText}>{assignment.homeowner_contact_email}</Text> : null}
+                      {assignment.homeowner_contact_phone ? <Text style={styles.contactText}>{assignment.homeowner_contact_phone}</Text> : null}
+                    </View>
+                  ) : null}
                   {assignment.scope_summary ? <Text style={styles.scopeText}>{assignment.scope_summary}</Text> : null}
                   {assignment.status === 'invited' && !assignment.initiated_by_gc ? (
                     <TouchableOpacity
@@ -1065,6 +1080,14 @@ const styles = StyleSheet.create({
   bodyText: { ...Typography.bodySecondary, lineHeight: 22 },
   termsEditor: { marginTop: Spacing.sm, borderTopWidth: 1, borderTopColor: Colors.glass.border, paddingTop: Spacing.sm },
   assignmentHeader: { flexDirection: 'row', justifyContent: 'space-between', gap: 12, alignItems: 'flex-start' },
+  contactPanel: {
+    marginTop: Spacing.sm,
+    paddingTop: Spacing.sm,
+    borderTopWidth: 1,
+    borderTopColor: Colors.glass.border,
+  },
+  contactLabel: { ...Typography.caption, color: Colors.text.tertiary, marginBottom: 4 },
+  contactText: { ...Typography.bodySecondary, color: Colors.text.primary, marginTop: 2 },
   scopeText: {
     ...Typography.caption,
     color: Colors.text.secondary,

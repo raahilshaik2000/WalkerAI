@@ -32,6 +32,9 @@ interface GCProjectAssignment {
   markup_pct: number;
   concierge_fee_pct: number;
   scope_summary: string | null;
+  homeowner_contact_name: string | null;
+  homeowner_contact_email: string | null;
+  homeowner_contact_phone: string | null;
   project: {
     id: string;
     address: string | null;
@@ -106,6 +109,7 @@ export default function GeneralContractorDashboard() {
         .from('general_contractor_projects')
         .select(`
           id, status, markup_pct, concierge_fee_pct, scope_summary,
+          homeowner_contact_name, homeowner_contact_email, homeowner_contact_phone,
           project:projects ( id, address, city, room_type, status, ai_cost_min, ai_cost_max )
         `)
         .eq('general_contractor_id', profile.id)
@@ -285,6 +289,11 @@ export default function GeneralContractorDashboard() {
                           <Text style={styles.projectTerms}>
                             {Number(assignment.markup_pct).toFixed(0)}% markup · {Number(assignment.concierge_fee_pct).toFixed(0)}% concierge
                           </Text>
+                          {assignment.homeowner_contact_name || assignment.homeowner_contact_email ? (
+                            <Text style={styles.projectContact}>
+                              {[assignment.homeowner_contact_name, assignment.homeowner_contact_email].filter(Boolean).join(' · ')}
+                            </Text>
+                          ) : null}
                         </View>
                         <View style={styles.projectRight}>
                           <StatusBadge
@@ -361,6 +370,7 @@ const styles = StyleSheet.create({
   projectTitle: { ...Typography.h3, marginBottom: 4 },
   projectMeta: { ...Typography.caption, color: Colors.text.tertiary },
   projectTerms: { ...Typography.caption, color: Colors.text.secondary, marginTop: 2 },
+  projectContact: { ...Typography.caption, color: Colors.text.tertiary, marginTop: 2 },
   projectRight: { alignItems: 'flex-end', gap: 8 },
   scopeSummary: {
     ...Typography.caption,

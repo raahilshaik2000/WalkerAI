@@ -111,6 +111,10 @@ describe('general contractor account type', () => {
       path.join(repoRoot, 'supabase/migrations/20260615000400_add_gc_project_creation_rpc.sql'),
       'utf8',
     );
+    const contactMigration = fs.readFileSync(
+      path.join(repoRoot, 'supabase/migrations/20260615002300_add_gc_project_client_contact.sql'),
+      'utf8',
+    );
     const navigator = fs.readFileSync(
       path.join(repoRoot, 'src/navigation/GeneralContractorNavigator.tsx'),
       'utf8',
@@ -139,9 +143,21 @@ describe('general contractor account type', () => {
     expect(migration).toContain("'draft'");
     expect(navigator).toContain('GeneralContractorCreateProject');
     expect(dashboard).toContain("navigation.navigate('GeneralContractorCreateProject')");
+    expect(dashboard).toContain('homeowner_contact_name, homeowner_contact_email, homeowner_contact_phone');
+    expect(dashboard).toContain('projectContact');
     expect(createProject).toContain("supabase.rpc('create_gc_managed_project'");
+    expect(createProject).toContain('Homeowner name');
+    expect(createProject).toContain('Homeowner phone');
+    expect(createProject).toContain('homeowner_contact_name: contactName');
+    expect(createProject).toContain('homeowner_contact_phone: contactPhone || null');
     expect(homeownerConcierge).toContain('Confirm GC Management');
+    expect(gcProjectDetail).toContain('homeowner_contact_name, homeowner_contact_email, homeowner_contact_phone');
+    expect(gcProjectDetail).toContain('Homeowner contact');
     expect(gcProjectDetail).toContain('Waiting for the homeowner to confirm GC management');
+    expect(contactMigration).toContain('ADD COLUMN IF NOT EXISTS homeowner_contact_name');
+    expect(contactMigration).toContain('ADD COLUMN IF NOT EXISTS homeowner_contact_email');
+    expect(contactMigration).toContain('ADD COLUMN IF NOT EXISTS homeowner_contact_phone');
+    expect(contactMigration).toContain('populate_gc_project_homeowner_contact');
   });
 
   it('counts real GC homeowner actions on the dashboard approval metric', () => {
