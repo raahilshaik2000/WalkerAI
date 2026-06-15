@@ -247,6 +247,25 @@ describe('general contractor account type', () => {
     expect(migration).toContain('guard_gc_approval_apply_active_assignment_trigger');
   });
 
+  it('guards GC assignment creation against lifecycle and verification bypasses', () => {
+    const migration = fs.readFileSync(
+      path.join(repoRoot, 'supabase/migrations/20260615003800_guard_gc_assignment_creation.sql'),
+      'utf8',
+    );
+
+    expect(migration).toContain('CREATE OR REPLACE FUNCTION public.guard_gc_assignment_creation()');
+    expect(migration).toContain("NEW.status <> 'invited'");
+    expect(migration).toContain('GC assignment homeowner must own the project');
+    expect(migration).toContain('gc.verified IS TRUE');
+    expect(migration).toContain('Only verified General Contractors can be assigned to projects');
+    expect(migration).toContain('COALESCE(NEW.initiated_by_gc, FALSE) IS TRUE');
+    expect(migration).toContain('Only the selected GC can create a GC-initiated assignment');
+    expect(migration).toContain('Only the homeowner can invite a GC to this project');
+    expect(migration).toContain("existing.status <> 'removed'");
+    expect(migration).toContain('This project already has a current GC assignment');
+    expect(migration).toContain('guard_gc_assignment_creation_trigger');
+  });
+
   it('keeps GC approval request details immutable after submission', () => {
     const migration = fs.readFileSync(
       path.join(repoRoot, 'supabase/migrations/20260615003500_guard_gc_approval_request_updates.sql'),
