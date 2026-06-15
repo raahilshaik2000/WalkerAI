@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import {
   Alert,
+  Image,
   KeyboardAvoidingView,
   Platform,
   ScrollView,
@@ -11,16 +12,19 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useNavigation } from '@react-navigation/native';
+import { launchImageLibrary } from 'react-native-image-picker';
 import Ionicons from 'react-native-vector-icons/Ionicons';
 import { supabase } from '@/lib/supabase/client';
+import { getUploadMetadata, uploadFile, type StorageUploadAsset } from '@/lib/supabase/storage';
 import { useAuthStore } from '@/stores/auth.store';
-import { Colors, Spacing, Typography } from '@/constants/theme';
+import { Colors, Radius, Spacing, Typography } from '@/constants/theme';
 import { GlassButton, GlassCard, GlassInput, GradientBackground } from '@/components/ui';
 
 export default function GeneralContractorInsuranceOnboarding() {
   const navigation = useNavigation<any>();
   const { user } = useAuthStore();
   const [documentUrl, setDocumentUrl] = useState('');
+  const [selectedDocument, setSelectedDocument] = useState<StorageUploadAsset | null>(null);
   const [loading, setLoading] = useState(false);
 
   useEffect(() => {
@@ -44,9 +48,31 @@ export default function GeneralContractorInsuranceOnboarding() {
     };
   }, [user?.id]);
 
+  const pickDocument = async () => {
+    const result = await launchImageLibrary({
+      mediaType: 'photo',
+      quality: 0.8,
+      selectionLimit: 1,
+      assetRepresentationMode: 'compatible',
+    });
+    if (!result.didCancel && result.assets?.[0]) {
+      setSelectedDocument(result.assets[0]);
+    }
+  };
+
+  const uploadSelectedDocument = async (): Promise<string | null> => {
+    if (!selectedDocument) return documentUrl.trim() || null;
+    if (!user?.id) throw new Error('Please sign in again before uploading GC documents.');
+
+    const upload = getUploadMetadata(selectedDocument);
+    const path = `general-contractors/${user.id}/insurance-${Date.now()}.${upload.extension}`;
+    const { storagePath } = await uploadFile('company-docs', path, upload.uri, upload.contentType);
+    return storagePath;
+  };
+
   const handleFinish = async () => {
-    if (!documentUrl.trim()) {
-      Alert.alert('Insurance required', 'Add an insurance document link before submitting for review.');
+    if (!documentUrl.trim() && !selectedDocument) {
+      Alert.alert('Insurance required', 'Upload an insurance document before submitting for review.');
       return;
     }
     if (!user?.id) {
@@ -67,9 +93,11 @@ export default function GeneralContractorInsuranceOnboarding() {
         return;
       }
 
+      const uploadedDocumentPath = await uploadSelectedDocument();
+      if (!uploadedDocumentPath) throw new Error('Insurance document was not uploaded.');
       const { error } = await supabase
         .from('general_contractors')
-        .update({ insurance_doc_url: documentUrl.trim() })
+        .update({ insurance_doc_url: uploadedDocumentPath })
         .eq('id', gc.id);
       if (error) throw error;
       navigation.navigate('GeneralContractorTabs', { screen: 'GeneralContractorProfile' });
@@ -109,8 +137,32 @@ export default function GeneralContractorInsuranceOnboarding() {
                 autoCorrect={false}
                 autoCapitalize="none"
                 keyboardType="url"
-                hint="Use a secure document link until native upload is wired for GC files."
+                hint="Existing saved document path or secure document link."
               />
+
+              <Text style={styles.uploadLabel}>Insurance Document</Text>
+              <TouchableOpacity
+                style={[styles.uploadArea, selectedDocument && styles.uploadAreaFilled]}
+                onPress={pickDocument}
+                activeOpacity={0.8}
+              >
+                {selectedDocument?.uri ? (
+                  <Image source={{ uri: selectedDocument.uri }} style={styles.uploadPreview} />
+                ) : (
+                  <View style={styles.uploadPlaceholder}>
+                    <Ionicons name="cloud-upload-outline" size={30} color={Colors.text.secondary} />
+                    <Text style={styles.uploadText}>
+                      {documentUrl ? 'Replace uploaded insurance document' : 'Tap to upload insurance document'}
+                    </Text>
+                    <Text style={styles.uploadSub}>JPG or PNG, max 10MB</Text>
+                  </View>
+                )}
+              </TouchableOpacity>
+              {selectedDocument ? (
+                <TouchableOpacity onPress={() => setSelectedDocument(null)} style={styles.removeButton}>
+                  <Text style={styles.removeText}>Remove selected document</Text>
+                </TouchableOpacity>
+              ) : null}
             </GlassCard>
 
             <GlassButton label="Submit for Review" onPress={handleFinish} loading={loading} fullWidth size="lg" />
@@ -143,4 +195,23 @@ const styles = StyleSheet.create({
   title: { ...Typography.h1, marginBottom: 8 },
   subtitle: { ...Typography.bodySecondary, marginBottom: Spacing.lg },
   card: { marginBottom: Spacing.md },
+  uploadLabel: { ...Typography.label, marginTop: Spacing.sm, marginBottom: 10 },
+  uploadArea: {
+    borderRadius: Radius.item,
+    borderWidth: 1,
+    borderColor: Colors.glass.border,
+    borderStyle: 'dashed',
+    overflow: 'hidden',
+    minHeight: 120,
+    justifyContent: 'center',
+    alignItems: 'center',
+    backgroundColor: Colors.glass.surface,
+  },
+  uploadAreaFilled: { borderStyle: 'solid' },
+  uploadPreview: { width: '100%', height: 180, resizeMode: 'cover' },
+  uploadPlaceholder: { alignItems: 'center', gap: 8, padding: 20 },
+  uploadText: { color: Colors.text.secondary, fontSize: 14, fontWeight: '700', textAlign: 'center' },
+  uploadSub: { color: Colors.text.tertiary, fontSize: 12 },
+  removeButton: { alignSelf: 'center', marginTop: 8 },
+  removeText: { color: Colors.error, fontSize: 13, fontWeight: '700' },
 });

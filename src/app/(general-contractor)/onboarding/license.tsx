@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import {
   Alert,
+  Image,
   KeyboardAvoidingView,
   Platform,
   ScrollView,
@@ -11,10 +12,12 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useNavigation } from '@react-navigation/native';
+import { launchImageLibrary } from 'react-native-image-picker';
 import Ionicons from 'react-native-vector-icons/Ionicons';
 import { supabase } from '@/lib/supabase/client';
+import { getUploadMetadata, uploadFile, type StorageUploadAsset } from '@/lib/supabase/storage';
 import { useAuthStore } from '@/stores/auth.store';
-import { Colors, Spacing, Typography } from '@/constants/theme';
+import { Colors, Radius, Spacing, Typography } from '@/constants/theme';
 import { GlassButton, GlassCard, GlassInput, GradientBackground } from '@/components/ui';
 
 export default function GeneralContractorLicenseOnboarding() {
@@ -22,6 +25,7 @@ export default function GeneralContractorLicenseOnboarding() {
   const { user } = useAuthStore();
   const [licenseNumber, setLicenseNumber] = useState('');
   const [documentUrl, setDocumentUrl] = useState('');
+  const [selectedDocument, setSelectedDocument] = useState<StorageUploadAsset | null>(null);
   const [loading, setLoading] = useState(false);
 
   useEffect(() => {
@@ -46,6 +50,28 @@ export default function GeneralContractorLicenseOnboarding() {
     };
   }, [user?.id]);
 
+  const pickDocument = async () => {
+    const result = await launchImageLibrary({
+      mediaType: 'photo',
+      quality: 0.8,
+      selectionLimit: 1,
+      assetRepresentationMode: 'compatible',
+    });
+    if (!result.didCancel && result.assets?.[0]) {
+      setSelectedDocument(result.assets[0]);
+    }
+  };
+
+  const uploadSelectedDocument = async (): Promise<string | null> => {
+    if (!selectedDocument) return documentUrl.trim() || null;
+    if (!user?.id) throw new Error('Please sign in again before uploading GC documents.');
+
+    const upload = getUploadMetadata(selectedDocument);
+    const path = `general-contractors/${user.id}/license-${Date.now()}.${upload.extension}`;
+    const { storagePath } = await uploadFile('company-docs', path, upload.uri, upload.contentType);
+    return storagePath;
+  };
+
   const handleNext = async () => {
     if (!licenseNumber.trim()) {
       Alert.alert('License required', 'Enter the GC license or registration number.');
@@ -69,11 +95,12 @@ export default function GeneralContractorLicenseOnboarding() {
         return;
       }
 
+      const uploadedDocumentPath = await uploadSelectedDocument();
       const { error } = await supabase
         .from('general_contractors')
         .update({
           license_number: licenseNumber.trim(),
-          license_doc_url: documentUrl.trim() || null,
+          license_doc_url: uploadedDocumentPath,
         })
         .eq('id', gc.id);
       if (error) throw error;
@@ -122,8 +149,32 @@ export default function GeneralContractorLicenseOnboarding() {
                 autoCorrect={false}
                 autoCapitalize="none"
                 keyboardType="url"
-                hint="Use a secure document link until native upload is wired for GC files."
+                hint="Existing saved document path or secure document link."
               />
+
+              <Text style={styles.uploadLabel}>License Document</Text>
+              <TouchableOpacity
+                style={[styles.uploadArea, selectedDocument && styles.uploadAreaFilled]}
+                onPress={pickDocument}
+                activeOpacity={0.8}
+              >
+                {selectedDocument?.uri ? (
+                  <Image source={{ uri: selectedDocument.uri }} style={styles.uploadPreview} />
+                ) : (
+                  <View style={styles.uploadPlaceholder}>
+                    <Ionicons name="cloud-upload-outline" size={30} color={Colors.text.secondary} />
+                    <Text style={styles.uploadText}>
+                      {documentUrl ? 'Replace uploaded license document' : 'Tap to upload license document'}
+                    </Text>
+                    <Text style={styles.uploadSub}>JPG or PNG, max 10MB</Text>
+                  </View>
+                )}
+              </TouchableOpacity>
+              {selectedDocument ? (
+                <TouchableOpacity onPress={() => setSelectedDocument(null)} style={styles.removeButton}>
+                  <Text style={styles.removeText}>Remove selected document</Text>
+                </TouchableOpacity>
+              ) : null}
             </GlassCard>
 
             <GlassButton label="Continue" onPress={handleNext} loading={loading} fullWidth size="lg" />
@@ -157,4 +208,23 @@ const styles = StyleSheet.create({
   subtitle: { ...Typography.bodySecondary, marginBottom: Spacing.lg },
   card: { marginBottom: Spacing.md },
   inputSpacing: { marginBottom: Spacing.sm },
+  uploadLabel: { ...Typography.label, marginTop: Spacing.sm, marginBottom: 10 },
+  uploadArea: {
+    borderRadius: Radius.item,
+    borderWidth: 1,
+    borderColor: Colors.glass.border,
+    borderStyle: 'dashed',
+    overflow: 'hidden',
+    minHeight: 120,
+    justifyContent: 'center',
+    alignItems: 'center',
+    backgroundColor: Colors.glass.surface,
+  },
+  uploadAreaFilled: { borderStyle: 'solid' },
+  uploadPreview: { width: '100%', height: 180, resizeMode: 'cover' },
+  uploadPlaceholder: { alignItems: 'center', gap: 8, padding: 20 },
+  uploadText: { color: Colors.text.secondary, fontSize: 14, fontWeight: '700', textAlign: 'center' },
+  uploadSub: { color: Colors.text.tertiary, fontSize: 12 },
+  removeButton: { alignSelf: 'center', marginTop: 8 },
+  removeText: { color: Colors.error, fontSize: 13, fontWeight: '700' },
 });

@@ -60,8 +60,16 @@ describe('general contractor account type', () => {
     expect(licenseOnboarding).toContain("select('license_number, license_doc_url')");
     expect(licenseOnboarding).toContain("setLicenseNumber(data.license_number ?? '')");
     expect(licenseOnboarding).toContain("setDocumentUrl(data.license_doc_url ?? '')");
+    expect(licenseOnboarding).toContain("launchImageLibrary");
+    expect(licenseOnboarding).toContain("uploadFile('company-docs'");
+    expect(licenseOnboarding).toContain('general-contractors/${user.id}/license-');
     expect(insuranceOnboarding).toContain("select('insurance_doc_url')");
     expect(insuranceOnboarding).toContain("setDocumentUrl(data.insurance_doc_url ?? '')");
+    expect(insuranceOnboarding).toContain("launchImageLibrary");
+    expect(insuranceOnboarding).toContain("uploadFile('company-docs'");
+    expect(insuranceOnboarding).toContain('general-contractors/${user.id}/insurance-');
+    expect(licenseOnboarding).not.toContain('until native upload is wired');
+    expect(insuranceOnboarding).not.toContain('until native upload is wired');
   });
 
   it('adds the GC role to registration and root routing without falling through to company', () => {
