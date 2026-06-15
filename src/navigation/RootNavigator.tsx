@@ -80,6 +80,7 @@ import ProjectWarranties from '@/app/(homeowner)/project/[id]/warranties';
 
 // Supplier navigator
 import { SupplierNavigator } from '@/navigation/SupplierNavigator';
+import { GeneralContractorNavigator } from '@/navigation/GeneralContractorNavigator';
 
 // Company screens
 import CompanyDashboard from '@/app/(company)/index';
@@ -430,7 +431,11 @@ export function RootNavigator() {
 
   if (!hydrated) return null;
 
-  const resolvedRole = role === 'homeowner' || role === 'company' || role === 'supplier' || role === 'admin'
+  const resolvedRole = role === 'homeowner'
+    || role === 'company'
+    || role === 'supplier'
+    || role === 'general_contractor'
+    || role === 'admin'
     ? role
     : null;
   if (session && !resolvedRole) {
@@ -456,6 +461,8 @@ export function RootNavigator() {
           <Stack.Screen name="Homeowner" component={HomeownerNavigator} />
         ) : resolvedRole === 'supplier' ? (
           <Stack.Screen name="Supplier" component={SupplierNavigator} />
+        ) : resolvedRole === 'general_contractor' ? (
+          <Stack.Screen name="GeneralContractor" component={GeneralContractorNavigator} />
         ) : (
           <Stack.Screen name="Company" component={CompanyNavigator} />
         )}

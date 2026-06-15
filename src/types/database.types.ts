@@ -135,6 +135,43 @@ export interface Supplier {
   created_at: string;
 }
 
+export interface GeneralContractor {
+  id: string;
+  user_id: string;
+  business_name: string;
+  address: string | null;
+  city: string | null;
+  province: string | null;
+  postal_code: string | null;
+  location: unknown; // PostGIS geography
+  lat: number | null;
+  lng: number | null;
+  service_radius_km: number;
+  license_number: string | null;
+  license_doc_url: string | null;
+  insurance_doc_url: string | null;
+  verified: boolean;
+  concierge_enabled: boolean;
+  default_markup_pct: number;
+  default_concierge_fee_pct: number;
+  rating: number | null;
+  total_reviews: number;
+  created_at: string;
+}
+
+export interface GeneralContractorProject {
+  id: string;
+  project_id: string;
+  general_contractor_id: string;
+  homeowner_id: string;
+  status: 'invited' | 'active' | 'completed' | 'removed';
+  concierge_fee_pct: number;
+  markup_pct: number;
+  scope_summary: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
 export interface SupplierCatalogItem {
   id: string;
   supplier_id: string;

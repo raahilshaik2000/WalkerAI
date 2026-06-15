@@ -56,6 +56,31 @@ export function resolveNotificationRoute(
     }
   }
 
+  if (role === 'general_contractor') {
+    if (!projectId) {
+      return { name: 'GeneralContractorTabs', params: { screen: 'GeneralContractorProjects' } };
+    }
+    switch (type) {
+      case 'quote_submitted':
+      case 'milestone_needs_approval':
+      case 'schedule_confirmed':
+      case 'material_order_claimed':
+      case 'new_material_order':
+      case 'order_shipped':
+      case 'order_delivered':
+      case 'warranty_expiring':
+      case 'new_message':
+      case 'project_complete':
+      case 'dispute_raised':
+      case 'quote_approved':
+      case 'milestone_paid':
+      case 'milestone_completed':
+        return { name: 'GeneralContractorProjectDetail', params: { id: projectId } };
+      default:
+        return { name: 'GeneralContractorProjectDetail', params: { id: projectId } };
+    }
+  }
+
   if (role === 'company' || role === 'admin') {
     if (type === 'job_filled') return { name: 'CompanyTabs', params: { screen: 'Jobs' } };
     if (type === 'schedule_confirmed') return { name: 'CompanyTabs', params: { screen: 'Calendar' } };

@@ -1,4 +1,4 @@
-export type UserRole = 'homeowner' | 'company' | 'supplier' | 'admin';
+export type UserRole = 'homeowner' | 'company' | 'supplier' | 'general_contractor' | 'admin';
 
 export type ProjectStatus =
   | 'draft'

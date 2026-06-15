@@ -1,0 +1,52 @@
+import fs from 'fs';
+import path from 'path';
+import {
+  isGeneralContractorSetupComplete,
+  nextGeneralContractorOnboardingRoute,
+} from '../src/lib/general-contractor';
+import { resolveNotificationRoute } from '../src/lib/notifications/navigation';
+
+const repoRoot = path.join(__dirname, '..');
+
+describe('general contractor account type', () => {
+  it('routes general contractor notifications into the GC navigator', () => {
+    expect(resolveNotificationRoute('new_message', { project_id: 'project-1' }, 'general_contractor')).toEqual({
+      name: 'GeneralContractorProjectDetail',
+      params: { id: 'project-1' },
+    });
+
+    expect(resolveNotificationRoute('new_message', {}, 'general_contractor')).toEqual({
+      name: 'GeneralContractorTabs',
+      params: { screen: 'GeneralContractorProjects' },
+    });
+  });
+
+  it('keeps GC onboarding separate from company onboarding', () => {
+    expect(nextGeneralContractorOnboardingRoute(null)).toBe('GeneralContractorBusinessOnboarding');
+    expect(nextGeneralContractorOnboardingRoute({ license_number: null, insurance_doc_url: null })).toBe('GeneralContractorLicenseOnboarding');
+    expect(nextGeneralContractorOnboardingRoute({ license_number: 'GC-123', insurance_doc_url: null })).toBe('GeneralContractorInsuranceOnboarding');
+    expect(isGeneralContractorSetupComplete({ license_number: 'GC-123', insurance_doc_url: 'https://example.com/insurance.pdf' })).toBe(true);
+  });
+
+  it('adds the GC role to registration and root routing without falling through to company', () => {
+    const register = fs.readFileSync(path.join(repoRoot, 'src/app/(auth)/register.tsx'), 'utf8');
+    const rootNavigator = fs.readFileSync(path.join(repoRoot, 'src/navigation/RootNavigator.tsx'), 'utf8');
+
+    expect(register).toContain("value: 'general_contractor'");
+    expect(rootNavigator).toContain("role === 'general_contractor'");
+    expect(rootNavigator).toContain("resolvedRole === 'general_contractor'");
+    expect(rootNavigator).toContain('component={GeneralContractorNavigator}');
+  });
+
+  it('adds a database constraint and tables for GC profiles and assignments', () => {
+    const migration = fs.readFileSync(
+      path.join(repoRoot, 'supabase/migrations/20260615000100_add_general_contractor_role.sql'),
+      'utf8',
+    );
+
+    expect(migration).toContain("'general_contractor'");
+    expect(migration).toContain('CREATE TABLE IF NOT EXISTS public.general_contractors');
+    expect(migration).toContain('CREATE TABLE IF NOT EXISTS public.general_contractor_projects');
+    expect(migration).toContain('homeowner_id = (SELECT auth.uid())');
+  });
+});

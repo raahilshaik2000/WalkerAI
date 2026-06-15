@@ -86,6 +86,7 @@ export default function RegisterScreen() {
               {([
                 { value: 'homeowner', icon: 'home-outline', label: 'Homeowner', sub: 'I want to renovate' },
                 { value: 'company', icon: 'hammer-wrench', label: 'Contractor', sub: 'I do renovations' },
+                { value: 'general_contractor', icon: 'clipboard-text-clock-outline', label: 'GC', sub: 'I manage projects' },
                 { value: 'supplier', icon: 'truck-delivery-outline', label: 'Supplier', sub: 'I supply materials' },
               ] as const).map((opt) => (
                 <TouchableOpacity
@@ -169,9 +170,10 @@ const styles = StyleSheet.create({
   title: { ...Typography.h1, marginBottom: 8 },
   subtitle: { ...Typography.bodySecondary, marginBottom: Spacing.lg },
   roleLabel: { ...Typography.label, marginBottom: 10 },
-  roleRow: { flexDirection: 'row', gap: 12, marginBottom: Spacing.lg },
+  roleRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 12, marginBottom: Spacing.lg },
   roleCard: {
-    flex: 1,
+    width: '47%',
+    minHeight: 118,
     backgroundColor: Colors.glass.surface,
     borderWidth: 1,
     borderColor: Colors.glass.border,
