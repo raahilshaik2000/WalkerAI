@@ -331,4 +331,31 @@ describe('general contractor account type', () => {
     expect(gcDiscovery).toContain('No discovery or scope change becomes active until the homeowner approves it.');
     expect(gcDiscovery).not.toContain("from('change_orders').insert");
   });
+
+  it('lets GCs participate in the project communication thread', () => {
+    const migration = fs.readFileSync(
+      path.join(repoRoot, 'supabase/migrations/20260615001000_allow_gc_project_messages.sql'),
+      'utf8',
+    );
+    const navigator = fs.readFileSync(
+      path.join(repoRoot, 'src/navigation/GeneralContractorNavigator.tsx'),
+      'utf8',
+    );
+    const gcProjectDetail = fs.readFileSync(
+      path.join(repoRoot, 'src/app/(general-contractor)/project/[id]/index.tsx'),
+      'utf8',
+    );
+    const gcMessages = fs.readFileSync(
+      path.join(repoRoot, 'src/app/(general-contractor)/project/[id]/messages.tsx'),
+      'utf8',
+    );
+
+    expect(migration).toContain('messages_project_participants');
+    expect(migration).toContain('general_contractor_projects gcp');
+    expect(migration).toContain("gcp.status IN ('invited', 'active', 'completed')");
+    expect(navigator).toContain('GeneralContractorMessages');
+    expect(gcProjectDetail).toContain("navigation.navigate('GeneralContractorMessages'");
+    expect(gcMessages).toContain("from('messages').insert");
+    expect(gcMessages).toContain("channel(`gc-messages:${projectId}`)");
+  });
 });
