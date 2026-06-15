@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import {
   Alert,
   KeyboardAvoidingView,
@@ -22,6 +22,27 @@ export default function GeneralContractorInsuranceOnboarding() {
   const { user } = useAuthStore();
   const [documentUrl, setDocumentUrl] = useState('');
   const [loading, setLoading] = useState(false);
+
+  useEffect(() => {
+    if (!user?.id) return;
+
+    let cancelled = false;
+    const loadExistingInsurance = async () => {
+      const { data, error } = await supabase
+        .from('general_contractors')
+        .select('insurance_doc_url')
+        .eq('user_id', user.id)
+        .maybeSingle();
+      if (cancelled || error || !data) return;
+      setDocumentUrl(data.insurance_doc_url ?? '');
+    };
+
+    loadExistingInsurance().catch(() => undefined);
+
+    return () => {
+      cancelled = true;
+    };
+  }, [user?.id]);
 
   const handleFinish = async () => {
     if (!documentUrl.trim()) {

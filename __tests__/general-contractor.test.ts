@@ -47,6 +47,23 @@ describe('general contractor account type', () => {
     expect(businessOnboarding).toContain("navigation.navigate('GeneralContractorTabs', { screen: 'GeneralContractorProfile' })");
   });
 
+  it('preloads existing GC document setup fields when onboarding is resumed', () => {
+    const licenseOnboarding = fs.readFileSync(
+      path.join(repoRoot, 'src/app/(general-contractor)/onboarding/license.tsx'),
+      'utf8',
+    );
+    const insuranceOnboarding = fs.readFileSync(
+      path.join(repoRoot, 'src/app/(general-contractor)/onboarding/insurance.tsx'),
+      'utf8',
+    );
+
+    expect(licenseOnboarding).toContain("select('license_number, license_doc_url')");
+    expect(licenseOnboarding).toContain("setLicenseNumber(data.license_number ?? '')");
+    expect(licenseOnboarding).toContain("setDocumentUrl(data.license_doc_url ?? '')");
+    expect(insuranceOnboarding).toContain("select('insurance_doc_url')");
+    expect(insuranceOnboarding).toContain("setDocumentUrl(data.insurance_doc_url ?? '')");
+  });
+
   it('adds the GC role to registration and root routing without falling through to company', () => {
     const register = fs.readFileSync(path.join(repoRoot, 'src/app/(auth)/register.tsx'), 'utf8');
     const rootNavigator = fs.readFileSync(path.join(repoRoot, 'src/navigation/RootNavigator.tsx'), 'utf8');

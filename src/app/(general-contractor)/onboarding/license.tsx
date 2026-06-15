@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import {
   Alert,
   KeyboardAvoidingView,
@@ -23,6 +23,28 @@ export default function GeneralContractorLicenseOnboarding() {
   const [licenseNumber, setLicenseNumber] = useState('');
   const [documentUrl, setDocumentUrl] = useState('');
   const [loading, setLoading] = useState(false);
+
+  useEffect(() => {
+    if (!user?.id) return;
+
+    let cancelled = false;
+    const loadExistingLicense = async () => {
+      const { data, error } = await supabase
+        .from('general_contractors')
+        .select('license_number, license_doc_url')
+        .eq('user_id', user.id)
+        .maybeSingle();
+      if (cancelled || error || !data) return;
+      setLicenseNumber(data.license_number ?? '');
+      setDocumentUrl(data.license_doc_url ?? '');
+    };
+
+    loadExistingLicense().catch(() => undefined);
+
+    return () => {
+      cancelled = true;
+    };
+  }, [user?.id]);
 
   const handleNext = async () => {
     if (!licenseNumber.trim()) {
