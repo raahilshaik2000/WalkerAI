@@ -192,6 +192,22 @@ export interface ProjectApprovalRequest {
   responded_at: string | null;
 }
 
+export interface GcPaymentRequest {
+  id: string;
+  project_id: string;
+  general_contractor_id: string;
+  homeowner_id: string;
+  request_kind: 'deposit' | 'progress_draw' | 'final_payment';
+  title: string;
+  description: string | null;
+  amount_cents: number;
+  status: 'pending' | 'approved' | 'rejected' | 'cancelled';
+  response_note: string | null;
+  created_at: string;
+  responded_at: string | null;
+  cancelled_at: string | null;
+}
+
 export interface SupplierCatalogItem {
   id: string;
   supplier_id: string;

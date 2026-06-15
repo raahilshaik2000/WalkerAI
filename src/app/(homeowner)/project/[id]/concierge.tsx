@@ -13,9 +13,9 @@ import { useFocusEffect, useNavigation, useRoute } from '@react-navigation/nativ
 import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
 import { supabase } from '@/lib/supabase/client';
 import { useAuthStore } from '@/stores/auth.store';
-import type { GeneralContractor } from '@/types/database.types';
+import type { GcPaymentRequest, GeneralContractor } from '@/types/database.types';
 import { formatStatusLabel } from '@/lib/formatters';
-import { formatSignedCadCents } from '@/lib/currency';
+import { formatCadCents, formatSignedCadCents } from '@/lib/currency';
 import { getRequiredStringParam } from '@/lib/navigation-params';
 import { Colors, Spacing, Typography } from '@/constants/theme';
 import { GlassButton, GlassCard, GradientBackground, StatusBadge } from '@/components/ui';
@@ -56,6 +56,7 @@ export default function ProjectConciergeScreen() {
   const [currentAssignment, setCurrentAssignment] = useState<CurrentAssignment | null>(null);
   const [generalContractors, setGeneralContractors] = useState<GeneralContractor[]>([]);
   const [approvalRequests, setApprovalRequests] = useState<ApprovalRequest[]>([]);
+  const [paymentRequests, setPaymentRequests] = useState<GcPaymentRequest[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [invitingId, setInvitingId] = useState<string | null>(null);
@@ -73,7 +74,7 @@ export default function ProjectConciergeScreen() {
 
     try {
       setErrorMessage(null);
-      const [projectResult, assignmentResult, gcResult, approvalResult] = await Promise.all([
+      const [projectResult, assignmentResult, gcResult, approvalResult, paymentResult] = await Promise.all([
         supabase
           .from('projects')
           .select('id, homeowner_id')
@@ -101,22 +102,30 @@ export default function ProjectConciergeScreen() {
           .select('id, request_type, title, description, cost_delta, timeline_delta_days, status, response_note')
           .eq('project_id', projectId)
           .order('created_at', { ascending: false }),
+        supabase
+          .from('gc_payment_requests')
+          .select('id, project_id, general_contractor_id, homeowner_id, request_kind, title, description, amount_cents, status, response_note, created_at, responded_at, cancelled_at')
+          .eq('project_id', projectId)
+          .order('created_at', { ascending: false }),
       ]);
 
       if (projectResult.error) throw projectResult.error;
       if (assignmentResult.error) throw assignmentResult.error;
       if (gcResult.error) throw gcResult.error;
       if (approvalResult.error) throw approvalResult.error;
+      if (paymentResult.error) throw paymentResult.error;
 
       setProjectHomeownerId(projectResult.data?.homeowner_id ?? null);
       setCurrentAssignment(assignmentResult.data as CurrentAssignment | null);
       setGeneralContractors((gcResult.data ?? []) as GeneralContractor[]);
       setApprovalRequests((approvalResult.data ?? []) as ApprovalRequest[]);
+      setPaymentRequests((paymentResult.data ?? []) as GcPaymentRequest[]);
     } catch (err) {
       setErrorMessage(err instanceof Error ? err.message : 'Could not load concierge options.');
       setCurrentAssignment(null);
       setGeneralContractors([]);
       setApprovalRequests([]);
+      setPaymentRequests([]);
     } finally {
       setLoading(false);
       setRefreshing(false);
@@ -154,6 +163,42 @@ export default function ProjectConciergeScreen() {
           onPress: async () => {
             setRespondingId(request.id);
             const { error } = await supabase.rpc('respond_to_project_approval_request', {
+              p_request_id: request.id,
+              p_status: status,
+              p_response_note: null,
+            });
+            if (error) {
+              Alert.alert('Could not respond', error.message);
+            } else {
+              await fetchData();
+            }
+            setRespondingId(null);
+          },
+        },
+      ],
+    );
+  };
+
+  const handlePaymentResponse = async (request: GcPaymentRequest, status: 'approved' | 'rejected') => {
+    const currentUser = user ?? (await supabase.auth.getUser()).data.user;
+    if (!currentUser?.id || projectHomeownerId !== currentUser.id) {
+      Alert.alert('Not allowed', 'Only the homeowner can respond to payment requests.');
+      return;
+    }
+
+    Alert.alert(
+      status === 'approved' ? 'Approve payment request?' : 'Reject payment request?',
+      status === 'approved'
+        ? 'Approving this records your authorization. It does not bypass milestone escrow release.'
+        : 'This records that the GC payment request was rejected.',
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: status === 'approved' ? 'Approve' : 'Reject',
+          style: status === 'rejected' ? 'destructive' : 'default',
+          onPress: async () => {
+            setRespondingId(request.id);
+            const { error } = await supabase.rpc('respond_to_gc_payment_request', {
               p_request_id: request.id,
               p_status: status,
               p_response_note: null,
@@ -311,6 +356,59 @@ export default function ProjectConciergeScreen() {
               </GlassCard>
 
               <GlassCard style={styles.card}>
+                <Text style={styles.sectionTitle}>Payment requests</Text>
+                <Text style={styles.bodyText}>
+                  Approving a GC payment request records your authorization. It does not bypass milestone escrow release.
+                </Text>
+                {paymentRequests.length === 0 ? (
+                  <Text style={styles.emptySubText}>No GC payment requests yet.</Text>
+                ) : paymentRequests.map((request) => {
+                  const pending = request.status === 'pending';
+                  const responding = respondingId === request.id;
+                  return (
+                    <View key={request.id} style={styles.approvalItem}>
+                      <View style={styles.approvalHeader}>
+                        <View style={styles.approvalIcon}>
+                          <Icon
+                            name={request.status === 'approved' ? 'check-circle-outline' : request.status === 'rejected' ? 'close-circle-outline' : 'clock-outline'}
+                            size={18}
+                            color={request.status === 'approved' ? Colors.success : request.status === 'rejected' ? Colors.error : Colors.warning}
+                          />
+                        </View>
+                        <View style={styles.approvalBody}>
+                          <Text style={styles.approvalTitle}>{request.title}</Text>
+                          <Text style={styles.approvalMeta}>
+                            {formatStatusLabel(request.request_kind)} · {formatCadCents(request.amount_cents)}
+                          </Text>
+                        </View>
+                        <StatusBadge label={formatStatusLabel(request.status)} variant={pending ? 'pending' : request.status === 'approved' ? 'completed' : 'error'} size="sm" />
+                      </View>
+                      {request.description ? <Text style={styles.approvalDescription}>{request.description}</Text> : null}
+                      {pending ? (
+                        <View style={styles.approvalActions}>
+                          <GlassButton
+                            label="Approve"
+                            onPress={() => handlePaymentResponse(request, 'approved')}
+                            loading={responding}
+                            size="sm"
+                            style={styles.approvalButton}
+                          />
+                          <GlassButton
+                            label="Reject"
+                            onPress={() => handlePaymentResponse(request, 'rejected')}
+                            loading={responding}
+                            variant="destructive"
+                            size="sm"
+                            style={styles.approvalButton}
+                          />
+                        </View>
+                      ) : null}
+                    </View>
+                  );
+                })}
+              </GlassCard>
+
+              <GlassCard style={styles.card}>
                 <Text style={styles.sectionTitle}>Approval requests</Text>
                 {approvalRequests.length === 0 ? (
                   <Text style={styles.bodyText}>No GC approval requests yet.</Text>
@@ -426,6 +524,7 @@ const styles = StyleSheet.create({
   card: { marginBottom: Spacing.sm },
   sectionTitle: { ...Typography.label, marginBottom: 10 },
   bodyText: { ...Typography.bodySecondary, lineHeight: 22 },
+  emptySubText: { ...Typography.bodySecondary, lineHeight: 22, marginTop: 10 },
   gcHeader: { flexDirection: 'row', alignItems: 'center', gap: 12 },
   avatar: {
     width: 46,

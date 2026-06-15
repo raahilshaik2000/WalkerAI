@@ -240,4 +240,39 @@ describe('general contractor account type', () => {
     expect(gcPermits).toContain('Upload Document');
     expect(gcPermits).toContain('inspection_scheduled');
   });
+
+  it('lets GCs request payment draws while homeowner approval remains separate from escrow release', () => {
+    const migration = fs.readFileSync(
+      path.join(repoRoot, 'supabase/migrations/20260615000800_add_gc_payment_requests.sql'),
+      'utf8',
+    );
+    const navigator = fs.readFileSync(
+      path.join(repoRoot, 'src/navigation/GeneralContractorNavigator.tsx'),
+      'utf8',
+    );
+    const gcProjectDetail = fs.readFileSync(
+      path.join(repoRoot, 'src/app/(general-contractor)/project/[id]/index.tsx'),
+      'utf8',
+    );
+    const gcPayments = fs.readFileSync(
+      path.join(repoRoot, 'src/app/(general-contractor)/project/[id]/payments.tsx'),
+      'utf8',
+    );
+    const homeownerConcierge = fs.readFileSync(
+      path.join(repoRoot, 'src/app/(homeowner)/project/[id]/concierge.tsx'),
+      'utf8',
+    );
+
+    expect(migration).toContain('CREATE TABLE IF NOT EXISTS public.gc_payment_requests');
+    expect(migration).toContain("request_kind IN ('deposit', 'progress_draw', 'final_payment')");
+    expect(migration).toContain('CREATE OR REPLACE FUNCTION public.respond_to_gc_payment_request');
+    expect(migration).not.toContain('stripe.transfers');
+    expect(navigator).toContain('GeneralContractorPayments');
+    expect(gcProjectDetail).toContain("navigation.navigate('GeneralContractorPayments'");
+    expect(gcPayments).toContain("from('gc_payment_requests').insert");
+    expect(gcPayments).toContain('Funds are still released through existing escrow milestones');
+    expect(homeownerConcierge).toContain("from('gc_payment_requests')");
+    expect(homeownerConcierge).toContain("supabase.rpc('respond_to_gc_payment_request'");
+    expect(homeownerConcierge).toContain('Approving this records your authorization. It does not bypass milestone escrow release.');
+  });
 });

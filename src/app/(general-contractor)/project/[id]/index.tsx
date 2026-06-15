@@ -498,6 +498,21 @@ export default function GeneralContractorProjectDetail() {
                     </View>
                     <Icon name="chevron-right" size={20} color={Colors.text.tertiary} />
                   </TouchableOpacity>
+                  <View style={styles.controlDivider} />
+                  <TouchableOpacity
+                    style={styles.controlRow}
+                    onPress={() => navigation.navigate('GeneralContractorPayments', { id: projectId })}
+                    activeOpacity={0.85}
+                  >
+                    <View style={styles.controlIcon}>
+                      <Icon name="cash-clock" size={20} color={Colors.accent} />
+                    </View>
+                    <View style={styles.controlBody}>
+                      <Text style={styles.controlTitle}>Payment requests</Text>
+                      <Text style={styles.controlSub}>Ask for deposit, progress, or final draw approval</Text>
+                    </View>
+                    <Icon name="chevron-right" size={20} color={Colors.text.tertiary} />
+                  </TouchableOpacity>
                 </GlassCard>
               ) : null}
 
