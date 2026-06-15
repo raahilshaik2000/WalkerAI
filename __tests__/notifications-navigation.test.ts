@@ -91,4 +91,34 @@ describe('notification navigation', () => {
   it('does not route homeowner notifications without a project id', () => {
     expect(resolveNotificationRoute('quote_submitted', {}, 'homeowner')).toBeNull();
   });
+
+  it('routes homeowner GC workflow notifications to concierge controls', () => {
+    expect(resolveNotificationRoute('gc_approval_requested', { project_id: 'project-1' }, 'homeowner')).toEqual({
+      name: 'ProjectDetail',
+      params: {
+        screen: 'Concierge',
+        params: { id: 'project-1' },
+      },
+    });
+
+    expect(resolveNotificationRoute('gc_payment_requested', { project_id: 'project-1' }, 'homeowner')).toEqual({
+      name: 'ProjectDetail',
+      params: {
+        screen: 'Concierge',
+        params: { id: 'project-1' },
+      },
+    });
+  });
+
+  it('routes GC response notifications to the approvals inbox', () => {
+    expect(resolveNotificationRoute('gc_concierge_booking_requested', { project_id: 'project-1' }, 'general_contractor')).toEqual({
+      name: 'GeneralContractorTabs',
+      params: { screen: 'GeneralContractorApprovals' },
+    });
+
+    expect(resolveNotificationRoute('gc_approval_responded', { project_id: 'project-1' }, 'general_contractor')).toEqual({
+      name: 'GeneralContractorTabs',
+      params: { screen: 'GeneralContractorApprovals' },
+    });
+  });
 });

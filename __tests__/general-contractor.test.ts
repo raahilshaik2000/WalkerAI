@@ -498,4 +498,25 @@ describe('general contractor account type', () => {
     expect(gcCompletion).toContain("metadata: { action: 'complete_project' }");
     expect(gcCompletion).toContain('This does not release escrow funds.');
   });
+
+  it('notifies homeowners and GCs about GC workflow actions', () => {
+    const migration = fs.readFileSync(
+      path.join(repoRoot, 'supabase/migrations/20260615001500_add_gc_workflow_notifications.sql'),
+      'utf8',
+    );
+
+    expect(migration).toContain('gc_approval_requested');
+    expect(migration).toContain('gc_approval_responded');
+    expect(migration).toContain('gc_payment_requested');
+    expect(migration).toContain('gc_payment_responded');
+    expect(migration).toContain('gc_concierge_booking_requested');
+    expect(migration).toContain('gc_concierge_booking_responded');
+    expect(migration).toContain('AFTER INSERT ON public.project_approval_requests');
+    expect(migration).toContain('AFTER UPDATE OF status ON public.project_approval_requests');
+    expect(migration).toContain('AFTER INSERT ON public.gc_payment_requests');
+    expect(migration).toContain('AFTER UPDATE OF status ON public.gc_payment_requests');
+    expect(migration).toContain('AFTER INSERT ON public.gc_concierge_bookings');
+    expect(migration).toContain('AFTER UPDATE OF status ON public.gc_concierge_bookings');
+    expect(migration).toContain('REVOKE ALL ON FUNCTION public.insert_gc_workflow_notification');
+  });
 });

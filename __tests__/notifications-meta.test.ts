@@ -5,6 +5,8 @@ describe('notification display metadata', () => {
     expect(notificationDisplayMeta('warranty_expiring').timelineLabel).toBe('Warranty expiring soon');
     expect(notificationDisplayMeta('dispute_raised').timelineLabel).toBe('Dispute opened on a milestone');
     expect(notificationDisplayMeta('order_shipped').title).toBe('Order shipped');
+    expect(notificationDisplayMeta('gc_approval_requested').title).toBe('GC approval needed');
+    expect(notificationDisplayMeta('gc_concierge_booking_requested').timelineLabel).toBe('New concierge service request');
   });
 
   it('falls back to readable text for unknown notification types', () => {

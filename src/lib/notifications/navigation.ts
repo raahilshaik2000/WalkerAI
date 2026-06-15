@@ -57,6 +57,14 @@ export function resolveNotificationRoute(
   }
 
   if (role === 'general_contractor') {
+    if (
+      type === 'gc_concierge_booking_requested'
+      || type === 'gc_approval_responded'
+      || type === 'gc_payment_responded'
+    ) {
+      return { name: 'GeneralContractorTabs', params: { screen: 'GeneralContractorApprovals' } };
+    }
+
     if (!projectId) {
       return { name: 'GeneralContractorTabs', params: { screen: 'GeneralContractorProjects' } };
     }
@@ -118,6 +126,10 @@ export function resolveNotificationRoute(
   if (!projectId) return null;
 
   switch (type) {
+    case 'gc_approval_requested':
+    case 'gc_payment_requested':
+    case 'gc_concierge_booking_responded':
+      return projectDetailRoute('Concierge', projectId);
     case 'quote_submitted':
       return projectDetailRoute('Quote', projectId);
     case 'quote_approved':

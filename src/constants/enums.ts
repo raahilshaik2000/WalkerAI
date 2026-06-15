@@ -103,4 +103,10 @@ export type NotificationType =
   | 'bid_rejected'
   | 'order_shipped'
   | 'order_delivered'
-  | 'supplier_paid';
+  | 'supplier_paid'
+  | 'gc_approval_requested'
+  | 'gc_approval_responded'
+  | 'gc_payment_requested'
+  | 'gc_payment_responded'
+  | 'gc_concierge_booking_requested'
+  | 'gc_concierge_booking_responded';
