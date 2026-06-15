@@ -188,6 +188,8 @@ describe('generate-trade-slots source guards', () => {
       'utf8',
     );
 
+    expect(source).toContain("const VALID_TRADES = [\n  'plumber'");
+    expect(source).toContain('function fallbackTradeSlots');
     expect(source).toContain(".select('project_type')");
     expect(source).toContain('deterministicSlotsForGcProjectType(gcProjectType, totalMin, totalMax)');
     expect(source).toContain("projectType === 'flooring'");
@@ -197,6 +199,8 @@ describe('generate-trade-slots source guards', () => {
     expect(source).toContain("projectType === 'basement'");
     expect(source).toContain("projectType === 'addition'");
     expect(source).toContain('Project type: ${formatProjectType(projectType)}');
+    expect(source).not.toContain("trade_type: 'general_contractor'");
+    expect(source).not.toContain("'general_contractor', 'plumber'");
     expect(source).not.toContain('Room type: ${project.room_type}');
     expect(source).not.toContain('Full ${project.room_type} renovation');
   });
@@ -250,6 +254,18 @@ describe('dispatch-slots source guards', () => {
     expect(source).toContain(".eq('general_contractors.user_id', userId)");
     expect(source).toContain('const requesterIsHomeowner = project.homeowner_id === requesterId;');
     expect(source).toContain('if (!requesterIsHomeowner && !requesterIsActiveGc)');
+  });
+
+  it('does not dispatch specialist trade slots to company GC trade fallbacks', () => {
+    const source = fs.readFileSync(
+      path.join(__dirname, '../supabase/functions/dispatch-slots/index.ts'),
+      'utf8',
+    );
+
+    expect(source).toContain('Dispatch only exact trade matches.');
+    expect(source).toContain('the separate general_contractor account type');
+    expect(source).not.toContain(".filter('trade_types', 'cs', '{general_contractor}')");
+    expect(source).not.toContain('fall back to general contractors');
   });
 });
 

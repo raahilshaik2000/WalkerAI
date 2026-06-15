@@ -7,9 +7,9 @@ const corsHeaders = {
 };
 
 const VALID_TRADES = [
-  'general_contractor', 'plumber', 'electrician',
-  'tile_installer', 'cabinet_installer', 'painter',
-  'flooring_installer', 'drywall', 'demolition',
+  'plumber', 'electrician', 'tile_installer',
+  'cabinet_installer', 'painter', 'flooring_installer',
+  'drywall', 'demolition',
 ] as const;
 
 type TradeType = typeof VALID_TRADES[number];
@@ -33,6 +33,52 @@ function formatProjectType(projectType: string) {
 
 function slotCost(total: number, weight: number) {
   return Math.max(1, Math.round(total * weight));
+}
+
+function weightedTradeSlot(
+  tradeType: TradeType,
+  description: string,
+  totalMin: number,
+  totalMax: number,
+  weight: number,
+): TradeSlot {
+  return {
+    trade_type: tradeType,
+    description,
+    estimated_cost_min: slotCost(totalMin, weight),
+    estimated_cost_max: slotCost(totalMax, weight),
+  };
+}
+
+function fallbackTradeSlots(projectType: string, totalMin: number, totalMax: number): TradeSlot[] {
+  if (projectType === 'bathroom') {
+    return [
+      weightedTradeSlot('demolition', 'Bathroom demolition, disposal, and site preparation for the renovation scope.', totalMin, totalMax, 0.15),
+      weightedTradeSlot('plumber', 'Bathroom plumbing rough-in, fixture connections, and code-ready plumbing work.', totalMin, totalMax, 0.25),
+      weightedTradeSlot('electrician', 'Bathroom electrical rough-in, lighting, fan, GFCI, and device installation.', totalMin, totalMax, 0.15),
+      weightedTradeSlot('tile_installer', 'Bathroom waterproofing, tile installation, grout, and finish detailing.', totalMin, totalMax, 0.30),
+      weightedTradeSlot('painter', 'Bathroom surface preparation, priming, painting, and final touch-ups.', totalMin, totalMax, 0.15),
+    ];
+  }
+
+  if (projectType === 'kitchen') {
+    return [
+      weightedTradeSlot('demolition', 'Kitchen demolition, disposal, and site preparation for the renovation scope.', totalMin, totalMax, 0.15),
+      weightedTradeSlot('plumber', 'Kitchen plumbing rough-in, sink, faucet, dishwasher, and connection work.', totalMin, totalMax, 0.15),
+      weightedTradeSlot('electrician', 'Kitchen electrical rough-in, lighting, outlet, appliance, and device work.', totalMin, totalMax, 0.15),
+      weightedTradeSlot('cabinet_installer', 'Kitchen cabinet installation, alignment, trim, and finish coordination.', totalMin, totalMax, 0.25),
+      weightedTradeSlot('tile_installer', 'Kitchen backsplash or tile scope installation and finish detailing.', totalMin, totalMax, 0.15),
+      weightedTradeSlot('painter', 'Kitchen surface preparation, painting, and final touch-ups.', totalMin, totalMax, 0.15),
+    ];
+  }
+
+  return [
+    weightedTradeSlot('demolition', `Demolition, disposal, and site preparation for the ${formatProjectType(projectType)} scope.`, totalMin, totalMax, 0.20),
+    weightedTradeSlot('drywall', `Drywall, patching, finishing, and surface preparation for the ${formatProjectType(projectType)} scope.`, totalMin, totalMax, 0.25),
+    weightedTradeSlot('electrician', `Electrical coordination, rough-in, fixture, or device work for the ${formatProjectType(projectType)} scope.`, totalMin, totalMax, 0.20),
+    weightedTradeSlot('flooring_installer', `Flooring preparation, installation, transitions, and finish details for the ${formatProjectType(projectType)} scope.`, totalMin, totalMax, 0.20),
+    weightedTradeSlot('painter', `Painting, final finish work, and touch-ups for the ${formatProjectType(projectType)} scope.`, totalMin, totalMax, 0.15),
+  ];
 }
 
 function deterministicSlotsForGcProjectType(
@@ -60,69 +106,26 @@ function deterministicSlotsForGcProjectType(
 
   if (projectType === 'basement') {
     return [
-      {
-        trade_type: 'general_contractor',
-        description: 'Basement renovation coordination, site supervision, sequencing, and trade management.',
-        estimated_cost_min: slotCost(totalMin, 0.30),
-        estimated_cost_max: slotCost(totalMax, 0.30),
-      },
-      {
-        trade_type: 'drywall',
-        description: 'Basement wall and ceiling drywall installation, finishing, and patch preparation.',
-        estimated_cost_min: slotCost(totalMin, 0.25),
-        estimated_cost_max: slotCost(totalMax, 0.25),
-      },
-      {
-        trade_type: 'electrician',
-        description: 'Basement electrical rough-in, fixture/device installation, and code-ready electrical coordination.',
-        estimated_cost_min: slotCost(totalMin, 0.20),
-        estimated_cost_max: slotCost(totalMax, 0.20),
-      },
-      {
-        trade_type: 'flooring_installer',
-        description: 'Basement flooring preparation, installation, transitions, and finish details.',
-        estimated_cost_min: slotCost(totalMin, 0.25),
-        estimated_cost_max: slotCost(totalMax, 0.25),
-      },
+      weightedTradeSlot('demolition', 'Basement demolition, disposal, and site preparation for the renovation scope.', totalMin, totalMax, 0.15),
+      weightedTradeSlot('drywall', 'Basement wall and ceiling drywall installation, finishing, and patch preparation.', totalMin, totalMax, 0.30),
+      weightedTradeSlot('electrician', 'Basement electrical rough-in, fixture/device installation, and code-ready electrical work.', totalMin, totalMax, 0.20),
+      weightedTradeSlot('flooring_installer', 'Basement flooring preparation, installation, transitions, and finish details.', totalMin, totalMax, 0.20),
+      weightedTradeSlot('painter', 'Basement surface preparation, painting, and final finish touch-ups.', totalMin, totalMax, 0.15),
     ];
   }
 
   if (projectType === 'addition') {
     return [
-      {
-        trade_type: 'general_contractor',
-        description: 'Addition coordination, site supervision, sequencing, and trade management for the expanded scope.',
-        estimated_cost_min: slotCost(totalMin, 0.45),
-        estimated_cost_max: slotCost(totalMax, 0.45),
-      },
-      {
-        trade_type: 'electrician',
-        description: 'Electrical rough-in, panel/device coordination, fixture installation, and inspection-ready work.',
-        estimated_cost_min: slotCost(totalMin, 0.15),
-        estimated_cost_max: slotCost(totalMax, 0.15),
-      },
-      {
-        trade_type: 'drywall',
-        description: 'Drywall installation, finishing, patching, and paint-ready surface preparation.',
-        estimated_cost_min: slotCost(totalMin, 0.20),
-        estimated_cost_max: slotCost(totalMax, 0.20),
-      },
-      {
-        trade_type: 'flooring_installer',
-        description: 'Flooring installation and transitions for the addition scope.',
-        estimated_cost_min: slotCost(totalMin, 0.20),
-        estimated_cost_max: slotCost(totalMax, 0.20),
-      },
+      weightedTradeSlot('demolition', 'Addition demolition, opening preparation, disposal, and site protection.', totalMin, totalMax, 0.15),
+      weightedTradeSlot('electrician', 'Addition electrical rough-in, panel/device coordination, fixture installation, and inspection-ready work.', totalMin, totalMax, 0.20),
+      weightedTradeSlot('drywall', 'Addition drywall installation, finishing, patching, and paint-ready surface preparation.', totalMin, totalMax, 0.25),
+      weightedTradeSlot('flooring_installer', 'Flooring installation and transitions for the addition scope.', totalMin, totalMax, 0.20),
+      weightedTradeSlot('painter', 'Addition surface preparation, painting, and final finish touch-ups.', totalMin, totalMax, 0.20),
     ];
   }
 
   if (projectType === 'other') {
-    return [{
-      trade_type: 'general_contractor',
-      description: 'Custom renovation scope requiring GC coordination, planning, trade sequencing, and homeowner approval checkpoints.',
-      estimated_cost_min: totalMin,
-      estimated_cost_max: totalMax,
-    }];
+    return fallbackTradeSlots(projectType, totalMin, totalMax);
   }
 
   return [];
@@ -329,13 +332,7 @@ Return ONLY valid JSON, no markdown.`;
     }
 
     if (slots.length === 0) {
-      // Fallback: general contractor covers everything
-      slots = [{
-        trade_type: 'general_contractor',
-        description: `Full ${formatProjectType(projectType)} renovation including all labour and coordination.`,
-        estimated_cost_min: totalMin,
-        estimated_cost_max: totalMax,
-      }];
+      slots = fallbackTradeSlots(projectType, totalMin, totalMax);
     }
 
     // Delete any existing dispatch attempts and slots for this project

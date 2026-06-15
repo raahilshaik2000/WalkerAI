@@ -178,7 +178,8 @@ Deno.serve(async (req) => {
       if (!nearby || nearby.length === 0) continue;
       const distanceByCompanyId = new Map(nearby.map((n) => [n.company_id, n.distance_km]));
 
-      // Prefer exact trade matches. If no specialist is available, fall back to general contractors.
+      // Dispatch only exact trade matches. GC project management is handled by
+      // the separate general_contractor account type, not company trade slots.
       let matchedCompanies: MatchedCompany[] | null = null;
       let matchedCompaniesError: { message: string } | null = null;
       const exactMatch = await supabase
@@ -198,27 +199,6 @@ Deno.serve(async (req) => {
         matchedCompaniesError = null;
       }
       if (matchedCompaniesError) throw matchedCompaniesError;
-
-      if (!matchedCompanies || matchedCompanies.length === 0) {
-        const fallback = await supabase
-          .from('companies')
-          .select('id, user_id, trade_types, service_radius_km')
-          .in('id', nearby.map((n) => n.company_id))
-          .filter('trade_types', 'cs', '{general_contractor}');
-
-        if (isMissingColumnError(fallback.error)) {
-          const legacyFallback = await supabase
-            .from('companies')
-            .select('id, user_id, service_radius_km')
-            .in('id', nearby.map((n) => n.company_id));
-          if (legacyFallback.error) throw legacyFallback.error;
-          matchedCompanies = legacyFallback.data;
-        } else if (fallback.error) {
-          throw fallback.error;
-        } else {
-          matchedCompanies = fallback.data;
-        }
-      }
 
       if (!matchedCompanies || matchedCompanies.length === 0) continue;
 
