@@ -266,6 +266,37 @@ describe('general contractor account type', () => {
     expect(migration).toContain('guard_gc_assignment_creation_trigger');
   });
 
+  it('keeps GC verification and review metrics backend maintained', () => {
+    const migration = fs.readFileSync(
+      path.join(repoRoot, 'supabase/migrations/20260615003900_guard_gc_trust_fields.sql'),
+      'utf8',
+    );
+    const businessOnboarding = fs.readFileSync(
+      path.join(repoRoot, 'src/app/(general-contractor)/onboarding/business.tsx'),
+      'utf8',
+    );
+    const createTestUser = fs.readFileSync(
+      path.join(repoRoot, 'supabase/functions/create-test-user/index.ts'),
+      'utf8',
+    );
+
+    expect(migration).toContain('CREATE OR REPLACE FUNCTION public.guard_gc_trust_fields()');
+    expect(migration).toContain("(SELECT auth.role()) = 'service_role'");
+    expect(migration).toContain('COALESCE(NEW.verified, FALSE) IS TRUE');
+    expect(migration).toContain('NEW.rating IS NOT NULL');
+    expect(migration).toContain('COALESCE(NEW.total_reviews, 0) <> 0');
+    expect(migration).toContain('NEW.verified IS DISTINCT FROM OLD.verified');
+    expect(migration).toContain('NEW.rating IS DISTINCT FROM OLD.rating');
+    expect(migration).toContain('NEW.total_reviews IS DISTINCT FROM OLD.total_reviews');
+    expect(migration).toContain('GC verification and review metrics are maintained by WalkerAI backend services');
+    expect(migration).toContain('guard_gc_trust_fields_trigger');
+    expect(migration).toContain('REVOKE ALL ON FUNCTION public.guard_gc_trust_fields()');
+    expect(businessOnboarding).not.toContain('verified:');
+    expect(businessOnboarding).not.toContain('rating:');
+    expect(businessOnboarding).not.toContain('total_reviews:');
+    expect(createTestUser).toContain('verified: true');
+  });
+
   it('keeps GC approval request details immutable after submission', () => {
     const migration = fs.readFileSync(
       path.join(repoRoot, 'supabase/migrations/20260615003500_guard_gc_approval_request_updates.sql'),
