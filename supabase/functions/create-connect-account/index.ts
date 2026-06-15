@@ -17,7 +17,8 @@ function stripeReadiness(account: Stripe.Account) {
 }
 
 function isMissingColumnError(error: { message?: string } | null | undefined) {
-  return !!error?.message && /column .* does not exist/i.test(error.message);
+  const message = error?.message ?? '';
+  return /column .* does not exist/i.test(message) || /schema cache/i.test(message);
 }
 
 async function updateStripeReadiness(

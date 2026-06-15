@@ -111,6 +111,7 @@ describe('create-connect-account source guards', () => {
     expect(source).toContain("'general_contractors'");
     expect(source).toContain("'general_contractor_id'");
     expect(source).toContain('role: requestedRole');
+    expect(source).toContain('/schema cache/i.test(message)');
   });
 });
 
@@ -259,6 +260,7 @@ describe('stripe-webhook source guards', () => {
       'utf8',
     );
 
+    expect(source).toContain('/schema cache/i.test(message)');
     expect(source).toContain('async function projectHasTradeSlots');
     expect(source).toContain("await updateStripeReadiness(adminClient, 'general_contractors', account.id, readiness);");
     expect(source).toContain("const scheduleRequired = await projectHasTradeSlots(adminClient, project_id);");
@@ -329,6 +331,7 @@ describe('gc-concierge-payout source guards', () => {
       'utf8',
     );
 
+    expect(source).toContain('/schema cache/i.test(message)');
     expect(source).toContain("const { booking_id } = await req.json();");
     expect(source).toContain('booking.homeowner_id !== user.id');
     expect(source).toContain("booking.status !== 'accepted'");
