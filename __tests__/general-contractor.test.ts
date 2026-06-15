@@ -313,6 +313,9 @@ describe('general contractor account type', () => {
       'utf8',
     );
 
+    expect(dashboard).toContain("const activeAssignments = assignments.filter((item) => item.status === 'active');");
+    expect(dashboard).toContain("label: 'Active'");
+    expect(dashboard).not.toContain("item.status === 'active' || item.status === 'invited'");
     expect(dashboard).toContain("from('project_approval_requests')");
     expect(dashboard).toContain("from('gc_payment_requests')");
     expect(dashboard).toContain("from('gc_concierge_bookings')");

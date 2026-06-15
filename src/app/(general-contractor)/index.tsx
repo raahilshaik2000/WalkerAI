@@ -220,7 +220,7 @@ export default function GeneralContractorDashboard() {
     );
   }
 
-  const activeAssignments = assignments.filter((item) => item.status === 'active' || item.status === 'invited');
+  const activeAssignments = assignments.filter((item) => item.status === 'active');
   const managedValue = activeAssignments.reduce((sum, row) => sum + estimateMidpoint(row.project), 0);
 
   return (
@@ -250,7 +250,7 @@ export default function GeneralContractorDashboard() {
 
           <TradeMetricStrip
             items={[
-              { label: 'Managed', value: activeAssignments.length, tone: activeAssignments.length ? 'success' : 'muted' },
+              { label: 'Active', value: activeAssignments.length, tone: activeAssignments.length ? 'success' : 'muted' },
               { label: 'Approvals', value: pendingApprovals, tone: pendingApprovals ? 'warning' : 'muted' },
               { label: 'Value', value: managedValue ? formatCad(managedValue) : '$0', tone: managedValue ? 'success' : 'muted' },
             ]}
