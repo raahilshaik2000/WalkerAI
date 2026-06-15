@@ -836,6 +836,9 @@ describe('general contractor account type', () => {
     expect(companyJob).toContain("from('gc_trade_quote_negotiations')");
     expect(companyJob).toContain("supabase.rpc('respond_to_gc_trade_quote_negotiation'");
     expect(companyJob).toContain('GC quote negotiation');
+    expect(companyJob).toContain('Counteroffer accepted');
+    expect(companyJob).toContain('Build Updated Quote');
+    expect(companyJob).toContain("navigation.navigate('QuoteBuilder', quoteParams)");
   });
 
   it('collects accepted GC concierge booking payments through Stripe PaymentSheet', () => {

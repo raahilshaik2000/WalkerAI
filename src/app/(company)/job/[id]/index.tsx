@@ -351,6 +351,19 @@ export default function JobBriefScreen() {
             Alert.alert('Could not respond', error.message);
           } else {
             await fetchJob();
+            if (status === 'accepted') {
+              const quoteParams = negotiation.slot_id
+                ? { id: projectId, slot: negotiation.slot_id }
+                : { id: projectId, slot: slotId };
+              Alert.alert(
+                'Counteroffer accepted',
+                'Submit an updated quote package so the homeowner sees the agreed pricing and milestones.',
+                [
+                  { text: 'Later', style: 'cancel' },
+                  { text: 'Build Updated Quote', onPress: () => navigation.navigate('QuoteBuilder', quoteParams) },
+                ],
+              );
+            }
           }
           setRespondingNegotiationId(null);
         },
