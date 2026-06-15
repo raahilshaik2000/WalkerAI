@@ -430,6 +430,30 @@ describe('general contractor account type', () => {
     expect(migration).toContain('guard_gc_trade_negotiation_updates_trigger');
   });
 
+  it('restricts GC payment and trade negotiation status transitions to the proper actor', () => {
+    const migration = fs.readFileSync(
+      path.join(repoRoot, 'supabase/migrations/20260615234901_restrict_gc_payment_trade_status_transitions.sql'),
+      'utf8',
+    );
+
+    expect(migration).toContain('CREATE OR REPLACE FUNCTION public.guard_gc_payment_request_updates()');
+    expect(migration).toContain("IF NEW.status IN ('approved', 'rejected') THEN");
+    expect(migration).toContain('Only the homeowner can approve or reject a GC payment request');
+    expect(migration).toContain('GC payment request responses must include a response timestamp');
+    expect(migration).toContain("ELSIF NEW.status = 'cancelled' THEN");
+    expect(migration).toContain('Only the requesting GC can cancel a GC payment request');
+    expect(migration).toContain('GC payment request cancellations must include a cancellation timestamp');
+    expect(migration).toContain('GC payment request cancellations cannot include response details');
+
+    expect(migration).toContain('CREATE OR REPLACE FUNCTION public.guard_gc_trade_negotiation_updates()');
+    expect(migration).toContain("IF NEW.status IN ('accepted', 'rejected', 'revision_requested') THEN");
+    expect(migration).toContain('Only the quoted company can respond to a GC trade negotiation');
+    expect(migration).toContain('GC trade negotiation responses must include a response timestamp');
+    expect(migration).toContain('Only the requesting GC can cancel a GC trade negotiation');
+    expect(migration).toContain('GC trade negotiation cancellations must include a cancellation timestamp');
+    expect(migration).toContain('GC trade negotiation cancellations cannot include response details');
+  });
+
   it('requires GC approval, payment, and trade requests to start pending', () => {
     const migration = fs.readFileSync(
       path.join(repoRoot, 'supabase/migrations/20260615004200_guard_gc_request_insert_statuses.sql'),
