@@ -548,6 +548,10 @@ describe('general contractor account type', () => {
     expect(gcTrades).toContain("supabase.functions.invoke('generate-trade-slots'");
     expect(gcTrades).toContain('Generate Trade Plan');
     expect(gcTrades).toContain('The homeowner must confirm GC management before you can generate trade slots.');
+    expect(gcTrades).toContain("supabase.functions.invoke<DispatchResult>('dispatch-slots'");
+    expect(gcTrades).toContain('WalkerAI trade marketplace');
+    expect(gcTrades).toContain('Dispatch ${dispatchableSlotCount} Open Slot');
+    expect(gcTrades).toContain('The homeowner must confirm GC management before you can dispatch WalkerAI trades.');
     expect(gcTrades).toContain("request_type: 'trade_substitution'");
     expect(gcTrades).toContain('No trade assignment changes until the homeowner approves');
     expect(gcTrades).not.toContain("from('project_slots').update");

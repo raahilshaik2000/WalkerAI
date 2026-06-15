@@ -217,6 +217,20 @@ describe('dispatch-slots source guards', () => {
       /Project budget is missing\. Generate the project brief before dispatching\.[\s\S]*?\.from\('dispatch_logs'\)\.insert\(logs\)/
     );
   });
+
+  it('allows active GC managers to dispatch open trade slots without owning the project', () => {
+    const source = fs.readFileSync(
+      path.join(__dirname, '../supabase/functions/dispatch-slots/index.ts'),
+      'utf8',
+    );
+
+    expect(source).toContain('isActiveGeneralContractorForProject');
+    expect(source).toContain(".from('general_contractor_projects')");
+    expect(source).toContain(".eq('status', 'active')");
+    expect(source).toContain(".eq('general_contractors.user_id', userId)");
+    expect(source).toContain('const requesterIsHomeowner = project.homeowner_id === requesterId;');
+    expect(source).toContain('if (!requesterIsHomeowner && !requesterIsActiveGc)');
+  });
 });
 
 describe('quote submission status sync migration', () => {

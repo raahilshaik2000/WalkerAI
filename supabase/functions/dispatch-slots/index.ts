@@ -32,6 +32,24 @@ function withinCompanyServiceRadius(company: MatchedCompany, distanceByCompanyId
   return distanceKm <= serviceRadiusKm;
 }
 
+async function isActiveGeneralContractorForProject(
+  supabase: ReturnType<typeof createClient>,
+  projectId: string,
+  userId: string,
+) {
+  const { data, error } = await supabase
+    .from('general_contractor_projects')
+    .select('id, general_contractors!inner(user_id)')
+    .eq('project_id', projectId)
+    .eq('status', 'active')
+    .eq('general_contractors.user_id', userId)
+    .limit(1)
+    .maybeSingle();
+
+  if (error) throw error;
+  return !!data;
+}
+
 Deno.serve(async (req) => {
   if (req.method === 'OPTIONS') {
     return new Response('ok', { headers: corsHeaders });
@@ -87,11 +105,17 @@ Deno.serve(async (req) => {
         status: 404, headers: { ...corsHeaders, 'Content-Type': 'application/json' },
       });
     }
-    if (!isServiceRoleCall && project.homeowner_id !== requesterId) {
-      return new Response(JSON.stringify({ error: 'Forbidden' }), {
-        status: 403,
-        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-      });
+    if (!isServiceRoleCall) {
+      const requesterIsHomeowner = project.homeowner_id === requesterId;
+      const requesterIsActiveGc = requesterId
+        ? await isActiveGeneralContractorForProject(supabase, project_id, requesterId)
+        : false;
+      if (!requesterIsHomeowner && !requesterIsActiveGc) {
+        return new Response(JSON.stringify({ error: 'Forbidden' }), {
+          status: 403,
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        });
+      }
     }
 
     if (!['draft', 'brief_ready', 'dispatching'].includes(project.status)) {

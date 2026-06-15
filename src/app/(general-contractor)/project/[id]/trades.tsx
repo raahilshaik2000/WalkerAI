@@ -75,6 +75,12 @@ interface Assignment {
   general_contractor_id: string;
 }
 
+interface DispatchResult {
+  success?: boolean;
+  dispatched?: number;
+  message?: string;
+}
+
 function formatTrade(tradeType: string) {
   return TRADE_LABELS[tradeType] ?? tradeType.replace(/_/g, ' ');
 }
@@ -123,6 +129,7 @@ export default function GeneralContractorTradesScreen() {
   const [refreshing, setRefreshing] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [generatingSlots, setGeneratingSlots] = useState(false);
+  const [dispatchingTrades, setDispatchingTrades] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
   const quotesBySlot = useMemo(() => {
@@ -145,6 +152,14 @@ export default function GeneralContractorTradesScreen() {
     }
     return grouped;
   }, [negotiations]);
+
+  const dispatchableSlotCount = useMemo(() => (
+    slots.filter((slot) => (
+      slot.fulfillment_type !== 'external'
+      && !getCompany(slot)
+      && ['open', 'dispatching'].includes(slot.status)
+    )).length
+  ), [slots]);
 
   const fetchData = useCallback(async () => {
     const currentUser = (await supabase.auth.getUser()).data.user;
@@ -247,6 +262,39 @@ export default function GeneralContractorTradesScreen() {
       Alert.alert('Could not generate trades', await formatSupabaseFunctionError(err, 'Please confirm the project budget has been generated first.'));
     } finally {
       setGeneratingSlots(false);
+    }
+  };
+
+  const handleDispatchTrades = async () => {
+    if (!projectId) {
+      Alert.alert('Missing project', 'Reopen trade management from the project detail screen.');
+      return;
+    }
+    if (!assignment || assignment.status !== 'active') {
+      Alert.alert('Active GC management required', 'The homeowner must confirm GC management before you can dispatch WalkerAI trades.');
+      return;
+    }
+    if (dispatchableSlotCount === 0) {
+      Alert.alert('No open slots', 'Every WalkerAI trade slot is already assigned, externally managed, or scheduled.');
+      return;
+    }
+
+    setDispatchingTrades(true);
+    try {
+      const { data, error } = await supabase.functions.invoke<DispatchResult>('dispatch-slots', {
+        body: { project_id: projectId, round: 1 },
+      });
+      if (error) throw new Error(await formatSupabaseFunctionError(error));
+      if (data?.success === false || !data?.dispatched) {
+        Alert.alert('No trades dispatched', data?.message ?? 'No verified companies matched these open slots yet.');
+      } else {
+        Alert.alert('Trades notified', `${data.dispatched} trade invitation${data.dispatched === 1 ? '' : 's'} sent through WalkerAI.`);
+      }
+      await fetchData();
+    } catch (err) {
+      Alert.alert('Could not dispatch trades', await formatSupabaseFunctionError(err, 'Please confirm the project budget and coordinates are ready.'));
+    } finally {
+      setDispatchingTrades(false);
     }
   };
 
@@ -445,6 +493,24 @@ export default function GeneralContractorTradesScreen() {
               {assignment?.status !== 'active' ? (
                 <GlassCard style={styles.card}>
                   <Text style={styles.bodyText}>Homeowner confirmation is required before trade recommendations can be sent.</Text>
+                </GlassCard>
+              ) : null}
+
+              {assignment?.status === 'active' && dispatchableSlotCount > 0 ? (
+                <GlassCard style={styles.card}>
+                  <Text style={styles.sectionTitle}>WalkerAI trade marketplace</Text>
+                  <Text style={styles.bodyText}>
+                    Dispatch open WalkerAI slots to matching verified companies. Homeowner approval is still required for scope, payment, and later substitutions.
+                  </Text>
+                  <GlassButton
+                    label={`Dispatch ${dispatchableSlotCount} Open Slot${dispatchableSlotCount === 1 ? '' : 's'}`}
+                    onPress={handleDispatchTrades}
+                    loading={dispatchingTrades}
+                    disabled={dispatchingTrades}
+                    fullWidth
+                    size="sm"
+                    style={styles.actionButton}
+                  />
                 </GlassCard>
               ) : null}
 
