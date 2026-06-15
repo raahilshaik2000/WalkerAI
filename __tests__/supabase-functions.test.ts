@@ -131,6 +131,27 @@ describe('create-connect-account source guards', () => {
   });
 });
 
+describe('Stripe payout readiness guards', () => {
+  it('keeps Stripe readiness fields service-role maintained across account tables', () => {
+    const source = fs.readFileSync(
+      path.join(__dirname, '../supabase/migrations/20260615003300_guard_stripe_readiness_updates.sql'),
+      'utf8',
+    );
+
+    expect(source).toContain('CREATE OR REPLACE FUNCTION public.guard_stripe_readiness_fields()');
+    expect(source).toContain("(SELECT auth.role()) = 'service_role'");
+    expect(source).toContain('NEW.stripe_account_id IS NOT NULL');
+    expect(source).toContain('NEW.stripe_account_id IS DISTINCT FROM OLD.stripe_account_id');
+    expect(source).toContain('NEW.stripe_details_submitted IS DISTINCT FROM OLD.stripe_details_submitted');
+    expect(source).toContain('NEW.stripe_payouts_enabled IS DISTINCT FROM OLD.stripe_payouts_enabled');
+    expect(source).toContain('NEW.stripe_transfers_active IS DISTINCT FROM OLD.stripe_transfers_active');
+    expect(source).toContain('guard_company_stripe_readiness_fields');
+    expect(source).toContain('guard_supplier_stripe_readiness_fields');
+    expect(source).toContain('guard_gc_stripe_readiness_fields');
+    expect(source).toContain('Stripe payout readiness is maintained by WalkerAI backend services');
+  });
+});
+
 describe('company material verification source guards', () => {
   it('tries to generate supplier orders after contractor quantity verification', () => {
     const source = fs.readFileSync(
