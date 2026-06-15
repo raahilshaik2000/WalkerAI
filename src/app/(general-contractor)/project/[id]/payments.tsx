@@ -92,6 +92,7 @@ export default function GeneralContractorPaymentsScreen() {
           .from('gc_payment_requests')
           .select('id, project_id, general_contractor_id, homeowner_id, request_kind, title, description, amount_cents, status, response_note, created_at, responded_at, cancelled_at')
           .eq('project_id', projectId)
+          .eq('general_contractor_id', gc.id)
           .order('created_at', { ascending: false }),
       ]);
       if (assignmentResult.error) throw assignmentResult.error;

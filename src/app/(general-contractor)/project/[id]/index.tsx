@@ -159,10 +159,16 @@ export default function GeneralContractorProjectDetail() {
     try {
       setErrorMessage(null);
       const currentUser = (await supabase.auth.getUser()).data.user;
-      const { data: gc, error: gcError } = currentUser?.id
-        ? await supabase.from('general_contractors').select('id').eq('user_id', currentUser.id).maybeSingle()
-        : { data: null, error: null };
+      if (!currentUser?.id) {
+        throw new Error('You need to be signed in to view managed projects.');
+      }
+      const { data: gc, error: gcError } = await supabase
+        .from('general_contractors')
+        .select('id')
+        .eq('user_id', currentUser.id)
+        .maybeSingle();
       if (gcError) throw gcError;
+      if (!gc?.id) throw new Error('GC profile not found.');
 
       const [projectResult, slotResult, changeOrderResult, approvalResult] = await Promise.all([
         supabase
@@ -189,6 +195,7 @@ export default function GeneralContractorProjectDetail() {
           .from('project_approval_requests')
           .select('id, request_type, title, description, cost_delta, timeline_delta_days, status, response_note, created_at')
           .eq('project_id', projectId)
+          .eq('requested_by_gc_id', gc.id)
           .order('created_at', { ascending: false }),
       ]);
 
@@ -202,26 +209,20 @@ export default function GeneralContractorProjectDetail() {
       setChangeOrders((changeOrderResult.data ?? []) as ChangeOrder[]);
       setApprovalRequests((approvalResult.data ?? []) as ApprovalRequest[]);
 
-      if (gc?.id) {
-        const { data: assignmentRow, error: assignmentError } = await supabase
-          .from('general_contractor_projects')
-          .select(`
-            id, status, homeowner_id, general_contractor_id, markup_pct, concierge_fee_pct,
-            project_type, scope_summary, homeowner_contact_name, homeowner_contact_email, homeowner_contact_phone,
-            initiated_by_gc
-          `)
-          .eq('project_id', projectId)
-          .eq('general_contractor_id', gc.id)
-          .maybeSingle();
-        if (assignmentError) throw assignmentError;
-        setAssignment(assignmentRow as Assignment | null);
-        setProposedMarkupPct(assignmentRow?.markup_pct != null ? Number(assignmentRow.markup_pct).toFixed(0) : '');
-        setProposedConciergeFeePct(assignmentRow?.concierge_fee_pct != null ? Number(assignmentRow.concierge_fee_pct).toFixed(0) : '');
-      } else {
-        setAssignment(null);
-        setProposedMarkupPct('');
-        setProposedConciergeFeePct('');
-      }
+      const { data: assignmentRow, error: assignmentError } = await supabase
+        .from('general_contractor_projects')
+        .select(`
+          id, status, homeowner_id, general_contractor_id, markup_pct, concierge_fee_pct,
+          project_type, scope_summary, homeowner_contact_name, homeowner_contact_email, homeowner_contact_phone,
+          initiated_by_gc
+        `)
+        .eq('project_id', projectId)
+        .eq('general_contractor_id', gc.id)
+        .maybeSingle();
+      if (assignmentError) throw assignmentError;
+      setAssignment(assignmentRow as Assignment | null);
+      setProposedMarkupPct(assignmentRow?.markup_pct != null ? Number(assignmentRow.markup_pct).toFixed(0) : '');
+      setProposedConciergeFeePct(assignmentRow?.concierge_fee_pct != null ? Number(assignmentRow.concierge_fee_pct).toFixed(0) : '');
     } catch (err) {
       setErrorMessage(err instanceof Error ? err.message : 'Could not load managed project.');
       setProject(null);

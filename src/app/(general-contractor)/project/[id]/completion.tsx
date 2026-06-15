@@ -98,10 +98,16 @@ export default function GeneralContractorCompletionScreen() {
     try {
       setErrorMessage(null);
       const currentUser = (await supabase.auth.getUser()).data.user;
-      const { data: gc, error: gcError } = currentUser?.id
-        ? await supabase.from('general_contractors').select('id').eq('user_id', currentUser.id).maybeSingle()
-        : { data: null, error: null };
+      if (!currentUser?.id) {
+        throw new Error('You need to be signed in to view the completion binder.');
+      }
+      const { data: gc, error: gcError } = await supabase
+        .from('general_contractors')
+        .select('id')
+        .eq('user_id', currentUser.id)
+        .maybeSingle();
       if (gcError) throw gcError;
+      if (!gc?.id) throw new Error('GC profile not found.');
 
       const [projectResult, permitResult, warrantyResult, materialResult, approvalResult, paymentResult] = await Promise.all([
         supabase
@@ -128,11 +134,13 @@ export default function GeneralContractorCompletionScreen() {
           .from('project_approval_requests')
           .select('id, request_type, title, status, cost_delta, metadata')
           .eq('project_id', projectId)
+          .eq('requested_by_gc_id', gc.id)
           .order('created_at', { ascending: false }),
         supabase
           .from('gc_payment_requests')
           .select('id, request_kind, title, status, amount_cents')
           .eq('project_id', projectId)
+          .eq('general_contractor_id', gc.id)
           .order('created_at', { ascending: false }),
       ]);
 
@@ -151,18 +159,14 @@ export default function GeneralContractorCompletionScreen() {
       setApprovals((approvalResult.data ?? []) as ApprovalRecord[]);
       setPaymentRequests((paymentResult.data ?? []) as PaymentRequestRecord[]);
 
-      if (gc?.id) {
-        const { data: assignmentRow, error: assignmentError } = await supabase
-          .from('general_contractor_projects')
-          .select('id, status, homeowner_id, general_contractor_id, project_type')
-          .eq('project_id', projectId)
-          .eq('general_contractor_id', gc.id)
-          .maybeSingle();
-        if (assignmentError) throw assignmentError;
-        setAssignment(assignmentRow as AssignmentRecord | null);
-      } else {
-        setAssignment(null);
-      }
+      const { data: assignmentRow, error: assignmentError } = await supabase
+        .from('general_contractor_projects')
+        .select('id, status, homeowner_id, general_contractor_id, project_type')
+        .eq('project_id', projectId)
+        .eq('general_contractor_id', gc.id)
+        .maybeSingle();
+      if (assignmentError) throw assignmentError;
+      setAssignment(assignmentRow as AssignmentRecord | null);
     } catch (err) {
       setErrorMessage(err instanceof Error ? err.message : 'Could not load completion binder.');
       setProject(null);

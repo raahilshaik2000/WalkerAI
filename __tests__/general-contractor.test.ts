@@ -533,6 +533,7 @@ describe('general contractor account type', () => {
     expect(migration).not.toContain('stripe.transfers');
     expect(navigator).toContain('GeneralContractorPayments');
     expect(gcProjectDetail).toContain("navigation.navigate('GeneralContractorPayments'");
+    expect((gcPayments.match(/\.eq\('general_contractor_id', gc\.id\)/g) ?? []).length).toBeGreaterThanOrEqual(2);
     expect(gcPayments).toContain("from('gc_payment_requests').insert");
     expect(gcPayments).toContain('Funds are still released through existing escrow milestones');
     expect(gcApprovals).toContain("from('gc_payment_requests')");
@@ -598,6 +599,7 @@ describe('general contractor account type', () => {
 
     expect(navigator).toContain('GeneralContractorDiscovery');
     expect(gcProjectDetail).toContain("navigation.navigate('GeneralContractorDiscovery'");
+    expect(gcDiscovery).toContain(".eq('requested_by_gc_id', gc.id)");
     expect(gcDiscovery).toContain("from('project_approval_requests').insert");
     expect(gcDiscovery).toContain("request_type: requestType");
     expect(gcDiscovery).toContain("value: 'change_order'");
@@ -665,7 +667,10 @@ describe('general contractor account type', () => {
     expect(gcCompletion).toContain("from('warranties')");
     expect(gcCompletion).toContain("from('material_orders')");
     expect(gcCompletion).toContain("from('project_approval_requests')");
+    expect(gcCompletion).toContain('You need to be signed in to view the completion binder.');
+    expect(gcCompletion).toContain(".eq('requested_by_gc_id', gc.id)");
     expect(gcCompletion).toContain("from('gc_payment_requests')");
+    expect(gcCompletion).toContain(".eq('general_contractor_id', gc.id)");
     expect(gcCompletion).toContain('Digital project binder');
     expect(gcCompletion).toContain('const latestCompletionRequest = completionRequests[0];');
     expect(gcCompletion).toContain("const pendingCompletionRequest = completionRequests.find((approval) => approval.status === 'pending');");
@@ -791,7 +796,9 @@ describe('general contractor account type', () => {
       'utf8',
     );
 
+    expect(gcProjectDetail).toContain('You need to be signed in to view managed projects.');
     expect(gcProjectDetail).toContain("const pendingApprovalRequests = approvalRequests.filter((request) => request.status === 'pending');");
+    expect(gcProjectDetail).toContain(".eq('requested_by_gc_id', gc.id)");
     expect(gcProjectDetail).toContain('const pendingApprovals = pendingChangeOrders.length + pendingApprovalRequests.length;');
     expect(gcProjectDetail).toContain('pendingDecisionApprovalRequests.map');
     expect(gcProjectDetail).toContain('pendingDecisionChangeOrders.map');

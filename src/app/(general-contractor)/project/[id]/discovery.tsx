@@ -96,6 +96,7 @@ export default function GeneralContractorDiscoveryScreen() {
           .from('project_approval_requests')
           .select('id, request_type, title, description, cost_delta, timeline_delta_days, status, created_at')
           .eq('project_id', projectId)
+          .eq('requested_by_gc_id', gc.id)
           .in('request_type', ['change_order', 'scope_change', 'general_recommendation'])
           .order('created_at', { ascending: false }),
       ]);
