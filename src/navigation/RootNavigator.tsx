@@ -115,6 +115,13 @@ const ProjectDetailStack = createStackNavigator();
 const JobDetailStack = createStackNavigator();
 const DIYCreateStack = createStackNavigator();
 
+function isMissingUserProfileColumn(message: string | undefined | null) {
+  const text = message ?? '';
+  return /column .*(avatar_url|address|city|province|postal_code|full_name|phone).* does not exist/i.test(text)
+    || /could not find .* column .* users .* schema cache/i.test(text)
+    || /could not find .* users .* column .* schema cache/i.test(text);
+}
+
 function icon(name: string, focused: boolean, color: string) {
   return <Ionicons name={focused ? name : `${name}-outline`} size={22} color={color} />;
 }
@@ -349,7 +356,7 @@ export function RootNavigator() {
       .eq('id', nextSession.user.id)
       .maybeSingle();
 
-    if (userResult.error && /column .*(avatar_url|address|postal_code).* does not exist/i.test(userResult.error.message ?? '')) {
+    if (userResult.error && isMissingUserProfileColumn(userResult.error.message)) {
       userResult = await supabase
         .from('users')
         .select('role, full_name, phone, avatar_url')
@@ -357,7 +364,7 @@ export function RootNavigator() {
         .maybeSingle();
     }
 
-    if (userResult.error && /column .*avatar_url.* does not exist/i.test(userResult.error.message ?? '')) {
+    if (userResult.error && isMissingUserProfileColumn(userResult.error.message)) {
       userResult = await supabase
         .from('users')
         .select('role, full_name, phone')
@@ -365,7 +372,7 @@ export function RootNavigator() {
         .maybeSingle();
     }
 
-    if (userResult.error && /column .* does not exist/i.test(userResult.error.message ?? '')) {
+    if (userResult.error && isMissingUserProfileColumn(userResult.error.message)) {
       userResult = await supabase
         .from('users')
         .select('role')

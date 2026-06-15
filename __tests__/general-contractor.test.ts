@@ -80,6 +80,8 @@ describe('general contractor account type', () => {
     expect(rootNavigator).toContain("role === 'general_contractor'");
     expect(rootNavigator).toContain("resolvedRole === 'general_contractor'");
     expect(rootNavigator).toContain('component={GeneralContractorNavigator}');
+    expect(rootNavigator).toContain('isMissingUserProfileColumn');
+    expect(rootNavigator).toContain('schema cache');
   });
 
   it('adds a database constraint and tables for GC profiles and assignments', () => {
