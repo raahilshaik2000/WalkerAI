@@ -77,6 +77,10 @@ export default function GeneralContractorLicenseOnboarding() {
       Alert.alert('License required', 'Enter the GC license or registration number.');
       return;
     }
+    if (!documentUrl.trim() && !selectedDocument) {
+      Alert.alert('License document required', 'Upload the license document or provide an existing secure document link.');
+      return;
+    }
     if (!user?.id) {
       Alert.alert('Sign in required', 'Please sign in again before continuing.');
       return;
@@ -143,7 +147,7 @@ export default function GeneralContractorLicenseOnboarding() {
                 containerStyle={styles.inputSpacing}
               />
               <GlassInput
-                label="Document URL (optional)"
+                label="License Document URL"
                 value={documentUrl}
                 onChangeText={setDocumentUrl}
                 autoCorrect={false}

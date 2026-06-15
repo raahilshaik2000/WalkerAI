@@ -194,6 +194,7 @@ export default function GeneralContractorProfile() {
               <InfoRow label="Default markup" value={`${Number(gc.default_markup_pct).toFixed(0)}%`} />
               <InfoRow label="Concierge fee" value={`${Number(gc.default_concierge_fee_pct).toFixed(0)}%`} />
               <InfoRow label="License" value={gc.license_number ?? 'Required'} warning={!gc.license_number} />
+              <InfoRow label="License document" value={gc.license_doc_url ? 'Submitted' : 'Required'} warning={!gc.license_doc_url} />
               <InfoRow label="Insurance" value={gc.insurance_doc_url ? 'Submitted' : 'Required'} warning={!gc.insurance_doc_url} />
               <InfoRow label="Concierge" value={gc.concierge_enabled ? 'Enabled' : 'Disabled'} />
               <InfoRow

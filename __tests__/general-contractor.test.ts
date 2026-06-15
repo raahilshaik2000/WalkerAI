@@ -31,9 +31,10 @@ describe('general contractor account type', () => {
     );
 
     expect(nextGeneralContractorOnboardingRoute(null)).toBe('GeneralContractorBusinessOnboarding');
-    expect(nextGeneralContractorOnboardingRoute({ license_number: null, insurance_doc_url: null })).toBe('GeneralContractorLicenseOnboarding');
-    expect(nextGeneralContractorOnboardingRoute({ license_number: 'GC-123', insurance_doc_url: null })).toBe('GeneralContractorInsuranceOnboarding');
-    expect(isGeneralContractorSetupComplete({ license_number: 'GC-123', insurance_doc_url: 'https://example.com/insurance.pdf' })).toBe(true);
+    expect(nextGeneralContractorOnboardingRoute({ license_number: null, license_doc_url: null, insurance_doc_url: null })).toBe('GeneralContractorLicenseOnboarding');
+    expect(nextGeneralContractorOnboardingRoute({ license_number: 'GC-123', license_doc_url: null, insurance_doc_url: null })).toBe('GeneralContractorLicenseOnboarding');
+    expect(nextGeneralContractorOnboardingRoute({ license_number: 'GC-123', license_doc_url: 'qa/gc-license.pdf', insurance_doc_url: null })).toBe('GeneralContractorInsuranceOnboarding');
+    expect(isGeneralContractorSetupComplete({ license_number: 'GC-123', license_doc_url: 'qa/gc-license.pdf', insurance_doc_url: 'https://example.com/insurance.pdf' })).toBe(true);
     expect(businessOnboarding).toContain("from('general_contractors')");
     expect(businessOnboarding).toContain('business_name, address, city, province, postal_code, service_radius_km');
     expect(businessOnboarding).toContain('setBusinessName(data.business_name');
@@ -63,6 +64,8 @@ describe('general contractor account type', () => {
     expect(licenseOnboarding).toContain("launchImageLibrary");
     expect(licenseOnboarding).toContain("uploadFile('company-docs'");
     expect(licenseOnboarding).toContain('general-contractors/${user.id}/license-');
+    expect(licenseOnboarding).toContain('License document required');
+    expect(licenseOnboarding).toContain('License Document URL');
     expect(insuranceOnboarding).toContain("select('insurance_doc_url')");
     expect(insuranceOnboarding).toContain("setDocumentUrl(data.insurance_doc_url ?? '')");
     expect(insuranceOnboarding).toContain("launchImageLibrary");
