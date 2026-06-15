@@ -101,6 +101,7 @@ export default function GeneralContractorMaterialsScreen() {
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [submitting, setSubmitting] = useState(false);
+  const [gcVerified, setGcVerified] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
   const fetchData = useCallback(async () => {
@@ -116,11 +117,12 @@ export default function GeneralContractorMaterialsScreen() {
       setErrorMessage(null);
       const { data: gc, error: gcError } = await supabase
         .from('general_contractors')
-        .select('id')
+        .select('id, verified')
         .eq('user_id', currentUser.id)
         .maybeSingle();
       if (gcError) throw gcError;
       if (!gc?.id) throw new Error('GC profile not found.');
+      setGcVerified(gc.verified === true);
 
       const [assignmentResult, materialsResult, ordersResult, catalogResult] = await Promise.all([
         supabase
@@ -162,6 +164,7 @@ export default function GeneralContractorMaterialsScreen() {
       setMaterials([]);
       setOrders([]);
       setCatalogSuggestions([]);
+      setGcVerified(false);
     } finally {
       setLoading(false);
       setRefreshing(false);
@@ -193,6 +196,10 @@ export default function GeneralContractorMaterialsScreen() {
   const handleSubmit = async () => {
     if (!assignment || assignment.status !== 'active') {
       Alert.alert('Active GC management required', 'The homeowner must confirm GC management before material recommendations can be sent.');
+      return;
+    }
+    if (!gcVerified) {
+      Alert.alert('Verification required', 'WalkerAI must verify your GC profile before material recommendations can be sent.');
       return;
     }
     const material = materials.find((m) => m.id === selectedMaterialId);
@@ -369,7 +376,7 @@ export default function GeneralContractorMaterialsScreen() {
                 })}
               </GlassCard>
 
-              {assignment?.status === 'active' && selectedMaterialId ? (
+              {assignment?.status === 'active' && gcVerified && selectedMaterialId ? (
                 <GlassCard style={styles.card}>
                   <Text style={styles.sectionTitle}>Recommendation details</Text>
                   {selectedCatalogSuggestions.length > 0 ? (
@@ -441,6 +448,13 @@ export default function GeneralContractorMaterialsScreen() {
                     loading={submitting}
                     fullWidth
                   />
+                </GlassCard>
+              ) : assignment?.status === 'active' && !gcVerified ? (
+                <GlassCard style={styles.card}>
+                  <Text style={styles.sectionTitle}>Verification required</Text>
+                  <Text style={styles.bodyText}>
+                    WalkerAI verification is required before material recommendations can be sent.
+                  </Text>
                 </GlassCard>
               ) : assignment?.status === 'active' ? null : (
                 <GlassCard style={styles.card}>

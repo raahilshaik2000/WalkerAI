@@ -92,6 +92,7 @@ export default function GeneralContractorCompletionScreen() {
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [submittingCompletion, setSubmittingCompletion] = useState(false);
+  const [gcVerified, setGcVerified] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
   const fetchData = useCallback(async () => {
@@ -103,11 +104,12 @@ export default function GeneralContractorCompletionScreen() {
       }
       const { data: gc, error: gcError } = await supabase
         .from('general_contractors')
-        .select('id')
+        .select('id, verified')
         .eq('user_id', currentUser.id)
         .maybeSingle();
       if (gcError) throw gcError;
       if (!gc?.id) throw new Error('GC profile not found.');
+      setGcVerified(gc.verified === true);
 
       const [projectResult, permitResult, warrantyResult, materialResult, approvalResult, paymentResult] = await Promise.all([
         supabase
@@ -176,6 +178,7 @@ export default function GeneralContractorCompletionScreen() {
       setMaterialOrders([]);
       setApprovals([]);
       setPaymentRequests([]);
+      setGcVerified(false);
     } finally {
       setLoading(false);
       setRefreshing(false);
@@ -202,6 +205,7 @@ export default function GeneralContractorCompletionScreen() {
   const latestCompletionRequest = completionRequests[0];
   const pendingCompletionRequest = completionRequests.find((approval) => approval.status === 'pending');
   const canRequestCompletion = assignment?.status === 'active'
+    && gcVerified
     && project?.status !== 'completed'
     && !pendingCompletionRequest
     && pendingApprovals === 0;
@@ -209,6 +213,10 @@ export default function GeneralContractorCompletionScreen() {
   const handleRequestCompletion = async () => {
     if (!assignment || assignment.status !== 'active') {
       Alert.alert('Active GC management required', 'The homeowner must confirm active GC management before completion can be requested.');
+      return;
+    }
+    if (!gcVerified) {
+      Alert.alert('Verification required', 'WalkerAI must verify your GC profile before completion can be requested.');
       return;
     }
     if (pendingApprovals > 0) {
@@ -301,6 +309,10 @@ export default function GeneralContractorCompletionScreen() {
                     size="sm"
                     style={styles.completionButton}
                   />
+                ) : project?.status !== 'completed' && assignment?.status === 'active' && !gcVerified ? (
+                  <Text style={styles.completionNote}>
+                    WalkerAI verification is required before final project completion can be requested.
+                  </Text>
                 ) : project?.status !== 'completed' && !pendingCompletionRequest ? (
                   <Text style={styles.completionNote}>
                     Resolve pending approvals before requesting final project completion.

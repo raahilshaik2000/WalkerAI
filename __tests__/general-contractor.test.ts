@@ -237,6 +237,41 @@ describe('general contractor account type', () => {
     expect(migration).toContain("q.status = 'pending'");
   });
 
+  it('locks GC project sub-screen controls when active assignments lose verification', () => {
+    const screenPaths = [
+      'src/app/(general-contractor)/project/[id]/schedule.tsx',
+      'src/app/(general-contractor)/project/[id]/materials.tsx',
+      'src/app/(general-contractor)/project/[id]/discovery.tsx',
+      'src/app/(general-contractor)/project/[id]/payments.tsx',
+      'src/app/(general-contractor)/project/[id]/permits.tsx',
+      'src/app/(general-contractor)/project/[id]/trades.tsx',
+      'src/app/(general-contractor)/project/[id]/completion.tsx',
+    ];
+
+    for (const screenPath of screenPaths) {
+      const source = fs.readFileSync(path.join(repoRoot, screenPath), 'utf8');
+      expect(source).toContain(".select('id, verified')");
+      expect(source).toContain('setGcVerified(gc.verified === true)');
+      expect(source).toContain('WalkerAI verification is required');
+    }
+
+    const assistant = fs.readFileSync(
+      path.join(repoRoot, 'src/app/(general-contractor)/project/[id]/assistant.tsx'),
+      'utf8',
+    );
+    const projectDetail = fs.readFileSync(
+      path.join(repoRoot, 'src/app/(general-contractor)/project/[id]/index.tsx'),
+      'utf8',
+    );
+
+    expect(assistant).toContain(".select('id, verified')");
+    expect(assistant).toContain('gc.verified !== true');
+    expect(assistant).toContain('WalkerAI verification is required before project assistant summaries are available.');
+    expect(projectDetail).toContain("if (gc.verified !== true) throw new Error('WalkerAI must verify your GC profile before approval requests can be sent.')");
+    expect(projectDetail).toContain("const assignmentIsActive = assignment?.status === 'active' && gcVerified");
+    expect(projectDetail).toContain('{assignmentIsActive ? (');
+  });
+
   it('adds generic homeowner approval requests for GC recommendations', () => {
     const migration = fs.readFileSync(
       path.join(repoRoot, 'supabase/migrations/20260615000300_add_project_approval_requests.sql'),

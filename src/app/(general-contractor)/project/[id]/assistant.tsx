@@ -113,11 +113,14 @@ export default function GeneralContractorAssistantScreen() {
 
       const { data: gc, error: gcError } = await supabase
         .from('general_contractors')
-        .select('id')
+        .select('id, verified')
         .eq('user_id', currentUser.id)
         .maybeSingle();
       if (gcError) throw gcError;
       if (!gc?.id) throw new Error('GC profile not found.');
+      if (gc.verified !== true) {
+        throw new Error('WalkerAI verification is required before project assistant summaries are available.');
+      }
 
       const { data: assignmentRow, error: assignmentError } = await supabase
         .from('general_contractor_projects')

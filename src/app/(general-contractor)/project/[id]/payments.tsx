@@ -60,6 +60,7 @@ export default function GeneralContractorPaymentsScreen() {
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [submitting, setSubmitting] = useState(false);
+  const [gcVerified, setGcVerified] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
   const fetchData = useCallback(async () => {
@@ -75,11 +76,12 @@ export default function GeneralContractorPaymentsScreen() {
       setErrorMessage(null);
       const { data: gc, error: gcError } = await supabase
         .from('general_contractors')
-        .select('id')
+        .select('id, verified')
         .eq('user_id', currentUser.id)
         .maybeSingle();
       if (gcError) throw gcError;
       if (!gc?.id) throw new Error('GC profile not found.');
+      setGcVerified(gc.verified === true);
 
       const [assignmentResult, requestResult] = await Promise.all([
         supabase
@@ -104,6 +106,7 @@ export default function GeneralContractorPaymentsScreen() {
       setErrorMessage(err instanceof Error ? err.message : 'Could not load payment requests.');
       setAssignment(null);
       setRequests([]);
+      setGcVerified(false);
     } finally {
       setLoading(false);
       setRefreshing(false);
@@ -124,6 +127,10 @@ export default function GeneralContractorPaymentsScreen() {
   const handleSubmit = async () => {
     if (!assignment || assignment.status !== 'active') {
       Alert.alert('Active GC management required', 'The homeowner must confirm GC management before payment requests can be sent.');
+      return;
+    }
+    if (!gcVerified) {
+      Alert.alert('Verification required', 'WalkerAI must verify your GC profile before payment requests can be sent.');
       return;
     }
 
@@ -196,7 +203,7 @@ export default function GeneralContractorPaymentsScreen() {
             </GlassCard>
           ) : (
             <>
-              {assignment?.status === 'active' ? (
+              {assignment?.status === 'active' && gcVerified ? (
                 <GlassCard style={styles.card}>
                   <Text style={styles.sectionTitle}>New request</Text>
                   <View style={styles.kindGrid}>
@@ -242,6 +249,13 @@ export default function GeneralContractorPaymentsScreen() {
                     fullWidth
                     style={styles.submitButton}
                   />
+                </GlassCard>
+              ) : assignment?.status === 'active' ? (
+                <GlassCard style={styles.card}>
+                  <Text style={styles.sectionTitle}>Verification required</Text>
+                  <Text style={styles.bodyText}>
+                    WalkerAI verification is required before payment requests can be sent.
+                  </Text>
                 </GlassCard>
               ) : (
                 <GlassCard style={styles.card}>

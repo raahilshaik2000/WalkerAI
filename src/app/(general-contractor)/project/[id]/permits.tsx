@@ -65,6 +65,7 @@ export default function GeneralContractorPermitsScreen() {
   const [uploadingId, setUploadingId] = useState<string | null>(null);
   const [refreshing, setRefreshing] = useState(false);
   const [loading, setLoading] = useState(true);
+  const [gcVerified, setGcVerified] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
   const fetchPermits = useCallback(async () => {
@@ -75,17 +76,19 @@ export default function GeneralContractorPermitsScreen() {
         setAssignment(null);
         setPermits([]);
         setPreviewUrls({});
+        setGcVerified(false);
         setErrorMessage('You need to be signed in to manage permits.');
         return;
       }
 
       const { data: gc, error: gcError } = await supabase
         .from('general_contractors')
-        .select('id')
+        .select('id, verified')
         .eq('user_id', currentUser.id)
         .maybeSingle();
       if (gcError) throw gcError;
       if (!gc?.id) throw new Error('GC profile not found.');
+      setGcVerified(gc.verified === true);
 
       const { data: assignmentRow, error: assignmentError } = await supabase
         .from('general_contractor_projects')
@@ -129,6 +132,7 @@ export default function GeneralContractorPermitsScreen() {
       setAssignment(null);
       setPermits([]);
       setPreviewUrls({});
+      setGcVerified(false);
       setErrorMessage(err instanceof Error ? err.message : 'Could not load permits.');
     } finally {
       setLoading(false);
@@ -150,6 +154,10 @@ export default function GeneralContractorPermitsScreen() {
   const handleAddPermit = async () => {
     if (assignment?.status !== 'active') {
       Alert.alert('Active GC management required', 'The homeowner must confirm GC management before permits can be managed.');
+      return;
+    }
+    if (!gcVerified) {
+      Alert.alert('Verification required', 'WalkerAI must verify your GC profile before permits can be managed.');
       return;
     }
     if (!permitType.trim()) {
@@ -178,6 +186,10 @@ export default function GeneralContractorPermitsScreen() {
       Alert.alert('Active GC management required', 'The homeowner must confirm GC management before permit statuses can be updated.');
       return;
     }
+    if (!gcVerified) {
+      Alert.alert('Verification required', 'WalkerAI must verify your GC profile before permit statuses can be updated.');
+      return;
+    }
     const { error } = await supabase
       .from('permits')
       .update({ status })
@@ -193,6 +205,10 @@ export default function GeneralContractorPermitsScreen() {
   const handleUpload = async (permit: Permit) => {
     if (assignment?.status !== 'active') {
       Alert.alert('Active GC management required', 'The homeowner must confirm GC management before permit documents can be uploaded.');
+      return;
+    }
+    if (!gcVerified) {
+      Alert.alert('Verification required', 'WalkerAI must verify your GC profile before permit documents can be uploaded.');
       return;
     }
     const result = await launchImageLibrary({
@@ -232,7 +248,7 @@ export default function GeneralContractorPermitsScreen() {
     }
   };
 
-  const canManagePermits = assignment?.status === 'active';
+  const canManagePermits = assignment?.status === 'active' && gcVerified;
 
   return (
     <GradientBackground glow="top-right">
@@ -271,9 +287,11 @@ export default function GeneralContractorPermitsScreen() {
             </GlassCard>
           ) : !loading && !errorMessage ? (
             <GlassCard style={styles.card}>
-              <Text style={styles.sectionTitle}>Permits locked</Text>
+              <Text style={styles.sectionTitle}>{assignment?.status === 'active' ? 'Verification required' : 'Permits locked'}</Text>
               <Text style={styles.bodyText}>
-                The homeowner must confirm active GC management before permits, inspections, or uploaded documents can be managed.
+                {assignment?.status === 'active'
+                  ? 'WalkerAI verification is required before permits, inspections, or uploaded documents can be managed.'
+                  : 'The homeowner must confirm active GC management before permits, inspections, or uploaded documents can be managed.'}
               </Text>
             </GlassCard>
           ) : null}

@@ -288,6 +288,10 @@ export default function GeneralContractorProjectDetail() {
       Alert.alert('Active GC assignment required', 'Accept the management invite before sending approval requests.');
       return;
     }
+    if (!gcVerified) {
+      Alert.alert('Verification required', 'WalkerAI must verify your GC profile before approval requests can be sent.');
+      return;
+    }
     if (!approvalTitle.trim()) {
       Alert.alert('Title required', 'Add a short title for the homeowner approval request.');
       return;
@@ -324,11 +328,12 @@ export default function GeneralContractorProjectDetail() {
     try {
       const { data: gc, error: gcError } = await supabase
         .from('general_contractors')
-        .select('id')
+        .select('id, verified')
         .eq('user_id', currentUser.id)
         .maybeSingle();
       if (gcError) throw gcError;
       if (!gc?.id) throw new Error('GC profile not found.');
+      if (gc.verified !== true) throw new Error('WalkerAI must verify your GC profile before approval requests can be sent.');
       if (!project?.id) throw new Error('Project not loaded.');
 
       const { data: projectRow, error: projectError } = await supabase
@@ -375,6 +380,14 @@ export default function GeneralContractorProjectDetail() {
 
   const handleSaveExternalTrade = async () => {
     if (!externalSlotId) return;
+    if (!assignment || assignment.status !== 'active') {
+      Alert.alert('Active GC assignment required', 'The homeowner must confirm GC management before external trades can be managed.');
+      return;
+    }
+    if (!gcVerified) {
+      Alert.alert('Verification required', 'WalkerAI must verify your GC profile before external trades can be managed.');
+      return;
+    }
     if (!externalTradeName.trim()) {
       Alert.alert('Trade name required', 'Enter the external trade contact name.');
       return;
@@ -407,6 +420,14 @@ export default function GeneralContractorProjectDetail() {
   };
 
   const handleUploadExternalTradeDocument = async (slot: Slot) => {
+    if (!assignment || assignment.status !== 'active') {
+      Alert.alert('Active GC assignment required', 'The homeowner must confirm GC management before trade documents can be uploaded.');
+      return;
+    }
+    if (!gcVerified) {
+      Alert.alert('Verification required', 'WalkerAI must verify your GC profile before trade documents can be uploaded.');
+      return;
+    }
     if (slot.fulfillment_type !== 'external') {
       Alert.alert('External trade required', 'Documents can only be attached to externally managed trades.');
       return;
@@ -444,6 +465,10 @@ export default function GeneralContractorProjectDetail() {
   const handleSubmitTermsUpdate = async () => {
     if (!assignment || assignment.status !== 'active') {
       Alert.alert('Active GC assignment required', 'The homeowner must confirm GC management before terms changes can be requested.');
+      return;
+    }
+    if (!gcVerified) {
+      Alert.alert('Verification required', 'WalkerAI must verify your GC profile before terms changes can be requested.');
       return;
     }
 
@@ -502,6 +527,10 @@ export default function GeneralContractorProjectDetail() {
   const handleSubmitBudgetUpdate = async () => {
     if (!assignment || assignment.status !== 'active') {
       Alert.alert('Active GC assignment required', 'The homeowner must confirm GC management before budget changes can be requested.');
+      return;
+    }
+    if (!gcVerified) {
+      Alert.alert('Verification required', 'WalkerAI must verify your GC profile before budget changes can be requested.');
       return;
     }
 
@@ -870,7 +899,7 @@ export default function GeneralContractorProjectDetail() {
                       Generate or enter an estimate before WalkerAI can calculate markup, homeowner total, and GC revenue.
                     </Text>
                   )}
-                  {assignment.status === 'active' ? (
+                  {assignmentIsActive ? (
                     <View style={styles.termsEditor}>
                       <Text style={styles.sectionSubTitle}>Budget basis</Text>
                       <Text style={styles.bodyText}>
@@ -934,7 +963,7 @@ export default function GeneralContractorProjectDetail() {
                 </GlassCard>
               ) : null}
 
-              {assignment?.status === 'active' ? (
+              {assignmentIsActive ? (
                 <GlassCard style={styles.card}>
                   <Text style={styles.sectionTitle}>Request homeowner approval</Text>
                   <Text style={styles.bodyText}>
@@ -1053,7 +1082,7 @@ export default function GeneralContractorProjectDetail() {
                               ? `${slot.external_trade_document_urls?.length ?? 0} document${(slot.external_trade_document_urls?.length ?? 0) === 1 ? '' : 's'} uploaded`
                               : 'No license or insurance documents uploaded'}
                           </Text>
-                          {assignment?.status === 'active' ? (
+                          {assignmentIsActive ? (
                             <TouchableOpacity
                               style={styles.externalDocButton}
                               onPress={() => handleUploadExternalTradeDocument(slot)}
@@ -1067,7 +1096,7 @@ export default function GeneralContractorProjectDetail() {
                           ) : null}
                         </View>
                       ) : null}
-                      {assignment?.status === 'active' && !getCompanyName(slot) && slot.fulfillment_type !== 'external' ? (
+                      {assignmentIsActive && !getCompanyName(slot) && slot.fulfillment_type !== 'external' ? (
                         <TouchableOpacity
                           style={styles.externalLink}
                           onPress={() => startExternalTrade(slot)}
@@ -1081,7 +1110,7 @@ export default function GeneralContractorProjectDetail() {
                 ))}
               </GlassCard>
 
-              {assignment?.status === 'active' && externalSlotId ? (
+              {assignmentIsActive && externalSlotId ? (
                 <GlassCard style={styles.card}>
                   <Text style={styles.sectionTitle}>External trade</Text>
                   <Text style={styles.bodyText}>

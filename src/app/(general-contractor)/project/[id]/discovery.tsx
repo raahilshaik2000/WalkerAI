@@ -64,6 +64,7 @@ export default function GeneralContractorDiscoveryScreen() {
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [submitting, setSubmitting] = useState(false);
+  const [gcVerified, setGcVerified] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
   const fetchData = useCallback(async () => {
@@ -79,11 +80,12 @@ export default function GeneralContractorDiscoveryScreen() {
       setErrorMessage(null);
       const { data: gc, error: gcError } = await supabase
         .from('general_contractors')
-        .select('id')
+        .select('id, verified')
         .eq('user_id', currentUser.id)
         .maybeSingle();
       if (gcError) throw gcError;
       if (!gc?.id) throw new Error('GC profile not found.');
+      setGcVerified(gc.verified === true);
 
       const [assignmentResult, requestResult] = await Promise.all([
         supabase
@@ -109,6 +111,7 @@ export default function GeneralContractorDiscoveryScreen() {
       setErrorMessage(err instanceof Error ? err.message : 'Could not load discoveries.');
       setAssignment(null);
       setRequests([]);
+      setGcVerified(false);
     } finally {
       setLoading(false);
       setRefreshing(false);
@@ -129,6 +132,10 @@ export default function GeneralContractorDiscoveryScreen() {
   const handleSubmit = async () => {
     if (!assignment || assignment.status !== 'active') {
       Alert.alert('Active GC management required', 'The homeowner must confirm GC management before discoveries can be submitted.');
+      return;
+    }
+    if (!gcVerified) {
+      Alert.alert('Verification required', 'WalkerAI must verify your GC profile before discoveries can be submitted.');
       return;
     }
     if (!title.trim() || !description.trim()) {
@@ -212,7 +219,7 @@ export default function GeneralContractorDiscoveryScreen() {
             </GlassCard>
           ) : (
             <>
-              {assignment?.status === 'active' ? (
+              {assignment?.status === 'active' && gcVerified ? (
                 <GlassCard style={styles.card}>
                   <Text style={styles.sectionTitle}>New discovery</Text>
                   <View style={styles.typeGrid}>
@@ -250,6 +257,13 @@ export default function GeneralContractorDiscoveryScreen() {
                     />
                   </View>
                   <GlassButton label="Send for Homeowner Approval" onPress={handleSubmit} loading={submitting} fullWidth />
+                </GlassCard>
+              ) : assignment?.status === 'active' ? (
+                <GlassCard style={styles.card}>
+                  <Text style={styles.sectionTitle}>Verification required</Text>
+                  <Text style={styles.bodyText}>
+                    WalkerAI verification is required before discoveries or scope changes can be submitted.
+                  </Text>
                 </GlassCard>
               ) : (
                 <GlassCard style={styles.card}>
