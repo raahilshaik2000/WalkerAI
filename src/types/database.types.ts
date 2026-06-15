@@ -174,6 +174,7 @@ export interface GeneralContractorProject {
   status: 'invited' | 'active' | 'completed' | 'removed';
   concierge_fee_pct: number;
   markup_pct: number;
+  project_type: string | null;
   scope_summary: string | null;
   homeowner_contact_name: string | null;
   homeowner_contact_email: string | null;

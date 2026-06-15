@@ -63,6 +63,7 @@ interface Assignment {
   general_contractor_id: string;
   markup_pct: number;
   concierge_fee_pct: number;
+  project_type: string | null;
   scope_summary: string | null;
   homeowner_contact_name: string | null;
   homeowner_contact_email: string | null;
@@ -100,9 +101,14 @@ function projectStatusVariant(status: string): 'active' | 'completed' | 'pending
   return 'neutral';
 }
 
-function formatRoom(roomType?: string | null) {
-  if (!roomType) return 'Renovation';
-  return `${roomType.charAt(0).toUpperCase()}${roomType.slice(1)} Renovation`;
+function formatProjectType(projectType?: string | null, roomType?: string | null) {
+  const type = projectType || roomType;
+  if (!type) return 'Renovation Project';
+  const label = type
+    .split('_')
+    .map((part) => `${part.charAt(0).toUpperCase()}${part.slice(1)}`)
+    .join(' ');
+  return type === 'kitchen' || type === 'bathroom' ? `${label} Renovation` : label;
 }
 
 function formatTrade(tradeType: string) {
@@ -210,7 +216,7 @@ export default function GeneralContractorProjectDetail() {
           .from('general_contractor_projects')
           .select(`
             id, status, homeowner_id, general_contractor_id, markup_pct, concierge_fee_pct,
-            scope_summary, homeowner_contact_name, homeowner_contact_email, homeowner_contact_phone,
+            project_type, scope_summary, homeowner_contact_name, homeowner_contact_email, homeowner_contact_phone,
             initiated_by_gc
           `)
           .eq('project_id', projectId)
@@ -569,7 +575,7 @@ export default function GeneralContractorProjectDetail() {
               <Icon name="arrow-left" size={22} color={Colors.text.secondary} />
             </TouchableOpacity>
             <View style={styles.headerBody}>
-              <Text style={styles.title}>{formatRoom(project?.room_type)}</Text>
+              <Text style={styles.title}>{formatProjectType(assignment?.project_type, project?.room_type)}</Text>
               <Text style={styles.subtitle}>{project?.city || project?.address || 'Managed project'}</Text>
             </View>
             {project?.status ? (

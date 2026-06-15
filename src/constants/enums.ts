@@ -51,6 +51,18 @@ export type QualityTier = 'budget' | 'mid-range' | 'luxury';
 
 export type RoomType = 'kitchen' | 'bathroom';
 
+export const GC_PROJECT_TYPES = [
+  'kitchen',
+  'bathroom',
+  'flooring',
+  'painting',
+  'basement',
+  'addition',
+  'other',
+] as const;
+
+export type GeneralContractorProjectType = typeof GC_PROJECT_TYPES[number];
+
 export type MaterialOrderStatus =
   | 'open'
   | 'accepted'

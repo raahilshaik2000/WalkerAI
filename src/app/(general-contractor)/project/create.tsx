@@ -17,7 +17,7 @@ import { AddressAutocomplete, type AddressResult } from '@/components/ui/Address
 import { GlassButton, GlassCard, GlassInput, GradientBackground } from '@/components/ui';
 import { normalizeCanadianProvince } from '@/lib/canada';
 import { Colors, Spacing, Typography } from '@/constants/theme';
-import type { RoomType } from '@/constants/enums';
+import { GC_PROJECT_TYPES, type GeneralContractorProjectType } from '@/constants/enums';
 
 function parsePercent(value: string, fallback: number): number | null {
   const trimmed = value.trim();
@@ -28,12 +28,16 @@ function parsePercent(value: string, fallback: number): number | null {
   return Number.isFinite(parsed) ? parsed : null;
 }
 
+function projectTypeLabel(type: GeneralContractorProjectType) {
+  return type.charAt(0).toUpperCase() + type.slice(1);
+}
+
 export default function GeneralContractorCreateProject() {
   const navigation = useNavigation<any>();
   const [homeownerEmail, setHomeownerEmail] = useState('');
   const [homeownerName, setHomeownerName] = useState('');
   const [homeownerPhone, setHomeownerPhone] = useState('');
-  const [roomType, setRoomType] = useState<RoomType>('kitchen');
+  const [projectType, setProjectType] = useState<GeneralContractorProjectType>('kitchen');
   const [scopeSummary, setScopeSummary] = useState('');
   const [address, setAddress] = useState('');
   const [city, setCity] = useState('');
@@ -105,7 +109,7 @@ export default function GeneralContractorCreateProject() {
         p_postal_code: postalCode.trim() || null,
         p_lat: lat,
         p_lng: lng,
-        p_room_type: roomType,
+        p_room_type: projectType,
         p_scope_summary: scopeSummary.trim(),
         p_markup_pct: parsedMarkup,
         p_concierge_fee_pct: parsedConcierge,
@@ -172,17 +176,17 @@ export default function GeneralContractorCreateProject() {
 
               <Text style={styles.sectionTitle}>Project type</Text>
               <View style={styles.segmentRow}>
-                {(['kitchen', 'bathroom'] as RoomType[]).map((type) => {
-                  const selected = roomType === type;
+                {GC_PROJECT_TYPES.map((type) => {
+                  const selected = projectType === type;
                   return (
                     <TouchableOpacity
                       key={type}
                       style={[styles.segment, selected && styles.segmentActive]}
-                      onPress={() => setRoomType(type)}
+                      onPress={() => setProjectType(type)}
                       activeOpacity={0.85}
                     >
                       <Text style={[styles.segmentText, selected && styles.segmentTextActive]}>
-                        {type.charAt(0).toUpperCase() + type.slice(1)}
+                        {projectTypeLabel(type)}
                       </Text>
                     </TouchableOpacity>
                   );
@@ -194,7 +198,7 @@ export default function GeneralContractorCreateProject() {
                 value={scopeSummary}
                 onChangeText={setScopeSummary}
                 containerStyle={styles.inputSpacing}
-                hint="Example: Full bathroom remodel with tile, vanity, plumbing fixtures, and paint."
+                hint="Example: Full bathroom remodel, flooring replacement, basement finishing, or painting scope."
               />
             </GlassCard>
 
@@ -298,9 +302,10 @@ const styles = StyleSheet.create({
   card: { marginBottom: Spacing.sm },
   sectionTitle: { ...Typography.label, marginBottom: 10 },
   inputSpacing: { marginBottom: Spacing.sm },
-  segmentRow: { flexDirection: 'row', gap: 8, marginBottom: Spacing.sm },
+  segmentRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginBottom: Spacing.sm },
   segment: {
-    flex: 1,
+    minWidth: '30%',
+    flexGrow: 1,
     minHeight: 46,
     borderRadius: 14,
     borderWidth: 1,

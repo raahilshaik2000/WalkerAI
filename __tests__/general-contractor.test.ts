@@ -205,6 +205,10 @@ describe('general contractor account type', () => {
       path.join(repoRoot, 'supabase/migrations/20260615002800_gc_project_management_notification.sql'),
       'utf8',
     );
+    const projectTypeMigration = fs.readFileSync(
+      path.join(repoRoot, 'supabase/migrations/20260615002900_add_gc_project_type.sql'),
+      'utf8',
+    );
     const navigator = fs.readFileSync(
       path.join(repoRoot, 'src/navigation/GeneralContractorNavigator.tsx'),
       'utf8',
@@ -225,6 +229,10 @@ describe('general contractor account type', () => {
       path.join(repoRoot, 'src/app/(general-contractor)/project/[id]/index.tsx'),
       'utf8',
     );
+    const enums = fs.readFileSync(
+      path.join(repoRoot, 'src/constants/enums.ts'),
+      'utf8',
+    );
 
     expect(migration).toContain('CREATE OR REPLACE FUNCTION public.create_gc_managed_project');
     expect(migration).toContain("role = 'homeowner'");
@@ -235,7 +243,14 @@ describe('general contractor account type', () => {
     expect(dashboard).toContain("navigation.navigate('GeneralContractorCreateProject')");
     expect(dashboard).toContain('homeowner_contact_name, homeowner_contact_email, homeowner_contact_phone');
     expect(dashboard).toContain('projectContact');
+    expect(dashboard).toContain('project_type, scope_summary');
+    expect(dashboard).toContain('formatProjectType(assignment.project_type, project?.room_type)');
     expect(createProject).toContain("supabase.rpc('create_gc_managed_project'");
+    expect(createProject).toContain('GC_PROJECT_TYPES.map');
+    expect(enums).toContain("'flooring'");
+    expect(enums).toContain("'painting'");
+    expect(enums).toContain("'basement'");
+    expect(enums).toContain("'addition'");
     expect(createProject).toContain('Homeowner name');
     expect(createProject).toContain('Homeowner phone');
     expect(createProject).toContain('p_homeowner_contact_name: contactName');
@@ -245,6 +260,8 @@ describe('general contractor account type', () => {
     expect(gcProjectDetail).toContain('homeowner_contact_name, homeowner_contact_email, homeowner_contact_phone');
     expect(gcProjectDetail).toContain('Homeowner contact');
     expect(gcProjectDetail).toContain('Waiting for the homeowner to confirm GC management');
+    expect(gcProjectDetail).toContain('project_type, scope_summary');
+    expect(gcProjectDetail).toContain('formatProjectType(assignment?.project_type, project?.room_type)');
     expect(contactMigration).toContain('ADD COLUMN IF NOT EXISTS homeowner_contact_name');
     expect(contactMigration).toContain('ADD COLUMN IF NOT EXISTS homeowner_contact_email');
     expect(contactMigration).toContain('ADD COLUMN IF NOT EXISTS homeowner_contact_phone');
@@ -255,6 +272,10 @@ describe('general contractor account type', () => {
     expect(transactionalContactMigration).toContain('homeowner_contact_phone');
     expect(notificationMigration).toContain("'gc_management_invited'");
     expect(notificationMigration).not.toContain("'new_message'");
+    expect(projectTypeMigration).toContain('ADD COLUMN IF NOT EXISTS project_type');
+    expect(projectTypeMigration).toContain("'flooring', 'painting', 'basement', 'addition', 'other'");
+    expect(projectTypeMigration).toContain("CASE WHEN v_project_type IN ('kitchen', 'bathroom') THEN v_project_type ELSE NULL END");
+    expect(projectTypeMigration).not.toContain('Project type must be kitchen or bathroom');
   });
 
   it('counts real GC homeowner actions on the dashboard approval metric', () => {
