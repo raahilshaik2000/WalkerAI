@@ -775,6 +775,20 @@ describe('general contractor account type', () => {
     expect(gcApprovals).toContain("navigation.navigate('GeneralContractorProjectDetail'");
   });
 
+  it('counts modern GC approval requests in project pending decisions', () => {
+    const gcProjectDetail = fs.readFileSync(
+      path.join(repoRoot, 'src/app/(general-contractor)/project/[id]/index.tsx'),
+      'utf8',
+    );
+
+    expect(gcProjectDetail).toContain("const pendingApprovalRequests = approvalRequests.filter((request) => request.status === 'pending');");
+    expect(gcProjectDetail).toContain('const pendingApprovals = pendingChangeOrders.length + pendingApprovalRequests.length;');
+    expect(gcProjectDetail).toContain('pendingDecisionApprovalRequests.map');
+    expect(gcProjectDetail).toContain('pendingDecisionChangeOrders.map');
+    expect(gcProjectDetail).toContain("key={`approval-${request.id}`}");
+    expect(gcProjectDetail).toContain("key={`change-order-${order.id}`}");
+  });
+
   it('routes GC project completion through homeowner approval before closing records', () => {
     const migration = fs.readFileSync(
       path.join(repoRoot, 'supabase/migrations/20260615001400_apply_gc_completion_approval.sql'),

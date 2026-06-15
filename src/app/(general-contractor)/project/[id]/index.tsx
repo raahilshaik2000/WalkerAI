@@ -539,9 +539,13 @@ export default function GeneralContractorProjectDetail() {
     : project?.ai_cost_max != null || project?.ai_cost_min != null
     ? formatCad(project.ai_cost_max ?? project.ai_cost_min ?? 0)
     : 'Pending';
-  const pendingApprovals = changeOrders.filter((order) => (
+  const pendingChangeOrders = changeOrders.filter((order) => (
     order.status === 'proposed' && order.signed_by_company && !order.signed_by_homeowner
-  )).length;
+  ));
+  const pendingApprovalRequests = approvalRequests.filter((request) => request.status === 'pending');
+  const pendingApprovals = pendingChangeOrders.length + pendingApprovalRequests.length;
+  const pendingDecisionApprovalRequests = pendingApprovalRequests.slice(0, 5);
+  const pendingDecisionChangeOrders = pendingChangeOrders.slice(0, Math.max(0, 5 - pendingDecisionApprovalRequests.length));
   const assignedTrades = slots.filter((slot) => !!getCompanyName(slot)).length;
   const assignmentIsActive = assignment?.status === 'active';
   const markupSummary = assignment && project
@@ -1117,26 +1121,41 @@ export default function GeneralContractorProjectDetail() {
 
               <GlassCard style={styles.card}>
                 <Text style={styles.sectionTitle}>Pending homeowner decisions</Text>
-                {changeOrders.length === 0 ? (
+                {pendingDecisionApprovalRequests.length === 0 && pendingDecisionChangeOrders.length === 0 ? (
                   <Text style={styles.bodyText}>No change orders or approval requests are pending.</Text>
-                ) : changeOrders.slice(0, 5).map((order) => (
-                  <View key={order.id} style={styles.row}>
-                    <View style={styles.rowIcon}>
-                      <Icon
-                        name={order.status === 'approved' ? 'check-circle-outline' : order.status === 'rejected' ? 'close-circle-outline' : 'clock-outline'}
-                        size={18}
-                        color={order.status === 'approved' ? Colors.success : order.status === 'rejected' ? Colors.error : Colors.warning}
-                      />
-                    </View>
-                    <View style={styles.rowBody}>
-                      <Text style={styles.rowTitle}>{order.description}</Text>
-                      <Text style={styles.rowSub}>
-                        {formatStatusLabel(order.status)}
-                        {order.cost_delta != null ? ` · ${formatCad(Math.abs(order.cost_delta))}` : ''}
-                      </Text>
-                    </View>
-                  </View>
-                ))}
+                ) : (
+                  <>
+                    {pendingDecisionApprovalRequests.map((request) => (
+                      <View key={`approval-${request.id}`} style={styles.row}>
+                        <View style={styles.rowIcon}>
+                          <Icon name="clock-alert-outline" size={18} color={Colors.warning} />
+                        </View>
+                        <View style={styles.rowBody}>
+                          <Text style={styles.rowTitle}>{request.title}</Text>
+                          <Text style={styles.rowSub}>
+                            {formatStatusLabel(request.request_type)}
+                            {request.cost_delta != null ? ` · ${formatSignedCadCents(request.cost_delta)}` : ''}
+                            {request.timeline_delta_days != null ? ` · ${request.timeline_delta_days > 0 ? '+' : ''}${request.timeline_delta_days} days` : ''}
+                          </Text>
+                        </View>
+                      </View>
+                    ))}
+                    {pendingDecisionChangeOrders.map((order) => (
+                      <View key={`change-order-${order.id}`} style={styles.row}>
+                        <View style={styles.rowIcon}>
+                          <Icon name="clock-outline" size={18} color={Colors.warning} />
+                        </View>
+                        <View style={styles.rowBody}>
+                          <Text style={styles.rowTitle}>{order.description}</Text>
+                          <Text style={styles.rowSub}>
+                            {formatStatusLabel(order.status)}
+                            {order.cost_delta != null ? ` · ${formatCad(Math.abs(order.cost_delta))}` : ''}
+                          </Text>
+                        </View>
+                      </View>
+                    ))}
+                  </>
+                )}
               </GlassCard>
             </>
           )}
