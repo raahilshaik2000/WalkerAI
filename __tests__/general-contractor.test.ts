@@ -105,4 +105,42 @@ describe('general contractor account type', () => {
     expect(homeownerConcierge).toContain("handleApprovalResponse(request, 'approved')");
     expect(homeownerConcierge).toContain("handleApprovalResponse(request, 'rejected')");
   });
+
+  it('supports GC-initiated homeowner-owned draft projects with homeowner confirmation', () => {
+    const migration = fs.readFileSync(
+      path.join(repoRoot, 'supabase/migrations/20260615000400_add_gc_project_creation_rpc.sql'),
+      'utf8',
+    );
+    const navigator = fs.readFileSync(
+      path.join(repoRoot, 'src/navigation/GeneralContractorNavigator.tsx'),
+      'utf8',
+    );
+    const dashboard = fs.readFileSync(
+      path.join(repoRoot, 'src/app/(general-contractor)/index.tsx'),
+      'utf8',
+    );
+    const createProject = fs.readFileSync(
+      path.join(repoRoot, 'src/app/(general-contractor)/project/create.tsx'),
+      'utf8',
+    );
+    const homeownerConcierge = fs.readFileSync(
+      path.join(repoRoot, 'src/app/(homeowner)/project/[id]/concierge.tsx'),
+      'utf8',
+    );
+    const gcProjectDetail = fs.readFileSync(
+      path.join(repoRoot, 'src/app/(general-contractor)/project/[id]/index.tsx'),
+      'utf8',
+    );
+
+    expect(migration).toContain('CREATE OR REPLACE FUNCTION public.create_gc_managed_project');
+    expect(migration).toContain("role = 'homeowner'");
+    expect(migration).toContain("v_gc.verified IS NOT TRUE");
+    expect(migration).toContain('initiated_by_gc');
+    expect(migration).toContain("'draft'");
+    expect(navigator).toContain('GeneralContractorCreateProject');
+    expect(dashboard).toContain("navigation.navigate('GeneralContractorCreateProject')");
+    expect(createProject).toContain("supabase.rpc('create_gc_managed_project'");
+    expect(homeownerConcierge).toContain('Confirm GC Management');
+    expect(gcProjectDetail).toContain('Waiting for the homeowner to confirm GC management');
+  });
 });

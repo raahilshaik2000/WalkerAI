@@ -54,6 +54,7 @@ interface Assignment {
   markup_pct: number;
   concierge_fee_pct: number;
   scope_summary: string | null;
+  initiated_by_gc: boolean;
 }
 
 interface ApprovalRequest {
@@ -168,7 +169,7 @@ export default function GeneralContractorProjectDetail() {
       if (gc?.id) {
         const { data: assignmentRow, error: assignmentError } = await supabase
           .from('general_contractor_projects')
-          .select('id, status, markup_pct, concierge_fee_pct, scope_summary')
+          .select('id, status, markup_pct, concierge_fee_pct, scope_summary, initiated_by_gc')
           .eq('project_id', projectId)
           .eq('general_contractor_id', gc.id)
           .maybeSingle();
@@ -382,7 +383,7 @@ export default function GeneralContractorProjectDetail() {
                     />
                   </View>
                   {assignment.scope_summary ? <Text style={styles.scopeText}>{assignment.scope_summary}</Text> : null}
-                  {assignment.status === 'invited' ? (
+                  {assignment.status === 'invited' && !assignment.initiated_by_gc ? (
                     <TouchableOpacity
                       style={[styles.acceptButton, accepting && styles.acceptButtonDisabled]}
                       onPress={handleAcceptInvite}
@@ -391,6 +392,10 @@ export default function GeneralContractorProjectDetail() {
                     >
                       <Text style={styles.acceptButtonText}>{accepting ? 'Accepting...' : 'Accept Management Invite'}</Text>
                     </TouchableOpacity>
+                  ) : assignment.status === 'invited' && assignment.initiated_by_gc ? (
+                    <Text style={styles.pendingHomeownerText}>
+                      Waiting for the homeowner to confirm GC management before recommendations can be sent.
+                    </Text>
                   ) : null}
                 </GlassCard>
               ) : null}
@@ -566,6 +571,12 @@ const styles = StyleSheet.create({
   },
   acceptButtonDisabled: { opacity: 0.65 },
   acceptButtonText: { color: Colors.accentFg, fontSize: 15, fontWeight: '800' },
+  pendingHomeownerText: {
+    ...Typography.caption,
+    color: Colors.warning,
+    marginTop: Spacing.sm,
+    lineHeight: 18,
+  },
   typeGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginTop: 14, marginBottom: 12 },
   typeChip: {
     borderWidth: 1,

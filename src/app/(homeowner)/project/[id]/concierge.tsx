@@ -25,6 +25,7 @@ interface CurrentAssignment {
   status: string;
   markup_pct: number;
   concierge_fee_pct: number;
+  initiated_by_gc: boolean;
   general_contractor?: Pick<GeneralContractor, 'id' | 'business_name' | 'city' | 'province' | 'rating' | 'total_reviews'> | Array<Pick<GeneralContractor, 'id' | 'business_name' | 'city' | 'province' | 'rating' | 'total_reviews'>> | null;
 }
 
@@ -81,7 +82,7 @@ export default function ProjectConciergeScreen() {
         supabase
           .from('general_contractor_projects')
           .select(`
-            id, status, markup_pct, concierge_fee_pct,
+            id, status, markup_pct, concierge_fee_pct, initiated_by_gc,
             general_contractor:general_contractors ( id, business_name, city, province, rating, total_reviews )
           `)
           .eq('project_id', projectId)
@@ -212,6 +213,39 @@ export default function ProjectConciergeScreen() {
     );
   };
 
+  const handleConfirmGcManagement = async () => {
+    const currentUser = user ?? (await supabase.auth.getUser()).data.user;
+    if (!currentUser?.id || projectHomeownerId !== currentUser.id || !currentAssignment?.id) {
+      Alert.alert('Not allowed', 'Only the homeowner can confirm GC management for this project.');
+      return;
+    }
+
+    Alert.alert(
+      'Confirm GC management?',
+      'This lets the GC manage recommendations for the project. You still approve scope, spending, payments, trade changes, and schedule changes.',
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Confirm',
+          onPress: async () => {
+            setRespondingId(currentAssignment.id);
+            const { error } = await supabase
+              .from('general_contractor_projects')
+              .update({ status: 'active' })
+              .eq('id', currentAssignment.id)
+              .eq('status', 'invited');
+            if (error) {
+              Alert.alert('Could not confirm GC', error.message);
+            } else {
+              await fetchData();
+            }
+            setRespondingId(null);
+          },
+        },
+      ],
+    );
+  };
+
   const assignedGc = getAssignedGc(currentAssignment);
 
   return (
@@ -265,6 +299,18 @@ export default function ProjectConciergeScreen() {
                   <Text style={styles.termText}>{Number(currentAssignment.markup_pct).toFixed(0)}% markup</Text>
                   <Text style={styles.termText}>{Number(currentAssignment.concierge_fee_pct).toFixed(0)}% concierge fee</Text>
                 </View>
+                {currentAssignment.status === 'invited' && currentAssignment.initiated_by_gc ? (
+                  <GlassButton
+                    label="Confirm GC Management"
+                    onPress={handleConfirmGcManagement}
+                    loading={respondingId === currentAssignment.id}
+                    fullWidth
+                    size="sm"
+                    style={styles.inviteButton}
+                  />
+                ) : currentAssignment.status === 'invited' ? (
+                  <Text style={styles.waitingText}>Waiting for the GC to accept your invite.</Text>
+                ) : null}
               </GlassCard>
 
               <GlassCard style={styles.card}>
@@ -409,6 +455,7 @@ const styles = StyleSheet.create({
     paddingVertical: 6,
   },
   inviteButton: { marginTop: Spacing.sm },
+  waitingText: { ...Typography.caption, color: Colors.warning, marginTop: Spacing.sm, fontWeight: '700' },
   approvalItem: {
     paddingVertical: 12,
     borderTopWidth: 1,

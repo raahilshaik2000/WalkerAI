@@ -208,7 +208,18 @@ export default function GeneralContractorDashboard() {
           <TradeScreenHeader
             title="GC Desk"
             subtitle={gc?.business_name ? `${gc.business_name} · Project command center` : 'Project command center'}
-            right={<NotificationButton />}
+            right={(
+              <View style={styles.headerActions}>
+                <TouchableOpacity
+                  style={styles.headerActionButton}
+                  onPress={() => navigation.navigate('GeneralContractorCreateProject')}
+                  activeOpacity={0.85}
+                >
+                  <Icon name="plus" size={20} color={Colors.text.primary} />
+                </TouchableOpacity>
+                <NotificationButton />
+              </View>
+            )}
           />
 
           <TradeMetricStrip
@@ -281,6 +292,17 @@ export default function GeneralContractorDashboard() {
 const styles = StyleSheet.create({
   safe: { flex: 1 },
   scroll: { flexGrow: 1, paddingHorizontal: Spacing.sm, paddingTop: Spacing.sm, paddingBottom: 120 },
+  headerActions: { flexDirection: 'row', alignItems: 'center', gap: 8 },
+  headerActionButton: {
+    width: 42,
+    height: 42,
+    borderRadius: 21,
+    backgroundColor: Colors.surface.default,
+    borderWidth: 1,
+    borderColor: Colors.surface.border,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
   pendingContainer: { flex: 1, alignItems: 'center', justifyContent: 'center', paddingHorizontal: Spacing.lg },
   onboardIconWrap: {
     width: 80,
