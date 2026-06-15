@@ -153,14 +153,11 @@ export default function ProjectConciergeScreen() {
           style: status === 'rejected' ? 'destructive' : 'default',
           onPress: async () => {
             setRespondingId(request.id);
-            const { error } = await supabase
-              .from('project_approval_requests')
-              .update({
-                status,
-                responded_at: new Date().toISOString(),
-              })
-              .eq('id', request.id)
-              .eq('status', 'pending');
+            const { error } = await supabase.rpc('respond_to_project_approval_request', {
+              p_request_id: request.id,
+              p_status: status,
+              p_response_note: null,
+            });
             if (error) {
               Alert.alert('Could not respond', error.message);
             } else {

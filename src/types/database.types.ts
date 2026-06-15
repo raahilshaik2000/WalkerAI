@@ -187,6 +187,7 @@ export interface ProjectApprovalRequest {
   timeline_delta_days: number | null;
   status: ApprovalRequestStatus;
   response_note: string | null;
+  metadata: Record<string, unknown>;
   created_at: string;
   responded_at: string | null;
 }

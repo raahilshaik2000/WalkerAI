@@ -468,6 +468,26 @@ export default function GeneralContractorProjectDetail() {
 
               {assignment ? (
                 <GlassCard style={styles.card}>
+                  <Text style={styles.sectionTitle}>Project controls</Text>
+                  <TouchableOpacity
+                    style={styles.controlRow}
+                    onPress={() => navigation.navigate('GeneralContractorSchedule', { id: projectId })}
+                    activeOpacity={0.85}
+                  >
+                    <View style={styles.controlIcon}>
+                      <Icon name="calendar-clock" size={20} color={Colors.accent} />
+                    </View>
+                    <View style={styles.controlBody}>
+                      <Text style={styles.controlTitle}>Schedule center</Text>
+                      <Text style={styles.controlSub}>Recommend trade dates for homeowner approval</Text>
+                    </View>
+                    <Icon name="chevron-right" size={20} color={Colors.text.tertiary} />
+                  </TouchableOpacity>
+                </GlassCard>
+              ) : null}
+
+              {assignment ? (
+                <GlassCard style={styles.card}>
                   <Text style={styles.sectionTitle}>Markup engine</Text>
                   {markupSummary ? (
                     <>
@@ -794,6 +814,18 @@ const styles = StyleSheet.create({
   budgetValue: { ...Typography.body, flex: 1, textAlign: 'right' },
   budgetValueStrong: { fontWeight: '900', color: Colors.text.primary },
   budgetValuePositive: { color: Colors.success, fontWeight: '800' },
+  controlRow: { flexDirection: 'row', alignItems: 'center', gap: 12 },
+  controlIcon: {
+    width: 42,
+    height: 42,
+    borderRadius: 21,
+    backgroundColor: Colors.surface.default,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  controlBody: { flex: 1 },
+  controlTitle: { ...Typography.body, fontWeight: '800' },
+  controlSub: { ...Typography.caption, marginTop: 3 },
   typeGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginTop: 14, marginBottom: 12 },
   typeChip: {
     borderWidth: 1,

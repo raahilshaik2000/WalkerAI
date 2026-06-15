@@ -180,4 +180,36 @@ describe('general contractor account type', () => {
     expect(homeownerProject).toContain('Externally managed by GC');
     expect(homeownerProject).toContain('No escrow protection');
   });
+
+  it('routes GC schedule recommendations through homeowner approval before dates apply', () => {
+    const migration = fs.readFileSync(
+      path.join(repoRoot, 'supabase/migrations/20260615000600_apply_schedule_approval_requests.sql'),
+      'utf8',
+    );
+    const navigator = fs.readFileSync(
+      path.join(repoRoot, 'src/navigation/GeneralContractorNavigator.tsx'),
+      'utf8',
+    );
+    const gcProjectDetail = fs.readFileSync(
+      path.join(repoRoot, 'src/app/(general-contractor)/project/[id]/index.tsx'),
+      'utf8',
+    );
+    const gcSchedule = fs.readFileSync(
+      path.join(repoRoot, 'src/app/(general-contractor)/project/[id]/schedule.tsx'),
+      'utf8',
+    );
+    const homeownerConcierge = fs.readFileSync(
+      path.join(repoRoot, 'src/app/(homeowner)/project/[id]/concierge.tsx'),
+      'utf8',
+    );
+
+    expect(migration).toContain('respond_to_project_approval_request');
+    expect(migration).toContain("v_request.request_type = 'schedule_change'");
+    expect(migration).toContain('scheduled_start_date = v_start_date');
+    expect(navigator).toContain('GeneralContractorSchedule');
+    expect(gcProjectDetail).toContain("navigation.navigate('GeneralContractorSchedule'");
+    expect(gcSchedule).toContain("request_type: 'schedule_change'");
+    expect(gcSchedule).toContain('Send Schedule for Approval');
+    expect(homeownerConcierge).toContain("supabase.rpc('respond_to_project_approval_request'");
+  });
 });
