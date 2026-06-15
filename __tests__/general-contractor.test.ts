@@ -479,4 +479,23 @@ describe('general contractor account type', () => {
     expect(gcApprovals).toContain('Homeowner approval requests');
     expect(gcApprovals).toContain("navigation.navigate('GeneralContractorProjectDetail'");
   });
+
+  it('routes GC project completion through homeowner approval before closing records', () => {
+    const migration = fs.readFileSync(
+      path.join(repoRoot, 'supabase/migrations/20260615001400_apply_gc_completion_approval.sql'),
+      'utf8',
+    );
+    const gcCompletion = fs.readFileSync(
+      path.join(repoRoot, 'src/app/(general-contractor)/project/[id]/completion.tsx'),
+      'utf8',
+    );
+
+    expect(migration).toContain("v_request.metadata->>'action' = 'complete_project'");
+    expect(migration).toContain("SET status = 'completed'");
+    expect(migration).toContain('public.general_contractor_projects');
+    expect(migration).not.toContain('stripe.transfers');
+    expect(gcCompletion).toContain('Request Homeowner Completion Approval');
+    expect(gcCompletion).toContain("metadata: { action: 'complete_project' }");
+    expect(gcCompletion).toContain('This does not release escrow funds.');
+  });
 });

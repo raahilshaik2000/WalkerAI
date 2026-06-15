@@ -1,6 +1,7 @@
 import { useCallback, useState } from 'react';
 import type { ReactNode } from 'react';
 import {
+  Alert,
   RefreshControl,
   ScrollView,
   StyleSheet,
@@ -16,7 +17,7 @@ import { formatCadCents, formatSignedCadCents } from '@/lib/currency';
 import { formatStatusLabel } from '@/lib/formatters';
 import { getRequiredStringParam } from '@/lib/navigation-params';
 import { Colors, Spacing, Typography } from '@/constants/theme';
-import { GlassCard, GradientBackground, StatusBadge } from '@/components/ui';
+import { GlassButton, GlassCard, GradientBackground, StatusBadge } from '@/components/ui';
 
 interface ProjectSummary {
   id: string;
@@ -50,6 +51,7 @@ interface ApprovalRecord {
   title: string;
   status: string;
   cost_delta: number | null;
+  metadata: Record<string, unknown>;
 }
 
 interface PaymentRequestRecord {
@@ -58,6 +60,13 @@ interface PaymentRequestRecord {
   title: string;
   status: string;
   amount_cents: number;
+}
+
+interface AssignmentRecord {
+  id: string;
+  status: string;
+  homeowner_id: string;
+  general_contractor_id: string;
 }
 
 function statusVariant(status: string): 'pending' | 'completed' | 'error' | 'neutral' {
@@ -77,6 +86,7 @@ export default function GeneralContractorCompletionScreen() {
   const route = useRoute<any>();
   const projectId = getRequiredStringParam(route.params, 'id');
   const [project, setProject] = useState<ProjectSummary | null>(null);
+  const [assignment, setAssignment] = useState<AssignmentRecord | null>(null);
   const [permits, setPermits] = useState<PermitRecord[]>([]);
   const [warranties, setWarranties] = useState<WarrantyRecord[]>([]);
   const [materialOrders, setMaterialOrders] = useState<MaterialOrderRecord[]>([]);
@@ -84,11 +94,18 @@ export default function GeneralContractorCompletionScreen() {
   const [paymentRequests, setPaymentRequests] = useState<PaymentRequestRecord[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
+  const [submittingCompletion, setSubmittingCompletion] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
   const fetchData = useCallback(async () => {
     try {
       setErrorMessage(null);
+      const currentUser = (await supabase.auth.getUser()).data.user;
+      const { data: gc, error: gcError } = currentUser?.id
+        ? await supabase.from('general_contractors').select('id').eq('user_id', currentUser.id).maybeSingle()
+        : { data: null, error: null };
+      if (gcError) throw gcError;
+
       const [projectResult, permitResult, warrantyResult, materialResult, approvalResult, paymentResult] = await Promise.all([
         supabase
           .from('projects')
@@ -112,7 +129,7 @@ export default function GeneralContractorCompletionScreen() {
           .order('created_at', { ascending: false }),
         supabase
           .from('project_approval_requests')
-          .select('id, request_type, title, status, cost_delta')
+          .select('id, request_type, title, status, cost_delta, metadata')
           .eq('project_id', projectId)
           .order('created_at', { ascending: false }),
         supabase
@@ -136,9 +153,23 @@ export default function GeneralContractorCompletionScreen() {
       setMaterialOrders((materialResult.data ?? []) as MaterialOrderRecord[]);
       setApprovals((approvalResult.data ?? []) as ApprovalRecord[]);
       setPaymentRequests((paymentResult.data ?? []) as PaymentRequestRecord[]);
+
+      if (gc?.id) {
+        const { data: assignmentRow, error: assignmentError } = await supabase
+          .from('general_contractor_projects')
+          .select('id, status, homeowner_id, general_contractor_id')
+          .eq('project_id', projectId)
+          .eq('general_contractor_id', gc.id)
+          .maybeSingle();
+        if (assignmentError) throw assignmentError;
+        setAssignment(assignmentRow as AssignmentRecord | null);
+      } else {
+        setAssignment(null);
+      }
     } catch (err) {
       setErrorMessage(err instanceof Error ? err.message : 'Could not load completion binder.');
       setProject(null);
+      setAssignment(null);
       setPermits([]);
       setWarranties([]);
       setMaterialOrders([]);
@@ -166,6 +197,51 @@ export default function GeneralContractorCompletionScreen() {
   const pendingApprovals = approvals.filter((approval) => approval.status === 'pending').length
     + paymentRequests.filter((request) => request.status === 'pending').length;
   const paidMaterials = materialOrders.reduce((sum, order) => sum + (order.final_price ?? 0), 0);
+  const completionRequest = approvals.find((approval) => approval.metadata?.action === 'complete_project');
+  const canRequestCompletion = assignment?.status === 'active'
+    && project?.status !== 'completed'
+    && !completionRequest
+    && pendingApprovals === 0;
+
+  const handleRequestCompletion = async () => {
+    if (!assignment || assignment.status !== 'active') {
+      Alert.alert('Active GC management required', 'The homeowner must confirm active GC management before completion can be requested.');
+      return;
+    }
+    if (pendingApprovals > 0) {
+      Alert.alert('Pending approvals remain', 'Resolve existing approval and payment requests before requesting final project completion.');
+      return;
+    }
+
+    Alert.alert(
+      'Request project completion?',
+      'The homeowner must approve this before WalkerAI marks the project and GC assignment completed. This does not release escrow funds.',
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Request',
+          onPress: async () => {
+            setSubmittingCompletion(true);
+            const { error } = await supabase.from('project_approval_requests').insert({
+              project_id: projectId,
+              requested_by_gc_id: assignment.general_contractor_id,
+              homeowner_id: assignment.homeowner_id,
+              request_type: 'general_recommendation',
+              title: 'Project completion approval',
+              description: 'GC recommends marking the renovation complete. Escrow and milestone releases still follow their existing payment workflows.',
+              metadata: { action: 'complete_project' },
+            });
+            if (error) {
+              Alert.alert('Could not request completion', error.message);
+            } else {
+              await fetchData();
+            }
+            setSubmittingCompletion(false);
+          },
+        },
+      ],
+    );
+  };
 
   return (
     <GradientBackground glow="top-right">
@@ -206,6 +282,25 @@ export default function GeneralContractorCompletionScreen() {
                   <SummaryTile label="Warranties" value={warranties.length} />
                   <SummaryTile label="Pending approvals" value={pendingApprovals} warning={pendingApprovals > 0} />
                 </View>
+                {completionRequest ? (
+                  <View style={styles.completionStatus}>
+                    <Text style={styles.bodyText}>Completion request: {formatStatusLabel(completionRequest.status)}</Text>
+                  </View>
+                ) : null}
+                {canRequestCompletion ? (
+                  <GlassButton
+                    label="Request Homeowner Completion Approval"
+                    onPress={handleRequestCompletion}
+                    loading={submittingCompletion}
+                    fullWidth
+                    size="sm"
+                    style={styles.completionButton}
+                  />
+                ) : project?.status !== 'completed' && !completionRequest ? (
+                  <Text style={styles.completionNote}>
+                    Resolve pending approvals before requesting final project completion.
+                  </Text>
+                ) : null}
               </GlassCard>
 
               <GlassCard style={styles.card}>
@@ -334,6 +429,14 @@ const styles = StyleSheet.create({
   summaryTileWarning: { borderColor: 'rgba(245,158,11,0.55)' },
   summaryValue: { color: Colors.text.primary, fontSize: 18, fontWeight: '900' },
   summaryLabel: { ...Typography.caption, marginTop: 3 },
+  completionButton: { marginTop: Spacing.sm },
+  completionStatus: {
+    marginTop: Spacing.sm,
+    paddingTop: Spacing.sm,
+    borderTopWidth: 1,
+    borderTopColor: Colors.glass.border,
+  },
+  completionNote: { ...Typography.caption, color: Colors.warning, marginTop: Spacing.sm, lineHeight: 18 },
   infoRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',
