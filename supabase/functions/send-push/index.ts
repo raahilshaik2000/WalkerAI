@@ -345,6 +345,18 @@ function buildNotificationContent(
         body: (payload.message as string) ?? 'A General Contractor created a draft project for your approval.',
         priority: 'high',
       };
+    case 'gc_management_invite_received':
+      return {
+        title: 'GC Management Invite',
+        body: (payload.message as string) ?? 'A homeowner invited you to manage their project.',
+        priority: 'high',
+      };
+    case 'gc_management_confirmed':
+      return {
+        title: 'GC Management Active',
+        body: (payload.message as string) ?? 'GC management is now active for this project.',
+        priority: 'high',
+      };
     case 'project_complete':
       return {
         title: 'Project Complete',

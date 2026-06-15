@@ -361,6 +361,12 @@ describe('send-push source guards', () => {
     expect(source).toContain("case 'gc_management_invited':");
     expect(source).toContain("title: 'GC Management Approval Needed'");
     expect(source).toContain('A General Contractor created a draft project for your approval.');
+    expect(source).toContain("case 'gc_management_invite_received':");
+    expect(source).toContain("title: 'GC Management Invite'");
+    expect(source).toContain('A homeowner invited you to manage their project.');
+    expect(source).toContain("case 'gc_management_confirmed':");
+    expect(source).toContain("title: 'GC Management Active'");
+    expect(source).toContain('GC management is now active for this project.');
   });
 });
 
