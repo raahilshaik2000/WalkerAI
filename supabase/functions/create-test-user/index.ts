@@ -12,11 +12,14 @@ const corsHeaders = {
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 };
 
+const allowedRoles = ['homeowner', 'company', 'supplier', 'general_contractor'] as const;
+
 interface CreateRequest {
   email: string;
   password: string;
-  role: 'homeowner' | 'company' | 'supplier';
+  role: 'homeowner' | 'company' | 'supplier' | 'general_contractor';
   full_name?: string;
+  business_name?: string;
 }
 
 Deno.serve(async (req) => {
@@ -32,6 +35,11 @@ Deno.serve(async (req) => {
     const body: CreateRequest = await req.json();
     if (!body.email || !body.password || !body.role) {
       return new Response(JSON.stringify({ error: 'email, password, role required' }), {
+        status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      });
+    }
+    if (!allowedRoles.includes(body.role)) {
+      return new Response(JSON.stringify({ error: `role must be one of: ${allowedRoles.join(', ')}` }), {
         status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' },
       });
     }
@@ -80,12 +88,43 @@ Deno.serve(async (req) => {
       });
     }
 
+    if (body.role === 'general_contractor') {
+      const { error: gcError } = await supabase.from('general_contractors').upsert({
+        user_id: userId,
+        business_name: body.business_name?.trim() || 'QA General Contractor',
+        address: '100 King St W',
+        city: 'Toronto',
+        province: 'ON',
+        postal_code: 'M5X 1A9',
+        lat: 43.6487,
+        lng: -79.3817,
+        service_radius_km: 100,
+        license_number: 'QA-GC-001',
+        license_doc_url: 'qa/gc-license.pdf',
+        insurance_doc_url: 'qa/gc-insurance.pdf',
+        verified: true,
+        concierge_enabled: true,
+        default_markup_pct: 15,
+        default_concierge_fee_pct: 10,
+      }, { onConflict: 'user_id' });
+
+      if (gcError) {
+        return new Response(JSON.stringify({
+          auth_user_id: userId,
+          warning: `auth user ready but GC profile upsert failed: ${gcError.message}`,
+        }), {
+          status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        });
+      }
+    }
+
     return new Response(JSON.stringify({
       success: true,
       user_id: userId,
       email: body.email,
       role: body.role,
       was_existing: !!existing,
+      profile: body.role === 'general_contractor' ? 'verified_general_contractor' : null,
     }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
 
   } catch (err) {

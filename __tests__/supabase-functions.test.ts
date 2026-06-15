@@ -58,6 +58,44 @@ describe('generate-material-orders source guards', () => {
   });
 });
 
+describe('QA account seed source guards', () => {
+  it('allows create-test-user to create a verified general contractor profile', () => {
+    const source = fs.readFileSync(
+      path.join(__dirname, '../supabase/functions/create-test-user/index.ts'),
+      'utf8',
+    );
+
+    expect(source).toContain("'general_contractor'");
+    expect(source).toContain("body.role === 'general_contractor'");
+    expect(source).toContain(".from('general_contractors').upsert");
+    expect(source).toContain('verified: true');
+    expect(source).toContain('concierge_enabled: true');
+    expect(source).toContain("profile: body.role === 'general_contractor' ? 'verified_general_contractor' : null");
+  });
+
+  it('seeds all four QA accounts using current profile columns', () => {
+    const source = fs.readFileSync(
+      path.join(__dirname, '../supabase/functions/seed-qa/index.ts'),
+      'utf8',
+    );
+
+    expect(source).toContain('gc_email');
+    expect(source).toContain("ensureUser(supabase, body.gc_email, body.gc_password, 'general_contractor')");
+    expect(source).toContain(".from('general_contractors').upsert");
+    expect(source).toContain("general_contractor: { id: generalContractor.id, email: body.gc_email }");
+    expect(source).toContain('concierge_enabled: true');
+    expect(source).toContain('stripe_details_submitted: true');
+    expect(source).toContain('stripe_transfers_active: true');
+    expect(source).toContain('verified: true');
+    expect(source).toContain('lat: 43.6532');
+    expect(source).toContain('lng: -79.3832');
+    expect(source).not.toContain('is_verified');
+    expect(source).not.toContain('latitude:');
+    expect(source).not.toContain('longitude:');
+    expect(source).not.toContain('stripe_onboarding_completed');
+  });
+});
+
 describe('company material verification source guards', () => {
   it('tries to generate supplier orders after contractor quantity verification', () => {
     const source = fs.readFileSync(
