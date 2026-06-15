@@ -286,6 +286,7 @@ export default function GeneralContractorTradesScreen() {
           recommended_company: recommendedCompany.trim() || null,
           recommended_contact: recommendedContact.trim() || null,
           recommendation_note: recommendationNote.trim() || null,
+          external_management_requested: !slot.assigned_company && slot.fulfillment_type !== 'external',
         },
       });
       if (error) throw error;
@@ -579,7 +580,7 @@ export default function GeneralContractorTradesScreen() {
                 <GlassCard style={styles.card}>
                   <Text style={styles.sectionTitle}>Recommend trade change</Text>
                   <Text style={styles.bodyText}>
-                    This creates a homeowner approval request. It does not replace a WalkerAI trade or add an external subcontractor automatically.
+                    This creates a homeowner approval request. If the slot is unassigned, approval records the contact as an unverified external trade. WalkerAI-assigned trades are not removed automatically.
                   </Text>
                   <GlassInput
                     label="Recommended trade contact"

@@ -181,6 +181,25 @@ describe('general contractor account type', () => {
     expect(homeownerProject).toContain('No escrow protection');
   });
 
+  it('applies approved GC external trade recommendations only for unassigned slots', () => {
+    const migration = fs.readFileSync(
+      path.join(repoRoot, 'supabase/migrations/20260615002000_apply_trade_substitution_approval.sql'),
+      'utf8',
+    );
+    const gcTrades = fs.readFileSync(
+      path.join(repoRoot, 'src/app/(general-contractor)/project/[id]/trades.tsx'),
+      'utf8',
+    );
+
+    expect(migration).toContain("v_request.request_type = 'trade_substitution'");
+    expect(migration).toContain("fulfillment_type = 'external'");
+    expect(migration).toContain("external_trade_verification_status = 'unverified'");
+    expect(migration).toContain('assigned_company_id IS NULL');
+    expect(migration).toContain('no WalkerAI escrow protection');
+    expect(gcTrades).toContain('external_management_requested');
+    expect(gcTrades).toContain('WalkerAI-assigned trades are not removed automatically');
+  });
+
   it('routes GC schedule recommendations through homeowner approval before dates apply', () => {
     const migration = fs.readFileSync(
       path.join(repoRoot, 'supabase/migrations/20260615000600_apply_schedule_approval_requests.sql'),
