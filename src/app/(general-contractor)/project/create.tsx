@@ -109,19 +109,11 @@ export default function GeneralContractorCreateProject() {
         p_scope_summary: scopeSummary.trim(),
         p_markup_pct: parsedMarkup,
         p_concierge_fee_pct: parsedConcierge,
+        p_homeowner_contact_name: contactName,
+        p_homeowner_contact_phone: contactPhone || null,
       });
       if (error) throw error;
       if (!data || typeof data !== 'string') throw new Error('Project was not created.');
-
-      const { error: contactError } = await supabase
-        .from('general_contractor_projects')
-        .update({
-          homeowner_contact_name: contactName,
-          homeowner_contact_email: normalizedEmail,
-          homeowner_contact_phone: contactPhone || null,
-        })
-        .eq('project_id', data);
-      if (contactError) throw contactError;
 
       Alert.alert(
         'Project created',

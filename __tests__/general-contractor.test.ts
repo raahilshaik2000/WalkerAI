@@ -168,6 +168,10 @@ describe('general contractor account type', () => {
       path.join(repoRoot, 'supabase/migrations/20260615002300_add_gc_project_client_contact.sql'),
       'utf8',
     );
+    const transactionalContactMigration = fs.readFileSync(
+      path.join(repoRoot, 'supabase/migrations/20260615002700_create_gc_project_with_contact.sql'),
+      'utf8',
+    );
     const navigator = fs.readFileSync(
       path.join(repoRoot, 'src/navigation/GeneralContractorNavigator.tsx'),
       'utf8',
@@ -201,8 +205,9 @@ describe('general contractor account type', () => {
     expect(createProject).toContain("supabase.rpc('create_gc_managed_project'");
     expect(createProject).toContain('Homeowner name');
     expect(createProject).toContain('Homeowner phone');
-    expect(createProject).toContain('homeowner_contact_name: contactName');
-    expect(createProject).toContain('homeowner_contact_phone: contactPhone || null');
+    expect(createProject).toContain('p_homeowner_contact_name: contactName');
+    expect(createProject).toContain('p_homeowner_contact_phone: contactPhone || null');
+    expect(createProject).not.toContain(".from('general_contractor_projects')\n        .update");
     expect(homeownerConcierge).toContain('Confirm GC Management');
     expect(gcProjectDetail).toContain('homeowner_contact_name, homeowner_contact_email, homeowner_contact_phone');
     expect(gcProjectDetail).toContain('Homeowner contact');
@@ -211,6 +216,10 @@ describe('general contractor account type', () => {
     expect(contactMigration).toContain('ADD COLUMN IF NOT EXISTS homeowner_contact_email');
     expect(contactMigration).toContain('ADD COLUMN IF NOT EXISTS homeowner_contact_phone');
     expect(contactMigration).toContain('populate_gc_project_homeowner_contact');
+    expect(transactionalContactMigration).toContain('DROP FUNCTION IF EXISTS public.create_gc_managed_project');
+    expect(transactionalContactMigration).toContain('p_homeowner_contact_name TEXT DEFAULT NULL');
+    expect(transactionalContactMigration).toContain('homeowner_contact_name');
+    expect(transactionalContactMigration).toContain('homeowner_contact_phone');
   });
 
   it('counts real GC homeowner actions on the dashboard approval metric', () => {
