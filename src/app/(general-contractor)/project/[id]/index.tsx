@@ -483,6 +483,21 @@ export default function GeneralContractorProjectDetail() {
                     </View>
                     <Icon name="chevron-right" size={20} color={Colors.text.tertiary} />
                   </TouchableOpacity>
+                  <View style={styles.controlDivider} />
+                  <TouchableOpacity
+                    style={styles.controlRow}
+                    onPress={() => navigation.navigate('GeneralContractorPermits', { id: projectId })}
+                    activeOpacity={0.85}
+                  >
+                    <View style={styles.controlIcon}>
+                      <Icon name="file-document-check-outline" size={20} color={Colors.accent} />
+                    </View>
+                    <View style={styles.controlBody}>
+                      <Text style={styles.controlTitle}>Permits & inspections</Text>
+                      <Text style={styles.controlSub}>Track documents and inspection status</Text>
+                    </View>
+                    <Icon name="chevron-right" size={20} color={Colors.text.tertiary} />
+                  </TouchableOpacity>
                 </GlassCard>
               ) : null}
 
@@ -826,6 +841,7 @@ const styles = StyleSheet.create({
   controlBody: { flex: 1 },
   controlTitle: { ...Typography.body, fontWeight: '800' },
   controlSub: { ...Typography.caption, marginTop: 3 },
+  controlDivider: { height: 1, backgroundColor: Colors.glass.border, marginVertical: 12 },
   typeGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginTop: 14, marginBottom: 12 },
   typeChip: {
     borderWidth: 1,

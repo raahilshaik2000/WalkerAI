@@ -212,4 +212,32 @@ describe('general contractor account type', () => {
     expect(gcSchedule).toContain('Send Schedule for Approval');
     expect(homeownerConcierge).toContain("supabase.rpc('respond_to_project_approval_request'");
   });
+
+  it('allows active GCs to coordinate permits and inspections for managed projects', () => {
+    const migration = fs.readFileSync(
+      path.join(repoRoot, 'supabase/migrations/20260615000700_allow_gc_permit_management.sql'),
+      'utf8',
+    );
+    const navigator = fs.readFileSync(
+      path.join(repoRoot, 'src/navigation/GeneralContractorNavigator.tsx'),
+      'utf8',
+    );
+    const gcProjectDetail = fs.readFileSync(
+      path.join(repoRoot, 'src/app/(general-contractor)/project/[id]/index.tsx'),
+      'utf8',
+    );
+    const gcPermits = fs.readFileSync(
+      path.join(repoRoot, 'src/app/(general-contractor)/project/[id]/permits.tsx'),
+      'utf8',
+    );
+
+    expect(migration).toContain('permits_gc_managed');
+    expect(migration).toContain("gcp.status = 'active'");
+    expect(migration).toContain('permits_gc_managed_insert');
+    expect(navigator).toContain('GeneralContractorPermits');
+    expect(gcProjectDetail).toContain("navigation.navigate('GeneralContractorPermits'");
+    expect(gcPermits).toContain("from('permits').insert");
+    expect(gcPermits).toContain('Upload Document');
+    expect(gcPermits).toContain('inspection_scheduled');
+  });
 });
