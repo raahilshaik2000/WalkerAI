@@ -362,6 +362,23 @@ describe('general contractor account type', () => {
     expect(migration).toContain('guard_gc_approval_request_updates_trigger');
   });
 
+  it('restricts GC approval status transitions to the proper actor', () => {
+    const migration = fs.readFileSync(
+      path.join(repoRoot, 'supabase/migrations/20260615231628_restrict_gc_approval_status_transitions.sql'),
+      'utf8',
+    );
+
+    expect(migration).toContain('CREATE OR REPLACE FUNCTION public.guard_gc_approval_request_updates()');
+    expect(migration).toContain("IF NEW.status IN ('approved', 'rejected') THEN");
+    expect(migration).toContain('Only the homeowner can approve or reject a GC approval request');
+    expect(migration).toContain("ELSIF NEW.status = 'cancelled' THEN");
+    expect(migration).toContain('Only the requesting GC can cancel a GC approval request');
+    expect(migration).toContain("ELSIF NEW.status = 'pending' THEN");
+    expect(migration).toContain('Approval request status cannot be reset to pending');
+    expect(migration).toContain('Approval request responses must include a response timestamp');
+    expect(migration).toContain('guard_gc_approval_request_updates_trigger');
+  });
+
   it('keeps GC payment and trade negotiation request terms immutable after submission', () => {
     const migration = fs.readFileSync(
       path.join(repoRoot, 'supabase/migrations/20260615003600_guard_gc_request_audit_fields.sql'),
