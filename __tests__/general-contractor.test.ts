@@ -77,6 +77,8 @@ describe('general contractor account type', () => {
     const rootNavigator = fs.readFileSync(path.join(repoRoot, 'src/navigation/RootNavigator.tsx'), 'utf8');
 
     expect(register).toContain("value: 'general_contractor'");
+    expect(register).toContain("label: 'General Contractor'");
+    expect(register).toContain("label: 'Trade Company'");
     expect(rootNavigator).toContain("role === 'general_contractor'");
     expect(rootNavigator).toContain("resolvedRole === 'general_contractor'");
     expect(rootNavigator).toContain('component={GeneralContractorNavigator}');

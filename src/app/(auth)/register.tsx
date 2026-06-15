@@ -85,8 +85,8 @@ export default function RegisterScreen() {
             <View style={styles.roleRow}>
               {([
                 { value: 'homeowner', icon: 'home-outline', label: 'Homeowner', sub: 'I want to renovate' },
-                { value: 'company', icon: 'hammer-wrench', label: 'Contractor', sub: 'I do renovations' },
-                { value: 'general_contractor', icon: 'clipboard-text-clock-outline', label: 'GC', sub: 'I manage projects' },
+                { value: 'company', icon: 'hammer-wrench', label: 'Trade Company', sub: 'I do renovation work' },
+                { value: 'general_contractor', icon: 'clipboard-text-clock-outline', label: 'General Contractor', sub: 'I manage projects' },
                 { value: 'supplier', icon: 'truck-delivery-outline', label: 'Supplier', sub: 'I supply materials' },
               ] as const).map((opt) => (
                 <TouchableOpacity
