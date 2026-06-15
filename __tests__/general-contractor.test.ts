@@ -297,6 +297,34 @@ describe('general contractor account type', () => {
     expect(createTestUser).toContain('verified: true');
   });
 
+  it('keeps account roles and GC profiles aligned at the database boundary', () => {
+    const migration = fs.readFileSync(
+      path.join(repoRoot, 'supabase/migrations/20260615004000_guard_account_role_boundaries.sql'),
+      'utf8',
+    );
+    const auth = fs.readFileSync(
+      path.join(repoRoot, 'src/lib/supabase/auth.ts'),
+      'utf8',
+    );
+    const editProfile = fs.readFileSync(
+      path.join(repoRoot, 'src/app/(homeowner)/edit-profile.tsx'),
+      'utf8',
+    );
+
+    expect(migration).toContain('CREATE OR REPLACE FUNCTION public.guard_user_identity_fields()');
+    expect(migration).toContain("(SELECT auth.role()) = 'service_role'");
+    expect(migration).toContain('NEW.role IS DISTINCT FROM OLD.role');
+    expect(migration).toContain('NEW.email IS DISTINCT FROM OLD.email');
+    expect(migration).toContain('User email and account role are maintained by WalkerAI authentication services');
+    expect(migration).toContain('guard_user_identity_fields_trigger');
+    expect(migration).toContain('CREATE OR REPLACE FUNCTION public.guard_gc_profile_user_role()');
+    expect(migration).toContain("u.role = 'general_contractor'");
+    expect(migration).toContain('General Contractor profiles can only belong to general_contractor users');
+    expect(migration).toContain('guard_gc_profile_user_role_trigger');
+    expect(auth).toContain("options: {\n      data: { role },\n    },");
+    expect(editProfile).not.toContain('role:');
+  });
+
   it('keeps GC approval request details immutable after submission', () => {
     const migration = fs.readFileSync(
       path.join(repoRoot, 'supabase/migrations/20260615003500_guard_gc_approval_request_updates.sql'),
