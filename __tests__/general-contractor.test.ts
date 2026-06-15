@@ -519,4 +519,31 @@ describe('general contractor account type', () => {
     expect(migration).toContain('AFTER UPDATE OF status ON public.gc_concierge_bookings');
     expect(migration).toContain('REVOKE ALL ON FUNCTION public.insert_gc_workflow_notification');
   });
+
+  it('adds GC-to-trade quote negotiation without mutating homeowner quote totals directly', () => {
+    const migration = fs.readFileSync(
+      path.join(repoRoot, 'supabase/migrations/20260615001600_add_gc_trade_negotiations.sql'),
+      'utf8',
+    );
+    const gcTrades = fs.readFileSync(
+      path.join(repoRoot, 'src/app/(general-contractor)/project/[id]/trades.tsx'),
+      'utf8',
+    );
+    const companyJob = fs.readFileSync(
+      path.join(repoRoot, 'src/app/(company)/job/[id]/index.tsx'),
+      'utf8',
+    );
+
+    expect(migration).toContain('CREATE TABLE IF NOT EXISTS public.gc_trade_quote_negotiations');
+    expect(migration).toContain('CREATE OR REPLACE FUNCTION public.respond_to_gc_trade_quote_negotiation');
+    expect(migration).toContain('gc_trade_negotiation_requested');
+    expect(migration).toContain('gc_trade_negotiation_responded');
+    expect(migration).toContain('REVOKE ALL ON FUNCTION public.respond_to_gc_trade_quote_negotiation');
+    expect(migration).not.toContain('UPDATE public.quotes');
+    expect(gcTrades).toContain("from('gc_trade_quote_negotiations').insert");
+    expect(gcTrades).toContain('Counteroffer / revision request');
+    expect(companyJob).toContain("from('gc_trade_quote_negotiations')");
+    expect(companyJob).toContain("supabase.rpc('respond_to_gc_trade_quote_negotiation'");
+    expect(companyJob).toContain('GC quote negotiation');
+  });
 });

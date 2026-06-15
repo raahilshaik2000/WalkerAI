@@ -196,6 +196,20 @@ const META: Record<string, NotificationDisplayMeta> = {
     color: '#34D399',
     timelineLabel: 'GC responded to a concierge service request',
   },
+  gc_trade_negotiation_requested: {
+    emoji: '💬',
+    title: 'Quote revision requested',
+    timelineIcon: 'chatbubble-ellipses-outline',
+    color: '#F59E0B',
+    timelineLabel: 'GC requested a trade quote revision',
+  },
+  gc_trade_negotiation_responded: {
+    emoji: '💬',
+    title: 'Trade responded',
+    timelineIcon: 'chatbubble-ellipses-outline',
+    color: '#34D399',
+    timelineLabel: 'Trade responded to a GC quote negotiation',
+  },
   order_shipped: {
     emoji: '🚚',
     title: 'Order shipped',

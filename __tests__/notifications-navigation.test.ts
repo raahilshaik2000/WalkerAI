@@ -121,4 +121,19 @@ describe('notification navigation', () => {
       params: { screen: 'GeneralContractorApprovals' },
     });
   });
+
+  it('routes GC trade negotiation notifications to the right role surface', () => {
+    expect(resolveNotificationRoute('gc_trade_negotiation_requested', { project_id: 'project-1', slot_id: 'slot-1' }, 'company')).toEqual({
+      name: 'JobDetail',
+      params: {
+        screen: 'JobDetailMain',
+        params: { id: 'project-1', slot: 'slot-1' },
+      },
+    });
+
+    expect(resolveNotificationRoute('gc_trade_negotiation_responded', { project_id: 'project-1' }, 'general_contractor')).toEqual({
+      name: 'GeneralContractorTrades',
+      params: { id: 'project-1' },
+    });
+  });
 });

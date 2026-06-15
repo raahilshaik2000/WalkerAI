@@ -69,6 +69,8 @@ export function resolveNotificationRoute(
       return { name: 'GeneralContractorTabs', params: { screen: 'GeneralContractorProjects' } };
     }
     switch (type) {
+      case 'gc_trade_negotiation_responded':
+        return { name: 'GeneralContractorTrades', params: { id: projectId } };
       case 'quote_submitted':
       case 'milestone_needs_approval':
       case 'schedule_confirmed':
@@ -100,6 +102,7 @@ export function resolveNotificationRoute(
       case 'slot_dispatched':
       case 'job_accepted':
       case 'slot_accepted':
+      case 'gc_trade_negotiation_requested':
         return jobDetailRoute('JobDetailMain', projectId, slotParams);
       case 'quote_approved':
       case 'milestone_paid':

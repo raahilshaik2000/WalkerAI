@@ -109,4 +109,6 @@ export type NotificationType =
   | 'gc_payment_requested'
   | 'gc_payment_responded'
   | 'gc_concierge_booking_requested'
-  | 'gc_concierge_booking_responded';
+  | 'gc_concierge_booking_responded'
+  | 'gc_trade_negotiation_requested'
+  | 'gc_trade_negotiation_responded';

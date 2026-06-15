@@ -7,6 +7,7 @@ describe('notification display metadata', () => {
     expect(notificationDisplayMeta('order_shipped').title).toBe('Order shipped');
     expect(notificationDisplayMeta('gc_approval_requested').title).toBe('GC approval needed');
     expect(notificationDisplayMeta('gc_concierge_booking_requested').timelineLabel).toBe('New concierge service request');
+    expect(notificationDisplayMeta('gc_trade_negotiation_requested').title).toBe('Quote revision requested');
   });
 
   it('falls back to readable text for unknown notification types', () => {
