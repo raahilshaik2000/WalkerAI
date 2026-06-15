@@ -13,6 +13,7 @@ import GeneralContractorCreateProject from '@/app/(general-contractor)/project/c
 import GeneralContractorSchedule from '@/app/(general-contractor)/project/[id]/schedule';
 import GeneralContractorPermits from '@/app/(general-contractor)/project/[id]/permits';
 import GeneralContractorPayments from '@/app/(general-contractor)/project/[id]/payments';
+import GeneralContractorMaterials from '@/app/(general-contractor)/project/[id]/materials';
 import GeneralContractorBusinessOnboarding from '@/app/(general-contractor)/onboarding/business';
 import GeneralContractorLicenseOnboarding from '@/app/(general-contractor)/onboarding/license';
 import GeneralContractorInsuranceOnboarding from '@/app/(general-contractor)/onboarding/insurance';
@@ -57,6 +58,7 @@ export function GeneralContractorNavigator() {
       <Stack.Screen name="GeneralContractorSchedule" component={GeneralContractorSchedule} />
       <Stack.Screen name="GeneralContractorPermits" component={GeneralContractorPermits} />
       <Stack.Screen name="GeneralContractorPayments" component={GeneralContractorPayments} />
+      <Stack.Screen name="GeneralContractorMaterials" component={GeneralContractorMaterials} />
       <Stack.Screen name="GeneralContractorCreateProject" component={GeneralContractorCreateProject} />
       <Stack.Screen name="GeneralContractorBusinessOnboarding" component={GeneralContractorBusinessOnboarding} />
       <Stack.Screen name="GeneralContractorLicenseOnboarding" component={GeneralContractorLicenseOnboarding} />

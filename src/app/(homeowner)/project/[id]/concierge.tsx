@@ -410,8 +410,11 @@ export default function ProjectConciergeScreen() {
 
               <GlassCard style={styles.card}>
                 <Text style={styles.sectionTitle}>Approval requests</Text>
+                <Text style={styles.bodyText}>
+                  Material substitutions approved here update the project material preference fields. Supplier orders and escrow payments stay in their existing workflows.
+                </Text>
                 {approvalRequests.length === 0 ? (
-                  <Text style={styles.bodyText}>No GC approval requests yet.</Text>
+                  <Text style={styles.emptySubText}>No GC approval requests yet.</Text>
                 ) : approvalRequests.map((request) => {
                   const pending = request.status === 'pending';
                   const responding = respondingId === request.id;

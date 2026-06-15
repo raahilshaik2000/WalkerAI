@@ -275,4 +275,37 @@ describe('general contractor account type', () => {
     expect(homeownerConcierge).toContain("supabase.rpc('respond_to_gc_payment_request'");
     expect(homeownerConcierge).toContain('Approving this records your authorization. It does not bypass milestone escrow release.');
   });
+
+  it('lets GCs recommend material substitutions without bypassing homeowner approval', () => {
+    const migration = fs.readFileSync(
+      path.join(repoRoot, 'supabase/migrations/20260615000900_add_gc_material_recommendations.sql'),
+      'utf8',
+    );
+    const navigator = fs.readFileSync(
+      path.join(repoRoot, 'src/navigation/GeneralContractorNavigator.tsx'),
+      'utf8',
+    );
+    const gcProjectDetail = fs.readFileSync(
+      path.join(repoRoot, 'src/app/(general-contractor)/project/[id]/index.tsx'),
+      'utf8',
+    );
+    const gcMaterials = fs.readFileSync(
+      path.join(repoRoot, 'src/app/(general-contractor)/project/[id]/materials.tsx'),
+      'utf8',
+    );
+    const homeownerConcierge = fs.readFileSync(
+      path.join(repoRoot, 'src/app/(homeowner)/project/[id]/concierge.tsx'),
+      'utf8',
+    );
+
+    expect(migration).toContain('materials_gc_managed_select');
+    expect(migration).toContain("v_request.request_type = 'material_substitution'");
+    expect(migration).toContain('specific_model = v_product_name');
+    expect(navigator).toContain('GeneralContractorMaterials');
+    expect(gcProjectDetail).toContain("navigation.navigate('GeneralContractorMaterials'");
+    expect(gcMaterials).toContain("request_type: 'material_substitution'");
+    expect(gcMaterials).toContain('Send Material Recommendation');
+    expect(gcMaterials).toContain('Homeowner approval is required before the material preference changes.');
+    expect(homeownerConcierge).toContain('Material substitutions approved here update the project material preference fields.');
+  });
 });
