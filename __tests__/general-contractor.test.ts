@@ -416,4 +416,30 @@ describe('general contractor account type', () => {
     expect(gcTrades).toContain('No trade assignment changes until the homeowner approves');
     expect(gcTrades).not.toContain("from('project_slots').update");
   });
+
+  it('adds fixed-price GC concierge booking requests with the 80/20 split', () => {
+    const migration = fs.readFileSync(
+      path.join(repoRoot, 'supabase/migrations/20260615001300_add_gc_concierge_bookings.sql'),
+      'utf8',
+    );
+    const homeownerConcierge = fs.readFileSync(
+      path.join(repoRoot, 'src/app/(homeowner)/project/[id]/concierge.tsx'),
+      'utf8',
+    );
+    const gcApprovals = fs.readFileSync(
+      path.join(repoRoot, 'src/app/(general-contractor)/approvals.tsx'),
+      'utf8',
+    );
+
+    expect(migration).toContain('CREATE TABLE IF NOT EXISTS public.gc_concierge_bookings');
+    expect(migration).toContain("'virtual_30'");
+    expect(migration).toContain('v_price := 9900');
+    expect(migration).toContain('v_contractor_payout := ROUND(v_price * 0.80)::INTEGER');
+    expect(migration).toContain('CREATE OR REPLACE FUNCTION public.request_gc_concierge_booking');
+    expect(migration).toContain('CREATE OR REPLACE FUNCTION public.respond_to_gc_concierge_booking');
+    expect(homeownerConcierge).toContain("supabase.rpc('request_gc_concierge_booking'");
+    expect(homeownerConcierge).toContain('Contractor payout is 80%; WalkerAI keeps 20%.');
+    expect(gcApprovals).toContain("from('gc_concierge_bookings')");
+    expect(gcApprovals).toContain("supabase.rpc('respond_to_gc_concierge_booking'");
+  });
 });

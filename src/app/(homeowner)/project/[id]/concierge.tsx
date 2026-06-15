@@ -13,7 +13,7 @@ import { useFocusEffect, useNavigation, useRoute } from '@react-navigation/nativ
 import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
 import { supabase } from '@/lib/supabase/client';
 import { useAuthStore } from '@/stores/auth.store';
-import type { GcPaymentRequest, GeneralContractor } from '@/types/database.types';
+import type { GcConciergeBooking, GcPaymentRequest, GeneralContractor } from '@/types/database.types';
 import { formatStatusLabel } from '@/lib/formatters';
 import { formatCadCents, formatSignedCadCents } from '@/lib/currency';
 import { getRequiredStringParam } from '@/lib/navigation-params';
@@ -26,7 +26,7 @@ interface CurrentAssignment {
   markup_pct: number;
   concierge_fee_pct: number;
   initiated_by_gc: boolean;
-  general_contractor?: Pick<GeneralContractor, 'id' | 'business_name' | 'city' | 'province' | 'rating' | 'total_reviews'> | Array<Pick<GeneralContractor, 'id' | 'business_name' | 'city' | 'province' | 'rating' | 'total_reviews'>> | null;
+  general_contractor?: Pick<GeneralContractor, 'id' | 'business_name' | 'city' | 'province' | 'rating' | 'total_reviews' | 'concierge_enabled'> | Array<Pick<GeneralContractor, 'id' | 'business_name' | 'city' | 'province' | 'rating' | 'total_reviews' | 'concierge_enabled'>> | null;
 }
 
 interface ApprovalRequest {
@@ -39,6 +39,15 @@ interface ApprovalRequest {
   status: string;
   response_note: string | null;
 }
+
+type ConciergeServiceKind = GcConciergeBooking['service_kind'];
+
+const CONCIERGE_SERVICE_OPTIONS: Array<{ kind: ConciergeServiceKind; label: string; price: string }> = [
+  { kind: 'virtual_30', label: '30 min virtual', price: '$99' },
+  { kind: 'virtual_60', label: '60 min virtual', price: '$149' },
+  { kind: 'site_visit_first_hour', label: 'Site visit', price: '$249' },
+  { kind: 'full_project_concierge', label: 'Full project', price: '10%' },
+];
 
 function getAssignedGc(row: CurrentAssignment | null) {
   if (!row) return null;
@@ -57,9 +66,11 @@ export default function ProjectConciergeScreen() {
   const [generalContractors, setGeneralContractors] = useState<GeneralContractor[]>([]);
   const [approvalRequests, setApprovalRequests] = useState<ApprovalRequest[]>([]);
   const [paymentRequests, setPaymentRequests] = useState<GcPaymentRequest[]>([]);
+  const [bookingRequests, setBookingRequests] = useState<GcConciergeBooking[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [invitingId, setInvitingId] = useState<string | null>(null);
+  const [bookingId, setBookingId] = useState<string | null>(null);
   const [respondingId, setRespondingId] = useState<string | null>(null);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
@@ -74,7 +85,7 @@ export default function ProjectConciergeScreen() {
 
     try {
       setErrorMessage(null);
-      const [projectResult, assignmentResult, gcResult, approvalResult, paymentResult] = await Promise.all([
+      const [projectResult, assignmentResult, gcResult, approvalResult, paymentResult, bookingResult] = await Promise.all([
         supabase
           .from('projects')
           .select('id, homeowner_id')
@@ -84,7 +95,7 @@ export default function ProjectConciergeScreen() {
           .from('general_contractor_projects')
           .select(`
             id, status, markup_pct, concierge_fee_pct, initiated_by_gc,
-            general_contractor:general_contractors ( id, business_name, city, province, rating, total_reviews )
+            general_contractor:general_contractors ( id, business_name, city, province, rating, total_reviews, concierge_enabled )
           `)
           .eq('project_id', projectId)
           .neq('status', 'removed')
@@ -107,6 +118,11 @@ export default function ProjectConciergeScreen() {
           .select('id, project_id, general_contractor_id, homeowner_id, request_kind, title, description, amount_cents, status, response_note, created_at, responded_at, cancelled_at')
           .eq('project_id', projectId)
           .order('created_at', { ascending: false }),
+        supabase
+          .from('gc_concierge_bookings')
+          .select('id, project_id, general_contractor_id, homeowner_id, service_kind, title, duration_minutes, price_cents, contractor_payout_cents, walker_fee_cents, status, response_note, created_at, responded_at')
+          .eq('project_id', projectId)
+          .order('created_at', { ascending: false }),
       ]);
 
       if (projectResult.error) throw projectResult.error;
@@ -114,18 +130,21 @@ export default function ProjectConciergeScreen() {
       if (gcResult.error) throw gcResult.error;
       if (approvalResult.error) throw approvalResult.error;
       if (paymentResult.error) throw paymentResult.error;
+      if (bookingResult.error) throw bookingResult.error;
 
       setProjectHomeownerId(projectResult.data?.homeowner_id ?? null);
       setCurrentAssignment(assignmentResult.data as CurrentAssignment | null);
       setGeneralContractors((gcResult.data ?? []) as GeneralContractor[]);
       setApprovalRequests((approvalResult.data ?? []) as ApprovalRequest[]);
       setPaymentRequests((paymentResult.data ?? []) as GcPaymentRequest[]);
+      setBookingRequests((bookingResult.data ?? []) as GcConciergeBooking[]);
     } catch (err) {
       setErrorMessage(err instanceof Error ? err.message : 'Could not load concierge options.');
       setCurrentAssignment(null);
       setGeneralContractors([]);
       setApprovalRequests([]);
       setPaymentRequests([]);
+      setBookingRequests([]);
     } finally {
       setLoading(false);
       setRefreshing(false);
@@ -255,6 +274,48 @@ export default function ProjectConciergeScreen() {
     );
   };
 
+  const handleRequestBooking = async (
+    gc: Pick<GeneralContractor, 'id' | 'business_name' | 'concierge_enabled'>,
+    serviceKind: ConciergeServiceKind,
+  ) => {
+    const currentUser = user ?? (await supabase.auth.getUser()).data.user;
+    if (!currentUser?.id || projectHomeownerId !== currentUser.id) {
+      Alert.alert('Not allowed', 'Only the homeowner can request concierge services.');
+      return;
+    }
+    if (!gc.concierge_enabled) {
+      Alert.alert('Concierge unavailable', 'This GC has not enabled concierge services.');
+      return;
+    }
+
+    const option = CONCIERGE_SERVICE_OPTIONS.find((item) => item.kind === serviceKind);
+    Alert.alert(
+      'Request concierge service?',
+      `${option?.label ?? 'Concierge service'} will be sent to ${gc.business_name}. WalkerAI records the 80/20 revenue split, but payment collection is still handled separately.`,
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Request',
+          onPress: async () => {
+            const requestKey = `${gc.id}:${serviceKind}`;
+            setBookingId(requestKey);
+            const { error } = await supabase.rpc('request_gc_concierge_booking', {
+              p_project_id: projectId,
+              p_general_contractor_id: gc.id,
+              p_service_kind: serviceKind,
+            });
+            if (error) {
+              Alert.alert('Could not request service', error.message);
+            } else {
+              await fetchData();
+            }
+            setBookingId(null);
+          },
+        },
+      ],
+    );
+  };
+
   const handleConfirmGcManagement = async () => {
     const currentUser = user ?? (await supabase.auth.getUser()).data.user;
     if (!currentUser?.id || projectHomeownerId !== currentUser.id || !currentAssignment?.id) {
@@ -352,6 +413,50 @@ export default function ProjectConciergeScreen() {
                   />
                 ) : currentAssignment.status === 'invited' ? (
                   <Text style={styles.waitingText}>Waiting for the GC to accept your invite.</Text>
+                ) : null}
+              </GlassCard>
+
+              <GlassCard style={styles.card}>
+                <Text style={styles.sectionTitle}>Concierge service requests</Text>
+                <Text style={styles.bodyText}>
+                  Virtual consults and site visits use fixed marketplace pricing. Contractor payout is 80%; WalkerAI keeps 20%.
+                </Text>
+                {bookingRequests.length === 0 ? (
+                  <Text style={styles.emptySubText}>No concierge consultation requests yet.</Text>
+                ) : bookingRequests.map((booking) => (
+                  <View key={booking.id} style={styles.approvalItem}>
+                    <View style={styles.approvalHeader}>
+                      <View style={styles.approvalIcon}>
+                        <Icon
+                          name={booking.status === 'accepted' ? 'calendar-check-outline' : booking.status === 'rejected' ? 'calendar-remove-outline' : 'calendar-clock-outline'}
+                          size={18}
+                          color={booking.status === 'accepted' ? Colors.success : booking.status === 'rejected' ? Colors.error : Colors.warning}
+                        />
+                      </View>
+                      <View style={styles.approvalBody}>
+                        <Text style={styles.approvalTitle}>{booking.title}</Text>
+                        <Text style={styles.approvalMeta}>
+                          {formatCadCents(booking.price_cents)} · GC {formatCadCents(booking.contractor_payout_cents)} · WalkerAI {formatCadCents(booking.walker_fee_cents)}
+                        </Text>
+                      </View>
+                      <StatusBadge label={formatStatusLabel(booking.status)} variant={booking.status === 'accepted' ? 'completed' : booking.status === 'rejected' ? 'error' : 'pending'} size="sm" />
+                    </View>
+                  </View>
+                ))}
+                {assignedGc.concierge_enabled ? (
+                  <View style={styles.serviceGrid}>
+                    {CONCIERGE_SERVICE_OPTIONS.map((option) => (
+                      <GlassButton
+                        key={option.kind}
+                        label={`${option.label} · ${option.price}`}
+                        onPress={() => handleRequestBooking(assignedGc, option.kind)}
+                        loading={bookingId === `${assignedGc.id}:${option.kind}`}
+                        variant="secondary"
+                        size="sm"
+                        style={styles.serviceButton}
+                      />
+                    ))}
+                  </View>
                 ) : null}
               </GlassCard>
 
@@ -489,7 +594,23 @@ export default function ProjectConciergeScreen() {
                 <View style={styles.termsRow}>
                   <Text style={styles.termText}>{Number(gc.default_markup_pct).toFixed(0)}% markup</Text>
                   <Text style={styles.termText}>{Number(gc.default_concierge_fee_pct).toFixed(0)}% concierge fee</Text>
+                  <Text style={styles.termText}>{gc.concierge_enabled ? 'Concierge marketplace' : 'Project management only'}</Text>
                 </View>
+                {gc.concierge_enabled ? (
+                  <View style={styles.serviceGrid}>
+                    {CONCIERGE_SERVICE_OPTIONS.map((option) => (
+                      <GlassButton
+                        key={option.kind}
+                        label={`${option.label} · ${option.price}`}
+                        onPress={() => handleRequestBooking(gc, option.kind)}
+                        loading={bookingId === `${gc.id}:${option.kind}`}
+                        variant="secondary"
+                        size="sm"
+                        style={styles.serviceButton}
+                      />
+                    ))}
+                  </View>
+                ) : null}
                 <GlassButton
                   label={invitingId === gc.id ? 'Inviting...' : 'Invite GC'}
                   onPress={() => handleInvite(gc)}
@@ -554,6 +675,8 @@ const styles = StyleSheet.create({
     paddingVertical: 6,
   },
   inviteButton: { marginTop: Spacing.sm },
+  serviceGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginTop: Spacing.sm },
+  serviceButton: { flexGrow: 1, minWidth: '47%' },
   waitingText: { ...Typography.caption, color: Colors.warning, marginTop: Spacing.sm, fontWeight: '700' },
   approvalItem: {
     paddingVertical: 12,

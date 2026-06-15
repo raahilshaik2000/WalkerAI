@@ -1,5 +1,6 @@
 import { useCallback, useState } from 'react';
 import {
+  Alert,
   RefreshControl,
   ScrollView,
   StyleSheet,
@@ -13,8 +14,10 @@ import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
 import { supabase } from '@/lib/supabase/client';
 import { useAuthStore } from '@/stores/auth.store';
 import { formatCad, formatStatusLabel } from '@/lib/formatters';
+import { formatCadCents } from '@/lib/currency';
+import type { GcConciergeBooking } from '@/types/database.types';
 import { Colors, Spacing, Typography } from '@/constants/theme';
-import { GradientBackground, GlassCard, StatusBadge } from '@/components/ui';
+import { GradientBackground, GlassButton, GlassCard, StatusBadge } from '@/components/ui';
 import { TradeEmptyState, TradeScreenHeader } from '@/components/company/TradeUI';
 
 interface ApprovalRow {
@@ -49,8 +52,10 @@ export default function GeneralContractorApprovals() {
   const navigation = useNavigation<any>();
   const { user } = useAuthStore();
   const [approvals, setApprovals] = useState<ApprovalRow[]>([]);
+  const [bookingRequests, setBookingRequests] = useState<GcConciergeBooking[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
+  const [respondingBookingId, setRespondingBookingId] = useState<string | null>(null);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
   const fetchData = useCallback(async () => {
@@ -72,15 +77,27 @@ export default function GeneralContractorApprovals() {
       if (profileError) throw profileError;
       if (!gc?.id) {
         setApprovals([]);
+        setBookingRequests([]);
         return;
       }
 
-      const { data: assignments, error: assignmentError } = await supabase
-        .from('general_contractor_projects')
-        .select('project_id')
-        .eq('general_contractor_id', gc.id)
-        .neq('status', 'removed');
+      const [assignmentResult, bookingResult] = await Promise.all([
+        supabase
+          .from('general_contractor_projects')
+          .select('project_id')
+          .eq('general_contractor_id', gc.id)
+          .neq('status', 'removed'),
+        supabase
+          .from('gc_concierge_bookings')
+          .select('id, project_id, general_contractor_id, homeowner_id, service_kind, title, duration_minutes, price_cents, contractor_payout_cents, walker_fee_cents, status, response_note, created_at, responded_at')
+          .eq('general_contractor_id', gc.id)
+          .order('created_at', { ascending: false }),
+      ]);
+      const assignments = assignmentResult.data;
+      const assignmentError = assignmentResult.error;
       if (assignmentError) throw assignmentError;
+      if (bookingResult.error) throw bookingResult.error;
+      setBookingRequests((bookingResult.data ?? []) as GcConciergeBooking[]);
 
       const projectIds = (assignments ?? []).map((row) => row.project_id).filter(Boolean);
       if (projectIds.length === 0) {
@@ -101,6 +118,7 @@ export default function GeneralContractorApprovals() {
     } catch (err) {
       setErrorMessage(err instanceof Error ? err.message : 'Could not load approvals.');
       setApprovals([]);
+      setBookingRequests([]);
     } finally {
       setLoading(false);
       setRefreshing(false);
@@ -116,6 +134,36 @@ export default function GeneralContractorApprovals() {
   const onRefresh = () => {
     setRefreshing(true);
     fetchData();
+  };
+
+  const handleBookingResponse = async (booking: GcConciergeBooking, status: 'accepted' | 'rejected') => {
+    Alert.alert(
+      status === 'accepted' ? 'Accept concierge request?' : 'Reject concierge request?',
+      status === 'accepted'
+        ? 'This confirms the consultation request. Payment collection is still handled separately from this booking record.'
+        : 'This marks the consultation request as rejected.',
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: status === 'accepted' ? 'Accept' : 'Reject',
+          style: status === 'rejected' ? 'destructive' : 'default',
+          onPress: async () => {
+            setRespondingBookingId(booking.id);
+            const { error } = await supabase.rpc('respond_to_gc_concierge_booking', {
+              p_booking_id: booking.id,
+              p_status: status,
+              p_response_note: null,
+            });
+            if (error) {
+              Alert.alert('Could not respond', error.message);
+            } else {
+              await fetchData();
+            }
+            setRespondingBookingId(null);
+          },
+        },
+      ],
+    );
   };
 
   return (
@@ -134,43 +182,96 @@ export default function GeneralContractorApprovals() {
             <GlassCard style={styles.card}>
               <Text style={styles.bodyText}>Loading approvals...</Text>
             </GlassCard>
-          ) : approvals.length === 0 ? (
+          ) : approvals.length === 0 && bookingRequests.length === 0 ? (
             <TradeEmptyState
               icon="clipboard-check-outline"
               title="No approval requests"
               body="Change orders and other homeowner decisions for GC-managed projects will appear here."
             />
-          ) : approvals.map((approval) => {
-            const project = getProject(approval);
-            const needsHomeowner = approval.status === 'proposed' && approval.signed_by_company && !approval.signed_by_homeowner;
-            return (
-              <TouchableOpacity
-                key={approval.id}
-                activeOpacity={0.85}
-                onPress={() => navigation.navigate('GeneralContractorProjectDetail', { id: approval.project_id })}
-              >
-                <GlassCard style={[styles.card, needsHomeowner && styles.needsAction]}>
-                  <View style={styles.cardHeader}>
-                    <View style={styles.iconWrap}>
-                      <Icon name={needsHomeowner ? 'clock-alert-outline' : 'clipboard-text-outline'} size={20} color={needsHomeowner ? Colors.warning : Colors.text.secondary} />
-                    </View>
-                    <View style={styles.cardBody}>
-                      <Text style={styles.projectTitle}>{formatRoom(project?.room_type)}</Text>
-                      <Text style={styles.projectMeta}>{project?.city || project?.address || 'Managed project'}</Text>
-                    </View>
-                    <StatusBadge label={formatStatusLabel(approval.status)} variant={needsHomeowner ? 'pending' : approval.status === 'approved' ? 'completed' : 'neutral'} dot />
-                  </View>
-                  <Text style={styles.description}>{approval.description}</Text>
-                  {approval.cost_delta != null ? (
-                    <Text style={styles.costText}>Documented cost change: {formatCad(Math.abs(approval.cost_delta))}</Text>
-                  ) : null}
-                  {needsHomeowner ? (
-                    <Text style={styles.waitingText}>Waiting for homeowner approval</Text>
-                  ) : null}
+          ) : (
+            <>
+              {bookingRequests.length > 0 ? (
+                <GlassCard style={styles.card}>
+                  <Text style={styles.sectionTitle}>Concierge requests</Text>
+                  {bookingRequests.map((booking) => {
+                    const pending = booking.status === 'pending';
+                    const responding = respondingBookingId === booking.id;
+                    return (
+                      <View key={booking.id} style={styles.bookingItem}>
+                        <View style={styles.cardHeader}>
+                          <View style={styles.iconWrap}>
+                            <Icon
+                              name={booking.status === 'accepted' ? 'calendar-check-outline' : booking.status === 'rejected' ? 'calendar-remove-outline' : 'calendar-clock-outline'}
+                              size={20}
+                              color={booking.status === 'accepted' ? Colors.success : booking.status === 'rejected' ? Colors.error : Colors.warning}
+                            />
+                          </View>
+                          <View style={styles.cardBody}>
+                            <Text style={styles.projectTitle}>{booking.title}</Text>
+                            <Text style={styles.projectMeta}>
+                              {formatCadCents(booking.price_cents)} · Your payout {formatCadCents(booking.contractor_payout_cents)} · WalkerAI {formatCadCents(booking.walker_fee_cents)}
+                            </Text>
+                          </View>
+                          <StatusBadge label={formatStatusLabel(booking.status)} variant={pending ? 'pending' : booking.status === 'accepted' ? 'completed' : 'error'} dot />
+                        </View>
+                        {pending ? (
+                          <View style={styles.bookingActions}>
+                            <GlassButton
+                              label="Accept"
+                              onPress={() => handleBookingResponse(booking, 'accepted')}
+                              loading={responding}
+                              size="sm"
+                              style={styles.bookingButton}
+                            />
+                            <GlassButton
+                              label="Reject"
+                              onPress={() => handleBookingResponse(booking, 'rejected')}
+                              loading={responding}
+                              variant="destructive"
+                              size="sm"
+                              style={styles.bookingButton}
+                            />
+                          </View>
+                        ) : null}
+                      </View>
+                    );
+                  })}
                 </GlassCard>
-              </TouchableOpacity>
-            );
-          })}
+              ) : null}
+
+              {approvals.map((approval) => {
+                const project = getProject(approval);
+                const needsHomeowner = approval.status === 'proposed' && approval.signed_by_company && !approval.signed_by_homeowner;
+                return (
+                  <TouchableOpacity
+                    key={approval.id}
+                    activeOpacity={0.85}
+                    onPress={() => navigation.navigate('GeneralContractorProjectDetail', { id: approval.project_id })}
+                  >
+                    <GlassCard style={[styles.card, needsHomeowner && styles.needsAction]}>
+                      <View style={styles.cardHeader}>
+                        <View style={styles.iconWrap}>
+                          <Icon name={needsHomeowner ? 'clock-alert-outline' : 'clipboard-text-outline'} size={20} color={needsHomeowner ? Colors.warning : Colors.text.secondary} />
+                        </View>
+                        <View style={styles.cardBody}>
+                          <Text style={styles.projectTitle}>{formatRoom(project?.room_type)}</Text>
+                          <Text style={styles.projectMeta}>{project?.city || project?.address || 'Managed project'}</Text>
+                        </View>
+                        <StatusBadge label={formatStatusLabel(approval.status)} variant={needsHomeowner ? 'pending' : approval.status === 'approved' ? 'completed' : 'neutral'} dot />
+                      </View>
+                      <Text style={styles.description}>{approval.description}</Text>
+                      {approval.cost_delta != null ? (
+                        <Text style={styles.costText}>Documented cost change: {formatCad(Math.abs(approval.cost_delta))}</Text>
+                      ) : null}
+                      {needsHomeowner ? (
+                        <Text style={styles.waitingText}>Waiting for homeowner approval</Text>
+                      ) : null}
+                    </GlassCard>
+                  </TouchableOpacity>
+                );
+              })}
+            </>
+          )}
         </ScrollView>
       </SafeAreaView>
     </GradientBackground>
@@ -182,6 +283,7 @@ const styles = StyleSheet.create({
   scroll: { flexGrow: 1, paddingHorizontal: Spacing.sm, paddingTop: Spacing.sm, paddingBottom: 120 },
   card: { marginBottom: Spacing.sm },
   needsAction: { borderColor: 'rgba(245,158,11,0.45)' },
+  sectionTitle: { ...Typography.label, marginBottom: 12 },
   cardHeader: { flexDirection: 'row', alignItems: 'center', gap: 12, marginBottom: 12 },
   iconWrap: {
     width: 40,
@@ -198,4 +300,11 @@ const styles = StyleSheet.create({
   costText: { ...Typography.caption, color: Colors.text.secondary },
   waitingText: { ...Typography.caption, color: Colors.warning, marginTop: 8, fontWeight: '700' },
   bodyText: { ...Typography.bodySecondary },
+  bookingItem: {
+    paddingVertical: 12,
+    borderTopWidth: 1,
+    borderTopColor: Colors.glass.border,
+  },
+  bookingActions: { flexDirection: 'row', gap: 8, marginTop: 4 },
+  bookingButton: { flex: 1 },
 });

@@ -208,6 +208,23 @@ export interface GcPaymentRequest {
   cancelled_at: string | null;
 }
 
+export interface GcConciergeBooking {
+  id: string;
+  project_id: string;
+  general_contractor_id: string;
+  homeowner_id: string;
+  service_kind: 'virtual_30' | 'virtual_60' | 'site_visit_first_hour' | 'full_project_concierge';
+  title: string;
+  duration_minutes: number | null;
+  price_cents: number;
+  contractor_payout_cents: number;
+  walker_fee_cents: number;
+  status: 'pending' | 'accepted' | 'rejected' | 'cancelled' | 'completed';
+  response_note: string | null;
+  created_at: string;
+  responded_at: string | null;
+}
+
 export interface SupplierCatalogItem {
   id: string;
   supplier_id: string;
