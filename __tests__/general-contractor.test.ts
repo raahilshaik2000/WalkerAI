@@ -964,6 +964,21 @@ describe('general contractor account type', () => {
     expect(gcApprovals).toContain("supabase.rpc('respond_to_gc_concierge_booking'");
   });
 
+  it('requires GC concierge availability before accepting stale booking requests', () => {
+    const migration = fs.readFileSync(
+      path.join(repoRoot, 'supabase/migrations/20260615004300_require_available_gc_concierge_acceptance.sql'),
+      'utf8',
+    );
+
+    expect(migration).toContain('CREATE OR REPLACE FUNCTION public.respond_to_gc_concierge_booking');
+    expect(migration).toContain("p_status = 'accepted'");
+    expect(migration).toContain('verified IS TRUE AND concierge_enabled IS TRUE');
+    expect(migration).toContain('v_gc_available IS NOT TRUE');
+    expect(migration).toContain('Only verified concierge-enabled GCs can accept concierge bookings');
+    expect(migration).toContain('Only the requested GC can respond to this booking');
+    expect(migration).toContain('GRANT EXECUTE ON FUNCTION public.respond_to_gc_concierge_booking(UUID, TEXT, TEXT) TO authenticated');
+  });
+
   it('adds a deterministic GC project assistant from live project records', () => {
     const navigator = fs.readFileSync(
       path.join(repoRoot, 'src/navigation/GeneralContractorNavigator.tsx'),
