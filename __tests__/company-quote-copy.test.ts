@@ -31,4 +31,17 @@ describe('company quote copy', () => {
     expect(source).not.toContain('quote saved without line item rows');
     expect(source).not.toContain('isMissingRelationError(itemsError)');
   });
+
+  it('lets companies replace unfunded pending quotes for GC-requested revisions', () => {
+    const repoRoot = path.resolve(__dirname, '..');
+    const source = fs.readFileSync(
+      path.join(repoRoot, 'src/app/(company)/job/[id]/quote-builder.tsx'),
+      'utf8'
+    );
+
+    expect(source).toContain('stripe_payment_intent_id');
+    expect(source).toContain('The homeowner has already started payment for this quote');
+    expect(source).toContain("await supabase\n          .from('quotes')\n          .delete()");
+    expect(source).not.toContain('Wait for the homeowner to review it before submitting another.');
+  });
 });

@@ -241,7 +241,7 @@ export default function QuoteBuilderScreen() {
 
       let existingQuoteResult: any = await supabase
         .from('quotes')
-        .select('id, status, submitted_at, slot_id')
+        .select('id, status, submitted_at, slot_id, stripe_payment_intent_id')
         .eq('project_id', projectId)
         .eq('company_id', company.id)
         .in('status', ['pending', 'approved'])
@@ -258,7 +258,13 @@ export default function QuoteBuilderScreen() {
       }
 
       if (existingQuoteResult.error) throw existingQuoteResult.error;
-      const existingQuotes = ((existingQuoteResult.data ?? []) as Array<{ id: string; status: string; submitted_at: string | null; slot_id?: string | null }>)
+      const existingQuotes = ((existingQuoteResult.data ?? []) as Array<{
+        id: string;
+        status: string;
+        submitted_at: string | null;
+        slot_id?: string | null;
+        stripe_payment_intent_id?: string | null;
+      }>)
         .filter((quote) => {
           if (!('slot_id' in quote)) return true;
           return quoteSlotId ? quote.slot_id === quoteSlotId : quote.slot_id === null;
@@ -268,7 +274,17 @@ export default function QuoteBuilderScreen() {
         throw new Error('This trade already has a paid quote from your company.');
       }
       if (existingQuote?.status === 'pending') {
-        throw new Error('You already submitted a quote for this trade. Wait for the homeowner to review it before submitting another.');
+        if (existingQuote.stripe_payment_intent_id) {
+          throw new Error('The homeowner has already started payment for this quote. Ask them to reject it before submitting a revision.');
+        }
+        const { error: deleteExistingQuoteError } = await supabase
+          .from('quotes')
+          .delete()
+          .eq('id', existingQuote.id)
+          .eq('status', 'pending');
+        if (deleteExistingQuoteError) {
+          throw new Error(`Existing pending quote could not be replaced: ${deleteExistingQuoteError.message}`);
+        }
       }
 
       // Create quote
