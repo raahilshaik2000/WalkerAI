@@ -384,6 +384,30 @@ describe('general contractor account type', () => {
     expect(migration).toContain('guard_gc_trade_negotiation_updates_trigger');
   });
 
+  it('requires GC approval, payment, and trade requests to start pending', () => {
+    const migration = fs.readFileSync(
+      path.join(repoRoot, 'supabase/migrations/20260615004200_guard_gc_request_insert_statuses.sql'),
+      'utf8',
+    );
+
+    expect(migration).toContain('CREATE OR REPLACE FUNCTION public.guard_project_approval_request_insert()');
+    expect(migration).toContain("NEW.status <> 'pending'");
+    expect(migration).toContain('NEW.response_note IS NOT NULL');
+    expect(migration).toContain('NEW.responded_at IS NOT NULL');
+    expect(migration).toContain('GC approval requests must start pending without response details');
+    expect(migration).toContain("NULLIF(TRIM(NEW.title), '') IS NULL");
+    expect(migration).toContain('guard_project_approval_request_insert_trigger');
+    expect(migration).toContain('CREATE OR REPLACE FUNCTION public.guard_gc_payment_request_insert()');
+    expect(migration).toContain('NEW.cancelled_at IS NOT NULL');
+    expect(migration).toContain('GC payment requests must start pending without response details');
+    expect(migration).toContain('guard_gc_payment_request_insert_trigger');
+    expect(migration).toContain('CREATE OR REPLACE FUNCTION public.guard_gc_trade_negotiation_insert()');
+    expect(migration).toContain('NEW.company_response_note IS NOT NULL');
+    expect(migration).toContain("NULLIF(TRIM(NEW.scope_note), '') IS NULL");
+    expect(migration).toContain('GC trade negotiations must start pending without response details');
+    expect(migration).toContain('guard_gc_trade_negotiation_insert_trigger');
+  });
+
   it('supports GC-initiated homeowner-owned draft projects with homeowner confirmation', () => {
     const migration = fs.readFileSync(
       path.join(repoRoot, 'supabase/migrations/20260615000400_add_gc_project_creation_rpc.sql'),
