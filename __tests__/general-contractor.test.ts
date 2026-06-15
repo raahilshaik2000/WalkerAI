@@ -155,4 +155,29 @@ describe('general contractor account type', () => {
     expect(gcProjectDetail).toContain('Homeowner-facing total');
     expect(gcProjectDetail).toContain('Estimated GC revenue');
   });
+
+  it('supports externally managed trades without treating them as WalkerAI verified', () => {
+    const migration = fs.readFileSync(
+      path.join(repoRoot, 'supabase/migrations/20260615000500_add_external_trade_management.sql'),
+      'utf8',
+    );
+    const gcProjectDetail = fs.readFileSync(
+      path.join(repoRoot, 'src/app/(general-contractor)/project/[id]/index.tsx'),
+      'utf8',
+    );
+    const homeownerProject = fs.readFileSync(
+      path.join(repoRoot, 'src/app/(homeowner)/project/[id]/index.tsx'),
+      'utf8',
+    );
+
+    expect(migration).toContain("fulfillment_type IN ('walker_ai', 'external')");
+    expect(migration).toContain('CREATE OR REPLACE FUNCTION public.mark_project_slot_externally_managed');
+    expect(migration).toContain('Active GC management is required before marking external trades');
+    expect(migration).toContain("status = 'filled'");
+    expect(gcProjectDetail).toContain("supabase.rpc('mark_project_slot_externally_managed'");
+    expect(gcProjectDetail).toContain('Mark externally managed');
+    expect(gcProjectDetail).toContain('No escrow protection');
+    expect(homeownerProject).toContain('Externally managed by GC');
+    expect(homeownerProject).toContain('No escrow protection');
+  });
 });

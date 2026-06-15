@@ -37,6 +37,10 @@ interface Slot {
   id: string;
   trade_type: string;
   status: string;
+  fulfillment_type?: 'walker_ai' | 'external' | null;
+  external_trade_name?: string | null;
+  external_trade_company?: string | null;
+  external_trade_verification_status?: 'unverified' | 'documents_uploaded' | 'walker_verified' | null;
   assigned_company?: { name: string | null } | Array<{ name: string | null }> | null;
 }
 
@@ -119,10 +123,17 @@ export default function GeneralContractorProjectDetail() {
   const [approvalDescription, setApprovalDescription] = useState('');
   const [approvalCostDelta, setApprovalCostDelta] = useState('');
   const [approvalTimelineDelta, setApprovalTimelineDelta] = useState('');
+  const [externalSlotId, setExternalSlotId] = useState<string | null>(null);
+  const [externalTradeName, setExternalTradeName] = useState('');
+  const [externalTradeCompany, setExternalTradeCompany] = useState('');
+  const [externalTradeEmail, setExternalTradeEmail] = useState('');
+  const [externalTradePhone, setExternalTradePhone] = useState('');
+  const [externalTradeNotes, setExternalTradeNotes] = useState('');
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [accepting, setAccepting] = useState(false);
   const [submittingApproval, setSubmittingApproval] = useState(false);
+  const [savingExternalTrade, setSavingExternalTrade] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
   const fetchData = useCallback(async () => {
@@ -142,7 +153,11 @@ export default function GeneralContractorProjectDetail() {
           .maybeSingle(),
         supabase
           .from('project_slots')
-          .select('id, trade_type, status, assigned_company:companies!assigned_company_id(name)')
+          .select(`
+            id, trade_type, status, fulfillment_type,
+            external_trade_name, external_trade_company, external_trade_verification_status,
+            assigned_company:companies!assigned_company_id(name)
+          `)
           .eq('project_id', projectId)
           .order('created_at', { ascending: true }),
         supabase
@@ -308,6 +323,48 @@ export default function GeneralContractorProjectDetail() {
       Alert.alert('Could not submit approval request', err instanceof Error ? err.message : 'Please try again.');
     } finally {
       setSubmittingApproval(false);
+    }
+  };
+
+  const startExternalTrade = (slot: Slot) => {
+    setExternalSlotId(slot.id);
+    setExternalTradeName(slot.external_trade_name ?? '');
+    setExternalTradeCompany(slot.external_trade_company ?? '');
+    setExternalTradeEmail('');
+    setExternalTradePhone('');
+    setExternalTradeNotes('');
+  };
+
+  const handleSaveExternalTrade = async () => {
+    if (!externalSlotId) return;
+    if (!externalTradeName.trim()) {
+      Alert.alert('Trade name required', 'Enter the external trade contact name.');
+      return;
+    }
+
+    setSavingExternalTrade(true);
+    try {
+      const { error } = await supabase.rpc('mark_project_slot_externally_managed', {
+        p_slot_id: externalSlotId,
+        p_trade_name: externalTradeName.trim(),
+        p_trade_company: externalTradeCompany.trim() || null,
+        p_trade_email: externalTradeEmail.trim() || null,
+        p_trade_phone: externalTradePhone.trim() || null,
+        p_verification_status: 'unverified',
+        p_notes: externalTradeNotes.trim() || null,
+      });
+      if (error) throw error;
+      setExternalSlotId(null);
+      setExternalTradeName('');
+      setExternalTradeCompany('');
+      setExternalTradeEmail('');
+      setExternalTradePhone('');
+      setExternalTradeNotes('');
+      await fetchData();
+    } catch (err) {
+      Alert.alert('Could not mark external trade', err instanceof Error ? err.message : 'Please try again.');
+    } finally {
+      setSavingExternalTrade(false);
     }
   };
 
@@ -539,15 +596,97 @@ export default function GeneralContractorProjectDetail() {
                 ) : slots.map((slot) => (
                   <View key={slot.id} style={styles.row}>
                     <View style={styles.rowIcon}>
-                      <Icon name={getCompanyName(slot) ? 'check-circle-outline' : 'circle-outline'} size={18} color={getCompanyName(slot) ? Colors.success : Colors.text.tertiary} />
+                      <Icon
+                        name={slot.fulfillment_type === 'external' ? 'account-hard-hat-outline' : getCompanyName(slot) ? 'check-circle-outline' : 'circle-outline'}
+                        size={18}
+                        color={slot.fulfillment_type === 'external' ? Colors.warning : getCompanyName(slot) ? Colors.success : Colors.text.tertiary}
+                      />
                     </View>
                     <View style={styles.rowBody}>
                       <Text style={styles.rowTitle}>{formatTrade(slot.trade_type)}</Text>
-                      <Text style={styles.rowSub}>{getCompanyName(slot) ?? formatStatusLabel(slot.status)}</Text>
+                      <Text style={styles.rowSub}>
+                        {slot.fulfillment_type === 'external'
+                          ? `${slot.external_trade_name ?? 'External trade'} · Externally managed`
+                          : getCompanyName(slot) ?? formatStatusLabel(slot.status)}
+                      </Text>
+                      {slot.fulfillment_type === 'external' ? (
+                        <Text style={styles.externalWarning}>
+                          Not verified by WalkerAI · No escrow protection · GC managed
+                        </Text>
+                      ) : null}
+                      {assignment?.status === 'active' && !getCompanyName(slot) && slot.fulfillment_type !== 'external' ? (
+                        <TouchableOpacity
+                          style={styles.externalLink}
+                          onPress={() => startExternalTrade(slot)}
+                          activeOpacity={0.85}
+                        >
+                          <Text style={styles.externalLinkText}>Mark externally managed</Text>
+                        </TouchableOpacity>
+                      ) : null}
                     </View>
                   </View>
                 ))}
               </GlassCard>
+
+              {assignment?.status === 'active' && externalSlotId ? (
+                <GlassCard style={styles.card}>
+                  <Text style={styles.sectionTitle}>External trade</Text>
+                  <Text style={styles.bodyText}>
+                    Use this only when the GC is managing this scope outside WalkerAI.
+                  </Text>
+                  <GlassInput
+                    label="Trade contact name"
+                    value={externalTradeName}
+                    onChangeText={setExternalTradeName}
+                    containerStyle={styles.formInput}
+                  />
+                  <GlassInput
+                    label="Company"
+                    value={externalTradeCompany}
+                    onChangeText={setExternalTradeCompany}
+                    containerStyle={styles.formInput}
+                  />
+                  <View style={styles.formRow}>
+                    <GlassInput
+                      label="Email"
+                      value={externalTradeEmail}
+                      onChangeText={setExternalTradeEmail}
+                      autoCapitalize="none"
+                      keyboardType="email-address"
+                      containerStyle={styles.formHalf}
+                    />
+                    <GlassInput
+                      label="Phone"
+                      value={externalTradePhone}
+                      onChangeText={setExternalTradePhone}
+                      keyboardType="phone-pad"
+                      containerStyle={styles.formHalf}
+                    />
+                  </View>
+                  <GlassInput
+                    label="Notes"
+                    value={externalTradeNotes}
+                    onChangeText={setExternalTradeNotes}
+                    containerStyle={styles.formInput}
+                  />
+                  <View style={styles.externalActions}>
+                    <GlassButton
+                      label="Cancel"
+                      onPress={() => setExternalSlotId(null)}
+                      variant="secondary"
+                      size="sm"
+                      style={styles.externalActionButton}
+                    />
+                    <GlassButton
+                      label="Save External Trade"
+                      onPress={handleSaveExternalTrade}
+                      loading={savingExternalTrade}
+                      size="sm"
+                      style={styles.externalActionButton}
+                    />
+                  </View>
+                </GlassCard>
+              ) : null}
 
               <GlassCard style={styles.card}>
                 <Text style={styles.sectionTitle}>Pending homeowner decisions</Text>
@@ -685,4 +824,9 @@ const styles = StyleSheet.create({
   rowBody: { flex: 1 },
   rowTitle: { ...Typography.body, fontWeight: '700' },
   rowSub: { ...Typography.caption, marginTop: 3 },
+  externalWarning: { ...Typography.caption, color: Colors.warning, marginTop: 5, lineHeight: 17 },
+  externalLink: { alignSelf: 'flex-start', marginTop: 9 },
+  externalLinkText: { color: Colors.accent, fontSize: 13, fontWeight: '800' },
+  externalActions: { flexDirection: 'row', gap: 8, marginTop: 2 },
+  externalActionButton: { flex: 1 },
 });

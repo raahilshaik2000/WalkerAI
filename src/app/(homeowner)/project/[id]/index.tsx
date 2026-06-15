@@ -42,6 +42,10 @@ interface AssignedTradeSlot {
   trade_type: string;
   status: string;
   assigned_company_id: string | null;
+  fulfillment_type?: 'walker_ai' | 'external' | null;
+  external_trade_name?: string | null;
+  external_trade_company?: string | null;
+  external_trade_verification_status?: string | null;
   assigned_company?: {
     name: string;
     rating: number | null;
@@ -166,11 +170,11 @@ export default function ProjectDetailScreen() {
       supabase
         .from('project_slots')
         .select(`
-          id, trade_type, status, assigned_company_id,
+          id, trade_type, status, assigned_company_id, fulfillment_type,
+          external_trade_name, external_trade_company, external_trade_verification_status,
           assigned_company:companies!assigned_company_id ( name, rating, total_reviews )
         `)
         .eq('project_id', id)
-        .not('assigned_company_id', 'is', null)
         .in('status', ['filled', 'scheduled'])
         .order('created_at', { ascending: true }),
     ]);
@@ -353,13 +357,24 @@ export default function ProjectDetailScreen() {
                       {TRADE_LABELS[slot.trade_type] ?? slot.trade_type.replace(/_/g, ' ')}
                     </Text>
                     <Text style={styles.companyName}>
-                      {slot.assigned_company?.name ?? 'Contractor assigned'}
+                      {slot.fulfillment_type === 'external'
+                        ? slot.external_trade_name ?? 'External trade'
+                        : slot.assigned_company?.name ?? 'Contractor assigned'}
                     </Text>
+                    {slot.fulfillment_type === 'external' ? (
+                      <Text style={styles.externalTradeNotice}>
+                        Externally managed by GC · Not WalkerAI verified · No escrow protection
+                      </Text>
+                    ) : null}
                   </View>
                   <View style={styles.tradeMeta}>
-                    <Text style={styles.slotStatus}>{slot.status.replace(/_/g, ' ')}</Text>
+                    <Text style={styles.slotStatus}>
+                      {slot.fulfillment_type === 'external' ? 'external' : slot.status.replace(/_/g, ' ')}
+                    </Text>
                     <Text style={styles.companyRating}>
-                      {slot.assigned_company?.rating
+                      {slot.fulfillment_type === 'external'
+                        ? 'GC responsibility'
+                        : slot.assigned_company?.rating
                         ? `⭐ ${slot.assigned_company.rating.toFixed(1)} · ${slot.assigned_company.total_reviews ?? 0}`
                         : 'New'}
                     </Text>
@@ -463,6 +478,7 @@ const styles = StyleSheet.create({
   tradeType: { fontSize: 13, fontWeight: '700', color: Colors.accent, marginBottom: 4, textTransform: 'capitalize' },
   slotStatus: { ...Typography.caption, color: Colors.text.secondary, textTransform: 'capitalize', marginBottom: 4 },
   companyName: { ...Typography.h3, marginBottom: 4 },
+  externalTradeNotice: { ...Typography.caption, color: Colors.warning, marginTop: 4, lineHeight: 17 },
   companyRating: { ...Typography.caption },
   costRange: { fontSize: 28, fontWeight: '700', color: Colors.success, letterSpacing: -0.5, marginBottom: 4 },
   costNote: { ...Typography.caption },
