@@ -467,4 +467,16 @@ describe('general contractor account type', () => {
     expect(gcAssistant).toContain("from('messages')");
     expect(gcAssistant).toContain('No manual edits or AI assumptions are applied.');
   });
+
+  it('shows modern GC approval requests in the GC approvals inbox', () => {
+    const gcApprovals = fs.readFileSync(
+      path.join(repoRoot, 'src/app/(general-contractor)/approvals.tsx'),
+      'utf8',
+    );
+
+    expect(gcApprovals).toContain("from('project_approval_requests')");
+    expect(gcApprovals).toContain("eq('requested_by_gc_id', gc.id)");
+    expect(gcApprovals).toContain('Homeowner approval requests');
+    expect(gcApprovals).toContain("navigation.navigate('GeneralContractorProjectDetail'");
+  });
 });

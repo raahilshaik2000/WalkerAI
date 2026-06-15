@@ -20,6 +20,16 @@ import { Colors, Spacing, Typography } from '@/constants/theme';
 import { GradientBackground, GlassButton, GlassCard, StatusBadge } from '@/components/ui';
 import { TradeEmptyState, TradeScreenHeader } from '@/components/company/TradeUI';
 
+type ProjectJoin = {
+  room_type: string | null;
+  city: string | null;
+  address: string | null;
+} | Array<{
+  room_type: string | null;
+  city: string | null;
+  address: string | null;
+}> | null;
+
 interface ApprovalRow {
   id: string;
   description: string;
@@ -28,18 +38,21 @@ interface ApprovalRow {
   signed_by_homeowner: boolean;
   signed_by_company: boolean;
   project_id: string;
-  project?: {
-    room_type: string | null;
-    city: string | null;
-    address: string | null;
-  } | Array<{
-    room_type: string | null;
-    city: string | null;
-    address: string | null;
-  }> | null;
+  project?: ProjectJoin;
 }
 
-function getProject(row: ApprovalRow) {
+interface RecommendationApprovalRow {
+  id: string;
+  project_id: string;
+  request_type: string;
+  title: string;
+  cost_delta: number | null;
+  timeline_delta_days: number | null;
+  status: string;
+  project?: ProjectJoin;
+}
+
+function getProject(row: { project?: ProjectJoin }) {
   return Array.isArray(row.project) ? row.project[0] ?? null : row.project ?? null;
 }
 
@@ -52,6 +65,7 @@ export default function GeneralContractorApprovals() {
   const navigation = useNavigation<any>();
   const { user } = useAuthStore();
   const [approvals, setApprovals] = useState<ApprovalRow[]>([]);
+  const [recommendationRequests, setRecommendationRequests] = useState<RecommendationApprovalRow[]>([]);
   const [bookingRequests, setBookingRequests] = useState<GcConciergeBooking[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
@@ -77,11 +91,12 @@ export default function GeneralContractorApprovals() {
       if (profileError) throw profileError;
       if (!gc?.id) {
         setApprovals([]);
+        setRecommendationRequests([]);
         setBookingRequests([]);
         return;
       }
 
-      const [assignmentResult, bookingResult] = await Promise.all([
+      const [assignmentResult, bookingResult, recommendationResult] = await Promise.all([
         supabase
           .from('general_contractor_projects')
           .select('project_id')
@@ -92,12 +107,22 @@ export default function GeneralContractorApprovals() {
           .select('id, project_id, general_contractor_id, homeowner_id, service_kind, title, duration_minutes, price_cents, contractor_payout_cents, walker_fee_cents, status, response_note, created_at, responded_at')
           .eq('general_contractor_id', gc.id)
           .order('created_at', { ascending: false }),
+        supabase
+          .from('project_approval_requests')
+          .select(`
+            id, project_id, request_type, title, cost_delta, timeline_delta_days, status,
+            project:projects ( room_type, city, address )
+          `)
+          .eq('requested_by_gc_id', gc.id)
+          .order('created_at', { ascending: false }),
       ]);
       const assignments = assignmentResult.data;
       const assignmentError = assignmentResult.error;
       if (assignmentError) throw assignmentError;
       if (bookingResult.error) throw bookingResult.error;
+      if (recommendationResult.error) throw recommendationResult.error;
       setBookingRequests((bookingResult.data ?? []) as GcConciergeBooking[]);
+      setRecommendationRequests((recommendationResult.data ?? []) as RecommendationApprovalRow[]);
 
       const projectIds = (assignments ?? []).map((row) => row.project_id).filter(Boolean);
       if (projectIds.length === 0) {
@@ -118,6 +143,7 @@ export default function GeneralContractorApprovals() {
     } catch (err) {
       setErrorMessage(err instanceof Error ? err.message : 'Could not load approvals.');
       setApprovals([]);
+      setRecommendationRequests([]);
       setBookingRequests([]);
     } finally {
       setLoading(false);
@@ -182,7 +208,7 @@ export default function GeneralContractorApprovals() {
             <GlassCard style={styles.card}>
               <Text style={styles.bodyText}>Loading approvals...</Text>
             </GlassCard>
-          ) : approvals.length === 0 && bookingRequests.length === 0 ? (
+          ) : approvals.length === 0 && recommendationRequests.length === 0 && bookingRequests.length === 0 ? (
             <TradeEmptyState
               icon="clipboard-check-outline"
               title="No approval requests"
@@ -234,6 +260,47 @@ export default function GeneralContractorApprovals() {
                           </View>
                         ) : null}
                       </View>
+                    );
+                  })}
+                </GlassCard>
+              ) : null}
+
+              {recommendationRequests.length > 0 ? (
+                <GlassCard style={styles.card}>
+                  <Text style={styles.sectionTitle}>Homeowner approval requests</Text>
+                  {recommendationRequests.map((request) => {
+                    const project = getProject(request);
+                    const pending = request.status === 'pending';
+                    return (
+                      <TouchableOpacity
+                        key={request.id}
+                        activeOpacity={0.85}
+                        onPress={() => navigation.navigate('GeneralContractorProjectDetail', { id: request.project_id })}
+                      >
+                        <View style={styles.bookingItem}>
+                          <View style={styles.cardHeader}>
+                            <View style={styles.iconWrap}>
+                              <Icon
+                                name={pending ? 'clock-alert-outline' : request.status === 'approved' ? 'check-circle-outline' : 'close-circle-outline'}
+                                size={20}
+                                color={pending ? Colors.warning : request.status === 'approved' ? Colors.success : Colors.error}
+                              />
+                            </View>
+                            <View style={styles.cardBody}>
+                              <Text style={styles.projectTitle}>{request.title}</Text>
+                              <Text style={styles.projectMeta}>
+                                {formatRoom(project?.room_type)} · {project?.city || project?.address || 'Managed project'}
+                              </Text>
+                            </View>
+                            <StatusBadge label={formatStatusLabel(request.status)} variant={pending ? 'pending' : request.status === 'approved' ? 'completed' : 'error'} dot />
+                          </View>
+                          <Text style={styles.costText}>
+                            {formatStatusLabel(request.request_type)}
+                            {request.cost_delta != null ? ` · ${formatCad(request.cost_delta)}` : ''}
+                            {request.timeline_delta_days != null ? ` · ${request.timeline_delta_days > 0 ? '+' : ''}${request.timeline_delta_days} days` : ''}
+                          </Text>
+                        </View>
+                      </TouchableOpacity>
                     );
                   })}
                 </GlassCard>
