@@ -194,10 +194,12 @@ export default function GeneralContractorCompletionScreen() {
   const pendingApprovals = approvals.filter((approval) => approval.status === 'pending').length
     + paymentRequests.filter((request) => request.status === 'pending').length;
   const paidMaterials = materialOrders.reduce((sum, order) => sum + (order.final_price ?? 0), 0);
-  const completionRequest = approvals.find((approval) => approval.metadata?.action === 'complete_project');
+  const completionRequests = approvals.filter((approval) => approval.metadata?.action === 'complete_project');
+  const latestCompletionRequest = completionRequests[0];
+  const pendingCompletionRequest = completionRequests.find((approval) => approval.status === 'pending');
   const canRequestCompletion = assignment?.status === 'active'
     && project?.status !== 'completed'
-    && !completionRequest
+    && !pendingCompletionRequest
     && pendingApprovals === 0;
 
   const handleRequestCompletion = async () => {
@@ -281,9 +283,9 @@ export default function GeneralContractorCompletionScreen() {
                   <SummaryTile label="Warranties" value={warranties.length} />
                   <SummaryTile label="Pending approvals" value={pendingApprovals} warning={pendingApprovals > 0} />
                 </View>
-                {completionRequest ? (
+                {latestCompletionRequest ? (
                   <View style={styles.completionStatus}>
-                    <Text style={styles.bodyText}>Completion request: {formatStatusLabel(completionRequest.status)}</Text>
+                    <Text style={styles.bodyText}>Latest completion request: {formatStatusLabel(latestCompletionRequest.status)}</Text>
                   </View>
                 ) : null}
                 {canRequestCompletion ? (
@@ -295,7 +297,7 @@ export default function GeneralContractorCompletionScreen() {
                     size="sm"
                     style={styles.completionButton}
                   />
-                ) : project?.status !== 'completed' && !completionRequest ? (
+                ) : project?.status !== 'completed' && !pendingCompletionRequest ? (
                   <Text style={styles.completionNote}>
                     Resolve pending approvals before requesting final project completion.
                   </Text>

@@ -661,6 +661,9 @@ describe('general contractor account type', () => {
     expect(gcCompletion).toContain("from('project_approval_requests')");
     expect(gcCompletion).toContain("from('gc_payment_requests')");
     expect(gcCompletion).toContain('Digital project binder');
+    expect(gcCompletion).toContain('const latestCompletionRequest = completionRequests[0];');
+    expect(gcCompletion).toContain("const pendingCompletionRequest = completionRequests.find((approval) => approval.status === 'pending');");
+    expect(gcCompletion).toContain('&& !pendingCompletionRequest');
   });
 
   it('gives GCs trade management visibility without bypassing homeowner approval', () => {
