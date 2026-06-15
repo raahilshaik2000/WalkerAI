@@ -345,6 +345,10 @@ describe('general contractor account type', () => {
       path.join(repoRoot, 'src/app/(homeowner)/project/[id]/index.tsx'),
       'utf8',
     );
+    const homeownerSchedule = fs.readFileSync(
+      path.join(repoRoot, 'src/app/(homeowner)/project/[id]/schedule.tsx'),
+      'utf8',
+    );
 
     expect(migration).toContain("fulfillment_type IN ('walker_ai', 'external')");
     expect(migration).toContain('CREATE OR REPLACE FUNCTION public.mark_project_slot_externally_managed');
@@ -355,6 +359,10 @@ describe('general contractor account type', () => {
     expect(gcProjectDetail).toContain('No escrow protection');
     expect(homeownerProject).toContain('Externally managed by GC');
     expect(homeownerProject).toContain('No escrow protection');
+    expect(homeownerSchedule).toContain('function isSchedulableSlot(slot: Slot)');
+    expect(homeownerSchedule).toContain("slot.fulfillment_type === 'external'");
+    expect(homeownerSchedule).toContain('walkerAiSchedulableSlots');
+    expect(homeownerSchedule).toContain('External scope is not managed by WalkerAI escrow.');
   });
 
   it('stores external trade documents without paid WalkerAI verification', () => {

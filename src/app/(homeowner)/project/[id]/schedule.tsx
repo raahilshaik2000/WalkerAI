@@ -40,6 +40,9 @@ interface Slot {
   description: string;
   status: string;
   assigned_company_id: string | null;
+  fulfillment_type?: 'walker_ai' | 'external' | null;
+  external_trade_name?: string | null;
+  external_trade_company?: string | null;
   scheduled_start_date: string | null;
   scheduled_end_date: string | null;
   companies?: { name: string; user_id: string } | Array<{ name: string; user_id: string }> | null;
@@ -59,6 +62,21 @@ function formatDate(iso: string | null) {
 function getCompany(slot: Slot) {
   if (Array.isArray(slot.companies)) return slot.companies[0] ?? null;
   return slot.companies ?? null;
+}
+
+function isExternalSlot(slot: Slot) {
+  return slot.fulfillment_type === 'external';
+}
+
+function isSchedulableSlot(slot: Slot) {
+  return ['filled', 'scheduled'].includes(slot.status) && (!!slot.assigned_company_id || isExternalSlot(slot));
+}
+
+function slotParticipantName(slot: Slot) {
+  if (isExternalSlot(slot)) {
+    return slot.external_trade_name ?? slot.external_trade_company ?? 'Externally managed trade';
+  }
+  return getCompany(slot)?.name ?? 'Waiting for contractor';
 }
 
 function isMissingColumnError(error: { message?: string } | null | undefined) {
@@ -91,7 +109,11 @@ export default function ScheduleScreen() {
 
     const { data, error } = await supabase
       .from('project_slots')
-      .select('id, trade_type, description, status, assigned_company_id, scheduled_start_date, scheduled_end_date, companies(name, user_id)')
+      .select(`
+        id, trade_type, description, status, assigned_company_id,
+        fulfillment_type, external_trade_name, external_trade_company,
+        scheduled_start_date, scheduled_end_date, companies(name, user_id)
+      `)
       .eq('project_id', projectId)
       .order('created_at');
 
@@ -127,12 +149,9 @@ export default function ScheduleScreen() {
       return;
     }
 
-    const schedulableSlots = slots.filter((s) => (
-      !!s.assigned_company_id && ['filled', 'scheduled'].includes(s.status)
-    ));
-    const unassignedSlots = slots.filter((s) => (
-      !s.assigned_company_id || !['filled', 'scheduled'].includes(s.status)
-    ));
+    const schedulableSlots = slots.filter(isSchedulableSlot);
+    const walkerAiSchedulableSlots = schedulableSlots.filter((s) => !!s.assigned_company_id && !isExternalSlot(s));
+    const unassignedSlots = slots.filter((s) => !isSchedulableSlot(s));
 
     if (slots.length === 0) {
       Alert.alert('No trades assigned', 'Trade slots will appear here after contractors accept the project.');
@@ -232,7 +251,7 @@ export default function ScheduleScreen() {
         }
 
         allRequiredQuotesApproved = allSchedulableSlotsHaveApprovedQuotes(
-          schedulableSlots,
+          walkerAiSchedulableSlots,
           approvedQuotes
         );
       }
@@ -345,9 +364,8 @@ export default function ScheduleScreen() {
           ) : null}
 
           {slots.map((slot) => {
-            const company = getCompany(slot);
             const d = dates[slot.id] ?? { start: null, end: null };
-            const canSchedule = !!slot.assigned_company_id && ['filled', 'scheduled'].includes(slot.status);
+            const canSchedule = isSchedulableSlot(slot);
 
             return (
               <View key={slot.id} style={[styles.slotCard, !canSchedule && styles.slotCardPending]}>
@@ -357,9 +375,10 @@ export default function ScheduleScreen() {
                   </View>
                   <View style={styles.slotInfo}>
                     <Text style={styles.tradeName}>{TRADE_LABELS[slot.trade_type] ?? slot.trade_type}</Text>
-                    <Text style={styles.companyName}>
-                      {company?.name ?? (canSchedule ? 'Assigned' : 'Waiting for contractor')}
-                    </Text>
+                    <Text style={styles.companyName}>{slotParticipantName(slot)}</Text>
+                    {isExternalSlot(slot) ? (
+                      <Text style={styles.externalNotice}>External scope is not managed by WalkerAI escrow.</Text>
+                    ) : null}
                   </View>
                 </View>
 
@@ -522,6 +541,7 @@ const styles = StyleSheet.create({
   slotInfo: { flex: 1 },
   tradeName: { fontSize: 15, fontWeight: '700', color: '#fff' },
   companyName: { fontSize: 12, color: Colors.text.secondary, marginTop: 2 },
+  externalNotice: { fontSize: 11, color: Colors.warning, marginTop: 3, lineHeight: 15 },
   slotDesc: { fontSize: 13, color: Colors.text.secondary, lineHeight: 18, marginBottom: 10 },
 
   dateRow: { flexDirection: 'row', alignItems: 'center' },
