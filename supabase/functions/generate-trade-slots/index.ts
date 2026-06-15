@@ -138,10 +138,11 @@ async function isActiveGeneralContractorForProject(
 ) {
   const { data, error } = await supabase
     .from('general_contractor_projects')
-    .select('id, general_contractors!inner(user_id)')
+    .select('id, general_contractors!inner(user_id, verified)')
     .eq('project_id', projectId)
     .eq('status', 'active')
     .eq('general_contractors.user_id', userId)
+    .eq('general_contractors.verified', true)
     .limit(1)
     .maybeSingle();
 

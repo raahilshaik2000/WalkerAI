@@ -215,6 +215,7 @@ describe('generate-trade-slots source guards', () => {
     expect(source).toContain(".from('general_contractor_projects')");
     expect(source).toContain(".eq('status', 'active')");
     expect(source).toContain(".eq('general_contractors.user_id', userId)");
+    expect(source).toContain(".eq('general_contractors.verified', true)");
     expect(source).toContain('const requesterIsHomeowner = project.homeowner_id === requesterId;');
     expect(source).toContain('if (!requesterIsHomeowner && !requesterIsActiveGc)');
   });
@@ -289,6 +290,7 @@ describe('dispatch-slots source guards', () => {
     expect(source).toContain(".from('general_contractor_projects')");
     expect(source).toContain(".eq('status', 'active')");
     expect(source).toContain(".eq('general_contractors.user_id', userId)");
+    expect(source).toContain(".eq('general_contractors.verified', true)");
     expect(source).toContain('const requesterIsHomeowner = project.homeowner_id === requesterId;');
     expect(source).toContain('if (!requesterIsHomeowner && !requesterIsActiveGc)');
   });
