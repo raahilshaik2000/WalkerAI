@@ -561,6 +561,21 @@ export default function GeneralContractorProjectDetail() {
                   <View style={styles.controlDivider} />
                   <TouchableOpacity
                     style={styles.controlRow}
+                    onPress={() => navigation.navigate('GeneralContractorAssistant', { id: projectId })}
+                    activeOpacity={0.85}
+                  >
+                    <View style={styles.controlIcon}>
+                      <Icon name="robot-outline" size={20} color={Colors.accent} />
+                    </View>
+                    <View style={styles.controlBody}>
+                      <Text style={styles.controlTitle}>Project assistant</Text>
+                      <Text style={styles.controlSub}>Generate daily summary, risk alerts, and outstanding tasks</Text>
+                    </View>
+                    <Icon name="chevron-right" size={20} color={Colors.text.tertiary} />
+                  </TouchableOpacity>
+                  <View style={styles.controlDivider} />
+                  <TouchableOpacity
+                    style={styles.controlRow}
                     onPress={() => navigation.navigate('GeneralContractorMessages', { id: projectId })}
                     activeOpacity={0.85}
                   >

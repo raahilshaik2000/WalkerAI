@@ -442,4 +442,29 @@ describe('general contractor account type', () => {
     expect(gcApprovals).toContain("from('gc_concierge_bookings')");
     expect(gcApprovals).toContain("supabase.rpc('respond_to_gc_concierge_booking'");
   });
+
+  it('adds a deterministic GC project assistant from live project records', () => {
+    const navigator = fs.readFileSync(
+      path.join(repoRoot, 'src/navigation/GeneralContractorNavigator.tsx'),
+      'utf8',
+    );
+    const gcProjectDetail = fs.readFileSync(
+      path.join(repoRoot, 'src/app/(general-contractor)/project/[id]/index.tsx'),
+      'utf8',
+    );
+    const gcAssistant = fs.readFileSync(
+      path.join(repoRoot, 'src/app/(general-contractor)/project/[id]/assistant.tsx'),
+      'utf8',
+    );
+
+    expect(navigator).toContain('GeneralContractorAssistant');
+    expect(gcProjectDetail).toContain("navigation.navigate('GeneralContractorAssistant'");
+    expect(gcAssistant).toContain("from('project_slots')");
+    expect(gcAssistant).toContain("from('permits')");
+    expect(gcAssistant).toContain("from('project_approval_requests')");
+    expect(gcAssistant).toContain("from('gc_payment_requests')");
+    expect(gcAssistant).toContain("from('material_orders')");
+    expect(gcAssistant).toContain("from('messages')");
+    expect(gcAssistant).toContain('No manual edits or AI assumptions are applied.');
+  });
 });
