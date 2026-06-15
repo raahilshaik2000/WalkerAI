@@ -143,6 +143,22 @@ describe('general contractor account type', () => {
     expect(homeownerConcierge).toContain("handleApprovalResponse(request, 'rejected')");
   });
 
+  it('shows action-aware homeowner approval details for GC-managed changes', () => {
+    const homeownerConcierge = fs.readFileSync(
+      path.join(repoRoot, 'src/app/(homeowner)/project/[id]/concierge.tsx'),
+      'utf8',
+    );
+
+    expect(homeownerConcierge).toContain('metadata: Record<string, unknown> | null');
+    expect(homeownerConcierge).toContain('getApprovalDetailRows(request)');
+    expect(homeownerConcierge).toContain("action === 'update_gc_budget'");
+    expect(homeownerConcierge).toContain('New project estimate:');
+    expect(homeownerConcierge).toContain("action === 'update_gc_terms'");
+    expect(homeownerConcierge).toContain('Approving updates the GC markup and concierge fee');
+    expect(homeownerConcierge).toContain('Review GC recommendations before they change project budget, terms, materials, trades, schedule, or completion status.');
+    expect(homeownerConcierge).not.toContain('Any project updates still need to be applied by the appropriate workflow.');
+  });
+
   it('supports GC-initiated homeowner-owned draft projects with homeowner confirmation', () => {
     const migration = fs.readFileSync(
       path.join(repoRoot, 'supabase/migrations/20260615000400_add_gc_project_creation_rpc.sql'),
@@ -451,7 +467,7 @@ describe('general contractor account type', () => {
     expect(gcMaterials).toContain('price_per_unit');
     expect(gcMaterials).toContain('Send Material Recommendation');
     expect(gcMaterials).toContain('Homeowner approval is required before the material preference changes.');
-    expect(homeownerConcierge).toContain('Material substitutions approved here update the project material preference fields.');
+    expect(homeownerConcierge).toContain('Approving updates the project material preference fields.');
   });
 
   it('gives GCs a discovery and scope-change approval workflow instead of bypassing change orders', () => {

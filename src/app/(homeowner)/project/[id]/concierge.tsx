@@ -42,6 +42,7 @@ interface ApprovalRequest {
   timeline_delta_days: number | null;
   status: string;
   response_note: string | null;
+  metadata: Record<string, unknown> | null;
 }
 
 type ConciergeServiceKind = GcConciergeBooking['service_kind'];
@@ -92,6 +93,73 @@ function formatGcDistance(gc: DiscoverableGeneralContractor): string | null {
   if (typeof gc.distance_km !== 'number' || !Number.isFinite(gc.distance_km)) return null;
   if (gc.distance_km < 1) return '<1 km away';
   return `${Math.round(gc.distance_km)} km away`;
+}
+
+function getMetadataNumber(metadata: Record<string, unknown> | null | undefined, key: string): number | null {
+  const value = metadata?.[key];
+  if (typeof value === 'number' && Number.isFinite(value)) return value;
+  if (typeof value === 'string' && value.trim()) {
+    const parsed = Number(value);
+    return Number.isFinite(parsed) ? parsed : null;
+  }
+  return null;
+}
+
+function getApprovalAction(request: ApprovalRequest): string | null {
+  const action = request.metadata?.action;
+  return typeof action === 'string' ? action : null;
+}
+
+function getApprovalDetailRows(request: ApprovalRequest): string[] {
+  const action = getApprovalAction(request);
+  if (action === 'update_gc_budget') {
+    const min = getMetadataNumber(request.metadata, 'proposed_ai_cost_min');
+    const max = getMetadataNumber(request.metadata, 'proposed_ai_cost_max');
+    return min != null && max != null
+      ? [`New project estimate: ${formatCadCents(min)} - ${formatCadCents(max)}`]
+      : ['Approving updates the project estimate after validation.'];
+  }
+  if (action === 'update_gc_terms') {
+    const markup = getMetadataNumber(request.metadata, 'proposed_markup_pct');
+    const conciergeFee = getMetadataNumber(request.metadata, 'proposed_concierge_fee_pct');
+    return [
+      markup != null ? `New markup: ${markup.toFixed(2)}%` : null,
+      conciergeFee != null ? `New concierge fee: ${conciergeFee.toFixed(2)}%` : null,
+    ].filter((row): row is string => Boolean(row));
+  }
+  if (action === 'complete_project') {
+    return ['Approving marks the managed project complete.'];
+  }
+  return [];
+}
+
+function getApprovalConfirmMessage(request: ApprovalRequest, status: 'approved' | 'rejected'): string {
+  if (status === 'rejected') return 'This records that the recommendation was rejected.';
+
+  const action = getApprovalAction(request);
+  if (action === 'update_gc_budget') {
+    const min = getMetadataNumber(request.metadata, 'proposed_ai_cost_min');
+    const max = getMetadataNumber(request.metadata, 'proposed_ai_cost_max');
+    return min != null && max != null
+      ? `Approving updates the project estimate to ${formatCadCents(min)} - ${formatCadCents(max)}.`
+      : 'Approving updates the project estimate after WalkerAI validates the request.';
+  }
+  if (action === 'update_gc_terms') {
+    return 'Approving updates the GC markup and concierge fee for this managed project.';
+  }
+  if (action === 'complete_project') {
+    return 'Approving marks this managed project complete.';
+  }
+  if (request.request_type === 'material_substitution') {
+    return 'Approving updates the project material preference fields.';
+  }
+  if (request.request_type === 'schedule_change') {
+    return 'Approving applies the proposed schedule change.';
+  }
+  if (request.request_type === 'trade_substitution') {
+    return 'Approving records the GC trade recommendation for this scope.';
+  }
+  return 'This records your approval for the GC recommendation.';
 }
 
 export default function ProjectConciergeScreen() {
@@ -153,7 +221,7 @@ export default function ProjectConciergeScreen() {
         fetchDiscoverableGeneralContractors(projectId),
         supabase
           .from('project_approval_requests')
-          .select('id, request_type, title, description, cost_delta, timeline_delta_days, status, response_note')
+          .select('id, request_type, title, description, cost_delta, timeline_delta_days, status, response_note, metadata')
           .eq('project_id', projectId)
           .order('created_at', { ascending: false }),
         supabase
@@ -213,9 +281,7 @@ export default function ProjectConciergeScreen() {
 
     Alert.alert(
       status === 'approved' ? 'Approve request?' : 'Reject request?',
-      status === 'approved'
-        ? 'This records your approval. Any project updates still need to be applied by the appropriate workflow.'
-        : 'This records that the recommendation was rejected.',
+      getApprovalConfirmMessage(request, status),
       [
         { text: 'Cancel', style: 'cancel' },
         {
@@ -694,7 +760,7 @@ export default function ProjectConciergeScreen() {
               <GlassCard style={styles.card}>
                 <Text style={styles.sectionTitle}>Approval requests</Text>
                 <Text style={styles.bodyText}>
-                  Material substitutions approved here update the project material preference fields. Supplier orders and escrow payments stay in their existing workflows.
+                  Review GC recommendations before they change project budget, terms, materials, trades, schedule, or completion status. Supplier orders and escrow payments stay in their existing workflows.
                 </Text>
                 {approvalRequests.length === 0 ? (
                   <Text style={styles.emptySubText}>No GC approval requests yet.</Text>
@@ -722,6 +788,9 @@ export default function ProjectConciergeScreen() {
                         <StatusBadge label={formatStatusLabel(request.status)} variant={pending ? 'pending' : request.status === 'approved' ? 'completed' : 'error'} size="sm" />
                       </View>
                       {request.description ? <Text style={styles.approvalDescription}>{request.description}</Text> : null}
+                      {getApprovalDetailRows(request).map((row) => (
+                        <Text key={row} style={styles.approvalDetail}>{row}</Text>
+                      ))}
                       {pending ? (
                         <View style={styles.approvalActions}>
                           <GlassButton
@@ -869,6 +938,7 @@ const styles = StyleSheet.create({
   approvalMeta: { ...Typography.caption, marginTop: 3 },
   paidText: { ...Typography.caption, color: Colors.success, marginTop: Spacing.sm, fontWeight: '800' },
   approvalDescription: { ...Typography.bodySecondary, lineHeight: 21, marginTop: 8 },
+  approvalDetail: { ...Typography.caption, color: Colors.text.primary, marginTop: 6, fontWeight: '800' },
   approvalActions: { flexDirection: 'row', gap: 8, marginTop: 12 },
   approvalButton: { flex: 1 },
 });
