@@ -145,6 +145,10 @@ describe('general contractor account type', () => {
   });
 
   it('surfaces the GC markup engine on managed project detail', () => {
+    const migration = fs.readFileSync(
+      path.join(repoRoot, 'supabase/migrations/20260615002200_apply_gc_terms_approval.sql'),
+      'utf8',
+    );
     const gcProjectDetail = fs.readFileSync(
       path.join(repoRoot, 'src/app/(general-contractor)/project/[id]/index.tsx'),
       'utf8',
@@ -154,6 +158,13 @@ describe('general contractor account type', () => {
     expect(gcProjectDetail).toContain('Markup engine');
     expect(gcProjectDetail).toContain('Homeowner-facing total');
     expect(gcProjectDetail).toContain('Estimated GC revenue');
+    expect(gcProjectDetail).toContain('Send Terms for Approval');
+    expect(gcProjectDetail).toContain("action: 'update_gc_terms'");
+    expect(gcProjectDetail).toContain("from('project_approval_requests').insert");
+    expect(migration).toContain("v_request.metadata->>'action' = 'update_gc_terms'");
+    expect(migration).toContain('markup_pct = v_markup_pct');
+    expect(migration).toContain('concierge_fee_pct = v_concierge_fee_pct');
+    expect(migration).toContain("AND status = 'active'");
   });
 
   it('supports externally managed trades without treating them as WalkerAI verified', () => {

@@ -59,6 +59,8 @@ interface ChangeOrder {
 interface Assignment {
   id: string;
   status: string;
+  homeowner_id: string;
+  general_contractor_id: string;
   markup_pct: number;
   concierge_fee_pct: number;
   scope_summary: string | null;
@@ -107,6 +109,13 @@ function formatTrade(tradeType: string) {
     .join(' ');
 }
 
+function parsePercent(value: string): number | null {
+  const normalized = value.trim().replace('%', '');
+  if (!/^\d+(\.\d{1,2})?$/.test(normalized)) return null;
+  const parsed = Number(normalized);
+  return Number.isFinite(parsed) ? parsed : null;
+}
+
 function getCompanyName(slot: Slot) {
   const company = Array.isArray(slot.assigned_company) ? slot.assigned_company[0] : slot.assigned_company;
   return company?.name ?? null;
@@ -132,10 +141,13 @@ export default function GeneralContractorProjectDetail() {
   const [externalTradeEmail, setExternalTradeEmail] = useState('');
   const [externalTradePhone, setExternalTradePhone] = useState('');
   const [externalTradeNotes, setExternalTradeNotes] = useState('');
+  const [proposedMarkupPct, setProposedMarkupPct] = useState('');
+  const [proposedConciergeFeePct, setProposedConciergeFeePct] = useState('');
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [accepting, setAccepting] = useState(false);
   const [submittingApproval, setSubmittingApproval] = useState(false);
+  const [submittingTerms, setSubmittingTerms] = useState(false);
   const [savingExternalTrade, setSavingExternalTrade] = useState(false);
   const [uploadingExternalDocSlotId, setUploadingExternalDocSlotId] = useState<string | null>(null);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
@@ -190,14 +202,18 @@ export default function GeneralContractorProjectDetail() {
       if (gc?.id) {
         const { data: assignmentRow, error: assignmentError } = await supabase
           .from('general_contractor_projects')
-          .select('id, status, markup_pct, concierge_fee_pct, scope_summary, initiated_by_gc')
+          .select('id, status, homeowner_id, general_contractor_id, markup_pct, concierge_fee_pct, scope_summary, initiated_by_gc')
           .eq('project_id', projectId)
           .eq('general_contractor_id', gc.id)
           .maybeSingle();
         if (assignmentError) throw assignmentError;
         setAssignment(assignmentRow as Assignment | null);
+        setProposedMarkupPct(assignmentRow?.markup_pct != null ? Number(assignmentRow.markup_pct).toFixed(0) : '');
+        setProposedConciergeFeePct(assignmentRow?.concierge_fee_pct != null ? Number(assignmentRow.concierge_fee_pct).toFixed(0) : '');
       } else {
         setAssignment(null);
+        setProposedMarkupPct('');
+        setProposedConciergeFeePct('');
       }
     } catch (err) {
       setErrorMessage(err instanceof Error ? err.message : 'Could not load managed project.');
@@ -402,6 +418,64 @@ export default function GeneralContractorProjectDetail() {
       Alert.alert('Upload failed', err instanceof Error ? err.message : 'Please try again.');
     } finally {
       setUploadingExternalDocSlotId(null);
+    }
+  };
+
+  const handleSubmitTermsUpdate = async () => {
+    if (!assignment || assignment.status !== 'active') {
+      Alert.alert('Active GC assignment required', 'The homeowner must confirm GC management before terms changes can be requested.');
+      return;
+    }
+
+    const markupPct = parsePercent(proposedMarkupPct);
+    if (markupPct == null || markupPct < 0 || markupPct > 50) {
+      Alert.alert('Invalid markup', 'Markup must be between 0% and 50%.');
+      return;
+    }
+
+    const conciergePct = parsePercent(proposedConciergeFeePct);
+    if (conciergePct == null || conciergePct < 0 || conciergePct > 25) {
+      Alert.alert('Invalid concierge fee', 'Concierge fee must be between 0% and 25%.');
+      return;
+    }
+
+    if (markupPct === Number(assignment.markup_pct) && conciergePct === Number(assignment.concierge_fee_pct)) {
+      Alert.alert('No change', 'Adjust the markup or concierge fee before sending a homeowner approval request.');
+      return;
+    }
+
+    setSubmittingTerms(true);
+    try {
+      const { error } = await supabase.from('project_approval_requests').insert({
+        project_id: projectId,
+        requested_by_gc_id: assignment.general_contractor_id,
+        homeowner_id: assignment.homeowner_id,
+        request_type: 'general_recommendation',
+        title: 'GC management terms update',
+        description: [
+          `Current markup: ${Number(assignment.markup_pct).toFixed(2)}%`,
+          `Proposed markup: ${markupPct.toFixed(2)}%`,
+          `Current concierge fee: ${Number(assignment.concierge_fee_pct).toFixed(2)}%`,
+          `Proposed concierge fee: ${conciergePct.toFixed(2)}%`,
+          'No terms change applies until the homeowner approves this request.',
+        ].join('\n'),
+        cost_delta: null,
+        timeline_delta_days: null,
+        metadata: {
+          action: 'update_gc_terms',
+          current_markup_pct: Number(assignment.markup_pct),
+          proposed_markup_pct: markupPct,
+          current_concierge_fee_pct: Number(assignment.concierge_fee_pct),
+          proposed_concierge_fee_pct: conciergePct,
+        },
+      });
+      if (error) throw error;
+      Alert.alert('Sent for approval', 'The homeowner must approve before WalkerAI updates the GC markup and concierge fee.');
+      await fetchData();
+    } catch (err) {
+      Alert.alert('Could not request terms update', err instanceof Error ? err.message : 'Please try again.');
+    } finally {
+      setSubmittingTerms(false);
     }
   };
 
@@ -676,6 +750,37 @@ export default function GeneralContractorProjectDetail() {
                       Generate or enter an estimate before WalkerAI can calculate markup, homeowner total, and GC revenue.
                     </Text>
                   )}
+                  {assignment.status === 'active' ? (
+                    <View style={styles.termsEditor}>
+                      <Text style={styles.bodyText}>
+                        Update margin terms through homeowner approval. Approved terms recalculate this project only.
+                      </Text>
+                      <View style={styles.formRow}>
+                        <GlassInput
+                          label="Markup %"
+                          value={proposedMarkupPct}
+                          onChangeText={setProposedMarkupPct}
+                          keyboardType="decimal-pad"
+                          containerStyle={styles.formHalf}
+                        />
+                        <GlassInput
+                          label="Concierge %"
+                          value={proposedConciergeFeePct}
+                          onChangeText={setProposedConciergeFeePct}
+                          keyboardType="decimal-pad"
+                          containerStyle={styles.formHalf}
+                        />
+                      </View>
+                      <GlassButton
+                        label="Send Terms for Approval"
+                        onPress={handleSubmitTermsUpdate}
+                        loading={submittingTerms}
+                        fullWidth
+                        size="sm"
+                        style={styles.submitApprovalButton}
+                      />
+                    </View>
+                  ) : null}
                 </GlassCard>
               ) : null}
 
@@ -958,6 +1063,7 @@ const styles = StyleSheet.create({
   card: { marginBottom: Spacing.sm },
   sectionTitle: { ...Typography.label, marginBottom: 10 },
   bodyText: { ...Typography.bodySecondary, lineHeight: 22 },
+  termsEditor: { marginTop: Spacing.sm, borderTopWidth: 1, borderTopColor: Colors.glass.border, paddingTop: Spacing.sm },
   assignmentHeader: { flexDirection: 'row', justifyContent: 'space-between', gap: 12, alignItems: 'flex-start' },
   scopeText: {
     ...Typography.caption,
