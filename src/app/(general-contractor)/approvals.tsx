@@ -38,6 +38,7 @@ interface ApprovalRow {
   signed_by_homeowner: boolean;
   signed_by_company: boolean;
   project_id: string;
+  project_type?: string | null;
   project?: ProjectJoin;
 }
 
@@ -49,20 +50,32 @@ interface RecommendationApprovalRow {
   cost_delta: number | null;
   timeline_delta_days: number | null;
   status: string;
+  project_type?: string | null;
   project?: ProjectJoin;
 }
 
 type PaymentRequestRow = GcPaymentRequest & {
+  project_type?: string | null;
   project?: ProjectJoin;
+};
+
+type GcProjectAssignmentRow = {
+  project_id: string;
+  project_type: string | null;
 };
 
 function getProject(row: { project?: ProjectJoin }) {
   return Array.isArray(row.project) ? row.project[0] ?? null : row.project ?? null;
 }
 
-function formatRoom(roomType?: string | null) {
-  if (!roomType) return 'Renovation';
-  return `${roomType.charAt(0).toUpperCase()}${roomType.slice(1)} Renovation`;
+function formatProjectType(projectType?: string | null, roomType?: string | null) {
+  const type = projectType || roomType;
+  if (!type) return 'Renovation Project';
+  const label = type
+    .split('_')
+    .map((part) => `${part.charAt(0).toUpperCase()}${part.slice(1)}`)
+    .join(' ');
+  return type === 'kitchen' || type === 'bathroom' ? `${label} Renovation` : label;
 }
 
 export default function GeneralContractorApprovals() {
@@ -105,7 +118,7 @@ export default function GeneralContractorApprovals() {
       const [assignmentResult, bookingResult, recommendationResult, paymentResult] = await Promise.all([
         supabase
           .from('general_contractor_projects')
-          .select('project_id')
+          .select('project_id, project_type')
           .eq('general_contractor_id', gc.id)
           .neq('status', 'removed'),
         supabase
@@ -137,9 +150,18 @@ export default function GeneralContractorApprovals() {
       if (bookingResult.error) throw bookingResult.error;
       if (recommendationResult.error) throw recommendationResult.error;
       if (paymentResult.error) throw paymentResult.error;
+      const projectTypeById = new Map(
+        ((assignments ?? []) as GcProjectAssignmentRow[]).map((assignment) => [assignment.project_id, assignment.project_type]),
+      );
       setBookingRequests((bookingResult.data ?? []) as GcConciergeBooking[]);
-      setRecommendationRequests((recommendationResult.data ?? []) as RecommendationApprovalRow[]);
-      setPaymentRequests((paymentResult.data ?? []) as PaymentRequestRow[]);
+      setRecommendationRequests(((recommendationResult.data ?? []) as RecommendationApprovalRow[]).map((request) => ({
+        ...request,
+        project_type: projectTypeById.get(request.project_id) ?? null,
+      })));
+      setPaymentRequests(((paymentResult.data ?? []) as PaymentRequestRow[]).map((request) => ({
+        ...request,
+        project_type: projectTypeById.get(request.project_id) ?? null,
+      })));
 
       const projectIds = (assignments ?? []).map((row) => row.project_id).filter(Boolean);
       if (projectIds.length === 0) {
@@ -156,7 +178,10 @@ export default function GeneralContractorApprovals() {
         .in('project_id', projectIds)
         .order('created_at', { ascending: false });
       if (error) throw error;
-      setApprovals((data ?? []) as ApprovalRow[]);
+      setApprovals(((data ?? []) as ApprovalRow[]).map((approval) => ({
+        ...approval,
+        project_type: projectTypeById.get(approval.project_id) ?? null,
+      })));
     } catch (err) {
       setErrorMessage(err instanceof Error ? err.message : 'Could not load approvals.');
       setApprovals([]);
@@ -315,7 +340,7 @@ export default function GeneralContractorApprovals() {
                             <View style={styles.cardBody}>
                               <Text style={styles.projectTitle}>{request.title}</Text>
                               <Text style={styles.projectMeta}>
-                                {formatRoom(project?.room_type)} · {project?.city || project?.address || 'Managed project'}
+                                {formatProjectType(request.project_type, project?.room_type)} · {project?.city || project?.address || 'Managed project'}
                               </Text>
                             </View>
                             <StatusBadge label={formatStatusLabel(request.status)} variant={pending ? 'pending' : request.status === 'approved' ? 'completed' : 'error'} dot />
@@ -356,7 +381,7 @@ export default function GeneralContractorApprovals() {
                             <View style={styles.cardBody}>
                               <Text style={styles.projectTitle}>{request.title}</Text>
                               <Text style={styles.projectMeta}>
-                                {formatRoom(project?.room_type)} · {project?.city || project?.address || 'Managed project'}
+                                {formatProjectType(request.project_type, project?.room_type)} · {project?.city || project?.address || 'Managed project'}
                               </Text>
                               <Text style={styles.projectMeta}>
                                 {formatStatusLabel(request.request_kind)} · {formatCadCents(request.amount_cents)}
@@ -392,7 +417,7 @@ export default function GeneralContractorApprovals() {
                           <Icon name={needsHomeowner ? 'clock-alert-outline' : 'clipboard-text-outline'} size={20} color={needsHomeowner ? Colors.warning : Colors.text.secondary} />
                         </View>
                         <View style={styles.cardBody}>
-                          <Text style={styles.projectTitle}>{formatRoom(project?.room_type)}</Text>
+                          <Text style={styles.projectTitle}>{formatProjectType(approval.project_type, project?.room_type)}</Text>
                           <Text style={styles.projectMeta}>{project?.city || project?.address || 'Managed project'}</Text>
                         </View>
                         <StatusBadge label={formatStatusLabel(approval.status)} variant={needsHomeowner ? 'pending' : approval.status === 'approved' ? 'completed' : 'neutral'} dot />

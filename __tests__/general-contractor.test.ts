@@ -711,6 +711,10 @@ describe('general contractor account type', () => {
 
     expect(gcApprovals).toContain("from('project_approval_requests')");
     expect(gcApprovals).toContain("eq('requested_by_gc_id', gc.id)");
+    expect(gcApprovals).toContain("select('project_id, project_type')");
+    expect(gcApprovals).toContain('projectTypeById.get(request.project_id)');
+    expect(gcApprovals).toContain('formatProjectType(request.project_type, project?.room_type)');
+    expect(gcApprovals).toContain('formatProjectType(approval.project_type, project?.room_type)');
     expect(gcApprovals).toContain('Homeowner approval requests');
     expect(gcApprovals).toContain("navigation.navigate('GeneralContractorProjectDetail'");
   });
