@@ -71,6 +71,9 @@ export function resolveNotificationRoute(
       return { name: 'GeneralContractorTabs', params: { screen: 'GeneralContractorProjects' } };
     }
     switch (type) {
+      case 'gc_management_invite_received':
+      case 'gc_management_confirmed':
+        return { name: 'GeneralContractorProjectDetail', params: { id: projectId } };
       case 'gc_trade_negotiation_responded':
         return { name: 'GeneralContractorTrades', params: { id: projectId } };
       case 'quote_submitted':
@@ -132,6 +135,7 @@ export function resolveNotificationRoute(
 
   switch (type) {
     case 'gc_management_invited':
+    case 'gc_management_confirmed':
     case 'gc_approval_requested':
     case 'gc_payment_requested':
     case 'gc_concierge_booking_responded':

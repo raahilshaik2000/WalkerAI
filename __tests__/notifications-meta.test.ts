@@ -18,6 +18,8 @@ describe('notification display metadata', () => {
     expect(notificationDisplayMeta('order_shipped').title).toBe('Order shipped');
     expect(notificationDisplayMeta('gc_approval_requested').title).toBe('GC approval needed');
     expect(notificationDisplayMeta('gc_management_invited').title).toBe('GC management approval needed');
+    expect(notificationDisplayMeta('gc_management_invite_received').title).toBe('GC invite received');
+    expect(notificationDisplayMeta('gc_management_confirmed').timelineLabel).toBe('GC management is active');
     expect(notificationDisplayMeta('gc_concierge_booking_requested').timelineLabel).toBe('New concierge service request');
     expect(notificationDisplayMeta('gc_concierge_payout_released').title).toBe('Concierge payout released');
     expect(notificationDisplayMeta('gc_trade_negotiation_requested').title).toBe('Quote revision requested');

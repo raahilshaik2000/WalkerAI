@@ -815,6 +815,10 @@ describe('general contractor account type', () => {
       path.join(repoRoot, 'supabase/migrations/20260615001500_add_gc_workflow_notifications.sql'),
       'utf8',
     );
+    const assignmentMigration = fs.readFileSync(
+      path.join(repoRoot, 'supabase/migrations/20260615003100_notify_gc_assignment_lifecycle.sql'),
+      'utf8',
+    );
 
     expect(migration).toContain('gc_approval_requested');
     expect(migration).toContain('gc_approval_responded');
@@ -829,6 +833,12 @@ describe('general contractor account type', () => {
     expect(migration).toContain('AFTER INSERT ON public.gc_concierge_bookings');
     expect(migration).toContain('AFTER UPDATE OF status ON public.gc_concierge_bookings');
     expect(migration).toContain('REVOKE ALL ON FUNCTION public.insert_gc_workflow_notification');
+    expect(assignmentMigration).toContain('gc_management_invite_received');
+    expect(assignmentMigration).toContain('gc_management_confirmed');
+    expect(assignmentMigration).toContain('AFTER INSERT ON public.general_contractor_projects');
+    expect(assignmentMigration).toContain('AFTER UPDATE OF status ON public.general_contractor_projects');
+    expect(assignmentMigration).toContain('COALESCE(NEW.initiated_by_gc, FALSE) IS FALSE');
+    expect(assignmentMigration).toContain("NEW.status = 'active'");
   });
 
   it('adds GC-to-trade quote negotiation without mutating homeowner quote totals directly', () => {

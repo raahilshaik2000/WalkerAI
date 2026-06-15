@@ -135,6 +135,26 @@ describe('notification navigation', () => {
     });
   });
 
+  it('routes GC assignment lifecycle notifications to project management surfaces', () => {
+    expect(resolveNotificationRoute('gc_management_invite_received', { project_id: 'project-1' }, 'general_contractor')).toEqual({
+      name: 'GeneralContractorProjectDetail',
+      params: { id: 'project-1' },
+    });
+
+    expect(resolveNotificationRoute('gc_management_confirmed', { project_id: 'project-1' }, 'general_contractor')).toEqual({
+      name: 'GeneralContractorProjectDetail',
+      params: { id: 'project-1' },
+    });
+
+    expect(resolveNotificationRoute('gc_management_confirmed', { project_id: 'project-1' }, 'homeowner')).toEqual({
+      name: 'ProjectDetail',
+      params: {
+        screen: 'Concierge',
+        params: { id: 'project-1' },
+      },
+    });
+  });
+
   it('routes GC trade negotiation notifications to the right role surface', () => {
     expect(resolveNotificationRoute('gc_trade_negotiation_requested', { project_id: 'project-1', slot_id: 'slot-1' }, 'company')).toEqual({
       name: 'JobDetail',
