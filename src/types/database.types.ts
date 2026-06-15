@@ -220,6 +220,9 @@ export interface GcConciergeBooking {
   contractor_payout_cents: number;
   walker_fee_cents: number;
   status: 'pending' | 'accepted' | 'rejected' | 'cancelled' | 'completed';
+  payment_status: 'unpaid' | 'payment_pending' | 'paid' | 'refunded';
+  stripe_payment_intent_id: string | null;
+  paid_at: string | null;
   response_note: string | null;
   created_at: string;
   responded_at: string | null;

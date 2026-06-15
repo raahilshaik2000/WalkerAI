@@ -191,7 +191,51 @@ Deno.serve(async (req) => {
     switch (event.type) {
       case 'payment_intent.succeeded': {
         const pi = event.data.object as Stripe.PaymentIntent;
-        const { project_id, quote_id } = pi.metadata;
+        const { project_id, quote_id, gc_concierge_booking_id } = pi.metadata;
+        if (gc_concierge_booking_id) {
+          const { data: booking, error: bookingLookupError } = await adminClient
+            .from('gc_concierge_bookings')
+            .select('id, project_id, general_contractor_id, stripe_payment_intent_id, payment_status, general_contractors(user_id)')
+            .eq('id', gc_concierge_booking_id)
+            .single();
+
+          if (bookingLookupError || !booking) {
+            throw new Error(`Concierge booking not found for payment_intent ${pi.id}`);
+          }
+
+          if (booking.project_id !== project_id || booking.stripe_payment_intent_id !== pi.id) {
+            throw new Error(`PaymentIntent metadata does not match concierge booking ${gc_concierge_booking_id}`);
+          }
+
+          const { data: updatedBooking, error: bookingUpdateError } = await adminClient
+            .from('gc_concierge_bookings')
+            .update({ payment_status: 'paid', paid_at: new Date().toISOString() })
+            .eq('id', gc_concierge_booking_id)
+            .eq('stripe_payment_intent_id', pi.id)
+            .neq('payment_status', 'paid')
+            .select('id')
+            .maybeSingle();
+          if (bookingUpdateError) throw bookingUpdateError;
+
+          if (updatedBooking) {
+            const gc = Array.isArray(booking.general_contractors)
+              ? booking.general_contractors[0]
+              : booking.general_contractors as { user_id: string } | null;
+            if (gc?.user_id) {
+              const { error: notificationError } = await adminClient.from('notifications').insert({
+                user_id: gc.user_id,
+                type: 'gc_concierge_booking_paid',
+                payload: {
+                  project_id,
+                  concierge_booking_id: gc_concierge_booking_id,
+                  payment_intent_id: pi.id,
+                },
+              });
+              if (notificationError) console.warn('gc_concierge_booking_paid notification failed:', notificationError);
+            }
+          }
+        }
+
         if (project_id && quote_id) {
           let quoteResult = await adminClient
             .from('quotes')

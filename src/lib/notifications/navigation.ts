@@ -59,6 +59,7 @@ export function resolveNotificationRoute(
   if (role === 'general_contractor') {
     if (
       type === 'gc_concierge_booking_requested'
+      || type === 'gc_concierge_booking_paid'
       || type === 'gc_approval_responded'
       || type === 'gc_payment_responded'
     ) {

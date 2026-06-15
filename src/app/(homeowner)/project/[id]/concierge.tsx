@@ -10,8 +10,12 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useFocusEffect, useNavigation, useRoute } from '@react-navigation/native';
+import { useStripe } from '@stripe/stripe-react-native';
+import ReactNativeHapticFeedback from 'react-native-haptic-feedback';
 import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
 import { supabase } from '@/lib/supabase/client';
+import { getPaymentSheetConfig } from '@/lib/payments';
+import { formatSupabaseFunctionError } from '@/lib/supabase/functions';
 import { useAuthStore } from '@/stores/auth.store';
 import type { GcConciergeBooking, GcPaymentRequest, GeneralContractor } from '@/types/database.types';
 import { formatStatusLabel } from '@/lib/formatters';
@@ -60,6 +64,7 @@ export default function ProjectConciergeScreen() {
   const route = useRoute<any>();
   const projectId = getRequiredStringParam(route.params, 'id');
   const navigation = useNavigation<any>();
+  const { initPaymentSheet, presentPaymentSheet } = useStripe();
   const { user } = useAuthStore();
   const [projectHomeownerId, setProjectHomeownerId] = useState<string | null>(null);
   const [currentAssignment, setCurrentAssignment] = useState<CurrentAssignment | null>(null);
@@ -71,6 +76,7 @@ export default function ProjectConciergeScreen() {
   const [refreshing, setRefreshing] = useState(false);
   const [invitingId, setInvitingId] = useState<string | null>(null);
   const [bookingId, setBookingId] = useState<string | null>(null);
+  const [payingBookingId, setPayingBookingId] = useState<string | null>(null);
   const [respondingId, setRespondingId] = useState<string | null>(null);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
@@ -120,7 +126,7 @@ export default function ProjectConciergeScreen() {
           .order('created_at', { ascending: false }),
         supabase
           .from('gc_concierge_bookings')
-          .select('id, project_id, general_contractor_id, homeowner_id, service_kind, title, duration_minutes, price_cents, contractor_payout_cents, walker_fee_cents, status, response_note, created_at, responded_at')
+          .select('id, project_id, general_contractor_id, homeowner_id, service_kind, title, duration_minutes, price_cents, contractor_payout_cents, walker_fee_cents, status, payment_status, stripe_payment_intent_id, paid_at, response_note, created_at, responded_at')
           .eq('project_id', projectId)
           .order('created_at', { ascending: false }),
       ]);
@@ -291,7 +297,7 @@ export default function ProjectConciergeScreen() {
     const option = CONCIERGE_SERVICE_OPTIONS.find((item) => item.kind === serviceKind);
     Alert.alert(
       'Request concierge service?',
-      `${option?.label ?? 'Concierge service'} will be sent to ${gc.business_name}. WalkerAI records the 80/20 revenue split, but payment collection is still handled separately.`,
+      `${option?.label ?? 'Concierge service'} will be sent to ${gc.business_name}. Once the GC accepts, you can pay securely in WalkerAI.`,
       [
         { text: 'Cancel', style: 'cancel' },
         {
@@ -310,6 +316,64 @@ export default function ProjectConciergeScreen() {
               await fetchData();
             }
             setBookingId(null);
+          },
+        },
+      ],
+    );
+  };
+
+  const handlePayBooking = async (booking: GcConciergeBooking) => {
+    const currentUser = user ?? (await supabase.auth.getUser()).data.user;
+    if (!currentUser?.id || projectHomeownerId !== currentUser.id) {
+      Alert.alert('Not allowed', 'Only the homeowner can pay concierge bookings.');
+      return;
+    }
+    if (booking.status !== 'accepted') {
+      Alert.alert('Booking not accepted', 'The GC must accept this concierge request before payment.');
+      return;
+    }
+    if (booking.payment_status === 'paid') {
+      Alert.alert('Already paid', 'This concierge booking has already been paid.');
+      return;
+    }
+
+    Alert.alert(
+      'Pay concierge booking?',
+      `Pay ${formatCadCents(booking.price_cents)} for ${booking.title}? WalkerAI records the 80/20 payout split.`,
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Pay Now',
+          onPress: async () => {
+            setPayingBookingId(booking.id);
+            try {
+              const { data, error } = await supabase.functions.invoke('create-gc-concierge-payment-intent', {
+                body: { booking_id: booking.id },
+              });
+              if (error) throw new Error(await formatSupabaseFunctionError(error));
+              const paymentSheetConfig = getPaymentSheetConfig(data);
+
+              const { error: initErr } = await initPaymentSheet({
+                paymentIntentClientSecret: paymentSheetConfig.clientSecret,
+                merchantDisplayName: 'WalkerAI',
+              });
+              if (initErr) throw new Error(initErr.message);
+
+              const { error: payErr } = await presentPaymentSheet();
+              if (payErr) {
+                if (payErr.code !== 'Canceled') throw new Error(payErr.message);
+                return;
+              }
+
+              ReactNativeHapticFeedback.trigger('notificationSuccess');
+              setTimeout(() => fetchData(), 1500);
+              setTimeout(() => fetchData(), 4000);
+              Alert.alert('Payment received', 'Your concierge booking payment is being confirmed.');
+            } catch (err) {
+              Alert.alert('Payment failed', await formatSupabaseFunctionError(err, 'Please try again.'));
+            } finally {
+              setPayingBookingId(null);
+            }
           },
         },
       ],
@@ -438,9 +502,25 @@ export default function ProjectConciergeScreen() {
                         <Text style={styles.approvalMeta}>
                           {formatCadCents(booking.price_cents)} · GC {formatCadCents(booking.contractor_payout_cents)} · WalkerAI {formatCadCents(booking.walker_fee_cents)}
                         </Text>
+                        <Text style={styles.approvalMeta}>
+                          Payment: {formatStatusLabel(booking.payment_status ?? 'unpaid')}
+                        </Text>
                       </View>
                       <StatusBadge label={formatStatusLabel(booking.status)} variant={booking.status === 'accepted' ? 'completed' : booking.status === 'rejected' ? 'error' : 'pending'} size="sm" />
                     </View>
+                    {booking.status === 'accepted' && booking.payment_status !== 'paid' ? (
+                      <GlassButton
+                        label={booking.payment_status === 'payment_pending' ? 'Continue Payment' : 'Pay Booking'}
+                        onPress={() => handlePayBooking(booking)}
+                        loading={payingBookingId === booking.id}
+                        disabled={!!payingBookingId}
+                        fullWidth
+                        size="sm"
+                        style={styles.inviteButton}
+                      />
+                    ) : booking.payment_status === 'paid' ? (
+                      <Text style={styles.paidText}>Paid{booking.paid_at ? ` · ${new Date(booking.paid_at).toLocaleDateString('en-CA')}` : ''}</Text>
+                    ) : null}
                   </View>
                 ))}
                 {assignedGc.concierge_enabled ? (
@@ -688,6 +768,7 @@ const styles = StyleSheet.create({
   approvalBody: { flex: 1 },
   approvalTitle: { ...Typography.body, fontWeight: '800' },
   approvalMeta: { ...Typography.caption, marginTop: 3 },
+  paidText: { ...Typography.caption, color: Colors.success, marginTop: Spacing.sm, fontWeight: '800' },
   approvalDescription: { ...Typography.bodySecondary, lineHeight: 21, marginTop: 8 },
   approvalActions: { flexDirection: 'row', gap: 8, marginTop: 12 },
   approvalButton: { flex: 1 },

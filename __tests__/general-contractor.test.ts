@@ -546,4 +546,24 @@ describe('general contractor account type', () => {
     expect(companyJob).toContain("supabase.rpc('respond_to_gc_trade_quote_negotiation'");
     expect(companyJob).toContain('GC quote negotiation');
   });
+
+  it('collects accepted GC concierge booking payments through Stripe PaymentSheet', () => {
+    const migration = fs.readFileSync(
+      path.join(repoRoot, 'supabase/migrations/20260615001700_add_gc_concierge_payment_fields.sql'),
+      'utf8',
+    );
+    const homeownerConcierge = fs.readFileSync(
+      path.join(repoRoot, 'src/app/(homeowner)/project/[id]/concierge.tsx'),
+      'utf8',
+    );
+
+    expect(migration).toContain('payment_status');
+    expect(migration).toContain('stripe_payment_intent_id');
+    expect(migration).toContain('paid_at');
+    expect(homeownerConcierge).toContain("supabase.functions.invoke('create-gc-concierge-payment-intent'");
+    expect(homeownerConcierge).toContain('initPaymentSheet');
+    expect(homeownerConcierge).toContain('presentPaymentSheet');
+    expect(homeownerConcierge).toContain('Pay Booking');
+    expect(homeownerConcierge).not.toContain('payment collection is still handled separately');
+  });
 });

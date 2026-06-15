@@ -228,6 +228,38 @@ describe('stripe-webhook source guards', () => {
     );
     expect(source).not.toContain("throw new Error(`Project ${project_id} could not be activated after payment`)");
   });
+
+  it('marks paid GC concierge bookings from Stripe metadata without approving quotes', () => {
+    const source = fs.readFileSync(
+      path.join(__dirname, '../supabase/functions/stripe-webhook/index.ts'),
+      'utf8',
+    );
+
+    expect(source).toContain('gc_concierge_booking_id');
+    expect(source).toContain(".from('gc_concierge_bookings')");
+    expect(source).toContain("payment_status: 'paid'");
+    expect(source).toContain('gc_concierge_booking_paid');
+    expect(source).toMatch(
+      /if \(gc_concierge_booking_id\)[\s\S]*?\.update\(\{ payment_status: 'paid', paid_at: new Date\(\)\.toISOString\(\) \}\)/
+    );
+  });
+});
+
+describe('create-gc-concierge-payment-intent source guards', () => {
+  it('creates Stripe intents only for accepted homeowner-owned concierge bookings', () => {
+    const source = fs.readFileSync(
+      path.join(__dirname, '../supabase/functions/create-gc-concierge-payment-intent/index.ts'),
+      'utf8',
+    );
+
+    expect(source).toContain("const { booking_id } = await req.json();");
+    expect(source).toContain("booking.homeowner_id !== user.id");
+    expect(source).toContain("booking.status !== 'accepted'");
+    expect(source).toContain("booking.payment_status === 'paid'");
+    expect(source).toContain("gc_concierge_booking_id: booking.id");
+    expect(source).toContain("payment_status: 'payment_pending'");
+    expect(source).toContain("transfer_group: `gc_concierge_${booking.id}`");
+  });
 });
 
 describe('release-milestone source guards', () => {

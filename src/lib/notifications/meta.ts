@@ -196,6 +196,13 @@ const META: Record<string, NotificationDisplayMeta> = {
     color: '#34D399',
     timelineLabel: 'GC responded to a concierge service request',
   },
+  gc_concierge_booking_paid: {
+    emoji: '💰',
+    title: 'Concierge booking paid',
+    timelineIcon: 'cash-outline',
+    color: '#34D399',
+    timelineLabel: 'Homeowner paid a concierge service booking',
+  },
   gc_trade_negotiation_requested: {
     emoji: '💬',
     title: 'Quote revision requested',
