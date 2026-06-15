@@ -152,6 +152,10 @@ describe('general contractor account type', () => {
     expect(gcProjectDetail).toContain('p_assignment_id: assignment.id');
     expect(gcProjectDetail).not.toContain("update({ status: 'active' })");
     expect(gcProjectDetail).toContain('GC management terms');
+    expect(gcProjectDetail).toContain("const assignmentIsActive = assignment?.status === 'active'");
+    expect(gcProjectDetail).toContain('Controls unlock after homeowner confirmation');
+    expect(gcProjectDetail).toContain('Schedule, permit, payment, material, trade, discovery, assistant, and completion tools become available once GC management is active.');
+    expect(gcProjectDetail).toContain('Coordinate with the homeowner while management approval is pending');
     expect(activationMigration).toContain('DROP POLICY IF EXISTS "gc_projects_participant_update"');
     expect(activationMigration).toContain('CREATE POLICY "gc_projects_homeowner_update"');
     expect(activationMigration).toContain('CREATE OR REPLACE FUNCTION public.accept_gc_management_invite');

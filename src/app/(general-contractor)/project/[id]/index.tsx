@@ -543,6 +543,7 @@ export default function GeneralContractorProjectDetail() {
     order.status === 'proposed' && order.signed_by_company && !order.signed_by_homeowner
   )).length;
   const assignedTrades = slots.filter((slot) => !!getCompanyName(slot)).length;
+  const assignmentIsActive = assignment?.status === 'active';
   const markupSummary = assignment && project
     ? calculateGcMarkup({
       baseMinCents: project.ai_cost_min,
@@ -640,7 +641,7 @@ export default function GeneralContractorProjectDetail() {
                 </GlassCard>
               ) : null}
 
-              {assignment ? (
+              {assignmentIsActive ? (
                 <GlassCard style={styles.card}>
                   <Text style={styles.sectionTitle}>Project controls</Text>
                   <TouchableOpacity
@@ -774,6 +775,36 @@ export default function GeneralContractorProjectDetail() {
                     <View style={styles.controlBody}>
                       <Text style={styles.controlTitle}>Completion binder</Text>
                       <Text style={styles.controlSub}>Review permits, warranties, receipts, and approvals</Text>
+                    </View>
+                    <Icon name="chevron-right" size={20} color={Colors.text.tertiary} />
+                  </TouchableOpacity>
+                </GlassCard>
+              ) : assignment ? (
+                <GlassCard style={styles.card}>
+                  <Text style={styles.sectionTitle}>Project controls</Text>
+                  <View style={styles.lockedControlsPanel}>
+                    <View style={styles.lockedControlsIcon}>
+                      <Icon name="lock-clock" size={22} color={Colors.warning} />
+                    </View>
+                    <View style={styles.controlBody}>
+                      <Text style={styles.lockedControlsTitle}>Controls unlock after homeowner confirmation</Text>
+                      <Text style={styles.controlSub}>
+                        Schedule, permit, payment, material, trade, discovery, assistant, and completion tools become available once GC management is active.
+                      </Text>
+                    </View>
+                  </View>
+                  <View style={styles.controlDivider} />
+                  <TouchableOpacity
+                    style={styles.controlRow}
+                    onPress={() => navigation.navigate('GeneralContractorMessages', { id: projectId })}
+                    activeOpacity={0.85}
+                  >
+                    <View style={styles.controlIcon}>
+                      <Icon name="message-text-outline" size={20} color={Colors.accent} />
+                    </View>
+                    <View style={styles.controlBody}>
+                      <Text style={styles.controlTitle}>Project messages</Text>
+                      <Text style={styles.controlSub}>Coordinate with the homeowner while management approval is pending</Text>
                     </View>
                     <Icon name="chevron-right" size={20} color={Colors.text.tertiary} />
                   </TouchableOpacity>
@@ -1213,6 +1244,16 @@ const styles = StyleSheet.create({
   controlTitle: { ...Typography.body, fontWeight: '800' },
   controlSub: { ...Typography.caption, marginTop: 3 },
   controlDivider: { height: 1, backgroundColor: Colors.glass.border, marginVertical: 12 },
+  lockedControlsPanel: { flexDirection: 'row', gap: 12, alignItems: 'flex-start' },
+  lockedControlsIcon: {
+    width: 42,
+    height: 42,
+    borderRadius: 21,
+    backgroundColor: 'rgba(255,193,7,0.12)',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  lockedControlsTitle: { ...Typography.body, color: Colors.text.primary, fontWeight: '800' },
   typeGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginTop: 14, marginBottom: 12 },
   typeChip: {
     borderWidth: 1,
