@@ -13,12 +13,119 @@ const VALID_TRADES = [
 ] as const;
 
 type TradeType = typeof VALID_TRADES[number];
+type GcProjectType = 'kitchen' | 'bathroom' | 'flooring' | 'painting' | 'basement' | 'addition' | 'other';
 
 interface TradeSlot {
   trade_type: TradeType;
   description: string;
   estimated_cost_min: number; // CAD cents
   estimated_cost_max: number; // CAD cents
+}
+
+function isGcProjectType(value: unknown): value is GcProjectType {
+  return typeof value === 'string'
+    && ['kitchen', 'bathroom', 'flooring', 'painting', 'basement', 'addition', 'other'].includes(value);
+}
+
+function formatProjectType(projectType: string) {
+  return projectType.replace(/_/g, ' ');
+}
+
+function slotCost(total: number, weight: number) {
+  return Math.max(1, Math.round(total * weight));
+}
+
+function deterministicSlotsForGcProjectType(
+  projectType: GcProjectType,
+  totalMin: number,
+  totalMax: number,
+): TradeSlot[] {
+  if (projectType === 'flooring') {
+    return [{
+      trade_type: 'flooring_installer',
+      description: 'Flooring installation scope, including layout coordination, installation, transitions, and site cleanup.',
+      estimated_cost_min: totalMin,
+      estimated_cost_max: totalMax,
+    }];
+  }
+
+  if (projectType === 'painting') {
+    return [{
+      trade_type: 'painter',
+      description: 'Painting scope, including surface preparation, priming, paint application, and cleanup.',
+      estimated_cost_min: totalMin,
+      estimated_cost_max: totalMax,
+    }];
+  }
+
+  if (projectType === 'basement') {
+    return [
+      {
+        trade_type: 'general_contractor',
+        description: 'Basement renovation coordination, site supervision, sequencing, and trade management.',
+        estimated_cost_min: slotCost(totalMin, 0.30),
+        estimated_cost_max: slotCost(totalMax, 0.30),
+      },
+      {
+        trade_type: 'drywall',
+        description: 'Basement wall and ceiling drywall installation, finishing, and patch preparation.',
+        estimated_cost_min: slotCost(totalMin, 0.25),
+        estimated_cost_max: slotCost(totalMax, 0.25),
+      },
+      {
+        trade_type: 'electrician',
+        description: 'Basement electrical rough-in, fixture/device installation, and code-ready electrical coordination.',
+        estimated_cost_min: slotCost(totalMin, 0.20),
+        estimated_cost_max: slotCost(totalMax, 0.20),
+      },
+      {
+        trade_type: 'flooring_installer',
+        description: 'Basement flooring preparation, installation, transitions, and finish details.',
+        estimated_cost_min: slotCost(totalMin, 0.25),
+        estimated_cost_max: slotCost(totalMax, 0.25),
+      },
+    ];
+  }
+
+  if (projectType === 'addition') {
+    return [
+      {
+        trade_type: 'general_contractor',
+        description: 'Addition coordination, site supervision, sequencing, and trade management for the expanded scope.',
+        estimated_cost_min: slotCost(totalMin, 0.45),
+        estimated_cost_max: slotCost(totalMax, 0.45),
+      },
+      {
+        trade_type: 'electrician',
+        description: 'Electrical rough-in, panel/device coordination, fixture installation, and inspection-ready work.',
+        estimated_cost_min: slotCost(totalMin, 0.15),
+        estimated_cost_max: slotCost(totalMax, 0.15),
+      },
+      {
+        trade_type: 'drywall',
+        description: 'Drywall installation, finishing, patching, and paint-ready surface preparation.',
+        estimated_cost_min: slotCost(totalMin, 0.20),
+        estimated_cost_max: slotCost(totalMax, 0.20),
+      },
+      {
+        trade_type: 'flooring_installer',
+        description: 'Flooring installation and transitions for the addition scope.',
+        estimated_cost_min: slotCost(totalMin, 0.20),
+        estimated_cost_max: slotCost(totalMax, 0.20),
+      },
+    ];
+  }
+
+  if (projectType === 'other') {
+    return [{
+      trade_type: 'general_contractor',
+      description: 'Custom renovation scope requiring GC coordination, planning, trade sequencing, and homeowner approval checkpoints.',
+      estimated_cost_min: totalMin,
+      estimated_cost_max: totalMax,
+    }];
+  }
+
+  return [];
 }
 
 async function isActiveGeneralContractorForProject(
@@ -137,9 +244,26 @@ Deno.serve(async (req) => {
       });
     }
 
-    const prompt = `You are a renovation project manager. Given the following ${project.room_type} renovation details, determine which trades are required and estimate their cost range.
+    const { data: gcProjectRows, error: gcProjectError } = await supabase
+      .from('general_contractor_projects')
+      .select('project_type')
+      .eq('project_id', project_id)
+      .neq('status', 'removed')
+      .order('updated_at', { ascending: false })
+      .limit(1);
+    if (gcProjectError) throw gcProjectError;
 
-Room type: ${project.room_type}
+    const gcProjectType = isGcProjectType(gcProjectRows?.[0]?.project_type)
+      ? gcProjectRows[0].project_type
+      : null;
+    const projectType = gcProjectType ?? (project.room_type === 'bathroom' ? 'bathroom' : 'kitchen');
+    const deterministicGcSlots = gcProjectType && !['kitchen', 'bathroom'].includes(gcProjectType)
+      ? deterministicSlotsForGcProjectType(gcProjectType, totalMin, totalMax)
+      : [];
+
+    const prompt = `You are a renovation project manager. Given the following ${formatProjectType(projectType)} renovation details, determine which trades are required and estimate their cost range.
+
+Project type: ${formatProjectType(projectType)}
 AI analysis: ${JSON.stringify(analysis)}
 Homeowner answers: ${JSON.stringify(answers)}
 Scope of work: ${JSON.stringify(scope ?? [])}
@@ -169,10 +293,10 @@ Each trade object must have:
 Only include trades that are genuinely required for this renovation. Do not include unnecessary trades.
 Return ONLY valid JSON, no markdown.`;
 
-    let slots: TradeSlot[] = [];
+    let slots: TradeSlot[] = deterministicGcSlots;
     const openaiApiKey = Deno.env.get('OPENAI_API_KEY');
 
-    if (openaiApiKey) {
+    if (slots.length === 0 && openaiApiKey) {
       try {
         const openai = new OpenAI({ apiKey: openaiApiKey });
         const completion = await openai.chat.completions.create({
@@ -208,7 +332,7 @@ Return ONLY valid JSON, no markdown.`;
       // Fallback: general contractor covers everything
       slots = [{
         trade_type: 'general_contractor',
-        description: `Full ${project.room_type} renovation including all labour and coordination.`,
+        description: `Full ${formatProjectType(projectType)} renovation including all labour and coordination.`,
         estimated_cost_min: totalMin,
         estimated_cost_max: totalMax,
       }];

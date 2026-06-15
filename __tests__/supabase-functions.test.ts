@@ -181,6 +181,25 @@ describe('generate-trade-slots source guards', () => {
     expect(source).toContain('const requesterIsHomeowner = project.homeowner_id === requesterId;');
     expect(source).toContain('if (!requesterIsHomeowner && !requesterIsActiveGc)');
   });
+
+  it('uses GC project type for non-kitchen trade slot generation', () => {
+    const source = fs.readFileSync(
+      path.join(__dirname, '../supabase/functions/generate-trade-slots/index.ts'),
+      'utf8',
+    );
+
+    expect(source).toContain(".select('project_type')");
+    expect(source).toContain('deterministicSlotsForGcProjectType(gcProjectType, totalMin, totalMax)');
+    expect(source).toContain("projectType === 'flooring'");
+    expect(source).toContain("trade_type: 'flooring_installer'");
+    expect(source).toContain("projectType === 'painting'");
+    expect(source).toContain("trade_type: 'painter'");
+    expect(source).toContain("projectType === 'basement'");
+    expect(source).toContain("projectType === 'addition'");
+    expect(source).toContain('Project type: ${formatProjectType(projectType)}');
+    expect(source).not.toContain('Room type: ${project.room_type}');
+    expect(source).not.toContain('Full ${project.room_type} renovation');
+  });
 });
 
 describe('dispatch-slots source guards', () => {
