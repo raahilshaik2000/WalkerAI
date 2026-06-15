@@ -46,6 +46,12 @@ interface GCProjectAssignment {
   } | null;
 }
 
+type GCProjectJoin = GCProjectAssignment['project'];
+
+type GCProjectAssignmentRow = Omit<GCProjectAssignment, 'project'> & {
+  project: GCProjectJoin | GCProjectJoin[] | null;
+};
+
 function projectStatusVariant(status: string): 'active' | 'completed' | 'pending' | 'dispatching' | 'neutral' {
   if (status === 'completed') return 'completed';
   if (status === 'dispatching') return 'dispatching';
@@ -117,10 +123,10 @@ export default function GeneralContractorDashboard() {
         .order('created_at', { ascending: false });
       if (assignmentError) throw assignmentError;
 
-      const normalized = ((rows ?? []) as any[]).map((row) => ({
+      const normalized: GCProjectAssignment[] = ((rows ?? []) as GCProjectAssignmentRow[]).map((row) => ({
         ...row,
         project: Array.isArray(row.project) ? row.project[0] ?? null : row.project ?? null,
-      })) as GCProjectAssignment[];
+      }));
       setAssignments(normalized);
 
       const [
