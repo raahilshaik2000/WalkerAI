@@ -60,6 +60,7 @@ export function resolveNotificationRoute(
     if (
       type === 'gc_concierge_booking_requested'
       || type === 'gc_concierge_booking_paid'
+      || type === 'gc_concierge_payout_released'
       || type === 'gc_approval_responded'
       || type === 'gc_payment_responded'
     ) {

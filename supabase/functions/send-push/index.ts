@@ -333,6 +333,12 @@ function buildNotificationContent(
         body: `$${formatCad(payload.amount)} is being deposited to your account.`,
         priority: 'normal',
       };
+    case 'gc_concierge_payout_released':
+      return {
+        title: '💰 Concierge Payout Released',
+        body: `$${formatCad(payload.amount)} is being deposited to your account.`,
+        priority: 'normal',
+      };
     case 'project_complete':
       return {
         title: 'Project Complete',

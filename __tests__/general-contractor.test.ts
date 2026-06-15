@@ -585,4 +585,27 @@ describe('general contractor account type', () => {
     expect(gcProfile).toContain('Set Up Payouts');
     expect(gcProfile).toContain('isStripePayoutLocallyReady(gc)');
   });
+
+  it('releases paid GC concierge booking payouts only after homeowner completion confirmation', () => {
+    const migration = fs.readFileSync(
+      path.join(repoRoot, 'supabase/migrations/20260615001900_add_gc_concierge_payout_tracking.sql'),
+      'utf8',
+    );
+    const homeownerConcierge = fs.readFileSync(
+      path.join(repoRoot, 'src/app/(homeowner)/project/[id]/concierge.tsx'),
+      'utf8',
+    );
+    const gcApprovals = fs.readFileSync(
+      path.join(repoRoot, 'src/app/(general-contractor)/approvals.tsx'),
+      'utf8',
+    );
+
+    expect(migration).toContain('stripe_transfer_id');
+    expect(migration).toContain('payout_released_at');
+    expect(homeownerConcierge).toContain("supabase.functions.invoke('gc-concierge-payout'");
+    expect(homeownerConcierge).toContain('Confirm Complete & Release Payout');
+    expect(homeownerConcierge).toContain("booking.payment_status !== 'paid'");
+    expect(gcApprovals).toContain('Waiting for homeowner completion confirmation');
+    expect(gcApprovals).toContain('Payout released');
+  });
 });

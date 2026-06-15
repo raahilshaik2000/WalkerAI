@@ -120,6 +120,11 @@ describe('notification navigation', () => {
       name: 'GeneralContractorTabs',
       params: { screen: 'GeneralContractorApprovals' },
     });
+
+    expect(resolveNotificationRoute('gc_concierge_payout_released', { project_id: 'project-1' }, 'general_contractor')).toEqual({
+      name: 'GeneralContractorTabs',
+      params: { screen: 'GeneralContractorApprovals' },
+    });
   });
 
   it('routes GC trade negotiation notifications to the right role surface', () => {

@@ -281,6 +281,29 @@ describe('create-gc-concierge-payment-intent source guards', () => {
   });
 });
 
+describe('gc-concierge-payout source guards', () => {
+  it('requires homeowner ownership, paid booking state, and Stripe transfer idempotency', () => {
+    const source = fs.readFileSync(
+      path.join(__dirname, '../supabase/functions/gc-concierge-payout/index.ts'),
+      'utf8',
+    );
+
+    expect(source).toContain("const { booking_id } = await req.json();");
+    expect(source).toContain('booking.homeowner_id !== user.id');
+    expect(source).toContain("booking.status !== 'accepted'");
+    expect(source).toContain("booking.payment_status !== 'paid'");
+    expect(source).toContain('assertStripePayoutReady');
+    expect(source).toContain('stripe.transfers.create');
+    expect(source).toContain("transfer_group: `gc_concierge_${booking.id}`");
+    expect(source).toContain("{ idempotencyKey: `gc-concierge-payout-${booking.id}` }");
+    expect(source).toContain("status: 'completed'");
+    expect(source).toContain("type: 'gc_concierge_payout_released'");
+    expect(source).toMatch(
+      /stripe\.transfers\.create[\s\S]*?\.update\(\{[\s\S]*?status: 'completed'[\s\S]*?stripe_transfer_id: transfer\.id/
+    );
+  });
+});
+
 describe('release-milestone source guards', () => {
   it('limits the active dispute lookup before maybeSingle', () => {
     const source = fs.readFileSync(

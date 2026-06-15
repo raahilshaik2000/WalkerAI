@@ -104,7 +104,7 @@ export default function GeneralContractorApprovals() {
           .neq('status', 'removed'),
         supabase
           .from('gc_concierge_bookings')
-          .select('id, project_id, general_contractor_id, homeowner_id, service_kind, title, duration_minutes, price_cents, contractor_payout_cents, walker_fee_cents, status, payment_status, stripe_payment_intent_id, paid_at, response_note, created_at, responded_at')
+          .select('id, project_id, general_contractor_id, homeowner_id, service_kind, title, duration_minutes, price_cents, contractor_payout_cents, walker_fee_cents, status, payment_status, stripe_payment_intent_id, stripe_transfer_id, paid_at, payout_released_at, response_note, created_at, responded_at')
           .eq('general_contractor_id', gc.id)
           .order('created_at', { ascending: false }),
         supabase
@@ -238,8 +238,15 @@ export default function GeneralContractorApprovals() {
                               {formatCadCents(booking.price_cents)} · Your payout {formatCadCents(booking.contractor_payout_cents)} · WalkerAI {formatCadCents(booking.walker_fee_cents)}
                             </Text>
                             <Text style={styles.projectMeta}>Payment: {formatStatusLabel(booking.payment_status ?? 'unpaid')}</Text>
+                            {booking.stripe_transfer_id ? (
+                              <Text style={styles.projectMeta}>
+                                Payout released{booking.payout_released_at ? ` · ${new Date(booking.payout_released_at).toLocaleDateString('en-CA')}` : ''}
+                              </Text>
+                            ) : booking.payment_status === 'paid' ? (
+                              <Text style={styles.projectMeta}>Waiting for homeowner completion confirmation</Text>
+                            ) : null}
                           </View>
-                          <StatusBadge label={formatStatusLabel(booking.status)} variant={pending ? 'pending' : booking.status === 'accepted' ? 'completed' : 'error'} dot />
+                          <StatusBadge label={formatStatusLabel(booking.status)} variant={pending ? 'pending' : ['accepted', 'completed'].includes(booking.status) ? 'completed' : 'error'} dot />
                         </View>
                         {pending ? (
                           <View style={styles.bookingActions}>

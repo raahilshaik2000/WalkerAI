@@ -77,6 +77,7 @@ export default function ProjectConciergeScreen() {
   const [invitingId, setInvitingId] = useState<string | null>(null);
   const [bookingId, setBookingId] = useState<string | null>(null);
   const [payingBookingId, setPayingBookingId] = useState<string | null>(null);
+  const [releasingBookingId, setReleasingBookingId] = useState<string | null>(null);
   const [respondingId, setRespondingId] = useState<string | null>(null);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
@@ -126,7 +127,7 @@ export default function ProjectConciergeScreen() {
           .order('created_at', { ascending: false }),
         supabase
           .from('gc_concierge_bookings')
-          .select('id, project_id, general_contractor_id, homeowner_id, service_kind, title, duration_minutes, price_cents, contractor_payout_cents, walker_fee_cents, status, payment_status, stripe_payment_intent_id, paid_at, response_note, created_at, responded_at')
+          .select('id, project_id, general_contractor_id, homeowner_id, service_kind, title, duration_minutes, price_cents, contractor_payout_cents, walker_fee_cents, status, payment_status, stripe_payment_intent_id, stripe_transfer_id, paid_at, payout_released_at, response_note, created_at, responded_at')
           .eq('project_id', projectId)
           .order('created_at', { ascending: false }),
       ]);
@@ -198,6 +199,53 @@ export default function ProjectConciergeScreen() {
               await fetchData();
             }
             setRespondingId(null);
+          },
+        },
+      ],
+    );
+  };
+
+  const handleReleaseBookingPayout = async (booking: GcConciergeBooking) => {
+    const currentUser = user ?? (await supabase.auth.getUser()).data.user;
+    if (!currentUser?.id || projectHomeownerId !== currentUser.id) {
+      Alert.alert('Not allowed', 'Only the homeowner can release concierge payouts.');
+      return;
+    }
+    if (booking.status === 'completed' && booking.stripe_transfer_id) {
+      Alert.alert('Already released', 'This concierge payout has already been released.');
+      return;
+    }
+    if (booking.status !== 'accepted') {
+      Alert.alert('Booking not ready', 'The booking must be accepted before payout release.');
+      return;
+    }
+    if (booking.payment_status !== 'paid') {
+      Alert.alert('Payment required', 'Pay the concierge booking before releasing the GC payout.');
+      return;
+    }
+
+    Alert.alert(
+      'Release concierge payout?',
+      `Confirm ${booking.title} is complete and release ${formatCadCents(booking.contractor_payout_cents)} to the GC.`,
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Release',
+          onPress: async () => {
+            setReleasingBookingId(booking.id);
+            try {
+              const { error } = await supabase.functions.invoke('gc-concierge-payout', {
+                body: { booking_id: booking.id },
+              });
+              if (error) throw new Error(await formatSupabaseFunctionError(error));
+              ReactNativeHapticFeedback.trigger('notificationSuccess');
+              Alert.alert('Payout released', 'The GC concierge payout has been sent.');
+              await fetchData();
+            } catch (err) {
+              Alert.alert('Release failed', await formatSupabaseFunctionError(err, 'Please try again.'));
+            } finally {
+              setReleasingBookingId(null);
+            }
           },
         },
       ],
@@ -506,7 +554,7 @@ export default function ProjectConciergeScreen() {
                           Payment: {formatStatusLabel(booking.payment_status ?? 'unpaid')}
                         </Text>
                       </View>
-                      <StatusBadge label={formatStatusLabel(booking.status)} variant={booking.status === 'accepted' ? 'completed' : booking.status === 'rejected' ? 'error' : 'pending'} size="sm" />
+                      <StatusBadge label={formatStatusLabel(booking.status)} variant={['accepted', 'completed'].includes(booking.status) ? 'completed' : booking.status === 'rejected' ? 'error' : 'pending'} size="sm" />
                     </View>
                     {booking.status === 'accepted' && booking.payment_status !== 'paid' ? (
                       <GlassButton
@@ -518,8 +566,23 @@ export default function ProjectConciergeScreen() {
                         size="sm"
                         style={styles.inviteButton}
                       />
-                    ) : booking.payment_status === 'paid' ? (
-                      <Text style={styles.paidText}>Paid{booking.paid_at ? ` · ${new Date(booking.paid_at).toLocaleDateString('en-CA')}` : ''}</Text>
+                    ) : booking.payment_status === 'paid' && booking.status === 'accepted' ? (
+                      <>
+                        <Text style={styles.paidText}>Paid{booking.paid_at ? ` · ${new Date(booking.paid_at).toLocaleDateString('en-CA')}` : ''}</Text>
+                        <GlassButton
+                          label="Confirm Complete & Release Payout"
+                          onPress={() => handleReleaseBookingPayout(booking)}
+                          loading={releasingBookingId === booking.id}
+                          disabled={!!releasingBookingId}
+                          fullWidth
+                          size="sm"
+                          style={styles.inviteButton}
+                        />
+                      </>
+                    ) : booking.status === 'completed' && booking.stripe_transfer_id ? (
+                      <Text style={styles.paidText}>
+                        Payout released{booking.payout_released_at ? ` · ${new Date(booking.payout_released_at).toLocaleDateString('en-CA')}` : ''}
+                      </Text>
                     ) : null}
                   </View>
                 ))}

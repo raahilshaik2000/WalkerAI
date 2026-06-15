@@ -227,7 +227,9 @@ export interface GcConciergeBooking {
   status: 'pending' | 'accepted' | 'rejected' | 'cancelled' | 'completed';
   payment_status: 'unpaid' | 'payment_pending' | 'paid' | 'refunded';
   stripe_payment_intent_id: string | null;
+  stripe_transfer_id: string | null;
   paid_at: string | null;
+  payout_released_at: string | null;
   response_note: string | null;
   created_at: string;
   responded_at: string | null;
