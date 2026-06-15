@@ -373,12 +373,17 @@ describe('stripe-webhook source guards', () => {
 });
 
 describe('send-push source guards', () => {
-  it('sends GC management invitations as approval prompts, not generic messages', () => {
+  it('sends GC workflow updates as specific prompts, not generic messages', () => {
     const source = fs.readFileSync(
       path.join(__dirname, '../supabase/functions/send-push/index.ts'),
       'utf8',
     );
 
+    expect(source).toContain("case 'gc_approval_requested':");
+    expect(source).toContain("title: 'GC Approval Needed'");
+    expect(source).toContain('A General Contractor recommendation needs your approval.');
+    expect(source).toContain("case 'gc_approval_responded':");
+    expect(source).toContain("title: 'Homeowner Responded'");
     expect(source).toContain("case 'gc_management_invited':");
     expect(source).toContain("title: 'GC Management Approval Needed'");
     expect(source).toContain('A General Contractor created a draft project for your approval.');
@@ -388,6 +393,24 @@ describe('send-push source guards', () => {
     expect(source).toContain("case 'gc_management_confirmed':");
     expect(source).toContain("title: 'GC Management Active'");
     expect(source).toContain('GC management is now active for this project.');
+    expect(source).toContain("case 'gc_payment_requested':");
+    expect(source).toContain("title: 'GC Payment Request'");
+    expect(source).toContain("case 'gc_payment_responded':");
+    expect(source).toContain("title: 'Payment Request Updated'");
+    expect(source).toContain("case 'gc_concierge_booking_requested':");
+    expect(source).toContain("title: 'New Concierge Request'");
+    expect(source).toContain("case 'gc_concierge_booking_responded':");
+    expect(source).toContain("title: 'Concierge Request Updated'");
+    expect(source).toContain("case 'gc_concierge_booking_paid':");
+    expect(source).toContain("title: 'Concierge Booking Paid'");
+    expect(source).toContain('The homeowner paid for the accepted concierge booking.');
+    expect(source).toContain("case 'gc_trade_negotiation_requested':");
+    expect(source).toContain("title: 'Quote Revision Requested'");
+    expect(source).toContain("case 'gc_trade_negotiation_responded':");
+    expect(source).toContain("title: 'Trade Responded'");
+    expect(source).toMatch(
+      /case 'order_delivered':[\s\S]*?case 'gc_approval_requested':[\s\S]*?case 'gc_trade_negotiation_responded':[\s\S]*?return 'milestone_updates';/
+    );
   });
 });
 

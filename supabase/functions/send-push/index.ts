@@ -13,6 +13,14 @@ interface PushPayload {
   payload: Record<string, unknown>;
 }
 
+function textValue(value: unknown, fallback: string): string {
+  return typeof value === 'string' && value.trim().length > 0 ? value : fallback;
+}
+
+function moneySuffix(value: unknown, prefix: string): string {
+  return typeof value === 'number' ? `${prefix}$${formatCad(value)}` : '';
+}
+
 // Apple-specific response codes that mean the token is dead and should be
 // marked inactive in device_tokens so we stop trying to deliver to it.
 const DEAD_TOKEN_REASONS = new Set([
@@ -339,6 +347,18 @@ function buildNotificationContent(
         body: `$${formatCad(payload.amount)} is being deposited to your account.`,
         priority: 'normal',
       };
+    case 'gc_approval_requested':
+      return {
+        title: 'GC Approval Needed',
+        body: (payload.title as string) ?? 'A General Contractor recommendation needs your approval.',
+        priority: 'high',
+      };
+    case 'gc_approval_responded':
+      return {
+        title: 'Homeowner Responded',
+        body: `${textValue(payload.title, 'A GC recommendation')} was ${textValue(payload.status, 'updated')}.`,
+        priority: 'normal',
+      };
     case 'gc_management_invited':
       return {
         title: 'GC Management Approval Needed',
@@ -356,6 +376,48 @@ function buildNotificationContent(
         title: 'GC Management Active',
         body: (payload.message as string) ?? 'GC management is now active for this project.',
         priority: 'high',
+      };
+    case 'gc_payment_requested':
+      return {
+        title: 'GC Payment Request',
+        body: `${textValue(payload.title, 'A payment request')} needs homeowner approval${moneySuffix(payload.amount_cents, ' for ')}.`,
+        priority: 'high',
+      };
+    case 'gc_payment_responded':
+      return {
+        title: 'Payment Request Updated',
+        body: `${textValue(payload.title, 'A payment request')} was ${textValue(payload.status, 'updated')}.`,
+        priority: 'normal',
+      };
+    case 'gc_concierge_booking_requested':
+      return {
+        title: 'New Concierge Request',
+        body: `${textValue(payload.title, 'A homeowner requested concierge help')}${moneySuffix(payload.price_cents, ' for ')}.`,
+        priority: 'high',
+      };
+    case 'gc_concierge_booking_responded':
+      return {
+        title: 'Concierge Request Updated',
+        body: `${textValue(payload.title, 'A concierge request')} was ${textValue(payload.status, 'updated')}.`,
+        priority: 'normal',
+      };
+    case 'gc_concierge_booking_paid':
+      return {
+        title: 'Concierge Booking Paid',
+        body: 'The homeowner paid for the accepted concierge booking.',
+        priority: 'high',
+      };
+    case 'gc_trade_negotiation_requested':
+      return {
+        title: 'Quote Revision Requested',
+        body: `${textValue(payload.general_contractor_name, 'A General Contractor')} requested a quote revision${moneySuffix(payload.offer_amount_cents, ' at ')}.`,
+        priority: 'high',
+      };
+    case 'gc_trade_negotiation_responded':
+      return {
+        title: 'Trade Responded',
+        body: `${textValue(payload.company_name, 'A trade')} ${textValue(payload.status, 'responded')} to your quote negotiation.`,
+        priority: 'normal',
       };
     case 'project_complete':
       return {
@@ -423,6 +485,19 @@ function notificationPreferenceKey(type: string): string | null {
     case 'new_material_order':
     case 'order_shipped':
     case 'order_delivered':
+    case 'gc_approval_requested':
+    case 'gc_approval_responded':
+    case 'gc_management_invited':
+    case 'gc_management_invite_received':
+    case 'gc_management_confirmed':
+    case 'gc_payment_requested':
+    case 'gc_payment_responded':
+    case 'gc_concierge_booking_requested':
+    case 'gc_concierge_booking_responded':
+    case 'gc_concierge_booking_paid':
+    case 'gc_concierge_payout_released':
+    case 'gc_trade_negotiation_requested':
+    case 'gc_trade_negotiation_responded':
       return 'milestone_updates';
     case 'warranty_expiring':
       return 'warranty_reminders';
