@@ -173,6 +173,14 @@ export default function GeneralContractorPermitsScreen() {
     }
   };
 
+  const handleOpenDocument = async (url: string) => {
+    try {
+      await Linking.openURL(url);
+    } catch {
+      Alert.alert('Unable to open document', 'Please try again in a moment.');
+    }
+  };
+
   return (
     <GradientBackground glow="top-right">
       <SafeAreaView style={styles.safe}>
@@ -254,7 +262,7 @@ export default function GeneralContractorPermitsScreen() {
                 {previewUrl && documentKind === 'image' ? (
                   <Image source={{ uri: previewUrl }} style={styles.docPreview} resizeMode="cover" />
                 ) : previewUrl ? (
-                  <TouchableOpacity style={styles.documentRow} onPress={() => { void Linking.openURL(previewUrl); }} activeOpacity={0.85}>
+                  <TouchableOpacity style={styles.documentRow} onPress={() => handleOpenDocument(previewUrl)} activeOpacity={0.85}>
                     <Icon name={documentKind === 'pdf' ? 'file-pdf-box' : 'file-document-outline'} size={26} color={Colors.accent} />
                     <View style={styles.documentText}>
                       <Text style={styles.documentTitle}>Open document</Text>

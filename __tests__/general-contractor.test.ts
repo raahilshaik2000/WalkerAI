@@ -431,6 +431,8 @@ describe('general contractor account type', () => {
     expect(gcPermits).toContain("from('permits').insert");
     expect(gcPermits).toContain('Upload Document');
     expect(gcPermits).toContain('inspection_scheduled');
+    expect(gcPermits).toContain('handleOpenDocument(previewUrl)');
+    expect(gcPermits).not.toContain('void Linking.openURL(previewUrl)');
   });
 
   it('lets GCs request payment draws while homeowner approval remains separate from escrow release', () => {
