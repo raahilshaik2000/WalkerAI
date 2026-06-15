@@ -247,6 +247,25 @@ describe('general contractor account type', () => {
     expect(migration).toContain('guard_gc_approval_apply_active_assignment_trigger');
   });
 
+  it('keeps GC approval request details immutable after submission', () => {
+    const migration = fs.readFileSync(
+      path.join(repoRoot, 'supabase/migrations/20260615003500_guard_gc_approval_request_updates.sql'),
+      'utf8',
+    );
+
+    expect(migration).toContain('CREATE OR REPLACE FUNCTION public.guard_gc_approval_request_updates()');
+    expect(migration).toContain("(SELECT auth.role()) = 'service_role'");
+    expect(migration).toContain("OLD.status <> 'pending'");
+    expect(migration).toContain('NEW.requested_by_gc_id IS DISTINCT FROM OLD.requested_by_gc_id');
+    expect(migration).toContain('NEW.request_type IS DISTINCT FROM OLD.request_type');
+    expect(migration).toContain('NEW.title IS DISTINCT FROM OLD.title');
+    expect(migration).toContain('NEW.cost_delta IS DISTINCT FROM OLD.cost_delta');
+    expect(migration).toContain('NEW.timeline_delta_days IS DISTINCT FROM OLD.timeline_delta_days');
+    expect(migration).toContain('NEW.metadata IS DISTINCT FROM OLD.metadata');
+    expect(migration).toContain('GC approval request details cannot be changed after submission');
+    expect(migration).toContain('guard_gc_approval_request_updates_trigger');
+  });
+
   it('supports GC-initiated homeowner-owned draft projects with homeowner confirmation', () => {
     const migration = fs.readFileSync(
       path.join(repoRoot, 'supabase/migrations/20260615000400_add_gc_project_creation_rpc.sql'),
