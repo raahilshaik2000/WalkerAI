@@ -242,7 +242,7 @@ const styles = StyleSheet.create({
   },
   notifIconText: { fontSize: 20 },
   notifContent: { flex: 1 },
-  notifTitle: { ...Typography.h3, marginBottom: 4, textTransform: 'capitalize' },
+  notifTitle: { ...Typography.h3, marginBottom: 4 },
   notifBody: { ...Typography.bodySecondary, lineHeight: 20, marginBottom: 4 },
   notifTime: { ...Typography.caption },
   unreadDot: { width: 8, height: 8, borderRadius: 4, backgroundColor: Colors.accent, marginTop: 6 },
