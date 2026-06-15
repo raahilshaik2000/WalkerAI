@@ -277,6 +277,9 @@ describe('general contractor account type', () => {
     expect(homeownerConcierge).toContain('project_type, scope_summary');
     expect(homeownerConcierge).toContain('formatGcProjectType(currentAssignment.project_type)');
     expect(homeownerConcierge).toContain('currentAssignment.scope_summary');
+    expect(homeownerConcierge).toContain('function gcAssignmentStatusVariant');
+    expect(homeownerConcierge).toContain('variant={gcAssignmentStatusVariant(currentAssignment.status)}');
+    expect(homeownerConcierge).not.toContain('label={formatStatusLabel(currentAssignment.status)} variant="pending"');
     expect(gcProjectDetail).toContain('homeowner_contact_name, homeowner_contact_email, homeowner_contact_phone');
     expect(gcProjectDetail).toContain('Homeowner contact');
     expect(gcProjectDetail).toContain('Waiting for the homeowner to confirm GC management');

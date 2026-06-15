@@ -98,6 +98,13 @@ function formatGcDistance(gc: DiscoverableGeneralContractor): string | null {
   return `${Math.round(gc.distance_km)} km away`;
 }
 
+function gcAssignmentStatusVariant(status: string): 'active' | 'completed' | 'pending' | 'neutral' {
+  if (status === 'active') return 'active';
+  if (status === 'completed') return 'completed';
+  if (status === 'invited') return 'pending';
+  return 'neutral';
+}
+
 function getMetadataNumber(metadata: Record<string, unknown> | null | undefined, key: string): number | null {
   const value = metadata?.[key];
   if (typeof value === 'number' && Number.isFinite(value)) return value;
@@ -612,7 +619,11 @@ export default function ProjectConciergeScreen() {
                     <Text style={styles.gcName}>{assignedGc.business_name}</Text>
                     <Text style={styles.gcMeta}>{[assignedGc.city, assignedGc.province].filter(Boolean).join(', ') || 'Location pending'}</Text>
                   </View>
-                  <StatusBadge label={formatStatusLabel(currentAssignment.status)} variant="pending" dot />
+                  <StatusBadge
+                    label={formatStatusLabel(currentAssignment.status)}
+                    variant={gcAssignmentStatusVariant(currentAssignment.status)}
+                    dot
+                  />
                 </View>
                 <View style={styles.termsRow}>
                   <Text style={styles.termText}>{Number(currentAssignment.markup_pct).toFixed(0)}% markup</Text>
