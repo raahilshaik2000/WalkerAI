@@ -181,6 +181,25 @@ export default function GeneralContractorDashboard() {
   };
 
   const setupRoute = nextGeneralContractorOnboardingRoute(gc);
+  if (!loading && errorMessage) {
+    return (
+      <GradientBackground glow="center">
+        <SafeAreaView style={styles.safe}>
+          <View style={styles.pendingContainer}>
+            <View style={styles.onboardIconWrap}>
+              <Icon name="alert-circle-outline" size={36} color={Colors.warning} />
+            </View>
+            <Text style={styles.pendingTitle}>Could not load GC desk</Text>
+            <Text style={styles.pendingSubtitle}>{errorMessage}</Text>
+            <TouchableOpacity style={styles.onboardCta} onPress={onRefresh} activeOpacity={0.85}>
+              <Text style={styles.onboardCtaText}>Try Again</Text>
+            </TouchableOpacity>
+          </View>
+        </SafeAreaView>
+      </GradientBackground>
+    );
+  }
+
   if (!loading && (!gc || setupRoute || !gc.verified)) {
     const setupIncomplete = !!setupRoute;
     return (

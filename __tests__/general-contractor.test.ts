@@ -579,6 +579,21 @@ describe('general contractor account type', () => {
     expect(dashboard).not.toContain("from('change_orders')");
   });
 
+  it('shows GC dashboard load failures before setup or verification empty states', () => {
+    const dashboard = fs.readFileSync(
+      path.join(repoRoot, 'src/app/(general-contractor)/index.tsx'),
+      'utf8',
+    );
+
+    expect(dashboard).toContain('if (!loading && errorMessage)');
+    expect(dashboard).toContain('Could not load GC desk');
+    expect(dashboard).toContain('<Text style={styles.pendingSubtitle}>{errorMessage}</Text>');
+    expect(dashboard).toContain('<Text style={styles.onboardCtaText}>Try Again</Text>');
+    expect(dashboard.indexOf('if (!loading && errorMessage)')).toBeLessThan(
+      dashboard.indexOf('if (!loading && (!gc || setupRoute || !gc.verified))'),
+    );
+  });
+
   it('surfaces the GC markup engine on managed project detail', () => {
     const migration = fs.readFileSync(
       path.join(repoRoot, 'supabase/migrations/20260615002200_apply_gc_terms_approval.sql'),
