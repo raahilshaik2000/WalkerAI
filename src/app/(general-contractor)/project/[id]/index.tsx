@@ -14,7 +14,7 @@ import { launchImageLibrary } from 'react-native-image-picker';
 import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
 import { supabase } from '@/lib/supabase/client';
 import { formatCad, formatStatusLabel } from '@/lib/formatters';
-import { formatSignedCadCents, parseSignedCadToCents } from '@/lib/currency';
+import { formatSignedCadCents, parseNonNegativeCadToCents, parseSignedCadToCents } from '@/lib/currency';
 import { calculateGcMarkup } from '@/lib/gc-markup';
 import { getRequiredStringParam } from '@/lib/navigation-params';
 import { getUploadMetadata, uploadFile } from '@/lib/supabase/storage';
@@ -144,12 +144,15 @@ export default function GeneralContractorProjectDetail() {
   const [externalTradeEmail, setExternalTradeEmail] = useState('');
   const [externalTradePhone, setExternalTradePhone] = useState('');
   const [externalTradeNotes, setExternalTradeNotes] = useState('');
+  const [proposedBudgetMin, setProposedBudgetMin] = useState('');
+  const [proposedBudgetMax, setProposedBudgetMax] = useState('');
   const [proposedMarkupPct, setProposedMarkupPct] = useState('');
   const [proposedConciergeFeePct, setProposedConciergeFeePct] = useState('');
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [accepting, setAccepting] = useState(false);
   const [submittingApproval, setSubmittingApproval] = useState(false);
+  const [submittingBudget, setSubmittingBudget] = useState(false);
   const [submittingTerms, setSubmittingTerms] = useState(false);
   const [savingExternalTrade, setSavingExternalTrade] = useState(false);
   const [uploadingExternalDocSlotId, setUploadingExternalDocSlotId] = useState<string | null>(null);
@@ -486,6 +489,55 @@ export default function GeneralContractorProjectDetail() {
     }
   };
 
+  const handleSubmitBudgetUpdate = async () => {
+    if (!assignment || assignment.status !== 'active') {
+      Alert.alert('Active GC assignment required', 'The homeowner must confirm GC management before budget changes can be requested.');
+      return;
+    }
+
+    const budgetMin = parseNonNegativeCadToCents(proposedBudgetMin);
+    const budgetMax = parseNonNegativeCadToCents(proposedBudgetMax);
+    if (budgetMin == null || budgetMin <= 0 || budgetMax == null || budgetMax <= 0 || budgetMax < budgetMin) {
+      Alert.alert('Invalid budget range', 'Enter a positive low and high estimate, with the high estimate greater than or equal to the low estimate.');
+      return;
+    }
+
+    setSubmittingBudget(true);
+    try {
+      const { error } = await supabase.from('project_approval_requests').insert({
+        project_id: projectId,
+        requested_by_gc_id: assignment.general_contractor_id,
+        homeowner_id: assignment.homeowner_id,
+        request_type: 'general_recommendation',
+        title: 'Preliminary project budget',
+        description: [
+          `Proposed budget range: ${formatCad(budgetMin)} - ${formatCad(budgetMax)}`,
+          'This becomes the project budget basis for markup, trade-slot generation, and dispatch only after homeowner approval.',
+        ].join('\n'),
+        cost_delta: project?.ai_cost_min != null && project.ai_cost_max != null
+          ? budgetMax - project.ai_cost_max
+          : null,
+        timeline_delta_days: null,
+        metadata: {
+          action: 'update_gc_budget',
+          current_ai_cost_min: project?.ai_cost_min ?? null,
+          current_ai_cost_max: project?.ai_cost_max ?? null,
+          proposed_ai_cost_min: budgetMin,
+          proposed_ai_cost_max: budgetMax,
+        },
+      });
+      if (error) throw error;
+      Alert.alert('Sent for approval', 'The homeowner must approve before WalkerAI updates the project budget basis.');
+      setProposedBudgetMin('');
+      setProposedBudgetMax('');
+      await fetchData();
+    } catch (err) {
+      Alert.alert('Could not request budget update', err instanceof Error ? err.message : 'Please try again.');
+    } finally {
+      setSubmittingBudget(false);
+    }
+  };
+
   const estimate = project?.ai_cost_min != null && project.ai_cost_max != null
     ? `${formatCad(project.ai_cost_min)} - ${formatCad(project.ai_cost_max)}`
     : project?.ai_cost_max != null || project?.ai_cost_min != null
@@ -767,6 +819,36 @@ export default function GeneralContractorProjectDetail() {
                   )}
                   {assignment.status === 'active' ? (
                     <View style={styles.termsEditor}>
+                      <Text style={styles.sectionSubTitle}>Budget basis</Text>
+                      <Text style={styles.bodyText}>
+                        Propose the preliminary estimate range used for markup, trade-slot generation, and dispatch. The homeowner must approve before it applies.
+                      </Text>
+                      <View style={styles.formRow}>
+                        <GlassInput
+                          label="Low estimate CAD"
+                          value={proposedBudgetMin}
+                          onChangeText={setProposedBudgetMin}
+                          keyboardType="decimal-pad"
+                          containerStyle={styles.formHalf}
+                        />
+                        <GlassInput
+                          label="High estimate CAD"
+                          value={proposedBudgetMax}
+                          onChangeText={setProposedBudgetMax}
+                          keyboardType="decimal-pad"
+                          containerStyle={styles.formHalf}
+                        />
+                      </View>
+                      <GlassButton
+                        label="Send Budget for Approval"
+                        onPress={handleSubmitBudgetUpdate}
+                        loading={submittingBudget}
+                        fullWidth
+                        size="sm"
+                        style={styles.submitApprovalButton}
+                      />
+                      <View style={styles.controlDivider} />
+                      <Text style={styles.sectionSubTitle}>Management terms</Text>
                       <Text style={styles.bodyText}>
                         Update margin terms through homeowner approval. Approved terms recalculate this project only.
                       </Text>
@@ -1077,6 +1159,7 @@ const styles = StyleSheet.create({
   subtitle: { ...Typography.bodySecondary, marginTop: 2 },
   card: { marginBottom: Spacing.sm },
   sectionTitle: { ...Typography.label, marginBottom: 10 },
+  sectionSubTitle: { ...Typography.caption, color: Colors.text.primary, fontWeight: '800', marginBottom: 8 },
   bodyText: { ...Typography.bodySecondary, lineHeight: 22 },
   termsEditor: { marginTop: Spacing.sm, borderTopWidth: 1, borderTopColor: Colors.glass.border, paddingTop: Spacing.sm },
   assignmentHeader: { flexDirection: 'row', justifyContent: 'space-between', gap: 12, alignItems: 'flex-start' },

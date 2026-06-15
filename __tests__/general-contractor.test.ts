@@ -218,6 +218,10 @@ describe('general contractor account type', () => {
       path.join(repoRoot, 'supabase/migrations/20260615002200_apply_gc_terms_approval.sql'),
       'utf8',
     );
+    const budgetMigration = fs.readFileSync(
+      path.join(repoRoot, 'supabase/migrations/20260615002600_apply_gc_budget_approval.sql'),
+      'utf8',
+    );
     const gcProjectDetail = fs.readFileSync(
       path.join(repoRoot, 'src/app/(general-contractor)/project/[id]/index.tsx'),
       'utf8',
@@ -227,6 +231,10 @@ describe('general contractor account type', () => {
     expect(gcProjectDetail).toContain('Markup engine');
     expect(gcProjectDetail).toContain('Homeowner-facing total');
     expect(gcProjectDetail).toContain('Estimated GC revenue');
+    expect(gcProjectDetail).toContain('Send Budget for Approval');
+    expect(gcProjectDetail).toContain("action: 'update_gc_budget'");
+    expect(gcProjectDetail).toContain('proposed_ai_cost_min: budgetMin');
+    expect(gcProjectDetail).toContain('proposed_ai_cost_max: budgetMax');
     expect(gcProjectDetail).toContain('Send Terms for Approval');
     expect(gcProjectDetail).toContain("action: 'update_gc_terms'");
     expect(gcProjectDetail).toContain("from('project_approval_requests').insert");
@@ -234,6 +242,10 @@ describe('general contractor account type', () => {
     expect(migration).toContain('markup_pct = v_markup_pct');
     expect(migration).toContain('concierge_fee_pct = v_concierge_fee_pct');
     expect(migration).toContain("AND status = 'active'");
+    expect(budgetMigration).toContain("v_request.metadata->>'action' = 'update_gc_budget'");
+    expect(budgetMigration).toContain('ai_cost_min = v_budget_min');
+    expect(budgetMigration).toContain('ai_cost_max = v_budget_max');
+    expect(budgetMigration).toContain("status = CASE WHEN status = 'draft' THEN 'brief_ready' ELSE status END");
   });
 
   it('supports externally managed trades without treating them as WalkerAI verified', () => {
