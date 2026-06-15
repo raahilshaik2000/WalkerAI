@@ -22,7 +22,7 @@ function isMissingColumnError(error: { message?: string } | null | undefined) {
 
 async function updateStripeReadiness(
   adminClient: ReturnType<typeof createClient>,
-  table: 'companies' | 'suppliers',
+  table: 'companies' | 'suppliers' | 'general_contractors',
   ownerId: string,
   readiness: ReturnType<typeof stripeReadiness>,
 ) {
@@ -76,12 +76,21 @@ Deno.serve(async (req) => {
     try {
       const body = await req.json();
       if (body?.role === 'supplier') requestedRole = 'supplier';
+      if (body?.role === 'general_contractor') requestedRole = 'general_contractor';
     } catch {
       // Existing company callers send no body.
     }
 
-    const table = requestedRole === 'supplier' ? 'suppliers' : 'companies';
-    const idField = requestedRole === 'supplier' ? 'supplier_id' : 'company_id';
+    const table = requestedRole === 'supplier'
+      ? 'suppliers'
+      : requestedRole === 'general_contractor'
+        ? 'general_contractors'
+        : 'companies';
+    const idField = requestedRole === 'supplier'
+      ? 'supplier_id'
+      : requestedRole === 'general_contractor'
+        ? 'general_contractor_id'
+        : 'company_id';
 
     const { data: accountOwner, error: ownerError } = await adminClient
       .from(table)
@@ -94,7 +103,12 @@ Deno.serve(async (req) => {
     if (ownerError) throw ownerError;
 
     if (!accountOwner) {
-      return new Response(JSON.stringify({ error: `${requestedRole === 'supplier' ? 'Supplier' : 'Company'} not found` }), {
+      const label = requestedRole === 'supplier'
+        ? 'Supplier'
+        : requestedRole === 'general_contractor'
+          ? 'General contractor'
+          : 'Company';
+      return new Response(JSON.stringify({ error: `${label} not found` }), {
         status: 404, headers: { ...corsHeaders, 'Content-Type': 'application/json' },
       });
     }

@@ -70,6 +70,8 @@ describe('QA account seed source guards', () => {
     expect(source).toContain(".from('general_contractors').upsert");
     expect(source).toContain('verified: true');
     expect(source).toContain('concierge_enabled: true');
+    expect(source).toContain("stripe_account_id: 'acct_qa_gc_test'");
+    expect(source).toContain('stripe_payouts_enabled: true');
     expect(source).toContain("profile: body.role === 'general_contractor' ? 'verified_general_contractor' : null");
   });
 
@@ -84,7 +86,9 @@ describe('QA account seed source guards', () => {
     expect(source).toContain(".from('general_contractors').upsert");
     expect(source).toContain("general_contractor: { id: generalContractor.id, email: body.gc_email }");
     expect(source).toContain('concierge_enabled: true');
+    expect(source).toContain("stripe_account_id: 'acct_qa_gc_test'");
     expect(source).toContain('stripe_details_submitted: true');
+    expect(source).toContain('stripe_payouts_enabled: true');
     expect(source).toContain('stripe_transfers_active: true');
     expect(source).toContain('verified: true');
     expect(source).toContain('lat: 43.6532');
@@ -93,6 +97,20 @@ describe('QA account seed source guards', () => {
     expect(source).not.toContain('latitude:');
     expect(source).not.toContain('longitude:');
     expect(source).not.toContain('stripe_onboarding_completed');
+  });
+});
+
+describe('create-connect-account source guards', () => {
+  it('supports Stripe Connect onboarding for GC payout accounts', () => {
+    const source = fs.readFileSync(
+      path.join(__dirname, '../supabase/functions/create-connect-account/index.ts'),
+      'utf8',
+    );
+
+    expect(source).toContain("body?.role === 'general_contractor'");
+    expect(source).toContain("'general_contractors'");
+    expect(source).toContain("'general_contractor_id'");
+    expect(source).toContain('role: requestedRole');
   });
 });
 
@@ -214,6 +232,7 @@ describe('stripe-webhook source guards', () => {
     );
 
     expect(source).toContain('async function projectHasTradeSlots');
+    expect(source).toContain("await updateStripeReadiness(adminClient, 'general_contractors', account.id, readiness);");
     expect(source).toContain("const scheduleRequired = await projectHasTradeSlots(adminClient, project_id);");
     expect(source).toContain(".select('id, scheduling_status')");
     expect(source).toContain('async function projectScheduleConfirmed');

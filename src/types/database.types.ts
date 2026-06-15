@@ -152,6 +152,11 @@ export interface GeneralContractor {
   license_number: string | null;
   license_doc_url: string | null;
   insurance_doc_url: string | null;
+  stripe_account_id: string | null;
+  stripe_details_submitted: boolean;
+  stripe_payouts_enabled: boolean;
+  stripe_transfers_active: boolean;
+  stripe_onboarding_checked_at: string | null;
   verified: boolean;
   concierge_enabled: boolean;
   default_markup_pct: number;

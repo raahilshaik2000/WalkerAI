@@ -566,4 +566,23 @@ describe('general contractor account type', () => {
     expect(homeownerConcierge).toContain('Pay Booking');
     expect(homeownerConcierge).not.toContain('payment collection is still handled separately');
   });
+
+  it('adds GC Stripe Connect setup for concierge payouts', () => {
+    const migration = fs.readFileSync(
+      path.join(repoRoot, 'supabase/migrations/20260615001800_add_gc_stripe_connect_fields.sql'),
+      'utf8',
+    );
+    const gcProfile = fs.readFileSync(
+      path.join(repoRoot, 'src/app/(general-contractor)/profile.tsx'),
+      'utf8',
+    );
+
+    expect(migration).toContain('ALTER TABLE public.general_contractors');
+    expect(migration).toContain('stripe_account_id');
+    expect(migration).toContain('stripe_transfers_active');
+    expect(gcProfile).toContain("supabase.functions.invoke('create-connect-account'");
+    expect(gcProfile).toContain("role: 'general_contractor'");
+    expect(gcProfile).toContain('Set Up Payouts');
+    expect(gcProfile).toContain('isStripePayoutLocallyReady(gc)');
+  });
 });

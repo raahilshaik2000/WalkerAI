@@ -104,7 +104,7 @@ export default function GeneralContractorApprovals() {
           .neq('status', 'removed'),
         supabase
           .from('gc_concierge_bookings')
-          .select('id, project_id, general_contractor_id, homeowner_id, service_kind, title, duration_minutes, price_cents, contractor_payout_cents, walker_fee_cents, status, response_note, created_at, responded_at')
+          .select('id, project_id, general_contractor_id, homeowner_id, service_kind, title, duration_minutes, price_cents, contractor_payout_cents, walker_fee_cents, status, payment_status, stripe_payment_intent_id, paid_at, response_note, created_at, responded_at')
           .eq('general_contractor_id', gc.id)
           .order('created_at', { ascending: false }),
         supabase
@@ -166,7 +166,7 @@ export default function GeneralContractorApprovals() {
     Alert.alert(
       status === 'accepted' ? 'Accept concierge request?' : 'Reject concierge request?',
       status === 'accepted'
-        ? 'This confirms the consultation request. Payment collection is still handled separately from this booking record.'
+        ? 'This confirms the consultation request. The homeowner can pay it securely in WalkerAI after acceptance.'
         : 'This marks the consultation request as rejected.',
       [
         { text: 'Cancel', style: 'cancel' },
@@ -237,6 +237,7 @@ export default function GeneralContractorApprovals() {
                             <Text style={styles.projectMeta}>
                               {formatCadCents(booking.price_cents)} · Your payout {formatCadCents(booking.contractor_payout_cents)} · WalkerAI {formatCadCents(booking.walker_fee_cents)}
                             </Text>
+                            <Text style={styles.projectMeta}>Payment: {formatStatusLabel(booking.payment_status ?? 'unpaid')}</Text>
                           </View>
                           <StatusBadge label={formatStatusLabel(booking.status)} variant={pending ? 'pending' : booking.status === 'accepted' ? 'completed' : 'error'} dot />
                         </View>

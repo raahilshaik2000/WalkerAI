@@ -104,6 +104,10 @@ Deno.serve(async (req) => {
         insurance_doc_url: 'qa/gc-insurance.pdf',
         verified: true,
         concierge_enabled: true,
+        stripe_account_id: 'acct_qa_gc_test',
+        stripe_details_submitted: true,
+        stripe_payouts_enabled: true,
+        stripe_transfers_active: true,
         default_markup_pct: 15,
         default_concierge_fee_pct: 10,
       }, { onConflict: 'user_id' });

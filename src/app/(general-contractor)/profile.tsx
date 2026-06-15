@@ -1,6 +1,7 @@
 import { useCallback, useState } from 'react';
 import {
   Alert,
+  Linking,
   RefreshControl,
   ScrollView,
   StyleSheet,
@@ -12,6 +13,8 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { useFocusEffect, useNavigation } from '@react-navigation/native';
 import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
 import { supabase } from '@/lib/supabase/client';
+import { formatSupabaseFunctionError } from '@/lib/supabase/functions';
+import { isStripePayoutLocallyReady } from '@/lib/payouts';
 import { useAuthStore } from '@/stores/auth.store';
 import type { GeneralContractor } from '@/types/database.types';
 import { nextGeneralContractorOnboardingRoute } from '@/lib/general-contractor';
@@ -25,6 +28,7 @@ export default function GeneralContractorProfile() {
   const [gc, setGc] = useState<GeneralContractor | null>(null);
   const [managedCount, setManagedCount] = useState(0);
   const [completedCount, setCompletedCount] = useState(0);
+  const [startingPayoutSetup, setStartingPayoutSetup] = useState(false);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
@@ -96,7 +100,25 @@ export default function GeneralContractorProfile() {
     ]);
   };
 
+  const handlePayoutSetup = async () => {
+    setStartingPayoutSetup(true);
+    try {
+      const { data, error } = await supabase.functions.invoke('create-connect-account', {
+        body: { role: 'general_contractor' },
+      });
+      if (error) throw new Error(await formatSupabaseFunctionError(error));
+      const url = typeof data?.url === 'string' ? data.url : null;
+      if (!url) throw new Error('Stripe did not return an onboarding link.');
+      await Linking.openURL(url);
+    } catch (err) {
+      Alert.alert('Could not start payout setup', await formatSupabaseFunctionError(err, 'Please try again.'));
+    } finally {
+      setStartingPayoutSetup(false);
+    }
+  };
+
   const setupRoute = nextGeneralContractorOnboardingRoute(gc);
+  const payoutReady = isStripePayoutLocallyReady(gc);
 
   return (
     <GradientBackground glow="top-right">
@@ -174,12 +196,25 @@ export default function GeneralContractorProfile() {
               <InfoRow label="License" value={gc.license_number ?? 'Required'} warning={!gc.license_number} />
               <InfoRow label="Insurance" value={gc.insurance_doc_url ? 'Submitted' : 'Required'} warning={!gc.insurance_doc_url} />
               <InfoRow label="Concierge" value={gc.concierge_enabled ? 'Enabled' : 'Disabled'} />
+              <InfoRow
+                label="Payouts"
+                value={payoutReady ? 'Ready' : gc.stripe_account_id ? 'Onboarding incomplete' : 'Not connected'}
+                warning={!payoutReady}
+              />
               {setupRoute ? (
                 <TouchableOpacity style={styles.setupLinkRow} onPress={() => navigation.navigate(setupRoute)} activeOpacity={0.8}>
                   <Text style={styles.setupLinkText}>Continue GC setup</Text>
                   <Icon name="chevron-right" size={20} color={Colors.accent} />
                 </TouchableOpacity>
               ) : null}
+              <GlassButton
+                label={payoutReady ? 'Refresh Payout Setup' : 'Set Up Payouts'}
+                onPress={handlePayoutSetup}
+                loading={startingPayoutSetup}
+                fullWidth
+                size="sm"
+                style={styles.cardButton}
+              />
             </GlassCard>
           ) : null}
 

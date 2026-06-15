@@ -16,7 +16,7 @@ function isMissingColumnError(error: { message?: string } | null | undefined) {
 
 async function updateStripeReadiness(
   adminClient: ReturnType<typeof createClient>,
-  table: 'companies' | 'suppliers',
+  table: 'companies' | 'suppliers' | 'general_contractors',
   stripeAccountId: string,
   readiness: ReturnType<typeof stripeReadiness>,
 ) {
@@ -341,6 +341,7 @@ Deno.serve(async (req) => {
 
         await updateStripeReadiness(adminClient, 'companies', account.id, readiness);
         await updateStripeReadiness(adminClient, 'suppliers', account.id, readiness);
+        await updateStripeReadiness(adminClient, 'general_contractors', account.id, readiness);
         break;
       }
 
