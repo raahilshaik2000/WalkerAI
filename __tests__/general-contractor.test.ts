@@ -190,6 +190,24 @@ describe('general contractor account type', () => {
     expect(activationMigration).toContain("SET status = 'active'");
   });
 
+  it('re-checks GC verification before management assignments activate', () => {
+    const migration = fs.readFileSync(
+      path.join(repoRoot, 'supabase/migrations/20260615004100_require_verified_gc_assignment_activation.sql'),
+      'utf8',
+    );
+
+    expect(migration).toContain('CREATE OR REPLACE FUNCTION public.accept_gc_management_invite');
+    expect(migration).toContain('CREATE OR REPLACE FUNCTION public.confirm_gc_management_assignment');
+    expect(migration).toContain('v_gc_verified BOOLEAN');
+    expect(migration).toContain('SELECT verified');
+    expect(migration).toContain('v_assignment.general_contractor_id');
+    expect(migration).toContain('v_gc_verified IS NOT TRUE');
+    expect(migration).toContain('Only verified General Contractors can activate management assignments');
+    expect(migration).toContain("SET status = 'active'");
+    expect(migration).toContain('GRANT EXECUTE ON FUNCTION public.accept_gc_management_invite(UUID) TO authenticated');
+    expect(migration).toContain('GRANT EXECUTE ON FUNCTION public.confirm_gc_management_assignment(UUID) TO authenticated');
+  });
+
   it('adds generic homeowner approval requests for GC recommendations', () => {
     const migration = fs.readFileSync(
       path.join(repoRoot, 'supabase/migrations/20260615000300_add_project_approval_requests.sql'),
