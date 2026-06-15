@@ -387,4 +387,33 @@ describe('general contractor account type', () => {
     expect(gcCompletion).toContain("from('gc_payment_requests')");
     expect(gcCompletion).toContain('Digital project binder');
   });
+
+  it('gives GCs trade management visibility without bypassing homeowner approval', () => {
+    const migration = fs.readFileSync(
+      path.join(repoRoot, 'supabase/migrations/20260615001200_allow_gc_trade_quote_read.sql'),
+      'utf8',
+    );
+    const navigator = fs.readFileSync(
+      path.join(repoRoot, 'src/navigation/GeneralContractorNavigator.tsx'),
+      'utf8',
+    );
+    const gcProjectDetail = fs.readFileSync(
+      path.join(repoRoot, 'src/app/(general-contractor)/project/[id]/index.tsx'),
+      'utf8',
+    );
+    const gcTrades = fs.readFileSync(
+      path.join(repoRoot, 'src/app/(general-contractor)/project/[id]/trades.tsx'),
+      'utf8',
+    );
+
+    expect(migration).toContain('general_contractor_projects gcp');
+    expect(migration).toContain("gcp.status = 'active'");
+    expect(navigator).toContain('GeneralContractorTrades');
+    expect(gcProjectDetail).toContain("navigation.navigate('GeneralContractorTrades'");
+    expect(gcTrades).toContain("from('project_slots')");
+    expect(gcTrades).toContain("from('quotes')");
+    expect(gcTrades).toContain("request_type: 'trade_substitution'");
+    expect(gcTrades).toContain('No trade assignment changes until the homeowner approves');
+    expect(gcTrades).not.toContain("from('project_slots').update");
+  });
 });

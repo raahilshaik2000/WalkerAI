@@ -531,6 +531,21 @@ export default function GeneralContractorProjectDetail() {
                   <View style={styles.controlDivider} />
                   <TouchableOpacity
                     style={styles.controlRow}
+                    onPress={() => navigation.navigate('GeneralContractorTrades', { id: projectId })}
+                    activeOpacity={0.85}
+                  >
+                    <View style={styles.controlIcon}>
+                      <Icon name="account-hard-hat-outline" size={20} color={Colors.accent} />
+                    </View>
+                    <View style={styles.controlBody}>
+                      <Text style={styles.controlTitle}>Trade management</Text>
+                      <Text style={styles.controlSub}>Compare assigned trades, quotes, and replacement recommendations</Text>
+                    </View>
+                    <Icon name="chevron-right" size={20} color={Colors.text.tertiary} />
+                  </TouchableOpacity>
+                  <View style={styles.controlDivider} />
+                  <TouchableOpacity
+                    style={styles.controlRow}
                     onPress={() => navigation.navigate('GeneralContractorDiscovery', { id: projectId })}
                     activeOpacity={0.85}
                   >
