@@ -251,6 +251,10 @@ describe('general contractor account type', () => {
       path.join(repoRoot, 'supabase/migrations/20260615002900_add_gc_project_type.sql'),
       'utf8',
     );
+    const homeownerConfirmationMigration = fs.readFileSync(
+      path.join(repoRoot, 'supabase/migrations/20260615003200_secure_homeowner_gc_confirmation.sql'),
+      'utf8',
+    );
     const navigator = fs.readFileSync(
       path.join(repoRoot, 'src/navigation/GeneralContractorNavigator.tsx'),
       'utf8',
@@ -302,6 +306,8 @@ describe('general contractor account type', () => {
     expect(createProject).toContain('p_homeowner_contact_phone: contactPhone || null');
     expect(createProject).not.toContain(".from('general_contractor_projects')\n        .update");
     expect(homeownerConcierge).toContain('Confirm GC Management');
+    expect(homeownerConcierge).toContain("supabase.rpc('confirm_gc_management_assignment'");
+    expect(homeownerConcierge).not.toContain(".from('general_contractor_projects')\n              .update({ status: 'active' })");
     expect(homeownerConcierge).toContain('project_type, scope_summary');
     expect(homeownerConcierge).toContain('formatGcProjectType(currentAssignment.project_type)');
     expect(homeownerConcierge).toContain('currentAssignment.scope_summary');
@@ -327,6 +333,12 @@ describe('general contractor account type', () => {
     expect(projectTypeMigration).toContain("'flooring', 'painting', 'basement', 'addition', 'other'");
     expect(projectTypeMigration).toContain("CASE WHEN v_project_type IN ('kitchen', 'bathroom') THEN v_project_type ELSE NULL END");
     expect(projectTypeMigration).not.toContain('Project type must be kitchen or bathroom');
+    expect(homeownerConfirmationMigration).toContain('DROP POLICY IF EXISTS "gc_projects_homeowner_update"');
+    expect(homeownerConfirmationMigration).toContain('CREATE OR REPLACE FUNCTION public.confirm_gc_management_assignment');
+    expect(homeownerConfirmationMigration).toContain('homeowner_id = (SELECT auth.uid())');
+    expect(homeownerConfirmationMigration).toContain('v_assignment.initiated_by_gc IS NOT TRUE');
+    expect(homeownerConfirmationMigration).toContain("v_assignment.status <> 'invited'");
+    expect(homeownerConfirmationMigration).toContain("SET status = 'active'");
   });
 
   it('counts real GC homeowner actions on the dashboard approval metric', () => {

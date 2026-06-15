@@ -555,11 +555,9 @@ export default function ProjectConciergeScreen() {
           text: 'Confirm',
           onPress: async () => {
             setRespondingId(currentAssignment.id);
-            const { error } = await supabase
-              .from('general_contractor_projects')
-              .update({ status: 'active' })
-              .eq('id', currentAssignment.id)
-              .eq('status', 'invited');
+            const { error } = await supabase.rpc('confirm_gc_management_assignment', {
+              p_assignment_id: currentAssignment.id,
+            });
             if (error) {
               Alert.alert('Could not confirm GC', error.message);
             } else {
