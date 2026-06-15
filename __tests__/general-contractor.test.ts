@@ -545,6 +545,9 @@ describe('general contractor account type', () => {
     expect(gcProjectDetail).toContain("navigation.navigate('GeneralContractorTrades'");
     expect(gcTrades).toContain("from('project_slots')");
     expect(gcTrades).toContain("from('quotes')");
+    expect(gcTrades).toContain("supabase.functions.invoke('generate-trade-slots'");
+    expect(gcTrades).toContain('Generate Trade Plan');
+    expect(gcTrades).toContain('The homeowner must confirm GC management before you can generate trade slots.');
     expect(gcTrades).toContain("request_type: 'trade_substitution'");
     expect(gcTrades).toContain('No trade assignment changes until the homeowner approves');
     expect(gcTrades).not.toContain("from('project_slots').update");

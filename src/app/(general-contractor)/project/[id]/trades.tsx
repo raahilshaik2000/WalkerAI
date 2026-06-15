@@ -14,6 +14,7 @@ import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
 import { supabase } from '@/lib/supabase/client';
 import { formatCadCents, parseNonNegativeCadToCents, parseSignedCadToCents } from '@/lib/currency';
 import { formatStatusLabel } from '@/lib/formatters';
+import { formatSupabaseFunctionError } from '@/lib/supabase/functions';
 import { getRequiredStringParam } from '@/lib/navigation-params';
 import { Colors, Spacing, Typography } from '@/constants/theme';
 import { GlassButton, GlassCard, GlassInput, GradientBackground, StatusBadge } from '@/components/ui';
@@ -121,6 +122,7 @@ export default function GeneralContractorTradesScreen() {
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [submitting, setSubmitting] = useState(false);
+  const [generatingSlots, setGeneratingSlots] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
   const quotesBySlot = useMemo(() => {
@@ -221,6 +223,31 @@ export default function GeneralContractorTradesScreen() {
   const onRefresh = () => {
     setRefreshing(true);
     fetchData();
+  };
+
+  const handleGenerateSlots = async () => {
+    if (!projectId) {
+      Alert.alert('Missing project', 'Reopen trade management from the project detail screen.');
+      return;
+    }
+    if (!assignment || assignment.status !== 'active') {
+      Alert.alert('Active GC management required', 'The homeowner must confirm GC management before you can generate trade slots.');
+      return;
+    }
+
+    setGeneratingSlots(true);
+    try {
+      const { error } = await supabase.functions.invoke('generate-trade-slots', {
+        body: { project_id: projectId },
+      });
+      if (error) throw new Error(await formatSupabaseFunctionError(error));
+      Alert.alert('Trade plan generated', 'WalkerAI created trade slots for this project. Review them before recommending changes.');
+      await fetchData();
+    } catch (err) {
+      Alert.alert('Could not generate trades', await formatSupabaseFunctionError(err, 'Please confirm the project budget has been generated first.'));
+    } finally {
+      setGeneratingSlots(false);
+    }
   };
 
   const selectSlot = (slot: Slot) => {
@@ -399,6 +426,19 @@ export default function GeneralContractorTradesScreen() {
           ) : slots.length === 0 ? (
             <GlassCard style={styles.card}>
               <Text style={styles.bodyText}>Trade slots have not been generated yet.</Text>
+              {assignment?.status === 'active' ? (
+                <GlassButton
+                  label="Generate Trade Plan"
+                  onPress={handleGenerateSlots}
+                  loading={generatingSlots}
+                  disabled={generatingSlots}
+                  fullWidth
+                  size="sm"
+                  style={styles.actionButton}
+                />
+              ) : (
+                <Text style={styles.emptyHint}>Homeowner confirmation is required before a GC can generate the trade plan.</Text>
+              )}
             </GlassCard>
           ) : (
             <>
@@ -653,6 +693,8 @@ const styles = StyleSheet.create({
   cardSelected: { borderColor: 'rgba(255,107,0,0.7)' },
   sectionTitle: { ...Typography.label, marginBottom: 10 },
   bodyText: { ...Typography.bodySecondary, lineHeight: 22 },
+  emptyHint: { ...Typography.caption, marginTop: 10, lineHeight: 18 },
+  actionButton: { marginTop: Spacing.sm },
   slotHeader: { flexDirection: 'row', alignItems: 'center', gap: 12 },
   slotIcon: {
     width: 42,

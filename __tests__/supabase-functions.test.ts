@@ -166,6 +166,20 @@ describe('generate-trade-slots source guards', () => {
       /\.from\('dispatch_logs'\)\.delete\(\)\.eq\('project_id', project_id\)[\s\S]*?\.from\('project_slots'\)\.delete\(\)\.eq\('project_id', project_id\)/
     );
   });
+
+  it('allows active GC managers to generate trade slots without making them project owners', () => {
+    const source = fs.readFileSync(
+      path.join(__dirname, '../supabase/functions/generate-trade-slots/index.ts'),
+      'utf8',
+    );
+
+    expect(source).toContain('isActiveGeneralContractorForProject');
+    expect(source).toContain(".from('general_contractor_projects')");
+    expect(source).toContain(".eq('status', 'active')");
+    expect(source).toContain(".eq('general_contractors.user_id', userId)");
+    expect(source).toContain('const requesterIsHomeowner = project.homeowner_id === requesterId;');
+    expect(source).toContain('if (!requesterIsHomeowner && !requesterIsActiveGc)');
+  });
 });
 
 describe('dispatch-slots source guards', () => {
