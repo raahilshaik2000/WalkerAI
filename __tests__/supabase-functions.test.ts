@@ -91,8 +91,14 @@ describe('QA account seed source guards', () => {
     expect(source).toContain('stripe_payouts_enabled: true');
     expect(source).toContain('stripe_transfers_active: true');
     expect(source).toContain('verified: true');
+    expect(source).toContain("trade_types: ['plumber']");
+    expect(source).toContain("primary_trade: 'plumber'");
+    expect(source).toContain('Company is configured as a verified plumber');
     expect(source).toContain('lat: 43.6532');
     expect(source).toContain('lng: -79.3832');
+    expect(source).not.toContain("trade_types: ['general_contractor']");
+    expect(source).not.toContain("primary_trade: 'general_contractor'");
+    expect(source).not.toContain('Company is configured as general_contractor');
     expect(source).not.toContain('is_verified');
     expect(source).not.toContain('latitude:');
     expect(source).not.toContain('longitude:');
