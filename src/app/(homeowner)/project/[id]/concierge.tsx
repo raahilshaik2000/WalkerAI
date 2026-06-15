@@ -15,6 +15,7 @@ import { supabase } from '@/lib/supabase/client';
 import { useAuthStore } from '@/stores/auth.store';
 import type { GeneralContractor } from '@/types/database.types';
 import { formatStatusLabel } from '@/lib/formatters';
+import { formatSignedCadCents } from '@/lib/currency';
 import { getRequiredStringParam } from '@/lib/navigation-params';
 import { Colors, Spacing, Typography } from '@/constants/theme';
 import { GlassButton, GlassCard, GradientBackground, StatusBadge } from '@/components/ui';
@@ -25,6 +26,17 @@ interface CurrentAssignment {
   markup_pct: number;
   concierge_fee_pct: number;
   general_contractor?: Pick<GeneralContractor, 'id' | 'business_name' | 'city' | 'province' | 'rating' | 'total_reviews'> | Array<Pick<GeneralContractor, 'id' | 'business_name' | 'city' | 'province' | 'rating' | 'total_reviews'>> | null;
+}
+
+interface ApprovalRequest {
+  id: string;
+  request_type: string;
+  title: string;
+  description: string | null;
+  cost_delta: number | null;
+  timeline_delta_days: number | null;
+  status: string;
+  response_note: string | null;
 }
 
 function getAssignedGc(row: CurrentAssignment | null) {
@@ -42,9 +54,11 @@ export default function ProjectConciergeScreen() {
   const [projectHomeownerId, setProjectHomeownerId] = useState<string | null>(null);
   const [currentAssignment, setCurrentAssignment] = useState<CurrentAssignment | null>(null);
   const [generalContractors, setGeneralContractors] = useState<GeneralContractor[]>([]);
+  const [approvalRequests, setApprovalRequests] = useState<ApprovalRequest[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [invitingId, setInvitingId] = useState<string | null>(null);
+  const [respondingId, setRespondingId] = useState<string | null>(null);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
   const fetchData = useCallback(async () => {
@@ -58,7 +72,7 @@ export default function ProjectConciergeScreen() {
 
     try {
       setErrorMessage(null);
-      const [projectResult, assignmentResult, gcResult] = await Promise.all([
+      const [projectResult, assignmentResult, gcResult, approvalResult] = await Promise.all([
         supabase
           .from('projects')
           .select('id, homeowner_id')
@@ -81,19 +95,27 @@ export default function ProjectConciergeScreen() {
           .eq('verified', true)
           .order('rating', { ascending: false, nullsFirst: false })
           .order('created_at', { ascending: false }),
+        supabase
+          .from('project_approval_requests')
+          .select('id, request_type, title, description, cost_delta, timeline_delta_days, status, response_note')
+          .eq('project_id', projectId)
+          .order('created_at', { ascending: false }),
       ]);
 
       if (projectResult.error) throw projectResult.error;
       if (assignmentResult.error) throw assignmentResult.error;
       if (gcResult.error) throw gcResult.error;
+      if (approvalResult.error) throw approvalResult.error;
 
       setProjectHomeownerId(projectResult.data?.homeowner_id ?? null);
       setCurrentAssignment(assignmentResult.data as CurrentAssignment | null);
       setGeneralContractors((gcResult.data ?? []) as GeneralContractor[]);
+      setApprovalRequests((approvalResult.data ?? []) as ApprovalRequest[]);
     } catch (err) {
       setErrorMessage(err instanceof Error ? err.message : 'Could not load concierge options.');
       setCurrentAssignment(null);
       setGeneralContractors([]);
+      setApprovalRequests([]);
     } finally {
       setLoading(false);
       setRefreshing(false);
@@ -109,6 +131,45 @@ export default function ProjectConciergeScreen() {
   const onRefresh = () => {
     setRefreshing(true);
     fetchData();
+  };
+
+  const handleApprovalResponse = async (request: ApprovalRequest, status: 'approved' | 'rejected') => {
+    const currentUser = user ?? (await supabase.auth.getUser()).data.user;
+    if (!currentUser?.id || projectHomeownerId !== currentUser.id) {
+      Alert.alert('Not allowed', 'Only the homeowner can respond to approval requests.');
+      return;
+    }
+
+    Alert.alert(
+      status === 'approved' ? 'Approve request?' : 'Reject request?',
+      status === 'approved'
+        ? 'This records your approval. Any project updates still need to be applied by the appropriate workflow.'
+        : 'This records that the recommendation was rejected.',
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: status === 'approved' ? 'Approve' : 'Reject',
+          style: status === 'rejected' ? 'destructive' : 'default',
+          onPress: async () => {
+            setRespondingId(request.id);
+            const { error } = await supabase
+              .from('project_approval_requests')
+              .update({
+                status,
+                responded_at: new Date().toISOString(),
+              })
+              .eq('id', request.id)
+              .eq('status', 'pending');
+            if (error) {
+              Alert.alert('Could not respond', error.message);
+            } else {
+              await fetchData();
+            }
+            setRespondingId(null);
+          },
+        },
+      ],
+    );
   };
 
   const handleInvite = async (gc: GeneralContractor) => {
@@ -188,22 +249,76 @@ export default function ProjectConciergeScreen() {
               <Text style={styles.bodyText}>Loading concierge options...</Text>
             </GlassCard>
           ) : assignedGc && currentAssignment ? (
-            <GlassCard style={styles.card}>
-              <View style={styles.gcHeader}>
-                <View style={styles.avatar}>
-                  <Text style={styles.avatarText}>{assignedGc.business_name.charAt(0).toUpperCase()}</Text>
+            <>
+              <GlassCard style={styles.card}>
+                <View style={styles.gcHeader}>
+                  <View style={styles.avatar}>
+                    <Text style={styles.avatarText}>{assignedGc.business_name.charAt(0).toUpperCase()}</Text>
+                  </View>
+                  <View style={styles.gcBody}>
+                    <Text style={styles.gcName}>{assignedGc.business_name}</Text>
+                    <Text style={styles.gcMeta}>{[assignedGc.city, assignedGc.province].filter(Boolean).join(', ') || 'Location pending'}</Text>
+                  </View>
+                  <StatusBadge label={formatStatusLabel(currentAssignment.status)} variant="pending" dot />
                 </View>
-                <View style={styles.gcBody}>
-                  <Text style={styles.gcName}>{assignedGc.business_name}</Text>
-                  <Text style={styles.gcMeta}>{[assignedGc.city, assignedGc.province].filter(Boolean).join(', ') || 'Location pending'}</Text>
+                <View style={styles.termsRow}>
+                  <Text style={styles.termText}>{Number(currentAssignment.markup_pct).toFixed(0)}% markup</Text>
+                  <Text style={styles.termText}>{Number(currentAssignment.concierge_fee_pct).toFixed(0)}% concierge fee</Text>
                 </View>
-                <StatusBadge label={formatStatusLabel(currentAssignment.status)} variant="pending" dot />
-              </View>
-              <View style={styles.termsRow}>
-                <Text style={styles.termText}>{Number(currentAssignment.markup_pct).toFixed(0)}% markup</Text>
-                <Text style={styles.termText}>{Number(currentAssignment.concierge_fee_pct).toFixed(0)}% concierge fee</Text>
-              </View>
-            </GlassCard>
+              </GlassCard>
+
+              <GlassCard style={styles.card}>
+                <Text style={styles.sectionTitle}>Approval requests</Text>
+                {approvalRequests.length === 0 ? (
+                  <Text style={styles.bodyText}>No GC approval requests yet.</Text>
+                ) : approvalRequests.map((request) => {
+                  const pending = request.status === 'pending';
+                  const responding = respondingId === request.id;
+                  return (
+                    <View key={request.id} style={styles.approvalItem}>
+                      <View style={styles.approvalHeader}>
+                        <View style={styles.approvalIcon}>
+                          <Icon
+                            name={request.status === 'approved' ? 'check-circle-outline' : request.status === 'rejected' ? 'close-circle-outline' : 'clock-outline'}
+                            size={18}
+                            color={request.status === 'approved' ? Colors.success : request.status === 'rejected' ? Colors.error : Colors.warning}
+                          />
+                        </View>
+                        <View style={styles.approvalBody}>
+                          <Text style={styles.approvalTitle}>{request.title}</Text>
+                          <Text style={styles.approvalMeta}>
+                            {formatStatusLabel(request.request_type)}
+                            {request.cost_delta != null ? ` · ${formatSignedCadCents(request.cost_delta)}` : ''}
+                            {request.timeline_delta_days != null ? ` · ${request.timeline_delta_days > 0 ? '+' : ''}${request.timeline_delta_days} days` : ''}
+                          </Text>
+                        </View>
+                        <StatusBadge label={formatStatusLabel(request.status)} variant={pending ? 'pending' : request.status === 'approved' ? 'completed' : 'error'} size="sm" />
+                      </View>
+                      {request.description ? <Text style={styles.approvalDescription}>{request.description}</Text> : null}
+                      {pending ? (
+                        <View style={styles.approvalActions}>
+                          <GlassButton
+                            label="Approve"
+                            onPress={() => handleApprovalResponse(request, 'approved')}
+                            loading={responding}
+                            size="sm"
+                            style={styles.approvalButton}
+                          />
+                          <GlassButton
+                            label="Reject"
+                            onPress={() => handleApprovalResponse(request, 'rejected')}
+                            loading={responding}
+                            variant="destructive"
+                            size="sm"
+                            style={styles.approvalButton}
+                          />
+                        </View>
+                      ) : null}
+                    </View>
+                  );
+                })}
+              </GlassCard>
+            </>
           ) : generalContractors.length === 0 ? (
             <GlassCard style={styles.card}>
               <Text style={styles.sectionTitle}>No verified GCs yet</Text>
@@ -294,4 +409,17 @@ const styles = StyleSheet.create({
     paddingVertical: 6,
   },
   inviteButton: { marginTop: Spacing.sm },
+  approvalItem: {
+    paddingVertical: 12,
+    borderTopWidth: 1,
+    borderTopColor: Colors.glass.border,
+  },
+  approvalHeader: { flexDirection: 'row', alignItems: 'flex-start', gap: 10 },
+  approvalIcon: { width: 24, alignItems: 'center', paddingTop: 2 },
+  approvalBody: { flex: 1 },
+  approvalTitle: { ...Typography.body, fontWeight: '800' },
+  approvalMeta: { ...Typography.caption, marginTop: 3 },
+  approvalDescription: { ...Typography.bodySecondary, lineHeight: 21, marginTop: 8 },
+  approvalActions: { flexDirection: 'row', gap: 8, marginTop: 12 },
+  approvalButton: { flex: 1 },
 });

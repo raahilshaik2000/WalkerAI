@@ -13,10 +13,12 @@ import { useFocusEffect, useNavigation, useRoute } from '@react-navigation/nativ
 import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
 import { supabase } from '@/lib/supabase/client';
 import { formatCad, formatStatusLabel } from '@/lib/formatters';
+import { formatSignedCadCents, parseSignedCadToCents } from '@/lib/currency';
 import { getRequiredStringParam } from '@/lib/navigation-params';
 import { Colors, Spacing, Typography } from '@/constants/theme';
-import { GradientBackground, GlassCard, StatusBadge } from '@/components/ui';
+import { GradientBackground, GlassButton, GlassCard, GlassInput, StatusBadge } from '@/components/ui';
 import { TradeMetricStrip } from '@/components/company/TradeUI';
+import type { ApprovalRequestType } from '@/constants/enums';
 
 interface ProjectDetail {
   id: string;
@@ -54,6 +56,28 @@ interface Assignment {
   scope_summary: string | null;
 }
 
+interface ApprovalRequest {
+  id: string;
+  request_type: ApprovalRequestType;
+  title: string;
+  description: string | null;
+  cost_delta: number | null;
+  timeline_delta_days: number | null;
+  status: string;
+  response_note: string | null;
+  created_at: string;
+}
+
+const APPROVAL_TYPES: Array<{ value: ApprovalRequestType; label: string }> = [
+  { value: 'general_recommendation', label: 'General' },
+  { value: 'scope_change', label: 'Scope' },
+  { value: 'material_substitution', label: 'Material' },
+  { value: 'trade_substitution', label: 'Trade' },
+  { value: 'schedule_change', label: 'Schedule' },
+  { value: 'payment_release', label: 'Payment' },
+  { value: 'change_order', label: 'Change order' },
+];
+
 function projectStatusVariant(status: string): 'active' | 'completed' | 'pending' | 'dispatching' | 'neutral' {
   if (status === 'completed') return 'completed';
   if (status === 'dispatching') return 'dispatching';
@@ -87,9 +111,16 @@ export default function GeneralContractorProjectDetail() {
   const [assignment, setAssignment] = useState<Assignment | null>(null);
   const [slots, setSlots] = useState<Slot[]>([]);
   const [changeOrders, setChangeOrders] = useState<ChangeOrder[]>([]);
+  const [approvalRequests, setApprovalRequests] = useState<ApprovalRequest[]>([]);
+  const [approvalType, setApprovalType] = useState<ApprovalRequestType>('general_recommendation');
+  const [approvalTitle, setApprovalTitle] = useState('');
+  const [approvalDescription, setApprovalDescription] = useState('');
+  const [approvalCostDelta, setApprovalCostDelta] = useState('');
+  const [approvalTimelineDelta, setApprovalTimelineDelta] = useState('');
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [accepting, setAccepting] = useState(false);
+  const [submittingApproval, setSubmittingApproval] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
   const fetchData = useCallback(async () => {
@@ -101,7 +132,7 @@ export default function GeneralContractorProjectDetail() {
         : { data: null, error: null };
       if (gcError) throw gcError;
 
-      const [projectResult, slotResult, changeOrderResult] = await Promise.all([
+      const [projectResult, slotResult, changeOrderResult, approvalResult] = await Promise.all([
         supabase
           .from('projects')
           .select('id, address, city, room_type, status, ai_cost_min, ai_cost_max, questionnaire_answers, created_at')
@@ -117,15 +148,22 @@ export default function GeneralContractorProjectDetail() {
           .select('id, description, cost_delta, status, signed_by_homeowner, signed_by_company')
           .eq('project_id', projectId)
           .order('created_at', { ascending: false }),
+        supabase
+          .from('project_approval_requests')
+          .select('id, request_type, title, description, cost_delta, timeline_delta_days, status, response_note, created_at')
+          .eq('project_id', projectId)
+          .order('created_at', { ascending: false }),
       ]);
 
       if (projectResult.error) throw projectResult.error;
       if (slotResult.error) throw slotResult.error;
       if (changeOrderResult.error) throw changeOrderResult.error;
+      if (approvalResult.error) throw approvalResult.error;
 
       setProject(projectResult.data as ProjectDetail | null);
       setSlots((slotResult.data ?? []) as Slot[]);
       setChangeOrders((changeOrderResult.data ?? []) as ChangeOrder[]);
+      setApprovalRequests((approvalResult.data ?? []) as ApprovalRequest[]);
 
       if (gc?.id) {
         const { data: assignmentRow, error: assignmentError } = await supabase
@@ -145,6 +183,7 @@ export default function GeneralContractorProjectDetail() {
       setAssignment(null);
       setSlots([]);
       setChangeOrders([]);
+      setApprovalRequests([]);
     } finally {
       setLoading(false);
       setRefreshing(false);
@@ -187,6 +226,87 @@ export default function GeneralContractorProjectDetail() {
         },
       ],
     );
+  };
+
+  const handleSubmitApprovalRequest = async () => {
+    if (!assignment?.id || assignment.status !== 'active') {
+      Alert.alert('Active GC assignment required', 'Accept the management invite before sending approval requests.');
+      return;
+    }
+    if (!approvalTitle.trim()) {
+      Alert.alert('Title required', 'Add a short title for the homeowner approval request.');
+      return;
+    }
+
+    const costDelta = approvalCostDelta.trim()
+      ? parseSignedCadToCents(approvalCostDelta)
+      : null;
+    if (approvalCostDelta.trim() && costDelta == null) {
+      Alert.alert('Invalid cost impact', 'Use a valid CAD amount such as 500, -250, or 125.50.');
+      return;
+    }
+
+    let timelineDelta: number | null = null;
+    if (approvalTimelineDelta.trim()) {
+      if (!/^-?\d+$/.test(approvalTimelineDelta.trim())) {
+        Alert.alert('Invalid timeline impact', 'Use whole days, such as 3 or -2.');
+        return;
+      }
+      timelineDelta = Number(approvalTimelineDelta.trim());
+      if (!Number.isSafeInteger(timelineDelta) || Math.abs(timelineDelta) > 365) {
+        Alert.alert('Invalid timeline impact', 'Timeline impact must be between -365 and 365 days.');
+        return;
+      }
+    }
+
+    const currentUser = (await supabase.auth.getUser()).data.user;
+    if (!currentUser?.id) {
+      Alert.alert('Sign in required', 'Please sign in again before submitting approval requests.');
+      return;
+    }
+
+    setSubmittingApproval(true);
+    try {
+      const { data: gc, error: gcError } = await supabase
+        .from('general_contractors')
+        .select('id')
+        .eq('user_id', currentUser.id)
+        .maybeSingle();
+      if (gcError) throw gcError;
+      if (!gc?.id) throw new Error('GC profile not found.');
+      if (!project?.id) throw new Error('Project not loaded.');
+
+      const { data: projectRow, error: projectError } = await supabase
+        .from('projects')
+        .select('homeowner_id')
+        .eq('id', project.id)
+        .maybeSingle();
+      if (projectError) throw projectError;
+      if (!projectRow?.homeowner_id) throw new Error('Project homeowner not found.');
+
+      const { error } = await supabase.from('project_approval_requests').insert({
+        project_id: project.id,
+        requested_by_gc_id: gc.id,
+        homeowner_id: projectRow.homeowner_id,
+        request_type: approvalType,
+        title: approvalTitle.trim(),
+        description: approvalDescription.trim() || null,
+        cost_delta: costDelta,
+        timeline_delta_days: timelineDelta,
+      });
+      if (error) throw error;
+
+      setApprovalTitle('');
+      setApprovalDescription('');
+      setApprovalCostDelta('');
+      setApprovalTimelineDelta('');
+      setApprovalType('general_recommendation');
+      await fetchData();
+    } catch (err) {
+      Alert.alert('Could not submit approval request', err instanceof Error ? err.message : 'Please try again.');
+    } finally {
+      setSubmittingApproval(false);
+    }
   };
 
   const estimate = project?.ai_cost_min != null && project.ai_cost_max != null
@@ -275,6 +395,93 @@ export default function GeneralContractorProjectDetail() {
                 </GlassCard>
               ) : null}
 
+              {assignment?.status === 'active' ? (
+                <GlassCard style={styles.card}>
+                  <Text style={styles.sectionTitle}>Request homeowner approval</Text>
+                  <Text style={styles.bodyText}>
+                    Use this for recommendations. Nothing changes until the homeowner approves.
+                  </Text>
+                  <View style={styles.typeGrid}>
+                    {APPROVAL_TYPES.map((type) => {
+                      const selected = approvalType === type.value;
+                      return (
+                        <TouchableOpacity
+                          key={type.value}
+                          style={[styles.typeChip, selected && styles.typeChipActive]}
+                          onPress={() => setApprovalType(type.value)}
+                          activeOpacity={0.85}
+                        >
+                          <Text style={[styles.typeChipText, selected && styles.typeChipTextActive]}>
+                            {type.label}
+                          </Text>
+                        </TouchableOpacity>
+                      );
+                    })}
+                  </View>
+                  <GlassInput
+                    label="Request title"
+                    value={approvalTitle}
+                    onChangeText={setApprovalTitle}
+                    containerStyle={styles.formInput}
+                  />
+                  <GlassInput
+                    label="Recommendation details"
+                    value={approvalDescription}
+                    onChangeText={setApprovalDescription}
+                    containerStyle={styles.formInput}
+                  />
+                  <View style={styles.formRow}>
+                    <GlassInput
+                      label="Cost +/- CAD"
+                      value={approvalCostDelta}
+                      onChangeText={setApprovalCostDelta}
+                      keyboardType="decimal-pad"
+                      containerStyle={styles.formHalf}
+                    />
+                    <GlassInput
+                      label="Days +/-"
+                      value={approvalTimelineDelta}
+                      onChangeText={setApprovalTimelineDelta}
+                      keyboardType="numbers-and-punctuation"
+                      containerStyle={styles.formHalf}
+                    />
+                  </View>
+                  <GlassButton
+                    label="Send for Homeowner Approval"
+                    onPress={handleSubmitApprovalRequest}
+                    loading={submittingApproval}
+                    fullWidth
+                    size="sm"
+                    style={styles.submitApprovalButton}
+                  />
+                </GlassCard>
+              ) : null}
+
+              <GlassCard style={styles.card}>
+                <Text style={styles.sectionTitle}>Approval requests</Text>
+                {approvalRequests.length === 0 ? (
+                  <Text style={styles.bodyText}>No GC approval requests yet.</Text>
+                ) : approvalRequests.slice(0, 5).map((request) => (
+                  <View key={request.id} style={styles.row}>
+                    <View style={styles.rowIcon}>
+                      <Icon
+                        name={request.status === 'approved' ? 'check-circle-outline' : request.status === 'rejected' ? 'close-circle-outline' : 'clock-outline'}
+                        size={18}
+                        color={request.status === 'approved' ? Colors.success : request.status === 'rejected' ? Colors.error : Colors.warning}
+                      />
+                    </View>
+                    <View style={styles.rowBody}>
+                      <Text style={styles.rowTitle}>{request.title}</Text>
+                      <Text style={styles.rowSub}>
+                        {formatStatusLabel(request.status)}
+                        {request.cost_delta != null ? ` · ${formatSignedCadCents(request.cost_delta)}` : ''}
+                        {request.timeline_delta_days != null ? ` · ${request.timeline_delta_days > 0 ? '+' : ''}${request.timeline_delta_days} days` : ''}
+                      </Text>
+                    </View>
+                  </View>
+                ))}
+              </GlassCard>
+
               <GlassCard style={styles.card}>
                 <Text style={styles.sectionTitle}>Trade plan</Text>
                 {slots.length === 0 ? (
@@ -359,6 +566,25 @@ const styles = StyleSheet.create({
   },
   acceptButtonDisabled: { opacity: 0.65 },
   acceptButtonText: { color: Colors.accentFg, fontSize: 15, fontWeight: '800' },
+  typeGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginTop: 14, marginBottom: 12 },
+  typeChip: {
+    borderWidth: 1,
+    borderColor: Colors.surface.border,
+    borderRadius: 16,
+    paddingHorizontal: 10,
+    paddingVertical: 8,
+    backgroundColor: Colors.surface.default,
+  },
+  typeChipActive: {
+    borderColor: 'rgba(255,107,0,0.65)',
+    backgroundColor: 'rgba(255,107,0,0.14)',
+  },
+  typeChipText: { color: Colors.text.secondary, fontSize: 12, fontWeight: '700' },
+  typeChipTextActive: { color: Colors.text.primary },
+  formInput: { marginBottom: Spacing.sm },
+  formRow: { flexDirection: 'row', gap: 8 },
+  formHalf: { flex: 1, marginBottom: Spacing.sm },
+  submitApprovalButton: { marginTop: 2 },
   row: {
     flexDirection: 'row',
     gap: 10,

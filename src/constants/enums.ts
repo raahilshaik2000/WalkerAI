@@ -32,6 +32,17 @@ export type QuoteStatus = 'pending' | 'approved' | 'rejected';
 
 export type ChangeOrderStatus = 'proposed' | 'approved' | 'rejected';
 
+export type ApprovalRequestStatus = 'pending' | 'approved' | 'rejected' | 'cancelled';
+
+export type ApprovalRequestType =
+  | 'scope_change'
+  | 'material_substitution'
+  | 'trade_substitution'
+  | 'schedule_change'
+  | 'payment_release'
+  | 'change_order'
+  | 'general_recommendation';
+
 export type DisputeStatus = 'open' | 'under_review' | 'resolved';
 
 export type DispatchResponse = 'pending' | 'accepted' | 'filled' | 'timeout' | 'declined';

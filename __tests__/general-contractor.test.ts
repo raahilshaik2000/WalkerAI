@@ -81,4 +81,28 @@ describe('general contractor account type', () => {
     expect(gcProjectDetail).toContain("update({ status: 'active' })");
     expect(gcProjectDetail).toContain('GC management terms');
   });
+
+  it('adds generic homeowner approval requests for GC recommendations', () => {
+    const migration = fs.readFileSync(
+      path.join(repoRoot, 'supabase/migrations/20260615000300_add_project_approval_requests.sql'),
+      'utf8',
+    );
+    const gcProjectDetail = fs.readFileSync(
+      path.join(repoRoot, 'src/app/(general-contractor)/project/[id]/index.tsx'),
+      'utf8',
+    );
+    const homeownerConcierge = fs.readFileSync(
+      path.join(repoRoot, 'src/app/(homeowner)/project/[id]/concierge.tsx'),
+      'utf8',
+    );
+
+    expect(migration).toContain('CREATE TABLE IF NOT EXISTS public.project_approval_requests');
+    expect(migration).toContain('approval_requests_gc_insert');
+    expect(migration).toContain('approval_requests_homeowner_update');
+    expect(gcProjectDetail).toContain('Send for Homeowner Approval');
+    expect(gcProjectDetail).toContain("from('project_approval_requests').insert");
+    expect(homeownerConcierge).toContain("from('project_approval_requests')");
+    expect(homeownerConcierge).toContain("handleApprovalResponse(request, 'approved')");
+    expect(homeownerConcierge).toContain("handleApprovalResponse(request, 'rejected')");
+  });
 });

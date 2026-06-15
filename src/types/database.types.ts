@@ -13,6 +13,8 @@ import type {
   MaterialOrderStatus,
   BidStatus,
   SupplierCategory,
+  ApprovalRequestStatus,
+  ApprovalRequestType,
 } from '@/constants/enums';
 
 export interface User {
@@ -170,6 +172,22 @@ export interface GeneralContractorProject {
   scope_summary: string | null;
   created_at: string;
   updated_at: string;
+}
+
+export interface ProjectApprovalRequest {
+  id: string;
+  project_id: string;
+  requested_by_gc_id: string;
+  homeowner_id: string;
+  request_type: ApprovalRequestType;
+  title: string;
+  description: string | null;
+  cost_delta: number | null;
+  timeline_delta_days: number | null;
+  status: ApprovalRequestStatus;
+  response_note: string | null;
+  created_at: string;
+  responded_at: string | null;
 }
 
 export interface SupplierCatalogItem {
