@@ -119,20 +119,39 @@ export default function GeneralContractorDashboard() {
       })) as GCProjectAssignment[];
       setAssignments(normalized);
 
-      const managedProjectIds = normalized.map((row) => row.project?.id).filter(Boolean) as string[];
-      if (managedProjectIds.length === 0) {
-        setPendingApprovals(0);
-      } else {
-        const { count, error: changeOrderError } = await supabase
-          .from('change_orders')
+      const [
+        approvalCountResult,
+        paymentCountResult,
+        conciergeCompletionResult,
+      ] = await Promise.all([
+        supabase
+          .from('project_approval_requests')
           .select('id', { count: 'exact', head: true })
-          .in('project_id', managedProjectIds)
-          .eq('status', 'proposed')
-          .eq('signed_by_company', true)
-          .eq('signed_by_homeowner', false);
-        if (changeOrderError) throw changeOrderError;
-        setPendingApprovals(count ?? 0);
-      }
+          .eq('requested_by_gc_id', profile.id)
+          .eq('status', 'pending'),
+        supabase
+          .from('gc_payment_requests')
+          .select('id', { count: 'exact', head: true })
+          .eq('general_contractor_id', profile.id)
+          .eq('status', 'pending'),
+        supabase
+          .from('gc_concierge_bookings')
+          .select('id', { count: 'exact', head: true })
+          .eq('general_contractor_id', profile.id)
+          .eq('status', 'accepted')
+          .eq('payment_status', 'paid')
+          .is('payout_released_at', null),
+      ]);
+
+      if (approvalCountResult.error) throw approvalCountResult.error;
+      if (paymentCountResult.error) throw paymentCountResult.error;
+      if (conciergeCompletionResult.error) throw conciergeCompletionResult.error;
+
+      setPendingApprovals(
+        (approvalCountResult.count ?? 0)
+        + (paymentCountResult.count ?? 0)
+        + (conciergeCompletionResult.count ?? 0),
+      );
     } catch (err) {
       setErrorMessage(err instanceof Error ? err.message : 'Could not load GC dashboard.');
       setAssignments([]);

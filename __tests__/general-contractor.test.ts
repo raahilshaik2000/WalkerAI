@@ -144,6 +144,22 @@ describe('general contractor account type', () => {
     expect(gcProjectDetail).toContain('Waiting for the homeowner to confirm GC management');
   });
 
+  it('counts real GC homeowner actions on the dashboard approval metric', () => {
+    const dashboard = fs.readFileSync(
+      path.join(repoRoot, 'src/app/(general-contractor)/index.tsx'),
+      'utf8',
+    );
+
+    expect(dashboard).toContain("from('project_approval_requests')");
+    expect(dashboard).toContain("from('gc_payment_requests')");
+    expect(dashboard).toContain("from('gc_concierge_bookings')");
+    expect(dashboard).toContain("eq('requested_by_gc_id', profile.id)");
+    expect(dashboard).toContain("eq('general_contractor_id', profile.id)");
+    expect(dashboard).toContain("eq('payment_status', 'paid')");
+    expect(dashboard).toContain("is('payout_released_at', null)");
+    expect(dashboard).not.toContain("from('change_orders')");
+  });
+
   it('surfaces the GC markup engine on managed project detail', () => {
     const migration = fs.readFileSync(
       path.join(repoRoot, 'supabase/migrations/20260615002200_apply_gc_terms_approval.sql'),
