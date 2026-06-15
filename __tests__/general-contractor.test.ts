@@ -613,6 +613,10 @@ describe('general contractor account type', () => {
       path.join(repoRoot, 'src/app/(general-contractor)/project/[id]/messages.tsx'),
       'utf8',
     );
+    const homeownerMessages = fs.readFileSync(
+      path.join(repoRoot, 'src/app/(homeowner)/messages.tsx'),
+      'utf8',
+    );
 
     expect(migration).toContain('messages_project_participants');
     expect(migration).toContain('general_contractor_projects gcp');
@@ -621,6 +625,10 @@ describe('general contractor account type', () => {
     expect(gcProjectDetail).toContain("navigation.navigate('GeneralContractorMessages'");
     expect(gcMessages).toContain("from('messages').insert");
     expect(gcMessages).toContain("channel(`gc-messages:${projectId}`)");
+    expect(homeownerMessages).toContain(".from('general_contractor_projects')");
+    expect(homeownerMessages).toContain("general_contractor:general_contractors(business_name)");
+    expect(homeownerMessages).toContain("Messages with your contractors, GC, and project participants");
+    expect(homeownerMessages).not.toContain(".not('assigned_company_id', 'is', null)");
   });
 
   it('adds a GC completion binder assembled from real project records', () => {

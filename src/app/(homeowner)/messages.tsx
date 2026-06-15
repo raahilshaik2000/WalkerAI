@@ -25,6 +25,27 @@ interface Thread {
   lastSentAt: string;
 }
 
+interface ProjectThreadRow {
+  id: string;
+  room_type: string | null;
+  companies?: { name: string | null } | Array<{ name: string | null }> | null;
+}
+
+interface SlotThreadRow {
+  project_id: string;
+  assigned_company_id: string | null;
+  fulfillment_type?: 'walker_ai' | 'external' | null;
+  external_trade_name?: string | null;
+  external_trade_company?: string | null;
+  companies?: { name: string | null } | Array<{ name: string | null }> | null;
+}
+
+interface GcThreadRow {
+  project_id: string;
+  status: string;
+  general_contractor?: { business_name: string | null } | Array<{ business_name: string | null }> | null;
+}
+
 function timeAgo(iso: string): string {
   const diff = Date.now() - new Date(iso).getTime();
   const mins = Math.floor(diff / 60000);
@@ -33,6 +54,16 @@ function timeAgo(iso: string): string {
   const hrs = Math.floor(mins / 60);
   if (hrs < 24) return `${hrs}h`;
   return `${Math.floor(hrs / 24)}d`;
+}
+
+function firstJoinedRow<T>(value: T | T[] | null | undefined): T | null {
+  return Array.isArray(value) ? value[0] ?? null : value ?? null;
+}
+
+function projectTitle(roomType: string | null) {
+  return roomType
+    ? `${roomType.charAt(0).toUpperCase()}${roomType.slice(1)} Renovation`
+    : 'Project';
 }
 
 export default function HomeownerMessages() {
@@ -58,12 +89,12 @@ export default function HomeownerMessages() {
     else if (mode === 'initial') setLoading(true);
     setErrorMessage(null);
 
-    // Get homeowner's active projects with assigned companies
+    // Include projects with any real project participant: legacy contractor,
+    // trade slot company, external GC-managed trade, or assigned GC.
     const { data: projects, error: projectsError } = await supabase
       .from('projects')
       .select('id, room_type, companies!assigned_company_id(name)')
       .eq('homeowner_id', user.id)
-      .not('assigned_company_id', 'is', null)
       .order('created_at', { ascending: false });
 
     if (projectsError) {
@@ -74,14 +105,87 @@ export default function HomeownerMessages() {
       return;
     }
 
-    if (!projects?.length) {
+    const projectRows = (projects ?? []) as ProjectThreadRow[];
+    const ownedProjectIds = projectRows.map((p) => p.id);
+    if (!ownedProjectIds.length) {
       setThreads([]);
       setLoading(false);
       setRefreshing(false);
       return;
     }
 
-    const projectIds = projects.map((p) => p.id);
+    const [slotResult, gcResult] = await Promise.all([
+      supabase
+        .from('project_slots')
+        .select(`
+          project_id, assigned_company_id, fulfillment_type,
+          external_trade_name, external_trade_company,
+          companies!assigned_company_id(name)
+        `)
+        .in('project_id', ownedProjectIds)
+        .or('assigned_company_id.not.is.null,fulfillment_type.eq.external'),
+      supabase
+        .from('general_contractor_projects')
+        .select('project_id, status, general_contractor:general_contractors(business_name)')
+        .in('project_id', ownedProjectIds)
+        .in('status', ['invited', 'active', 'completed']),
+    ]);
+
+    if (slotResult.error || gcResult.error) {
+      setThreads([]);
+      setErrorMessage(slotResult.error?.message ?? gcResult.error?.message ?? 'Could not load message participants.');
+      setLoading(false);
+      setRefreshing(false);
+      return;
+    }
+
+    const slotsByProject = new Map<string, SlotThreadRow[]>();
+    for (const slot of (slotResult.data ?? []) as SlotThreadRow[]) {
+      const rows = slotsByProject.get(slot.project_id) ?? [];
+      rows.push(slot);
+      slotsByProject.set(slot.project_id, rows);
+    }
+
+    const gcsByProject = new Map<string, GcThreadRow[]>();
+    for (const assignment of (gcResult.data ?? []) as GcThreadRow[]) {
+      const rows = gcsByProject.get(assignment.project_id) ?? [];
+      rows.push(assignment);
+      gcsByProject.set(assignment.project_id, rows);
+    }
+
+    const participantNameForProject = (project: ProjectThreadRow): string | null => {
+      const assignedCompany = firstJoinedRow(project.companies);
+      if (assignedCompany?.name) return assignedCompany.name;
+
+      const gc = gcsByProject.get(project.id)?.[0];
+      const gcProfile = firstJoinedRow(gc?.general_contractor);
+      if (gcProfile?.business_name) return gcProfile.business_name;
+
+      const slotNames = (slotsByProject.get(project.id) ?? [])
+        .map((slot) => {
+          if (slot.fulfillment_type === 'external') {
+            return slot.external_trade_company ?? slot.external_trade_name ?? null;
+          }
+          return firstJoinedRow(slot.companies)?.name ?? null;
+        })
+        .filter((name): name is string => Boolean(name));
+      if (slotNames.length === 1) return slotNames[0];
+      if (slotNames.length > 1) return `${slotNames.length} project participants`;
+      return null;
+    };
+
+    const threadProjects = projectRows
+      .map((project) => ({ project, participantName: participantNameForProject(project) }))
+      .filter((row) => !!row.participantName);
+
+    if (!threadProjects.length) {
+      setThreads([]);
+      setLoading(false);
+      setRefreshing(false);
+      return;
+    }
+
+    const projectIds = threadProjects.map(({ project }) => project.id);
 
     // Get latest message per project
     const { data: msgs, error: messagesError } = await supabase
@@ -111,16 +215,12 @@ export default function HomeownerMessages() {
       }
     }
 
-    const result: Thread[] = projects.map((p) => {
-      const last = latestMsg[p.id];
-      const companyName = (p.companies as any)?.name ?? 'Contractor';
-      const title = p.room_type
-        ? p.room_type.charAt(0).toUpperCase() + p.room_type.slice(1) + ' Renovation'
-        : 'Project';
+    const result: Thread[] = threadProjects.map(({ project, participantName }) => {
+      const last = latestMsg[project.id];
       return {
-        projectId: p.id,
-        projectTitle: title,
-        contractorName: companyName,
+        projectId: project.id,
+        projectTitle: projectTitle(project.room_type),
+        contractorName: participantName!,
         lastMessage: last ? (last.body || (last.attachment_url ? 'Photo attachment' : 'No message text')) : 'No messages yet',
         lastMessageTime: last ? timeAgo(last.sent_at) : '',
         lastSentAt: last?.sent_at ?? '',
@@ -238,7 +338,7 @@ export default function HomeownerMessages() {
                 <View style={styles.empty}>
                   <Ionicons name="chatbubbles-outline" size={48} color={Colors.text.tertiary} />
                   <Text style={styles.emptyTitle}>No conversations</Text>
-                  <Text style={styles.emptySub}>Messages with your contractors will appear here once a project is accepted</Text>
+                  <Text style={styles.emptySub}>Messages with your contractors, GC, and project participants will appear here once a project is accepted</Text>
                 </View>
               )
             }
