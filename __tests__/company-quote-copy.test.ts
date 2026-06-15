@@ -44,4 +44,18 @@ describe('company quote copy', () => {
     expect(source).toContain("await supabase\n          .from('quotes')\n          .delete()");
     expect(source).not.toContain('Wait for the homeowner to review it before submitting another.');
   });
+
+  it('offers a cents-safe milestone split to prevent quote total mismatch errors', () => {
+    const repoRoot = path.resolve(__dirname, '..');
+    const source = fs.readFileSync(
+      path.join(repoRoot, 'src/app/(company)/job/[id]/quote-builder.tsx'),
+      'utf8'
+    );
+
+    expect(source).toContain('function defaultMilestoneSplitCents');
+    expect(source).toContain('totalAmountCents - deposit - roughIn');
+    expect(source).toContain(`const splitLabel = milestones.length === 3 ? 'Split total 30/40/30' : 'Split total evenly';`);
+    expect(source).toContain('onPress={applyDefaultMilestoneSplit}');
+    expect(source).toContain('Enter line item amounts before splitting milestones.');
+  });
 });

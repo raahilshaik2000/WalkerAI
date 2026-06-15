@@ -44,6 +44,24 @@ function totalCents(items: Array<{ amount: string }>): number {
   return items.reduce((sum, item) => sum + parseMoneyToCents(item.amount), 0);
 }
 
+function formatCentsInput(cents: number): string {
+  return (cents / 100).toFixed(2);
+}
+
+function defaultMilestoneSplitCents(totalAmountCents: number, milestoneCount: number): number[] {
+  if (milestoneCount <= 0) return [];
+  if (milestoneCount === 3) {
+    const deposit = Math.round(totalAmountCents * 0.3);
+    const roughIn = Math.round(totalAmountCents * 0.4);
+    return [deposit, roughIn, totalAmountCents - deposit - roughIn];
+  }
+
+  const baseAmount = Math.floor(totalAmountCents / milestoneCount);
+  const split = Array.from({ length: milestoneCount }, () => baseAmount);
+  split[milestoneCount - 1] += totalAmountCents - (baseAmount * milestoneCount);
+  return split;
+}
+
 function parseMoneyToCents(value: string): number {
   return parseNonNegativeCadToCents(value) ?? 0;
 }
@@ -115,6 +133,20 @@ export default function QuoteBuilderScreen() {
 
   const updateMilestone = (id: string, field: keyof MilestoneInput, value: string) => {
     setMilestones((prev) => prev.map((m) => m.id === id ? { ...m, [field]: value } : m));
+  };
+
+  const applyDefaultMilestoneSplit = () => {
+    const quoteTotalCents = totalCents(lineItems);
+    if (quoteTotalCents <= 0) {
+      Alert.alert('Quote total required', 'Enter line item amounts before splitting milestones.');
+      return;
+    }
+
+    const split = defaultMilestoneSplitCents(quoteTotalCents, milestones.length);
+    setMilestones((prev) => prev.map((milestone, index) => ({
+      ...milestone,
+      amount: formatCentsInput(split[index] ?? 0),
+    })));
   };
 
   const handleSubmit = async () => {
@@ -408,7 +440,9 @@ export default function QuoteBuilderScreen() {
     }
   };
 
-  const totalDollars = formatTotal(lineItems);
+  const quoteTotalCents = totalCents(lineItems);
+  const totalDollars = quoteTotalCents / 100;
+  const splitLabel = milestones.length === 3 ? 'Split total 30/40/30' : 'Split total evenly';
 
   return (
     <GradientBackground glow="top-right">
@@ -479,6 +513,15 @@ export default function QuoteBuilderScreen() {
               <Text style={styles.sectionSub}>
                 Break your quote into milestone payments. Total must equal the quote total.
               </Text>
+              <TouchableOpacity
+                onPress={applyDefaultMilestoneSplit}
+                style={styles.splitBtn}
+                disabled={quoteTotalCents <= 0}
+              >
+                <Text style={[styles.splitBtnText, quoteTotalCents <= 0 && styles.splitBtnTextDisabled]}>
+                  {splitLabel}
+                </Text>
+              </TouchableOpacity>
               {milestones.map((m, i) => (
                 <View key={m.id} style={styles.milestoneInput}>
                   <Text style={styles.milestoneNum}>{i + 1}</Text>
@@ -564,6 +607,18 @@ const styles = StyleSheet.create({
   card: { marginBottom: Spacing.md },
   sectionTitle: { ...Typography.h3, marginBottom: 8 },
   sectionSub: { ...Typography.caption, marginBottom: 14, lineHeight: 18 },
+  splitBtn: {
+    alignSelf: 'flex-start',
+    paddingVertical: 8,
+    paddingHorizontal: 12,
+    borderRadius: Radius.item,
+    backgroundColor: Colors.surface.default,
+    borderWidth: 1,
+    borderColor: Colors.glass.border,
+    marginBottom: 14,
+  },
+  splitBtnText: { color: Colors.accent, fontSize: 13, fontWeight: '700' },
+  splitBtnTextDisabled: { color: Colors.text.tertiary },
   lineItemRow: {
     flexDirection: 'row',
     alignItems: 'center',
