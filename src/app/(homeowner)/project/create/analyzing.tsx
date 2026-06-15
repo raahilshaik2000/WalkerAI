@@ -206,7 +206,7 @@ export default function AnalyzingScreen() {
         }
 
         const { data: analyzeData, error: analyzeError } = await supabase.functions.invoke('analyze-photos', {
-          body: { project_id: pid, photo_base64s: photoBase64sFlat },
+          body: { project_id: pid, photo_base64s: photoBase64sFlat, room_type: selectedRoomType },
         });
 
         // Wait for photo uploads to finish alongside the edge function call.

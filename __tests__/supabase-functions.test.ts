@@ -485,6 +485,24 @@ describe('analyze-photos source guards', () => {
     expect(source).toContain('data: normalized.data');
     expect(source).toContain("if (typeof payload === 'string')");
   });
+
+  it('keeps project-fetch timeouts non-fatal without service-role writes before ownership verification', () => {
+    const edgeFunction = fs.readFileSync(
+      path.join(__dirname, '../supabase/functions/analyze-photos/index.ts'),
+      'utf8',
+    );
+    const analyzingScreen = fs.readFileSync(
+      path.join(__dirname, '../src/app/(homeowner)/project/create/analyzing.tsx'),
+      'utf8',
+    );
+
+    expect(analyzingScreen).toContain('room_type: selectedRoomType');
+    expect(edgeFunction).toContain('const requestedRoomType = room_type ===');
+    expect(edgeFunction).toContain('let projectOwnerVerified = false');
+    expect(edgeFunction).toContain('projectOwnerVerified = true');
+    expect(edgeFunction).toContain("console.warn('ai_analysis persist skipped because project ownership was not verified')");
+    expect(edgeFunction).not.toContain('const roomType = project.room_type');
+  });
 });
 
 describe('generate-diy-guide source guards', () => {

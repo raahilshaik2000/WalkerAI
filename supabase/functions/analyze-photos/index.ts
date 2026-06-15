@@ -132,7 +132,8 @@ Deno.serve(async (req) => {
       });
     }
 
-    const { project_id, photo_urls, photo_base64s } = await req.json();
+    const { project_id, photo_urls, photo_base64s, room_type } = await req.json();
+    const requestedRoomType = room_type === 'bathroom' ? 'bathroom' : 'kitchen';
 
     const hasUrls = Array.isArray(photo_urls) && photo_urls.length > 0;
     const hasBase64s = Array.isArray(photo_base64s) && photo_base64s.length > 0;
@@ -159,29 +160,36 @@ Deno.serve(async (req) => {
     ]) as { data: { room_type: string | null; homeowner_id: string } | null; error?: { message: string } };
 
     const project = projectResult.data;
+    let projectOwnerVerified = false;
     if (!project || project.homeowner_id !== user.id) {
       // If we couldn't load the project (timeout or not found), use the
       // homeowner's chosen room_type from the client's prior context. This
-      // is acceptable because room_type is also stored client-side and the
-      // analysis is best-effort.
+      // is acceptable because analysis is best-effort. Do not use the
+      // service-role client to persist later unless ownership was verified.
       if (projectResult.error?.message?.includes('timed out')) {
-        console.warn('analyze-photos: project fetch timed out, continuing with default room_type');
+        console.warn('analyze-photos: project fetch timed out, continuing with requested room_type');
       } else {
         return new Response(JSON.stringify({ error: 'Project not found or unauthorized' }), {
           status: 404, headers: { ...corsHeaders, 'Content-Type': 'application/json' },
         });
       }
+    } else {
+      projectOwnerVerified = true;
     }
 
     const anthropicApiKey = Deno.env.get('ANTHROPIC_API_KEY');
-    const roomType = project.room_type ?? 'kitchen';
+    const roomType = project?.room_type === 'bathroom' || project?.room_type === 'kitchen'
+      ? project.room_type
+      : requestedRoomType;
 
     if (!anthropicApiKey) {
       const analysis = fallbackAnalysis(roomType, 'missing Anthropic API key');
-      await adminClient
-        .from('projects')
-        .update({ ai_analysis: analysis })
-        .eq('id', project_id);
+      if (projectOwnerVerified) {
+        await adminClient
+          .from('projects')
+          .update({ ai_analysis: analysis })
+          .eq('id', project_id);
+      }
 
       return new Response(
         JSON.stringify({ success: true, analysis, fallback: true }),
@@ -276,18 +284,22 @@ Return ONLY the JSON object, no markdown, no explanation.`,
     // under load), don't fail the whole call — just log and return the
     // analysis so the homeowner can continue.
     try {
-      const dbWritePromise = adminClient
-        .from('projects')
-        .update({ ai_analysis: analysis })
-        .eq('id', project_id);
+      if (projectOwnerVerified) {
+        const dbWritePromise = adminClient
+          .from('projects')
+          .update({ ai_analysis: analysis })
+          .eq('id', project_id);
 
-      // Cap the DB write at 10s. If it doesn't finish in that window,
-      // the analysis still comes back successfully and the client persists
-      // it directly.
-      await Promise.race([
-        dbWritePromise,
-        new Promise((resolve) => setTimeout(() => resolve(null), 10000)),
-      ]);
+        // Cap the DB write at 10s. If it doesn't finish in that window,
+        // the analysis still comes back successfully and the client persists
+        // it directly.
+        await Promise.race([
+          dbWritePromise,
+          new Promise((resolve) => setTimeout(() => resolve(null), 10000)),
+        ]);
+      } else {
+        console.warn('ai_analysis persist skipped because project ownership was not verified');
+      }
     } catch (persistError) {
       console.warn(
         'ai_analysis persist failed (non-fatal — client will retry):',
