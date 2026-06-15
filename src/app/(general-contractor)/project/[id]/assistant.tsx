@@ -70,6 +70,9 @@ interface MessageRow {
 }
 
 interface AssignmentRow {
+  id: string;
+  status: string;
+  general_contractor_id: string;
   project_type: string | null;
 }
 
@@ -103,19 +106,37 @@ export default function GeneralContractorAssistantScreen() {
   const fetchData = useCallback(async () => {
     try {
       setErrorMessage(null);
-      const [projectResult, assignmentResult, slotResult, permitResult, approvalResult, paymentResult, materialResult, messageResult] = await Promise.all([
+      const currentUser = (await supabase.auth.getUser()).data.user;
+      if (!currentUser?.id) {
+        throw new Error('You need to be signed in to view project assistant summaries.');
+      }
+
+      const { data: gc, error: gcError } = await supabase
+        .from('general_contractors')
+        .select('id')
+        .eq('user_id', currentUser.id)
+        .maybeSingle();
+      if (gcError) throw gcError;
+      if (!gc?.id) throw new Error('GC profile not found.');
+
+      const { data: assignmentRow, error: assignmentError } = await supabase
+        .from('general_contractor_projects')
+        .select('id, status, general_contractor_id, project_type')
+        .eq('project_id', projectId)
+        .eq('general_contractor_id', gc.id)
+        .neq('status', 'removed')
+        .maybeSingle();
+      if (assignmentError) throw assignmentError;
+      if (!assignmentRow) throw new Error('GC assignment not found for this project.');
+      if (assignmentRow.status !== 'active') {
+        throw new Error('Active GC management is required before project assistant summaries are available.');
+      }
+
+      const [projectResult, slotResult, permitResult, approvalResult, paymentResult, materialResult, messageResult] = await Promise.all([
         supabase
           .from('projects')
           .select('id, status, room_type, ai_cost_min, ai_cost_max')
           .eq('id', projectId)
-          .maybeSingle(),
-        supabase
-          .from('general_contractor_projects')
-          .select('project_type')
-          .eq('project_id', projectId)
-          .neq('status', 'removed')
-          .order('updated_at', { ascending: false })
-          .limit(1)
           .maybeSingle(),
         supabase
           .from('project_slots')
@@ -130,11 +151,13 @@ export default function GeneralContractorAssistantScreen() {
           .from('project_approval_requests')
           .select('id, request_type, title, status, cost_delta, timeline_delta_days')
           .eq('project_id', projectId)
+          .eq('requested_by_gc_id', gc.id)
           .order('created_at', { ascending: false }),
         supabase
           .from('gc_payment_requests')
           .select('id, request_kind, title, amount_cents, status')
           .eq('project_id', projectId)
+          .eq('general_contractor_id', gc.id)
           .order('created_at', { ascending: false }),
         supabase
           .from('material_orders')
@@ -150,7 +173,6 @@ export default function GeneralContractorAssistantScreen() {
       ]);
 
       const loadError = projectResult.error
-        ?? assignmentResult.error
         ?? slotResult.error
         ?? permitResult.error
         ?? approvalResult.error
@@ -160,7 +182,7 @@ export default function GeneralContractorAssistantScreen() {
       if (loadError) throw loadError;
 
       setProject(projectResult.data as ProjectRow | null);
-      setAssignment(assignmentResult.data as AssignmentRow | null);
+      setAssignment(assignmentRow as AssignmentRow);
       setSlots((slotResult.data ?? []) as SlotRow[]);
       setPermits((permitResult.data ?? []) as PermitRow[]);
       setApprovals((approvalResult.data ?? []) as ApprovalRow[]);

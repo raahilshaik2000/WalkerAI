@@ -750,13 +750,20 @@ describe('general contractor account type', () => {
 
     expect(navigator).toContain('GeneralContractorAssistant');
     expect(gcProjectDetail).toContain("navigation.navigate('GeneralContractorAssistant'");
+    expect(gcAssistant).toContain('You need to be signed in to view project assistant summaries.');
+    expect(gcAssistant).toContain(".from('general_contractors')");
     expect(gcAssistant).toContain(".from('general_contractor_projects')");
-    expect(gcAssistant).toContain(".select('project_type')");
+    expect(gcAssistant).toContain(".select('id, status, general_contractor_id, project_type')");
+    expect(gcAssistant).toContain(".eq('general_contractor_id', gc.id)");
+    expect(gcAssistant).toContain("assignmentRow.status !== 'active'");
+    expect(gcAssistant).toContain('Active GC management is required before project assistant summaries are available.');
     expect(gcAssistant).toContain('formatGcProjectType(assignment?.project_type, project?.room_type)');
     expect(gcAssistant).toContain("from('project_slots')");
     expect(gcAssistant).toContain("from('permits')");
     expect(gcAssistant).toContain("from('project_approval_requests')");
+    expect(gcAssistant).toContain(".eq('requested_by_gc_id', gc.id)");
     expect(gcAssistant).toContain("from('gc_payment_requests')");
+    expect(gcAssistant).toContain(".eq('general_contractor_id', gc.id)");
     expect(gcAssistant).toContain("from('material_orders')");
     expect(gcAssistant).toContain("from('messages')");
     expect(gcAssistant).toContain('No manual edits or AI assumptions are applied.');
