@@ -121,6 +121,14 @@ export default function PermitsScreen() {
     }
   };
 
+  const handleOpenDocument = async (url: string) => {
+    try {
+      await Linking.openURL(url);
+    } catch {
+      Alert.alert('Unable to open document', 'Please try again in a moment.');
+    }
+  };
+
   return (
     <GradientBackground glow="top-right">
       <SafeAreaView style={styles.safe}>
@@ -190,7 +198,7 @@ export default function PermitsScreen() {
                 ) : previewUrl ? (
                   <TouchableOpacity
                     style={styles.documentRow}
-                    onPress={() => { void Linking.openURL(previewUrl); }}
+                    onPress={() => handleOpenDocument(previewUrl)}
                     activeOpacity={0.82}
                   >
                     <View style={styles.documentIcon}>

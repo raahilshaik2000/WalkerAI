@@ -20,8 +20,12 @@ describe('warranty upload screens', () => {
     expect(companySource).toContain("mediaType: 'photo'");
     expect(companySource).toContain('Add warranty photo');
     expect(companySource).toContain('Upload a warranty card or product coverage photo first.');
+    expect(companySource).toContain('handleOpenDocument(previewUrl)');
+    expect(companySource).not.toContain('void Linking.openURL(previewUrl)');
     expect(companySource).not.toContain('Add warranty document');
     expect(companySource).not.toContain('product documents for the homeowner');
+    expect(homeownerSource).toContain('handleOpenDocument(previewUrl)');
+    expect(homeownerSource).not.toContain('void Linking.openURL(previewUrl)');
     expect(homeownerSource).not.toContain('Warranty documents uploaded by your contractor appear here');
     expect(homeownerSource).not.toContain('or closeout documents when the project is complete');
   });
