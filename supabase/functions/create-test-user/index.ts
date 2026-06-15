@@ -88,6 +88,70 @@ Deno.serve(async (req) => {
       });
     }
 
+    if (body.role === 'company') {
+      const { error: companyError } = await supabase.from('companies').upsert({
+        user_id: userId,
+        name: body.business_name?.trim() || 'QA Trade Company',
+        address: '100 King St W',
+        license_number: 'QA-LICENSE-001',
+        license_doc_url: 'qa/company-license.pdf',
+        insurance_doc_url: 'qa/company-insurance.pdf',
+        service_radius_km: 50,
+        trade_types: ['plumber'],
+        primary_trade: 'plumber',
+        city: 'Toronto',
+        province: 'ON',
+        postal_code: 'M5V 3A8',
+        lat: 43.6532,
+        lng: -79.3832,
+        stripe_account_id: 'acct_qa_company_test',
+        stripe_details_submitted: true,
+        stripe_payouts_enabled: true,
+        stripe_transfers_active: true,
+        verified: true,
+      }, { onConflict: 'user_id' });
+
+      if (companyError) {
+        return new Response(JSON.stringify({
+          auth_user_id: userId,
+          warning: `auth user ready but company profile upsert failed: ${companyError.message}`,
+        }), {
+          status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        });
+      }
+    }
+
+    if (body.role === 'supplier') {
+      const { error: supplierError } = await supabase.from('suppliers').upsert({
+        user_id: userId,
+        business_name: body.business_name?.trim() || 'QA Building Supplier',
+        address: '100 King St W',
+        license_number: 'QA-SUPPLY-001',
+        license_doc_url: 'qa/supplier-license.pdf',
+        service_radius_km: 100,
+        categories: ['Cabinets & Storage', 'Countertops & Surfaces', 'Tile & Flooring', 'Plumbing Fixtures'],
+        city: 'Toronto',
+        province: 'ON',
+        postal_code: 'M5V 3A8',
+        lat: 43.6532,
+        lng: -79.3832,
+        stripe_account_id: 'acct_qa_supplier_test',
+        stripe_details_submitted: true,
+        stripe_payouts_enabled: true,
+        stripe_transfers_active: true,
+        verified: true,
+      }, { onConflict: 'user_id' });
+
+      if (supplierError) {
+        return new Response(JSON.stringify({
+          auth_user_id: userId,
+          warning: `auth user ready but supplier profile upsert failed: ${supplierError.message}`,
+        }), {
+          status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        });
+      }
+    }
+
     if (body.role === 'general_contractor') {
       const { error: gcError } = await supabase.from('general_contractors').upsert({
         user_id: userId,
@@ -128,7 +192,7 @@ Deno.serve(async (req) => {
       email: body.email,
       role: body.role,
       was_existing: !!existing,
-      profile: body.role === 'general_contractor' ? 'verified_general_contractor' : null,
+      profile: profileLabel(body.role),
     }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
 
   } catch (err) {
@@ -139,3 +203,10 @@ Deno.serve(async (req) => {
     });
   }
 });
+
+function profileLabel(role: CreateRequest['role']) {
+  if (role === 'company') return 'verified_company';
+  if (role === 'supplier') return 'verified_supplier';
+  if (role === 'general_contractor') return 'verified_general_contractor';
+  return null;
+}

@@ -59,7 +59,7 @@ describe('generate-material-orders source guards', () => {
 });
 
 describe('QA account seed source guards', () => {
-  it('allows create-test-user to create a verified general contractor profile', () => {
+  it('allows create-test-user to create verified company, supplier, and GC profiles', () => {
     const source = fs.readFileSync(
       path.join(__dirname, '../supabase/functions/create-test-user/index.ts'),
       'utf8',
@@ -67,12 +67,22 @@ describe('QA account seed source guards', () => {
 
     expect(source).toContain("'general_contractor'");
     expect(source).toContain("body.role === 'general_contractor'");
+    expect(source).toContain("body.role === 'company'");
+    expect(source).toContain("body.role === 'supplier'");
+    expect(source).toContain(".from('companies').upsert");
+    expect(source).toContain(".from('suppliers').upsert");
     expect(source).toContain(".from('general_contractors').upsert");
+    expect(source).toContain("trade_types: ['plumber']");
+    expect(source).toContain("primary_trade: 'plumber'");
     expect(source).toContain('verified: true');
     expect(source).toContain('concierge_enabled: true');
+    expect(source).toContain("stripe_account_id: 'acct_qa_company_test'");
+    expect(source).toContain("stripe_account_id: 'acct_qa_supplier_test'");
     expect(source).toContain("stripe_account_id: 'acct_qa_gc_test'");
     expect(source).toContain('stripe_payouts_enabled: true');
-    expect(source).toContain("profile: body.role === 'general_contractor' ? 'verified_general_contractor' : null");
+    expect(source).toContain("if (role === 'company') return 'verified_company'");
+    expect(source).toContain("if (role === 'supplier') return 'verified_supplier'");
+    expect(source).toContain("if (role === 'general_contractor') return 'verified_general_contractor'");
   });
 
   it('seeds all four QA accounts using current profile columns', () => {
