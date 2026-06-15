@@ -181,6 +181,27 @@ describe('general contractor account type', () => {
     expect(homeownerProject).toContain('No escrow protection');
   });
 
+  it('stores external trade documents without paid WalkerAI verification', () => {
+    const migration = fs.readFileSync(
+      path.join(repoRoot, 'supabase/migrations/20260615002100_add_external_trade_documents.sql'),
+      'utf8',
+    );
+    const gcProjectDetail = fs.readFileSync(
+      path.join(repoRoot, 'src/app/(general-contractor)/project/[id]/index.tsx'),
+      'utf8',
+    );
+
+    expect(migration).toContain('external_trade_document_urls');
+    expect(migration).toContain('CREATE OR REPLACE FUNCTION public.add_external_trade_document');
+    expect(migration).toContain("external_trade_verification_status = CASE");
+    expect(migration).toContain("'documents_uploaded'");
+    expect(migration).toContain('Active GC management is required before adding external trade documents');
+    expect(gcProjectDetail).toContain("uploadFile('company-docs'");
+    expect(gcProjectDetail).toContain("supabase.rpc('add_external_trade_document'");
+    expect(gcProjectDetail).toContain('Upload docs');
+    expect(gcProjectDetail).toContain('No license or insurance documents uploaded');
+  });
+
   it('applies approved GC external trade recommendations only for unassigned slots', () => {
     const migration = fs.readFileSync(
       path.join(repoRoot, 'supabase/migrations/20260615002000_apply_trade_substitution_approval.sql'),

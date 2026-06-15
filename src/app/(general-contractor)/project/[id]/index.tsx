@@ -10,12 +10,14 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useFocusEffect, useNavigation, useRoute } from '@react-navigation/native';
+import { launchImageLibrary } from 'react-native-image-picker';
 import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
 import { supabase } from '@/lib/supabase/client';
 import { formatCad, formatStatusLabel } from '@/lib/formatters';
 import { formatSignedCadCents, parseSignedCadToCents } from '@/lib/currency';
 import { calculateGcMarkup } from '@/lib/gc-markup';
 import { getRequiredStringParam } from '@/lib/navigation-params';
+import { getUploadMetadata, uploadFile } from '@/lib/supabase/storage';
 import { Colors, Spacing, Typography } from '@/constants/theme';
 import { GradientBackground, GlassButton, GlassCard, GlassInput, StatusBadge } from '@/components/ui';
 import { TradeMetricStrip } from '@/components/company/TradeUI';
@@ -41,6 +43,7 @@ interface Slot {
   external_trade_name?: string | null;
   external_trade_company?: string | null;
   external_trade_verification_status?: 'unverified' | 'documents_uploaded' | 'walker_verified' | null;
+  external_trade_document_urls?: string[] | null;
   assigned_company?: { name: string | null } | Array<{ name: string | null }> | null;
 }
 
@@ -134,6 +137,7 @@ export default function GeneralContractorProjectDetail() {
   const [accepting, setAccepting] = useState(false);
   const [submittingApproval, setSubmittingApproval] = useState(false);
   const [savingExternalTrade, setSavingExternalTrade] = useState(false);
+  const [uploadingExternalDocSlotId, setUploadingExternalDocSlotId] = useState<string | null>(null);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
   const fetchData = useCallback(async () => {
@@ -156,6 +160,7 @@ export default function GeneralContractorProjectDetail() {
           .select(`
             id, trade_type, status, fulfillment_type,
             external_trade_name, external_trade_company, external_trade_verification_status,
+            external_trade_document_urls,
             assigned_company:companies!assigned_company_id(name)
           `)
           .eq('project_id', projectId)
@@ -365,6 +370,38 @@ export default function GeneralContractorProjectDetail() {
       Alert.alert('Could not mark external trade', err instanceof Error ? err.message : 'Please try again.');
     } finally {
       setSavingExternalTrade(false);
+    }
+  };
+
+  const handleUploadExternalTradeDocument = async (slot: Slot) => {
+    if (slot.fulfillment_type !== 'external') {
+      Alert.alert('External trade required', 'Documents can only be attached to externally managed trades.');
+      return;
+    }
+
+    const result = await launchImageLibrary({
+      mediaType: 'photo',
+      quality: 0.8,
+      selectionLimit: 1,
+      assetRepresentationMode: 'compatible',
+    });
+    if (result.didCancel || !result.assets?.[0]) return;
+
+    setUploadingExternalDocSlotId(slot.id);
+    try {
+      const upload = getUploadMetadata(result.assets[0]);
+      const path = `external-trades/${projectId}/${slot.id}-${Date.now()}.${upload.extension}`;
+      const { storagePath } = await uploadFile('company-docs', path, upload.uri, upload.contentType);
+      const { error } = await supabase.rpc('add_external_trade_document', {
+        p_slot_id: slot.id,
+        p_document_url: storagePath,
+      });
+      if (error) throw error;
+      await fetchData();
+    } catch (err) {
+      Alert.alert('Upload failed', err instanceof Error ? err.message : 'Please try again.');
+    } finally {
+      setUploadingExternalDocSlotId(null);
     }
   };
 
@@ -754,6 +791,27 @@ export default function GeneralContractorProjectDetail() {
                           Not verified by WalkerAI · No escrow protection · GC managed
                         </Text>
                       ) : null}
+                      {slot.fulfillment_type === 'external' ? (
+                        <View style={styles.externalDocumentRow}>
+                          <Text style={styles.externalDocumentText}>
+                            {(slot.external_trade_document_urls?.length ?? 0) > 0
+                              ? `${slot.external_trade_document_urls?.length ?? 0} document${(slot.external_trade_document_urls?.length ?? 0) === 1 ? '' : 's'} uploaded`
+                              : 'No license or insurance documents uploaded'}
+                          </Text>
+                          {assignment?.status === 'active' ? (
+                            <TouchableOpacity
+                              style={styles.externalDocButton}
+                              onPress={() => handleUploadExternalTradeDocument(slot)}
+                              disabled={uploadingExternalDocSlotId === slot.id}
+                              activeOpacity={0.85}
+                            >
+                              <Text style={styles.externalLinkText}>
+                                {uploadingExternalDocSlotId === slot.id ? 'Uploading...' : 'Upload docs'}
+                              </Text>
+                            </TouchableOpacity>
+                          ) : null}
+                        </View>
+                      ) : null}
                       {assignment?.status === 'active' && !getCompanyName(slot) && slot.fulfillment_type !== 'external' ? (
                         <TouchableOpacity
                           style={styles.externalLink}
@@ -978,6 +1036,16 @@ const styles = StyleSheet.create({
   rowTitle: { ...Typography.body, fontWeight: '700' },
   rowSub: { ...Typography.caption, marginTop: 3 },
   externalWarning: { ...Typography.caption, color: Colors.warning, marginTop: 5, lineHeight: 17 },
+  externalDocumentRow: { marginTop: 8 },
+  externalDocumentText: { ...Typography.caption, color: Colors.text.secondary, marginBottom: 6 },
+  externalDocButton: {
+    alignSelf: 'flex-start',
+    borderWidth: 1,
+    borderColor: Colors.surface.border,
+    borderRadius: 999,
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+  },
   externalLink: { alignSelf: 'flex-start', marginTop: 9 },
   externalLinkText: { color: Colors.accent, fontSize: 13, fontWeight: '800' },
   externalActions: { flexDirection: 'row', gap: 8, marginTop: 2 },
