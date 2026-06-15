@@ -1,8 +1,6 @@
 import type { RoomScanData } from '@/stores/project-wizard.store';
 
-export function shouldGenerateImagePreview(projectId: string | null, roomScanData: RoomScanData | null): boolean {
-  void projectId;
-  void roomScanData;
+export function shouldGenerateImagePreview(_projectId: string | null, _roomScanData: RoomScanData | null): boolean {
   return false;
 }
 
