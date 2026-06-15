@@ -19,4 +19,18 @@ describe('homeowner quote status copy', () => {
     expect(source).toContain('<Text style={styles.paidBannerText}>{paidBannerText}</Text>');
     expect(source).not.toContain('<Text style={styles.paidBannerText}>Payment received — project is active</Text>');
   });
+
+  it('does not present contractor pricing as a fixed AI price', () => {
+    const source = fs.readFileSync(
+      path.join(__dirname, '../src/app/(homeowner)/project/[id]/quote.tsx'),
+      'utf8',
+    );
+
+    expect(source).toContain("quote ? 'Selected Contractor Quote' : 'WalkerAI Estimate'");
+    expect(source).toContain('const headlinePrice = quote?.total_amount');
+    expect(source).toContain('Project estimate: ${projectEstimate}');
+    expect(source).toContain("{quote.company_name ?? 'Contractor'} quote");
+    expect(source).not.toContain('Walker AI Fixed Price');
+    expect(source).not.toContain('Set by AI · confirmed by your contractor');
+  });
 });

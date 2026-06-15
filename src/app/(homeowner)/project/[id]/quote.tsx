@@ -337,6 +337,12 @@ export default function CostBreakdownScreen() {
 
   const milestones = [...(quote?.milestones ?? [])].sort((a, b) => a.sort_order - b.sort_order);
   const totalAmount = quote?.total_amount ?? project?.ai_cost_min ?? 0;
+  const projectEstimate = project?.ai_cost_min && project?.ai_cost_max
+    ? `${formatCad(project.ai_cost_min)} - ${formatCad(project.ai_cost_max)}`
+    : null;
+  const headlinePrice = quote?.total_amount
+    ? formatCad(quote.total_amount)
+    : projectEstimate ?? (totalAmount > 0 ? formatCad(totalAmount) : '-');
   const payableProjectStatuses = ['dispatching', 'accepted', 'quoting', 'scheduling', 'active'];
   const canPay = !!quote && quote.status === 'pending' && payableProjectStatuses.includes(project?.status ?? '');
   const isPaid = quote?.status === 'approved';
@@ -376,29 +382,29 @@ export default function CostBreakdownScreen() {
 
         <ScrollView contentContainerStyle={styles.scroll} showsVerticalScrollIndicator={false}>
 
-          {/* AI Price Card */}
+          {/* Quote summary */}
           <GlassCard style={styles.card}>
             <View style={styles.priceHeader}>
               <View style={[styles.iconCircle, { backgroundColor: 'rgba(255,107,0,0.12)' }]}>
                 <Ionicons name="sparkles" size={20} color="#FF6B00" />
               </View>
               <View style={{ flex: 1 }}>
-                <Text style={styles.priceLabel}>Walker AI Fixed Price</Text>
-                <Text style={styles.priceSubLabel}>Set by AI · confirmed by your contractor</Text>
+                <Text style={styles.priceLabel}>{quote ? 'Selected Contractor Quote' : 'WalkerAI Estimate'}</Text>
+                <Text style={styles.priceSubLabel}>
+                  {quote
+                    ? projectEstimate
+                      ? `Project estimate: ${projectEstimate}`
+                      : 'Final pricing from the selected contractor quote'
+                    : 'AI-generated budget range before contractor quote'}
+                </Text>
               </View>
             </View>
-            <Text style={styles.priceRange}>
-              {project?.ai_cost_min && project?.ai_cost_max
-                ? `${formatCad(project.ai_cost_min)} – ${formatCad(project.ai_cost_max)}`
-                : totalAmount > 0
-                ? formatCad(totalAmount)
-                : '—'}
-            </Text>
+            <Text style={styles.priceRange}>{headlinePrice}</Text>
             {quote?.total_amount ? (
               <View style={styles.confirmedRow}>
                 <Ionicons name="checkmark-circle" size={16} color="#34D399" />
                 <Text style={styles.confirmedText}>
-                  Contractor confirmed at {formatCad(quote.total_amount)}
+                  {quote.company_name ?? 'Contractor'} quote{quote.trade_label ? ` · ${quote.trade_label}` : ''}
                 </Text>
               </View>
             ) : (
