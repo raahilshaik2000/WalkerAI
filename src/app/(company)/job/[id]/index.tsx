@@ -352,9 +352,13 @@ export default function JobBriefScreen() {
           } else {
             await fetchJob();
             if (status === 'accepted') {
-              const quoteParams = negotiation.slot_id
-                ? { id: projectId, slot: negotiation.slot_id }
-                : { id: projectId, slot: slotId };
+              const quoteSlotId = negotiation.slot_id ?? slotId;
+              const quoteParams = {
+                id: projectId,
+                ...(quoteSlotId ? { slot: quoteSlotId } : {}),
+                ...(negotiation.offer_amount_cents ? { accepted_counteroffer_cents: negotiation.offer_amount_cents } : {}),
+                gc_negotiation_note: negotiation.scope_note,
+              };
               Alert.alert(
                 'Counteroffer accepted',
                 'Submit an updated quote package so the homeowner sees the agreed pricing and milestones.',

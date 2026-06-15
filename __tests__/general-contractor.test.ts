@@ -858,6 +858,8 @@ describe('general contractor account type', () => {
     expect(companyJob).toContain('GC quote negotiation');
     expect(companyJob).toContain('Counteroffer accepted');
     expect(companyJob).toContain('Build Updated Quote');
+    expect(companyJob).toContain('accepted_counteroffer_cents');
+    expect(companyJob).toContain('gc_negotiation_note');
     expect(companyJob).toContain("navigation.navigate('QuoteBuilder', quoteParams)");
   });
 

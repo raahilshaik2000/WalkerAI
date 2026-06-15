@@ -48,6 +48,11 @@ function formatCentsInput(cents: number): string {
   return (cents / 100).toFixed(2);
 }
 
+function positiveCentsParam(value: unknown): number | null {
+  const cents = typeof value === 'number' ? value : Number(value);
+  return Number.isFinite(cents) && cents > 0 ? Math.round(cents) : null;
+}
+
 function defaultMilestoneSplitCents(totalAmountCents: number, milestoneCount: number): number[] {
   if (milestoneCount <= 0) return [];
   if (milestoneCount === 3) {
@@ -90,23 +95,52 @@ function lineItemType(description: string, index: number): 'labour' | 'material'
   return index === 0 ? 'labour' : index === 1 ? 'material' : 'other';
 }
 
+function defaultLineItems(counterofferCents: number | null): LineItem[] {
+  if (!counterofferCents) {
+    return [
+      { id: '1', description: 'Labour', amount: '' },
+      { id: '2', description: 'Materials', amount: '' },
+    ];
+  }
+
+  return [
+    { id: '1', description: 'Accepted GC counteroffer', amount: formatCentsInput(counterofferCents) },
+  ];
+}
+
+function defaultMilestones(counterofferCents: number | null): MilestoneInput[] {
+  const base = [
+    { id: '1', title: 'Deposit (30%)', amount: '', due_date: '' },
+    { id: '2', title: 'Rough-in complete (40%)', amount: '', due_date: '' },
+    { id: '3', title: 'Project complete (30%)', amount: '', due_date: '' },
+  ];
+
+  if (!counterofferCents) return base;
+
+  const split = defaultMilestoneSplitCents(counterofferCents, base.length);
+  return base.map((milestone, index) => ({
+    ...milestone,
+    amount: formatCentsInput(split[index] ?? 0),
+  }));
+}
+
+function defaultNotes(value: unknown): string {
+  return typeof value === 'string' && value.trim()
+    ? `GC negotiation: ${value.trim()}`
+    : '';
+}
+
 export default function QuoteBuilderScreen() {
   const route = useRoute<any>();
   const projectId = getRequiredStringParam(route.params, 'id');
   const slotId: string | undefined = route.params?.slot;
   const navigation = useNavigation<any>();
   const { user } = useAuthStore();
+  const acceptedCounterofferCents = positiveCentsParam(route.params?.accepted_counteroffer_cents);
 
-  const [lineItems, setLineItems] = useState<LineItem[]>([
-    { id: '1', description: 'Labour', amount: '' },
-    { id: '2', description: 'Materials', amount: '' },
-  ]);
-  const [milestones, setMilestones] = useState<MilestoneInput[]>([
-    { id: '1', title: 'Deposit (30%)', amount: '', due_date: '' },
-    { id: '2', title: 'Rough-in complete (40%)', amount: '', due_date: '' },
-    { id: '3', title: 'Project complete (30%)', amount: '', due_date: '' },
-  ]);
-  const [notes, setNotes] = useState('');
+  const [lineItems, setLineItems] = useState<LineItem[]>(() => defaultLineItems(acceptedCounterofferCents));
+  const [milestones, setMilestones] = useState<MilestoneInput[]>(() => defaultMilestones(acceptedCounterofferCents));
+  const [notes, setNotes] = useState(() => defaultNotes(route.params?.gc_negotiation_note));
   const [submitting, setSubmitting] = useState(false);
 
   const addLineItem = () => {

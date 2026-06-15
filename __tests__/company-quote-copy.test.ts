@@ -62,4 +62,19 @@ describe('company quote copy', () => {
     expect(source).toContain('<Text style={styles.milestoneSummaryLabel}>Balance</Text>');
     expect(source).toContain('disabled={totalDollars <= 0 || !milestoneTotalsMatch}');
   });
+
+  it('prefills accepted GC counteroffers into the quote total and milestone split', () => {
+    const repoRoot = path.resolve(__dirname, '..');
+    const source = fs.readFileSync(
+      path.join(repoRoot, 'src/app/(company)/job/[id]/quote-builder.tsx'),
+      'utf8'
+    );
+
+    expect(source).toContain('const acceptedCounterofferCents = positiveCentsParam(route.params?.accepted_counteroffer_cents);');
+    expect(source).toContain('Accepted GC counteroffer');
+    expect(source).toContain('defaultLineItems(acceptedCounterofferCents)');
+    expect(source).toContain('defaultMilestones(acceptedCounterofferCents)');
+    expect(source).toContain('defaultMilestoneSplitCents(counterofferCents, base.length)');
+    expect(source).toContain('GC negotiation: ${value.trim()}');
+  });
 });
