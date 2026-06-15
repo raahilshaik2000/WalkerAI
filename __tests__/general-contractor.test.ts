@@ -177,7 +177,7 @@ describe('general contractor account type', () => {
     expect(gcProjectDetail).toContain('p_assignment_id: assignment.id');
     expect(gcProjectDetail).not.toContain("update({ status: 'active' })");
     expect(gcProjectDetail).toContain('GC management terms');
-    expect(gcProjectDetail).toContain("const assignmentIsActive = assignment?.status === 'active'");
+    expect(gcProjectDetail).toContain("const assignmentIsActive = assignment?.status === 'active' && gcVerified");
     expect(gcProjectDetail).toContain('Controls unlock after homeowner confirmation');
     expect(gcProjectDetail).toContain('Schedule, permit, payment, material, trade, discovery, assistant, and completion tools become available once GC management is active.');
     expect(gcProjectDetail).toContain('Coordinate with the homeowner while management approval is pending');
@@ -195,6 +195,10 @@ describe('general contractor account type', () => {
       path.join(repoRoot, 'supabase/migrations/20260615004100_require_verified_gc_assignment_activation.sql'),
       'utf8',
     );
+    const gcProjectDetail = fs.readFileSync(
+      path.join(repoRoot, 'src/app/(general-contractor)/project/[id]/index.tsx'),
+      'utf8',
+    );
 
     expect(migration).toContain('CREATE OR REPLACE FUNCTION public.accept_gc_management_invite');
     expect(migration).toContain('CREATE OR REPLACE FUNCTION public.confirm_gc_management_assignment');
@@ -206,6 +210,12 @@ describe('general contractor account type', () => {
     expect(migration).toContain("SET status = 'active'");
     expect(migration).toContain('GRANT EXECUTE ON FUNCTION public.accept_gc_management_invite(UUID) TO authenticated');
     expect(migration).toContain('GRANT EXECUTE ON FUNCTION public.confirm_gc_management_assignment(UUID) TO authenticated');
+    expect(gcProjectDetail).toContain(".select('id, verified')");
+    expect(gcProjectDetail).toContain('setGcVerified(gc.verified === true)');
+    expect(gcProjectDetail).toContain("if (!gcVerified) {\n      Alert.alert(\n        'Verification required'");
+    expect(gcProjectDetail).toContain('WalkerAI verification is required before you can accept this management invite.');
+    expect(gcProjectDetail).toContain('WalkerAI verification is required before project controls are available.');
+    expect(gcProjectDetail).toContain("assignment.status === 'invited' && !assignment.initiated_by_gc && gcVerified");
   });
 
   it('adds generic homeowner approval requests for GC recommendations', () => {

@@ -153,6 +153,7 @@ export default function GeneralContractorProjectDetail() {
   const [submittingTerms, setSubmittingTerms] = useState(false);
   const [savingExternalTrade, setSavingExternalTrade] = useState(false);
   const [uploadingExternalDocSlotId, setUploadingExternalDocSlotId] = useState<string | null>(null);
+  const [gcVerified, setGcVerified] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
   const fetchData = useCallback(async () => {
@@ -164,11 +165,12 @@ export default function GeneralContractorProjectDetail() {
       }
       const { data: gc, error: gcError } = await supabase
         .from('general_contractors')
-        .select('id')
+        .select('id, verified')
         .eq('user_id', currentUser.id)
         .maybeSingle();
       if (gcError) throw gcError;
       if (!gc?.id) throw new Error('GC profile not found.');
+      setGcVerified(gc.verified === true);
 
       const [projectResult, slotResult, changeOrderResult, approvalResult] = await Promise.all([
         supabase
@@ -230,6 +232,7 @@ export default function GeneralContractorProjectDetail() {
       setSlots([]);
       setChangeOrders([]);
       setApprovalRequests([]);
+      setGcVerified(false);
     } finally {
       setLoading(false);
       setRefreshing(false);
@@ -249,6 +252,13 @@ export default function GeneralContractorProjectDetail() {
 
   const handleAcceptInvite = async () => {
     if (!assignment?.id) return;
+    if (!gcVerified) {
+      Alert.alert(
+        'Verification required',
+        'WalkerAI must verify your GC profile before you can activate project management.',
+      );
+      return;
+    }
     Alert.alert(
       'Accept management invite?',
       'This activates your GC workspace for the project. The homeowner still approves all major decisions before they take effect.',
@@ -551,7 +561,7 @@ export default function GeneralContractorProjectDetail() {
   const pendingDecisionApprovalRequests = pendingApprovalRequests.slice(0, 5);
   const pendingDecisionChangeOrders = pendingChangeOrders.slice(0, Math.max(0, 5 - pendingDecisionApprovalRequests.length));
   const assignedTrades = slots.filter((slot) => !!getCompanyName(slot)).length;
-  const assignmentIsActive = assignment?.status === 'active';
+  const assignmentIsActive = assignment?.status === 'active' && gcVerified;
   const markupSummary = assignment && project
     ? calculateGcMarkup({
       baseMinCents: project.ai_cost_min,
@@ -632,7 +642,7 @@ export default function GeneralContractorProjectDetail() {
                     </View>
                   ) : null}
                   {assignment.scope_summary ? <Text style={styles.scopeText}>{assignment.scope_summary}</Text> : null}
-                  {assignment.status === 'invited' && !assignment.initiated_by_gc ? (
+                  {assignment.status === 'invited' && !assignment.initiated_by_gc && gcVerified ? (
                     <TouchableOpacity
                       style={[styles.acceptButton, accepting && styles.acceptButtonDisabled]}
                       onPress={handleAcceptInvite}
@@ -644,6 +654,14 @@ export default function GeneralContractorProjectDetail() {
                   ) : assignment.status === 'invited' && assignment.initiated_by_gc ? (
                     <Text style={styles.pendingHomeownerText}>
                       Waiting for the homeowner to confirm GC management before recommendations can be sent.
+                    </Text>
+                  ) : assignment.status === 'invited' && !gcVerified ? (
+                    <Text style={styles.pendingHomeownerText}>
+                      WalkerAI verification is required before you can accept this management invite.
+                    </Text>
+                  ) : assignment.status === 'active' && !gcVerified ? (
+                    <Text style={styles.pendingHomeownerText}>
+                      WalkerAI verification is required before project controls are available.
                     </Text>
                   ) : null}
                 </GlassCard>
