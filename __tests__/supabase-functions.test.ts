@@ -518,6 +518,18 @@ describe('accept-job source guards', () => {
     expect(source).toContain('total_cost: null');
     expect(source).not.toContain('if (lineItems.length > 0)');
   });
+
+  it('requires a manual quote after legacy acceptance when the AI budget is missing', () => {
+    const source = fs.readFileSync(
+      path.join(__dirname, '../supabase/functions/accept-job/index.ts'),
+      'utf8',
+    );
+
+    expect(source).toContain('let autoQuoteCreated = false;');
+    expect(source).toContain('autoQuoteCreated = true;');
+    expect(source).toContain('Job accepted but project AI budget is missing; manual quote is required.');
+    expect(source).toContain('needs_quote: !autoQuoteCreated || warnings.some');
+  });
 });
 
 describe('analyze-photos source guards', () => {

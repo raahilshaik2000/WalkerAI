@@ -376,6 +376,7 @@ Deno.serve(async (req) => {
     }
 
     // Auto-create a quote at the AI price with standard milestones + line items
+    let autoQuoteCreated = false;
     if (project?.ai_cost_min && project?.ai_cost_max) {
       const avgCost = Math.round((project.ai_cost_min + project.ai_cost_max) / 2);
       const deposit    = Math.round(avgCost * 0.30);
@@ -398,6 +399,7 @@ Deno.serve(async (req) => {
       if (quoteError || !quote?.id) {
         warnings.push(`Job accepted but automatic quote creation failed: ${quoteError?.message ?? 'missing quote id'}`);
       } else {
+        autoQuoteCreated = true;
         const { error: milestoneError } = await adminClient.from('milestones').insert([
           { quote_id: quote.id, title: 'Project Deposit',    amount: deposit,    sort_order: 1, status: 'pending' },
           { quote_id: quote.id, title: 'Mid-Project',        amount: midpoint,   sort_order: 2, status: 'pending' },
@@ -453,6 +455,8 @@ Deno.serve(async (req) => {
           warnings.push(`Quote created but line item creation failed: ${lineItemError.message}`);
         }
       }
+    } else {
+      warnings.push('Job accepted but project AI budget is missing; manual quote is required.');
     }
 
     if (project) {
@@ -509,7 +513,7 @@ Deno.serve(async (req) => {
         project_id,
         company_id: company.id,
         warnings,
-        needs_quote: warnings.some((warning) => warning.includes('quote') || warning.includes('milestone')),
+        needs_quote: !autoQuoteCreated || warnings.some((warning) => warning.includes('quote') || warning.includes('milestone')),
       }),
       { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
     );
