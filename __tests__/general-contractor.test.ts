@@ -646,6 +646,8 @@ describe('general contractor account type', () => {
     expect(migration).toContain("'documents_uploaded'");
     expect(migration).toContain('Active GC management is required before adding external trade documents');
     expect(gcProjectDetail).toContain("uploadFile('company-docs'");
+    expect(gcProjectDetail).toContain('Please sign in again before uploading trade documents.');
+    expect(gcProjectDetail).toContain('external-trades/${currentUser.id}/${projectId}/${slot.id}-');
     expect(gcProjectDetail).toContain("supabase.rpc('add_external_trade_document'");
     expect(gcProjectDetail).toContain('Upload docs');
     expect(gcProjectDetail).toContain('No license or insurance documents uploaded');

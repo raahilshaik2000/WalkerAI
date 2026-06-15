@@ -412,8 +412,11 @@ export default function GeneralContractorProjectDetail() {
 
     setUploadingExternalDocSlotId(slot.id);
     try {
+      const currentUser = (await supabase.auth.getUser()).data.user;
+      if (!currentUser?.id) throw new Error('Please sign in again before uploading trade documents.');
+
       const upload = getUploadMetadata(result.assets[0]);
-      const path = `external-trades/${projectId}/${slot.id}-${Date.now()}.${upload.extension}`;
+      const path = `external-trades/${currentUser.id}/${projectId}/${slot.id}-${Date.now()}.${upload.extension}`;
       const { storagePath } = await uploadFile('company-docs', path, upload.uri, upload.contentType);
       const { error } = await supabase.rpc('add_external_trade_document', {
         p_slot_id: slot.id,
