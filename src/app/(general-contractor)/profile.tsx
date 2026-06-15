@@ -207,6 +207,16 @@ export default function GeneralContractorProfile() {
                   <Icon name="chevron-right" size={20} color={Colors.accent} />
                 </TouchableOpacity>
               ) : null}
+              {!setupRoute ? (
+                <GlassButton
+                  label="Edit Business Info"
+                  onPress={() => navigation.navigate('GeneralContractorBusinessOnboarding', { returnToProfile: true })}
+                  fullWidth
+                  size="sm"
+                  variant="secondary"
+                  style={styles.cardButton}
+                />
+              ) : null}
               <GlassButton
                 label={payoutReady ? 'Refresh Payout Setup' : 'Set Up Payouts'}
                 onPress={handlePayoutSetup}

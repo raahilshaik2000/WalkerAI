@@ -10,7 +10,7 @@ import {
   View,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { useNavigation } from '@react-navigation/native';
+import { useNavigation, useRoute } from '@react-navigation/native';
 import Ionicons from 'react-native-vector-icons/Ionicons';
 import { supabase } from '@/lib/supabase/client';
 import { useAuthStore } from '@/stores/auth.store';
@@ -35,7 +35,9 @@ function parsePercent(value: string): number | null {
 
 export default function GeneralContractorBusinessOnboarding() {
   const navigation = useNavigation<any>();
+  const route = useRoute<any>();
   const { user } = useAuthStore();
+  const returnToProfile = route.params?.returnToProfile === true;
   const [businessName, setBusinessName] = useState('');
   const [address, setAddress] = useState('');
   const [city, setCity] = useState('');
@@ -160,7 +162,11 @@ export default function GeneralContractorBusinessOnboarding() {
       const { data, error } = await saveQuery.select('id').maybeSingle();
       if (error) throw error;
       if (!data) throw new Error('General contractor profile was not saved.');
-      navigation.navigate('GeneralContractorLicenseOnboarding');
+      if (returnToProfile) {
+        navigation.navigate('GeneralContractorTabs', { screen: 'GeneralContractorProfile' });
+      } else {
+        navigation.navigate('GeneralContractorLicenseOnboarding');
+      }
     } catch (err) {
       Alert.alert('Error', err instanceof Error ? err.message : 'Failed to save. Please try again.');
     } finally {
@@ -183,10 +189,12 @@ export default function GeneralContractorBusinessOnboarding() {
               ))}
             </View>
 
-            <Text style={styles.stepLabel}>STEP 1 OF 3</Text>
-            <Text style={styles.title}>GC profile</Text>
+            <Text style={styles.stepLabel}>{returnToProfile ? 'PROFILE SETTINGS' : 'STEP 1 OF 3'}</Text>
+            <Text style={styles.title}>{returnToProfile ? 'Edit GC profile' : 'GC profile'}</Text>
             <Text style={styles.subtitle}>
-              Set up your project management and concierge account.
+              {returnToProfile
+                ? 'Update your business details and default project management terms.'
+                : 'Set up your project management and concierge account.'}
             </Text>
 
             <GlassCard style={styles.card}>
@@ -271,7 +279,7 @@ export default function GeneralContractorBusinessOnboarding() {
               </View>
             </GlassCard>
 
-            <GlassButton label="Continue" onPress={handleNext} loading={loading} fullWidth size="lg" />
+            <GlassButton label={returnToProfile ? 'Save Changes' : 'Continue'} onPress={handleNext} loading={loading} fullWidth size="lg" />
           </ScrollView>
         </KeyboardAvoidingView>
       </SafeAreaView>

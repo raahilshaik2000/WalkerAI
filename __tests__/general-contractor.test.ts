@@ -39,6 +39,8 @@ describe('general contractor account type', () => {
     expect(businessOnboarding).toContain('setBusinessName(data.business_name');
     expect(businessOnboarding).toContain('setDefaultMarkup(data.default_markup_pct');
     expect(businessOnboarding).toContain('existing?.id');
+    expect(businessOnboarding).toContain('returnToProfile');
+    expect(businessOnboarding).toContain("navigation.navigate('GeneralContractorTabs', { screen: 'GeneralContractorProfile' })");
   });
 
   it('adds the GC role to registration and root routing without falling through to company', () => {
@@ -688,6 +690,8 @@ describe('general contractor account type', () => {
     expect(migration).toContain('stripe_transfers_active');
     expect(gcProfile).toContain("supabase.functions.invoke('create-connect-account'");
     expect(gcProfile).toContain("role: 'general_contractor'");
+    expect(gcProfile).toContain('Edit Business Info');
+    expect(gcProfile).toContain("navigation.navigate('GeneralContractorBusinessOnboarding', { returnToProfile: true })");
     expect(gcProfile).toContain('Set Up Payouts');
     expect(gcProfile).toContain('isStripePayoutLocallyReady(gc)');
   });
