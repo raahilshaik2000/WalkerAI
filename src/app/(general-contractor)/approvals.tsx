@@ -13,8 +13,8 @@ import { useFocusEffect, useNavigation } from '@react-navigation/native';
 import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
 import { supabase } from '@/lib/supabase/client';
 import { useAuthStore } from '@/stores/auth.store';
-import { formatCad, formatStatusLabel } from '@/lib/formatters';
-import { formatCadCents } from '@/lib/currency';
+import { formatStatusLabel } from '@/lib/formatters';
+import { formatCadCents, formatSignedCadCents } from '@/lib/currency';
 import { formatGcProjectType } from '@/lib/gc-project-type';
 import type { GcConciergeBooking, GcPaymentRequest } from '@/types/database.types';
 import { Colors, Spacing, Typography } from '@/constants/theme';
@@ -356,7 +356,7 @@ export default function GeneralContractorApprovals() {
                           </View>
                           <Text style={styles.costText}>
                             {formatStatusLabel(request.request_type)}
-                            {request.cost_delta != null ? ` · ${formatCad(request.cost_delta)}` : ''}
+                            {request.cost_delta != null ? ` · ${formatSignedCadCents(request.cost_delta)}` : ''}
                             {request.timeline_delta_days != null ? ` · ${request.timeline_delta_days > 0 ? '+' : ''}${request.timeline_delta_days} days` : ''}
                           </Text>
                         </View>
@@ -433,7 +433,7 @@ export default function GeneralContractorApprovals() {
                       </View>
                       <Text style={styles.description}>{approval.description}</Text>
                       {approval.cost_delta != null ? (
-                        <Text style={styles.costText}>Documented cost change: {formatCad(Math.abs(approval.cost_delta))}</Text>
+                        <Text style={styles.costText}>Documented cost change: {formatSignedCadCents(approval.cost_delta)}</Text>
                       ) : null}
                       {needsHomeowner ? (
                         <Text style={styles.waitingText}>Waiting for homeowner approval</Text>

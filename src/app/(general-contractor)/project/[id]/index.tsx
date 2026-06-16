@@ -1224,7 +1224,7 @@ export default function GeneralContractorProjectDetail() {
                           <Text style={styles.rowTitle}>{order.description}</Text>
                           <Text style={styles.rowSub}>
                             {formatStatusLabel(order.status)}
-                            {order.cost_delta != null ? ` · ${formatCad(Math.abs(order.cost_delta))}` : ''}
+                            {order.cost_delta != null ? ` · ${formatSignedCadCents(order.cost_delta)}` : ''}
                           </Text>
                         </View>
                       </View>

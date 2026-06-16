@@ -1407,6 +1407,9 @@ describe('general contractor account type', () => {
     expect(gcApprovals).toContain('formatGcProjectType(approval.project_type, project?.room_type)');
     expect(gcApprovals).toContain('Homeowner approval requests');
     expect(gcApprovals).toContain("navigation.navigate('GeneralContractorProjectDetail'");
+    expect(gcApprovals).toContain("request.cost_delta != null ? ` · ${formatSignedCadCents(request.cost_delta)}` : ''");
+    expect(gcApprovals).toContain('Documented cost change: {formatSignedCadCents(approval.cost_delta)}');
+    expect(gcApprovals).not.toContain('formatCad(Math.abs(approval.cost_delta))');
   });
 
   it('counts modern GC approval requests in project pending decisions', () => {
@@ -1430,6 +1433,8 @@ describe('general contractor account type', () => {
     expect(gcProjectDetail).toContain(".eq('status', 'pending')");
     expect(gcProjectDetail).toContain('No project budget, schedule, trade, material, or completion change will be applied.');
     expect(gcProjectDetail).toContain('disabled={!!cancellingApprovalId}');
+    expect(gcProjectDetail).toContain("order.cost_delta != null ? ` · ${formatSignedCadCents(order.cost_delta)}` : ''");
+    expect(gcProjectDetail).not.toContain('formatCad(Math.abs(order.cost_delta))');
   });
 
   it('routes GC project completion through homeowner approval before closing records', () => {
