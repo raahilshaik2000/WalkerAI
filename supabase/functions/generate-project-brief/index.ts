@@ -24,6 +24,25 @@ function isMissingColumnError(error: { message?: string } | null | undefined) {
   return !!error?.message && /column .* does not exist/i.test(error.message);
 }
 
+async function isActiveGeneralContractorForProject(
+  supabase: ReturnType<typeof createClient>,
+  projectId: string,
+  userId: string,
+) {
+  const { data, error } = await supabase
+    .from('general_contractor_projects')
+    .select('id, general_contractors!inner(user_id, verified)')
+    .eq('project_id', projectId)
+    .eq('status', 'active')
+    .eq('general_contractors.user_id', userId)
+    .eq('general_contractors.verified', true)
+    .limit(1)
+    .maybeSingle();
+
+  if (error) throw error;
+  return !!data;
+}
+
 // CAD cents — regional labour cost baselines
 const CANADIAN_COST_RANGES: Record<string, Record<string, { min: number; max: number }>> = {
   ON: { kitchen: { min: 2500000, max: 7500000 }, bathroom: { min: 800000, max: 2500000 } },
@@ -292,9 +311,20 @@ Deno.serve(async (req) => {
       .eq('id', project_id)
       .single();
 
-    if (projectError || !project || project.homeowner_id !== user.id) {
+    if (projectError || !project) {
       return new Response(JSON.stringify({ error: 'Not found' }), {
         status: 404, headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      });
+    }
+
+    const requesterIsHomeowner = project.homeowner_id === user.id;
+    const requesterIsActiveGc = requesterIsHomeowner
+      ? false
+      : await isActiveGeneralContractorForProject(adminClient, project_id, user.id);
+    if (!requesterIsHomeowner && !requesterIsActiveGc) {
+      return new Response(JSON.stringify({ error: 'Forbidden' }), {
+        status: 403,
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
       });
     }
 

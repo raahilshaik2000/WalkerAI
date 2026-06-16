@@ -189,6 +189,22 @@ describe('generate-project-brief source guards', () => {
     expect(source).not.toContain('if (forced_cost_min !== undefined) brief.ai_cost_min = forced_cost_min;');
     expect(source).not.toContain('if (forced_cost_max !== undefined) brief.ai_cost_max = forced_cost_max;');
   });
+
+  it('allows active GC managers to generate project briefs without making them project owners', () => {
+    const source = fs.readFileSync(
+      path.join(__dirname, '../supabase/functions/generate-project-brief/index.ts'),
+      'utf8',
+    );
+
+    expect(source).toContain('isActiveGeneralContractorForProject');
+    expect(source).toContain(".from('general_contractor_projects')");
+    expect(source).toContain(".eq('status', 'active')");
+    expect(source).toContain(".eq('general_contractors.user_id', userId)");
+    expect(source).toContain(".eq('general_contractors.verified', true)");
+    expect(source).toContain('const requesterIsHomeowner = project.homeowner_id === user.id;');
+    expect(source).toContain('if (!requesterIsHomeowner && !requesterIsActiveGc)');
+    expect(source).toContain("JSON.stringify({ error: 'Forbidden' })");
+  });
 });
 
 describe('generate-trade-slots source guards', () => {
