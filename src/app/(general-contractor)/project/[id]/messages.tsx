@@ -38,27 +38,92 @@ export default function GeneralContractorMessagesScreen() {
   const [messages, setMessages] = useState<Message[]>([]);
   const [body, setBody] = useState('');
   const [sending, setSending] = useState(false);
+  const [canSendMessages, setCanSendMessages] = useState(false);
+  const [composeLockMessage, setComposeLockMessage] = useState('Checking message access...');
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const flatListRef = useRef<FlatList>(null);
 
   useEffect(() => {
+    let cancelled = false;
+
     if (!projectId) {
       setErrorMessage('Project is missing. Reopen messages from the GC project page.');
+      setCanSendMessages(false);
+      setComposeLockMessage('Project is missing. Reopen messages from the GC project page.');
       return;
     }
 
     const load = async () => {
-      const { data, error } = await supabase
-        .from('messages')
-        .select('id, body, sender_id, sent_at, attachment_url')
-        .eq('project_id', projectId)
-        .order('sent_at', { ascending: true });
-      if (error) {
-        setErrorMessage(`Could not load messages: ${error.message}`);
+      const currentUser = user ?? (await supabase.auth.getUser()).data.user;
+      if (!currentUser?.id) {
+        if (!cancelled) {
+          setErrorMessage('You need to be signed in to view project messages.');
+          setCanSendMessages(false);
+          setComposeLockMessage('Sign in to send project messages.');
+        }
         return;
       }
-      setErrorMessage(null);
-      setMessages((data ?? []) as Message[]);
+
+      const [messageResult, gcResult] = await Promise.all([
+        supabase
+          .from('messages')
+          .select('id, body, sender_id, sent_at, attachment_url')
+          .eq('project_id', projectId)
+          .order('sent_at', { ascending: true }),
+        supabase
+          .from('general_contractors')
+          .select('id, verified')
+          .eq('user_id', currentUser.id)
+          .maybeSingle(),
+      ]);
+
+      if (cancelled) return;
+
+      if (messageResult.error) {
+        setErrorMessage(`Could not load messages: ${messageResult.error.message}`);
+      } else {
+        setErrorMessage(null);
+        setMessages((messageResult.data ?? []) as Message[]);
+      }
+
+      if (gcResult.error || !gcResult.data?.id) {
+        setCanSendMessages(false);
+        setComposeLockMessage('GC profile is required before project messages can be sent.');
+        return;
+      }
+
+      const { data: assignment, error: assignmentError } = await supabase
+        .from('general_contractor_projects')
+        .select('status')
+        .eq('project_id', projectId)
+        .eq('general_contractor_id', gcResult.data.id)
+        .in('status', ['invited', 'active', 'completed'])
+        .order('created_at', { ascending: false })
+        .limit(1)
+        .maybeSingle();
+
+      if (cancelled) return;
+
+      if (assignmentError || !assignment) {
+        setCanSendMessages(false);
+        setComposeLockMessage('GC project assignment is required before messages can be sent.');
+        return;
+      }
+
+      if (gcResult.data.verified !== true) {
+        setCanSendMessages(false);
+        setComposeLockMessage('WalkerAI verification is required before GC project messages can be sent.');
+        return;
+      }
+
+      if (!['invited', 'active'].includes(assignment.status)) {
+        setCanSendMessages(false);
+        setComposeLockMessage('This project message thread is read-only for completed GC assignments.');
+        return;
+      }
+
+      setCanSendMessages(true);
+      setComposeLockMessage('');
     };
     load();
 
@@ -75,12 +140,20 @@ export default function GeneralContractorMessagesScreen() {
       })
       .subscribe();
 
-    return () => { supabase.removeChannel(channel); };
-  }, [projectId]);
+    return () => {
+      cancelled = true;
+      supabase.removeChannel(channel);
+    };
+  }, [projectId, user]);
 
   const sendMessage = async () => {
     if (!body.trim() || sending) return;
-    if (!projectId || !user?.id) {
+    if (!canSendMessages) {
+      Alert.alert('Messages locked', composeLockMessage || 'Project messages are currently read-only.');
+      return;
+    }
+    const currentUser = user ?? (await supabase.auth.getUser()).data.user;
+    if (!projectId || !currentUser?.id) {
       Alert.alert('Unable to send', 'Please reopen this project and try again.');
       return;
     }
@@ -90,7 +163,7 @@ export default function GeneralContractorMessagesScreen() {
 
     const { error } = await supabase.from('messages').insert({
       project_id: projectId,
-      sender_id: user.id,
+      sender_id: currentUser.id,
       body: trimmed,
     });
 
@@ -177,19 +250,23 @@ export default function GeneralContractorMessagesScreen() {
           />
 
           <View style={styles.compose}>
+            {!!composeLockMessage && (
+              <Text style={styles.composeLock}>{composeLockMessage}</Text>
+            )}
             <TextInput
               style={styles.input}
               value={body}
               onChangeText={setBody}
-              placeholder="Type a message..."
+              placeholder={canSendMessages ? 'Type a message...' : 'Messages locked'}
               placeholderTextColor={Colors.text.tertiary}
+              editable={canSendMessages && !sending}
               multiline
               maxLength={2000}
             />
             <TouchableOpacity
-              style={[styles.sendBtn, (!body.trim() || sending) && styles.sendBtnDisabled]}
+              style={[styles.sendBtn, (!canSendMessages || !body.trim() || sending) && styles.sendBtnDisabled]}
               onPress={sendMessage}
-              disabled={!body.trim() || sending}
+              disabled={!canSendMessages || !body.trim() || sending}
               activeOpacity={0.85}
             >
               <Ionicons name="arrow-up" size={20} color={Colors.accentFg} />
@@ -256,14 +333,12 @@ const styles = StyleSheet.create({
   emptyState: { flex: 1, alignItems: 'center', justifyContent: 'center', paddingTop: 60, gap: 12 },
   emptyText: { ...Typography.bodySecondary, textAlign: 'center' },
   compose: {
-    flexDirection: 'row',
-    alignItems: 'flex-end',
     padding: Spacing.sm,
     borderTopWidth: 1,
     borderTopColor: Colors.glass.border,
-    gap: 10,
     backgroundColor: Colors.bg.primary,
   },
+  composeLock: { ...Typography.caption, color: Colors.warning, marginBottom: 8 },
   input: {
     flex: 1,
     color: Colors.text.primary,
@@ -272,11 +347,15 @@ const styles = StyleSheet.create({
     borderColor: Colors.glass.border,
     borderRadius: 22,
     paddingHorizontal: 16,
+    paddingRight: 58,
     paddingVertical: 11,
     fontSize: 15,
     maxHeight: 120,
   },
   sendBtn: {
+    position: 'absolute',
+    right: Spacing.sm,
+    bottom: Spacing.sm,
     width: 42,
     height: 42,
     borderRadius: 21,

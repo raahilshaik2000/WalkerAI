@@ -992,6 +992,10 @@ describe('general contractor account type', () => {
       path.join(repoRoot, 'supabase/migrations/20260615001000_allow_gc_project_messages.sql'),
       'utf8',
     );
+    const verificationMigration = fs.readFileSync(
+      path.join(repoRoot, 'supabase/migrations/20260615235914_require_verified_gc_message_writes.sql'),
+      'utf8',
+    );
     const navigator = fs.readFileSync(
       path.join(repoRoot, 'src/navigation/GeneralContractorNavigator.tsx'),
       'utf8',
@@ -1012,10 +1016,17 @@ describe('general contractor account type', () => {
     expect(migration).toContain('messages_project_participants');
     expect(migration).toContain('general_contractor_projects gcp');
     expect(migration).toContain("gcp.status IN ('invited', 'active', 'completed')");
+    expect(verificationMigration).toContain('messages_project_participants_select');
+    expect(verificationMigration).toContain('messages_project_participants_insert');
+    expect(verificationMigration).toContain('sender_id = (SELECT auth.uid())');
+    expect(verificationMigration).toMatch(/gc\.verified IS TRUE[\s\S]*gcp\.status IN \('invited', 'active'\)/);
     expect(navigator).toContain('GeneralContractorMessages');
     expect(gcProjectDetail).toContain("navigation.navigate('GeneralContractorMessages'");
     expect(gcMessages).toContain("from('messages').insert");
     expect(gcMessages).toContain("channel(`gc-messages:${projectId}`)");
+    expect(gcMessages).toContain(".select('id, verified')");
+    expect(gcMessages).toContain('WalkerAI verification is required before GC project messages can be sent.');
+    expect(gcMessages).toContain("placeholder={canSendMessages ? 'Type a message...' : 'Messages locked'}");
     expect(homeownerMessages).toContain(".from('general_contractor_projects')");
     expect(homeownerMessages).toContain("general_contractor:general_contractors(business_name)");
     expect(homeownerMessages).toContain("Messages with your contractors, GC, and project participants");
