@@ -147,6 +147,10 @@ describe('general contractor account type', () => {
       path.join(repoRoot, 'supabase/migrations/20260615000200_allow_homeowners_to_view_verified_gcs.sql'),
       'utf8',
     );
+    const authenticatedPolicyMigration = fs.readFileSync(
+      path.join(repoRoot, 'supabase/migrations/20260616005756_restrict_verified_gc_browsing_to_auth.sql'),
+      'utf8',
+    );
     const discoveryMigration = fs.readFileSync(
       path.join(repoRoot, 'supabase/migrations/20260615002500_general_contractors_for_project.sql'),
       'utf8',
@@ -165,6 +169,11 @@ describe('general contractor account type', () => {
     expect(rootNavigator).toContain("name=\"Concierge\"");
     expect(policyMigration).toContain('verified = TRUE');
     expect(policyMigration).toContain('general_contractors_select_own_or_verified');
+    expect(authenticatedPolicyMigration).toContain('DROP POLICY IF EXISTS "general_contractors_select_own_or_verified"');
+    expect(authenticatedPolicyMigration).toContain('FOR SELECT TO authenticated');
+    expect(authenticatedPolicyMigration).toContain('OR verified = TRUE');
+    expect(authenticatedPolicyMigration).toContain('REVOKE SELECT ON public.general_contractors FROM anon');
+    expect(authenticatedPolicyMigration).toContain('GRANT SELECT ON public.general_contractors TO authenticated');
     expect(discoveryMigration).toContain('CREATE OR REPLACE FUNCTION public.general_contractors_for_project');
     expect(discoveryMigration).toContain('ST_DWithin(gc.location, target_project.project_geography, gc.service_radius_km * 1000)');
     expect(discoveryMigration).toContain('distance_km');
