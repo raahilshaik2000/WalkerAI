@@ -489,6 +489,20 @@ describe('gc-concierge-payout source guards', () => {
 });
 
 describe('release-milestone source guards', () => {
+  it('allows externally managed trade slots to close out without WalkerAI quote funding', () => {
+    const source = fs.readFileSync(
+      path.join(__dirname, '../supabase/functions/release-milestone/index.ts'),
+      'utf8',
+    );
+
+    expect(source).toContain(".select('id, assigned_company_id, status, fulfillment_type')");
+    expect(source).toContain("const externalSlotsReady = requiredSlots");
+    expect(source).toContain("slot.fulfillment_type === 'external'");
+    expect(source).toContain("const quoteRequiredSlots = requiredSlots.filter((slot) => slot.fulfillment_type !== 'external');");
+    expect(source).toContain('if (quoteRequiredSlots.length === 0) return true;');
+    expect(source).toContain('return quoteRequiredSlots.every((slot) => (');
+  });
+
   it('limits the active dispute lookup before maybeSingle', () => {
     const source = fs.readFileSync(
       path.join(__dirname, '../supabase/functions/release-milestone/index.ts'),
