@@ -1298,6 +1298,9 @@ describe('general contractor account type', () => {
     expect(gcCompletion).toContain("from('gc_payment_requests')");
     expect(gcCompletion).toContain(".eq('general_contractor_id', gc.id)");
     expect(gcCompletion).toContain("from('change_orders')");
+    expect(gcCompletion).toContain("import type { ChangeOrder } from '@/types/database.types'");
+    expect(gcCompletion).toContain('useState<ChangeOrder[]>([])');
+    expect(gcCompletion).toContain('id, project_id, company_id, description, cost_delta, status, signed_by_homeowner, signed_by_company, created_at');
     expect(gcCompletion).toContain('const pendingChangeOrders = changeOrders.filter');
     expect(gcCompletion).toContain("order.status === 'proposed' && order.signed_by_company && !order.signed_by_homeowner");
     expect(gcCompletion).toContain('+ pendingChangeOrders');

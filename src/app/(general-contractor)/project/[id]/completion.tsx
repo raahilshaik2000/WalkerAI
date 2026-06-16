@@ -19,6 +19,7 @@ import { formatGcProjectType } from '@/lib/gc-project-type';
 import { getRequiredStringParam } from '@/lib/navigation-params';
 import { Colors, Spacing, Typography } from '@/constants/theme';
 import { GlassButton, GlassCard, GradientBackground, StatusBadge } from '@/components/ui';
+import type { ChangeOrder } from '@/types/database.types';
 
 interface ProjectSummary {
   id: string;
@@ -63,13 +64,6 @@ interface PaymentRequestRecord {
   amount_cents: number;
 }
 
-interface ChangeOrderRecord {
-  id: string;
-  status: string;
-  signed_by_homeowner: boolean;
-  signed_by_company: boolean;
-}
-
 interface AssignmentRecord {
   id: string;
   status: string;
@@ -96,7 +90,7 @@ export default function GeneralContractorCompletionScreen() {
   const [materialOrders, setMaterialOrders] = useState<MaterialOrderRecord[]>([]);
   const [approvals, setApprovals] = useState<ApprovalRecord[]>([]);
   const [paymentRequests, setPaymentRequests] = useState<PaymentRequestRecord[]>([]);
-  const [changeOrders, setChangeOrders] = useState<ChangeOrderRecord[]>([]);
+  const [changeOrders, setChangeOrders] = useState<ChangeOrder[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [submittingCompletion, setSubmittingCompletion] = useState(false);
@@ -154,7 +148,7 @@ export default function GeneralContractorCompletionScreen() {
           .order('created_at', { ascending: false }),
         supabase
           .from('change_orders')
-          .select('id, status, signed_by_homeowner, signed_by_company')
+          .select('id, project_id, company_id, description, cost_delta, status, signed_by_homeowner, signed_by_company, created_at')
           .eq('project_id', projectId)
           .order('created_at', { ascending: false }),
       ]);
@@ -174,7 +168,7 @@ export default function GeneralContractorCompletionScreen() {
       setMaterialOrders((materialResult.data ?? []) as MaterialOrderRecord[]);
       setApprovals((approvalResult.data ?? []) as ApprovalRecord[]);
       setPaymentRequests((paymentResult.data ?? []) as PaymentRequestRecord[]);
-      setChangeOrders((changeOrderResult.data ?? []) as ChangeOrderRecord[]);
+      setChangeOrders((changeOrderResult.data ?? []) as ChangeOrder[]);
 
       const { data: assignmentRow, error: assignmentError } = await supabase
         .from('general_contractor_projects')

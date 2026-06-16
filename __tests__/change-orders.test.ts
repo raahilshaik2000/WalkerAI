@@ -21,7 +21,11 @@ describe('change-order workflow copy', () => {
     expect(homeownerChangeOrders).toContain('does not automatically update funded escrow or milestone payments');
     expect(homeownerChangeOrders).toContain('does not automatically change funded escrow or milestone payments');
     expect(homeownerChangeOrders).toContain('Documented cost change');
+    expect(homeownerChangeOrders).toContain("import type { ChangeOrder } from '@/types/database.types'");
+    expect(homeownerChangeOrders).toContain('id, project_id, company_id, description, cost_delta, status, signed_by_homeowner, signed_by_company, created_at');
     expect(companyChangeOrders).toContain('funded escrow and milestone payments are not updated automatically');
     expect(companyChangeOrders).toContain('Documented only; escrow is not adjusted automatically.');
+    expect(companyChangeOrders).toContain("import type { ChangeOrder } from '@/types/database.types'");
+    expect(companyChangeOrders).toContain('id, project_id, company_id, description, cost_delta, status, signed_by_homeowner, signed_by_company, created_at');
   });
 });

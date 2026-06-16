@@ -20,23 +20,13 @@ import { formatSignedCadCents, parseSignedCadToCents } from '@/lib/currency';
 import { formatStatusLabel } from '@/lib/formatters';
 import { getRequiredStringParam } from '@/lib/navigation-params';
 import { GlassButton, GlassCard, GlassInput, GradientBackground, StatusBadge } from '@/components/ui';
-
-interface ChangeOrder {
-  id: string;
-  company_id: string | null;
-  description: string;
-  cost_delta: number | null;
-  status: string;
-  signed_by_homeowner: boolean;
-  signed_by_company: boolean;
-  created_at: string;
-}
+import type { ChangeOrder } from '@/types/database.types';
 
 const CHANGE_ORDER_SELECT_WITH_COMPANY =
-  'id, company_id, description, cost_delta, status, signed_by_homeowner, signed_by_company, created_at';
+  'id, project_id, company_id, description, cost_delta, status, signed_by_homeowner, signed_by_company, created_at';
 
 const CHANGE_ORDER_SELECT_LEGACY =
-  'id, description, cost_delta, status, signed_by_homeowner, signed_by_company, created_at';
+  'id, project_id, description, cost_delta, status, signed_by_homeowner, signed_by_company, created_at';
 
 function isMissingChangeOrderCompanyColumn(error: { message?: string } | null | undefined) {
   const message = error?.message ?? '';

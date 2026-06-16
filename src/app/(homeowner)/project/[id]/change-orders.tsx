@@ -16,17 +16,7 @@ import { Colors, Radius, Spacing, Typography } from '@/constants/theme';
 import { formatSignedCadCents } from '@/lib/currency';
 import { getRequiredStringParam } from '@/lib/navigation-params';
 import { GlassButton, GlassCard, GradientBackground, StatusBadge } from '@/components/ui';
-
-interface ChangeOrder {
-  id: string;
-  company_id: string | null;
-  description: string;
-  cost_delta: number | null;
-  status: string;
-  signed_by_homeowner: boolean;
-  signed_by_company: boolean;
-  created_at: string;
-}
+import type { ChangeOrder } from '@/types/database.types';
 
 function statusVariant(status: string): 'pending' | 'active' | 'completed' | 'error' {
   if (status === 'approved') return 'completed';
@@ -52,7 +42,7 @@ export default function HomeownerChangeOrdersScreen() {
 
     const { data, error } = await supabase
       .from('change_orders')
-      .select('id, company_id, description, cost_delta, status, signed_by_homeowner, signed_by_company, created_at')
+      .select('id, project_id, company_id, description, cost_delta, status, signed_by_homeowner, signed_by_company, created_at')
       .eq('project_id', projectId)
       .order('created_at', { ascending: false });
     if (error) {
