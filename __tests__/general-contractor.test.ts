@@ -483,6 +483,10 @@ describe('general contractor account type', () => {
       path.join(repoRoot, 'supabase/migrations/20260616000856_require_verified_gc_payment_approval.sql'),
       'utf8',
     );
+    const tradeAcceptanceMigration = fs.readFileSync(
+      path.join(repoRoot, 'supabase/migrations/20260616001136_require_verified_gc_trade_acceptance.sql'),
+      'utf8',
+    );
 
     expect(migration).toContain('CREATE OR REPLACE FUNCTION public.guard_gc_payment_request_updates()');
     expect(migration).toContain("IF NEW.status IN ('approved', 'rejected') THEN");
@@ -506,6 +510,12 @@ describe('general contractor account type', () => {
     expect(migration).toContain('Only the requesting GC can cancel a GC trade negotiation');
     expect(migration).toContain('GC trade negotiation cancellations must include a cancellation timestamp');
     expect(migration).toContain('GC trade negotiation cancellations cannot include response details');
+    expect(tradeAcceptanceMigration).toContain('CREATE OR REPLACE FUNCTION public.guard_gc_trade_negotiation_updates()');
+    expect(tradeAcceptanceMigration).toContain("NEW.status = 'accepted'");
+    expect(tradeAcceptanceMigration).toContain('JOIN public.general_contractors gc ON gc.id = gcp.general_contractor_id');
+    expect(tradeAcceptanceMigration).toContain("gcp.status = 'active'");
+    expect(tradeAcceptanceMigration).toContain('gc.verified IS TRUE');
+    expect(tradeAcceptanceMigration).toContain('Active verified GC management is required before accepting a GC trade negotiation');
   });
 
   it('requires GC approval, payment, and trade requests to start pending', () => {
@@ -1328,8 +1338,12 @@ describe('general contractor account type', () => {
     expect(gcTrades).toContain("from('gc_trade_quote_negotiations').insert");
     expect(gcTrades).toContain('Counteroffer / revision request');
     expect(companyJob).toContain("from('gc_trade_quote_negotiations')");
+    expect(companyJob).toContain('general_contractors(business_name, verified)');
     expect(companyJob).toContain("supabase.rpc('respond_to_gc_trade_quote_negotiation'");
     expect(companyJob).toContain('GC quote negotiation');
+    expect(companyJob).toContain("status === 'accepted' && !gcVerified");
+    expect(companyJob).toContain('Active verified GC management is required before a counteroffer can be accepted.');
+    expect(companyJob).toContain('disabled={!gcVerified || !!respondingNegotiationId}');
     expect(companyJob).toContain('Counteroffer accepted');
     expect(companyJob).toContain('Build Updated Quote');
     expect(companyJob).toContain('accepted_counteroffer_cents');

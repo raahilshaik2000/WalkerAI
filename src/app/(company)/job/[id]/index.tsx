@@ -46,10 +46,15 @@ function formatLocation(address?: string | null, city?: string | null) {
   return address || city || 'Location pending';
 }
 
-function getNegotiationGcName(negotiation: TradeNegotiation) {
+function getNegotiationGcProfile(negotiation: TradeNegotiation) {
   const gc = Array.isArray(negotiation.general_contractors)
     ? negotiation.general_contractors[0]
     : negotiation.general_contractors;
+  return gc ?? null;
+}
+
+function getNegotiationGcName(negotiation: TradeNegotiation) {
+  const gc = getNegotiationGcProfile(negotiation);
   return gc?.business_name ?? 'GC';
 }
 
@@ -97,7 +102,7 @@ interface TradeNegotiation {
   scope_note: string;
   status: string;
   created_at: string;
-  general_contractors?: { business_name: string | null } | Array<{ business_name: string | null }> | null;
+  general_contractors?: { business_name: string | null; verified: boolean | null } | Array<{ business_name: string | null; verified: boolean | null }> | null;
 }
 
 async function fetchCompanyPayoutProfile(userId: string): Promise<CompanyPayoutProfile | null> {
@@ -230,7 +235,7 @@ export default function JobBriefScreen() {
 
       const negotiationQuery = supabase
         .from('gc_trade_quote_negotiations')
-        .select('id, quote_id, slot_id, offer_amount_cents, scope_note, status, created_at, general_contractors(business_name)')
+        .select('id, quote_id, slot_id, offer_amount_cents, scope_note, status, created_at, general_contractors(business_name, verified)')
         .eq('project_id', projectId)
         .eq('company_id', companyId)
         .eq('status', 'pending')
@@ -328,6 +333,12 @@ export default function JobBriefScreen() {
     negotiation: TradeNegotiation,
     status: 'accepted' | 'rejected' | 'revision_requested',
   ) => {
+    const gcVerified = getNegotiationGcProfile(negotiation)?.verified === true;
+    if (status === 'accepted' && !gcVerified) {
+      Alert.alert('Negotiation locked', 'Active verified GC management is required before a counteroffer can be accepted.');
+      return;
+    }
+
     const label = status === 'accepted' ? 'Accept counteroffer?' : status === 'rejected' ? 'Reject request?' : 'Request revision?';
     const message = status === 'accepted'
       ? 'The GC will be notified. Submit an updated quote if the homeowner-facing amount or milestones need to change.'
@@ -571,52 +582,60 @@ export default function JobBriefScreen() {
               {tradeNegotiations.length > 0 ? (
                 <TradeSection title="GC quote negotiation">
                   <TradePanel style={styles.card}>
-                    {tradeNegotiations.map((negotiation, index) => (
-                      <View
-                        key={negotiation.id}
-                        style={[styles.negotiationItem, index < tradeNegotiations.length - 1 && styles.negotiationBorder]}
-                      >
-                        <View style={styles.negotiationHeader}>
-                          <View style={styles.negotiationIcon}>
-                            <Icon name="account-tie-outline" size={18} color={Colors.accent} />
+                    {tradeNegotiations.map((negotiation, index) => {
+                      const gcVerified = getNegotiationGcProfile(negotiation)?.verified === true;
+                      return (
+                        <View
+                          key={negotiation.id}
+                          style={[styles.negotiationItem, index < tradeNegotiations.length - 1 && styles.negotiationBorder]}
+                        >
+                          <View style={styles.negotiationHeader}>
+                            <View style={styles.negotiationIcon}>
+                              <Icon name="account-tie-outline" size={18} color={Colors.accent} />
+                            </View>
+                            <View style={styles.negotiationBody}>
+                              <Text style={styles.negotiationTitle}>{getNegotiationGcName(negotiation)}</Text>
+                              <Text style={styles.negotiationMeta}>
+                                {negotiation.offer_amount_cents ? `Counter: ${formatCad(negotiation.offer_amount_cents)}` : 'Scope revision requested'}
+                              </Text>
+                            </View>
+                            <StatusBadge label="Pending" variant="pending" dot />
                           </View>
-                          <View style={styles.negotiationBody}>
-                            <Text style={styles.negotiationTitle}>{getNegotiationGcName(negotiation)}</Text>
-                            <Text style={styles.negotiationMeta}>
-                              {negotiation.offer_amount_cents ? `Counter: ${formatCad(negotiation.offer_amount_cents)}` : 'Scope revision requested'}
+                          <Text style={styles.negotiationNote}>{negotiation.scope_note}</Text>
+                          {!gcVerified ? (
+                            <Text style={styles.negotiationLockedText}>
+                              Active verified GC management is required before this counteroffer can be accepted.
                             </Text>
+                          ) : null}
+                          <View style={styles.negotiationActions}>
+                            <GlassButton
+                              label="Accept"
+                              onPress={() => handleNegotiationResponse(negotiation, 'accepted')}
+                              loading={respondingNegotiationId === negotiation.id}
+                              disabled={!gcVerified || !!respondingNegotiationId}
+                              size="sm"
+                              style={styles.negotiationAction}
+                            />
+                            <GlassButton
+                              label="Revise"
+                              onPress={() => handleNegotiationResponse(negotiation, 'revision_requested')}
+                              disabled={!!respondingNegotiationId}
+                              size="sm"
+                              variant="secondary"
+                              style={styles.negotiationAction}
+                            />
+                            <GlassButton
+                              label="Reject"
+                              onPress={() => handleNegotiationResponse(negotiation, 'rejected')}
+                              disabled={!!respondingNegotiationId}
+                              size="sm"
+                              variant="secondary"
+                              style={styles.negotiationAction}
+                            />
                           </View>
-                          <StatusBadge label="Pending" variant="pending" dot />
                         </View>
-                        <Text style={styles.negotiationNote}>{negotiation.scope_note}</Text>
-                        <View style={styles.negotiationActions}>
-                          <GlassButton
-                            label="Accept"
-                            onPress={() => handleNegotiationResponse(negotiation, 'accepted')}
-                            loading={respondingNegotiationId === negotiation.id}
-                            disabled={!!respondingNegotiationId}
-                            size="sm"
-                            style={styles.negotiationAction}
-                          />
-                          <GlassButton
-                            label="Revise"
-                            onPress={() => handleNegotiationResponse(negotiation, 'revision_requested')}
-                            disabled={!!respondingNegotiationId}
-                            size="sm"
-                            variant="secondary"
-                            style={styles.negotiationAction}
-                          />
-                          <GlassButton
-                            label="Reject"
-                            onPress={() => handleNegotiationResponse(negotiation, 'rejected')}
-                            disabled={!!respondingNegotiationId}
-                            size="sm"
-                            variant="secondary"
-                            style={styles.negotiationAction}
-                          />
-                        </View>
-                      </View>
-                    ))}
+                      );
+                    })}
                   </TradePanel>
                 </TradeSection>
               ) : null}
@@ -730,6 +749,7 @@ const styles = StyleSheet.create({
   negotiationTitle: { ...Typography.body, fontWeight: '800' },
   negotiationMeta: { ...Typography.caption, marginTop: 2 },
   negotiationNote: { ...Typography.bodySecondary, lineHeight: 21, marginTop: 10 },
+  negotiationLockedText: { ...Typography.caption, color: Colors.warning, lineHeight: 18, marginTop: 10 },
   negotiationActions: { flexDirection: 'row', gap: 8, marginTop: 12 },
   negotiationAction: { flex: 1 },
   actionGrid: {
