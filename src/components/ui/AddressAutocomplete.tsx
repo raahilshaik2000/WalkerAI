@@ -1,7 +1,6 @@
 import React, { useEffect, useRef, useState } from 'react';
 import {
   ActivityIndicator,
-  FlatList,
   StyleProp,
   StyleSheet,
   Text,
@@ -160,27 +159,25 @@ export function AddressAutocomplete({
       </View>
 
       {results.length > 0 && (
-        <FlatList
-          data={results}
-          keyExtractor={(item) => String(item.place_id)}
-          style={styles.listView}
-          keyboardShouldPersistTaps="handled"
-          renderItem={({ item }) => {
+        <View style={styles.listView}>
+          {results.map((item, index) => {
             const parts = item.display_name.split(', ');
             const primary = parts.slice(0, 2).join(', ');
             const secondary = parts.slice(2, -1).join(', '); // drop Canada
             return (
-              <TouchableOpacity style={styles.row} onPress={() => handleSelect(item)} activeOpacity={0.7}>
-                <Ionicons name="location" size={14} color="#FF6B00" style={styles.rowIcon} />
-                <View style={styles.rowText}>
-                  <Text style={styles.rowPrimary} numberOfLines={1}>{primary}</Text>
-                  {secondary ? <Text style={styles.rowSecondary} numberOfLines={1}>{secondary}</Text> : null}
-                </View>
-              </TouchableOpacity>
+              <React.Fragment key={item.place_id}>
+                <TouchableOpacity style={styles.row} onPress={() => handleSelect(item)} activeOpacity={0.7}>
+                  <Ionicons name="location" size={14} color="#FF6B00" style={styles.rowIcon} />
+                  <View style={styles.rowText}>
+                    <Text style={styles.rowPrimary} numberOfLines={1}>{primary}</Text>
+                    {secondary ? <Text style={styles.rowSecondary} numberOfLines={1}>{secondary}</Text> : null}
+                  </View>
+                </TouchableOpacity>
+                {index < results.length - 1 ? <View style={styles.separator} /> : null}
+              </React.Fragment>
             );
-          }}
-          ItemSeparatorComponent={() => <View style={styles.separator} />}
-        />
+          })}
+        </View>
       )}
     </View>
   );

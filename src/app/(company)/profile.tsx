@@ -129,7 +129,7 @@ export default function CompanyProfileScreen() {
   const navigation = useNavigation<any>();
   const [company, setCompany] = useState<Company | null>(null);
   const [earnings, setEarnings] = useState<EarningsSummary>({ total_paid: 0, active_count: 0, completed_count: 0 });
-  const [, setLoading] = useState(true);
+  const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
@@ -301,6 +301,11 @@ export default function CompanyProfileScreen() {
               <Text style={styles.sectionLabel}>Profile unavailable</Text>
               <Text style={styles.infoVal}>{errorMessage}</Text>
             </GlassCard>
+          ) : loading ? (
+            <GlassCard style={styles.card}>
+              <Text style={styles.sectionLabel}>Profile</Text>
+              <Text style={styles.infoVal}>Loading company profile...</Text>
+            </GlassCard>
           ) : !company ? (
             <GlassCard style={styles.card}>
               <Text style={styles.sectionLabel}>Contractor setup</Text>
@@ -322,11 +327,11 @@ export default function CompanyProfileScreen() {
                 </Text>
               </View>
               <View style={styles.identityBody}>
-                <Text style={styles.companyName}>{company?.name ?? 'Your Company'}</Text>
+                <Text style={styles.companyName}>{loading ? 'Loading company...' : company?.name ?? 'Your Company'}</Text>
                 <Text style={styles.email}>{user?.email}</Text>
-                {company?.verified ? (
+                {!loading && company?.verified ? (
                   <StatusBadge label="Verified" variant="completed" size="sm" dot />
-                ) : setupRoute ? (
+                ) : !loading && setupRoute ? (
                   <TouchableOpacity
                     style={styles.continueSetupBtn}
                     onPress={() => navigation.navigate(setupRoute)}
@@ -334,9 +339,9 @@ export default function CompanyProfileScreen() {
                   >
                     <Text style={styles.continueSetupText}>Continue setup</Text>
                   </TouchableOpacity>
-                ) : (
+                ) : !loading ? (
                   <StatusBadge label="Pending verification" variant="pending" size="sm" />
-                )}
+                ) : null}
               </View>
             </View>
 

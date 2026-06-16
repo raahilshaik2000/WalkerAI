@@ -70,6 +70,30 @@ describe('general contractor account type', () => {
     expect(gcRoleMigration).toContain('New GC users use this separate concierge/GC role and profile table.');
   });
 
+  it('does not show setup fallbacks before verified trade profile queries resolve', () => {
+    const companyProfile = fs.readFileSync(
+      path.join(repoRoot, 'src/app/(company)/profile.tsx'),
+      'utf8',
+    );
+    const gcProfile = fs.readFileSync(
+      path.join(repoRoot, 'src/app/(general-contractor)/profile.tsx'),
+      'utf8',
+    );
+
+    expect(companyProfile).toContain('const [loading, setLoading] = useState(true);');
+    expect(companyProfile).toContain(') : loading ? (');
+    expect(companyProfile).toContain('Loading company profile...');
+    expect(companyProfile.indexOf(') : loading ? (')).toBeLessThan(
+      companyProfile.indexOf(') : !company ? ('),
+    );
+    expect(companyProfile).toContain("{loading ? 'Loading company...' : company?.name ?? 'Your Company'}");
+    expect(companyProfile).toContain('!loading && company?.verified');
+    expect(companyProfile).toContain('!loading && setupRoute');
+    expect(gcProfile).toContain("{loading ? 'Loading GC profile...' : gc?.business_name ?? 'General Contractor'}");
+    expect(gcProfile).toContain('!loading && gc?.verified');
+    expect(gcProfile).toContain('!loading && setupRoute');
+  });
+
   it('preloads existing GC document setup fields when onboarding is resumed', () => {
     const licenseOnboarding = fs.readFileSync(
       path.join(repoRoot, 'src/app/(general-contractor)/onboarding/license.tsx'),

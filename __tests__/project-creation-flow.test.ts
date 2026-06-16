@@ -46,6 +46,8 @@ describe('project creation flow guards', () => {
     expect(addressSource).not.toContain('address: transcript');
     expect(autocompleteSource).toContain('voiceQueryKey');
     expect(autocompleteSource).toContain('nominatim.openstreetmap.org/search');
+    expect(autocompleteSource).not.toContain('FlatList');
+    expect(autocompleteSource).toContain('results.map((item, index)');
   });
 
   it('disables voice controls when the native voice module is unavailable', () => {

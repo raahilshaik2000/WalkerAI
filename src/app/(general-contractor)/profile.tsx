@@ -159,11 +159,11 @@ export default function GeneralContractorProfile() {
                 </Text>
               </View>
               <View style={styles.identityBody}>
-                <Text style={styles.businessName}>{gc?.business_name ?? 'General Contractor'}</Text>
+                <Text style={styles.businessName}>{loading ? 'Loading GC profile...' : gc?.business_name ?? 'General Contractor'}</Text>
                 <Text style={styles.email}>{user?.email}</Text>
-                {gc?.verified ? (
+                {!loading && gc?.verified ? (
                   <StatusBadge label="Verified GC" variant="completed" size="sm" dot />
-                ) : setupRoute ? (
+                ) : !loading && setupRoute ? (
                   <TouchableOpacity
                     style={styles.continueSetupBtn}
                     onPress={() => navigation.navigate(setupRoute)}
@@ -171,9 +171,9 @@ export default function GeneralContractorProfile() {
                   >
                     <Text style={styles.continueSetupText}>Continue setup</Text>
                   </TouchableOpacity>
-                ) : (
+                ) : !loading ? (
                   <StatusBadge label="Pending review" variant="pending" size="sm" />
-                )}
+                ) : null}
               </View>
             </View>
           </GlassCard>
