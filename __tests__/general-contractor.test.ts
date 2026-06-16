@@ -97,6 +97,46 @@ describe('general contractor account type', () => {
     expect(insuranceOnboarding).not.toContain('until native upload is wired');
   });
 
+  it('scopes shared document storage paths to the matching account type', () => {
+    const migration = fs.readFileSync(
+      path.join(repoRoot, 'supabase/migrations/20260616010242_scope_company_docs_by_account_type.sql'),
+      'utf8',
+    );
+    const companyLicense = fs.readFileSync(
+      path.join(repoRoot, 'src/app/(company)/onboarding/license.tsx'),
+      'utf8',
+    );
+    const supplierLicense = fs.readFileSync(
+      path.join(repoRoot, 'src/app/(supplier)/onboarding/license.tsx'),
+      'utf8',
+    );
+    const gcLicense = fs.readFileSync(
+      path.join(repoRoot, 'src/app/(general-contractor)/onboarding/license.tsx'),
+      'utf8',
+    );
+    const gcProjectDetail = fs.readFileSync(
+      path.join(repoRoot, 'src/app/(general-contractor)/project/[id]/index.tsx'),
+      'utf8',
+    );
+
+    expect(migration).toContain('CREATE OR REPLACE FUNCTION public.can_access_company_doc_path');
+    expect(migration).toContain("current_user_role.role = 'company'");
+    expect(migration).toContain('path.segment_1 = (SELECT auth.uid())::text');
+    expect(migration).toContain("current_user_role.role = 'supplier'");
+    expect(migration).toContain("path.segment_1 = 'supplier-licenses'");
+    expect(migration).toContain("current_user_role.role = 'general_contractor'");
+    expect(migration).toContain("path.segment_1 = 'general-contractors'");
+    expect(migration).toContain("path.segment_1 = 'external-trades'");
+    expect(migration).toContain('gc.verified IS TRUE');
+    expect(migration).toContain("gcp.status = 'active'");
+    expect(migration).toContain('public.can_access_company_doc_path(name)');
+    expect(migration).toContain('GRANT EXECUTE ON FUNCTION public.can_access_company_doc_path(TEXT) TO authenticated');
+    expect(companyLicense).toContain('const path = `${user.id}/license-${Date.now()}.${upload.extension}`');
+    expect(supplierLicense).toContain('supplier-licenses/${user.id}/license');
+    expect(gcLicense).toContain('general-contractors/${user.id}/license-');
+    expect(gcProjectDetail).toContain('external-trades/${currentUser.id}/${projectId}');
+  });
+
   it('adds the GC role to registration and root routing without falling through to company', () => {
     const register = fs.readFileSync(path.join(repoRoot, 'src/app/(auth)/register.tsx'), 'utf8');
     const rootNavigator = fs.readFileSync(path.join(repoRoot, 'src/navigation/RootNavigator.tsx'), 'utf8');
