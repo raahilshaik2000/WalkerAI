@@ -13,6 +13,7 @@ import Ionicons from 'react-native-vector-icons/Ionicons';
 import LinearGradient from 'react-native-linear-gradient';
 import { useNavigation } from '@react-navigation/native';
 import { supabase } from '@/lib/supabase/client';
+import { isMissingSupabaseSchemaObjectError } from '@/lib/supabase/errors';
 import { formatGcProjectType } from '@/lib/gc-project-type';
 import { useAuthStore } from '@/stores/auth.store';
 import { AnimatedPressable, GlassButton } from '@/components/ui';
@@ -122,8 +123,12 @@ export function ProjectsCarousel({ refreshKey = 0, onRefreshDone }: { refreshKey
           .neq('status', 'removed')
           .order('created_at', { ascending: false });
         if (gcContextError) {
-          setProjects([]);
-          setErrorMessage(gcContextError.message);
+          if (!isMissingSupabaseSchemaObjectError(gcContextError, 'general_contractor_projects')) {
+            setProjects([]);
+            setErrorMessage(gcContextError.message);
+            return;
+          }
+          setProjects(projectList);
           return;
         }
 

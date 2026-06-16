@@ -13,6 +13,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { useNavigation } from '@react-navigation/native'
 import { useRoute } from '@react-navigation/native';
 import { supabase } from '@/lib/supabase/client';
+import { isMissingSupabaseSchemaObjectError } from '@/lib/supabase/errors';
 import { restartProjectDispatch } from '@/lib/project-dispatch';
 import { getRequiredStringParam } from '@/lib/navigation-params';
 import { formatGcProjectType } from '@/lib/gc-project-type';
@@ -211,18 +212,20 @@ export default function ProjectDetailScreen() {
       return;
     }
     if (gcContextResult.error) {
-      setErrorMessage(`Could not load GC project context: ${gcContextResult.error.message}`);
-      setProject(null);
-      setGcProjectContext(null);
-      setAssignedTradeSlots([]);
-      setLoading(false);
-      return;
+      if (!isMissingSupabaseSchemaObjectError(gcContextResult.error, 'general_contractor_projects')) {
+        setErrorMessage(`Could not load GC project context: ${gcContextResult.error.message}`);
+        setProject(null);
+        setGcProjectContext(null);
+        setAssignedTradeSlots([]);
+        setLoading(false);
+        return;
+      }
     }
 
     const row = projectResult.data as ProjectRow | null;
     const slotRows = (slotsResult.data ?? []) as AssignedTradeSlotRow[];
     setErrorMessage(null);
-    setGcProjectContext((gcContextResult.data as GcProjectContext | null) ?? null);
+    setGcProjectContext(gcContextResult.error ? null : (gcContextResult.data as GcProjectContext | null) ?? null);
     setProject(row
       ? {
           ...row,

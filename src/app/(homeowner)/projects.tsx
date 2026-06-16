@@ -19,6 +19,7 @@ import { AnimatedPressable, GlassButton, GradientBackground } from '@/components
 import { ProgressRing } from '@/components/dashboard/ProgressRing';
 import { Colors, Radius } from '@/constants/theme';
 import { supabase } from '@/lib/supabase/client';
+import { isMissingSupabaseSchemaObjectError } from '@/lib/supabase/errors';
 import { formatGcProjectType } from '@/lib/gc-project-type';
 import { useAuthStore } from '@/stores/auth.store';
 import { useDIYWizardStore, type DIYGuide } from '@/stores/diy-wizard.store';
@@ -243,18 +244,22 @@ export default function HomeownerProjects() {
           .in('project_id', ids)
           .neq('status', 'removed')
           .order('created_at', { ascending: false });
-        if (gcContextError) throw gcContextError;
-
-        const gcProjectTypes = new Map<string, string | null>();
-        ((gcContextData ?? []) as GcProjectContextRow[]).forEach((row) => {
-          if (!gcProjectTypes.has(row.project_id)) {
-            gcProjectTypes.set(row.project_id, row.project_type);
+        if (gcContextError) {
+          if (!isMissingSupabaseSchemaObjectError(gcContextError, 'general_contractor_projects')) {
+            throw gcContextError;
           }
-        });
-        projectList = projectList.map((project) => ({
-          ...project,
-          gc_project_type: gcProjectTypes.get(project.id) ?? null,
-        }));
+        } else {
+          const gcProjectTypes = new Map<string, string | null>();
+          ((gcContextData ?? []) as GcProjectContextRow[]).forEach((row) => {
+            if (!gcProjectTypes.has(row.project_id)) {
+              gcProjectTypes.set(row.project_id, row.project_type);
+            }
+          });
+          projectList = projectList.map((project) => ({
+            ...project,
+            gc_project_type: gcProjectTypes.get(project.id) ?? null,
+          }));
+        }
       }
       setProjects(projectList);
 

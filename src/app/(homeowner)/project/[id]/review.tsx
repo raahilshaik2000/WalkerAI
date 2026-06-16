@@ -13,6 +13,7 @@ import { useNavigation } from '@react-navigation/native'
 import { useRoute } from '@react-navigation/native';
 import ReactNativeHapticFeedback from 'react-native-haptic-feedback';
 import { supabase } from '@/lib/supabase/client';
+import { isMissingSupabaseSchemaObjectError } from '@/lib/supabase/errors';
 import { getRequiredStringParam } from '@/lib/navigation-params';
 import { useAuthStore } from '@/stores/auth.store';
 import { Colors, Radius, Spacing, Typography } from '@/constants/theme';
@@ -129,7 +130,8 @@ export default function ReviewScreen() {
           .in('status', ['active', 'completed']),
       ]);
 
-      const loadError = quotesRes.error ?? slotsRes.error ?? legacyRes.error ?? gcRes.error;
+      const gcContextUnavailable = isMissingSupabaseSchemaObjectError(gcRes.error, 'general_contractor_projects');
+      const loadError = quotesRes.error ?? slotsRes.error ?? legacyRes.error ?? (gcContextUnavailable ? null : gcRes.error);
       if (loadError) {
         setTargets([]);
         setSelectedTargetKey(null);
@@ -175,7 +177,7 @@ export default function ReviewScreen() {
       }
 
       const gcTargets: ReviewTarget[] = [];
-      for (const assignment of gcRes.data ?? []) {
+      for (const assignment of gcContextUnavailable ? [] : gcRes.data ?? []) {
         const gc = normalizeGeneralContractor((assignment as any).general_contractor);
         if (!gc) continue;
         gcTargets.push({

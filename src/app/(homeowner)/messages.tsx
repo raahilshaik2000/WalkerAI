@@ -12,6 +12,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { useFocusEffect, useNavigation } from '@react-navigation/native';
 import Ionicons from 'react-native-vector-icons/Ionicons';
 import { supabase } from '@/lib/supabase/client';
+import { isMissingSupabaseSchemaObjectError } from '@/lib/supabase/errors';
 import { useAuthStore } from '@/stores/auth.store';
 import { AnimatedPressable, GlassButton, GradientBackground } from '@/components/ui';
 import { Colors, Radius } from '@/constants/theme';
@@ -131,7 +132,8 @@ export default function HomeownerMessages() {
         .in('status', ['invited', 'active', 'completed']),
     ]);
 
-    if (slotResult.error || gcResult.error) {
+    const gcContextUnavailable = isMissingSupabaseSchemaObjectError(gcResult.error, 'general_contractor_projects');
+    if (slotResult.error || (gcResult.error && !gcContextUnavailable)) {
       setThreads([]);
       setErrorMessage(slotResult.error?.message ?? gcResult.error?.message ?? 'Could not load message participants.');
       setLoading(false);
@@ -147,7 +149,7 @@ export default function HomeownerMessages() {
     }
 
     const gcsByProject = new Map<string, GcThreadRow[]>();
-    for (const assignment of (gcResult.data ?? []) as GcThreadRow[]) {
+    for (const assignment of (gcContextUnavailable ? [] : (gcResult.data ?? [])) as GcThreadRow[]) {
       const rows = gcsByProject.get(assignment.project_id) ?? [];
       rows.push(assignment);
       gcsByProject.set(assignment.project_id, rows);

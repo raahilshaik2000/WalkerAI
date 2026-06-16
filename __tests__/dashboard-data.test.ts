@@ -62,3 +62,30 @@ describe('company dashboard project list', () => {
     expect(source).toContain("navigation.navigate('JobDetail', { screen: 'JobDetailMain', params: { id: job.id, slot: job.slotId } })");
   });
 });
+
+describe('homeowner optional GC context', () => {
+  it('does not fail core homeowner screens when GC assignment tables are not migrated yet', () => {
+    const repoRoot = path.resolve(__dirname, '..');
+    const helper = fs.readFileSync(path.join(repoRoot, 'src/lib/supabase/errors.ts'), 'utf8');
+    const carousel = fs.readFileSync(path.join(repoRoot, 'src/components/dashboard/ProjectsCarousel.tsx'), 'utf8');
+    const projects = fs.readFileSync(path.join(repoRoot, 'src/app/(homeowner)/projects.tsx'), 'utf8');
+    const projectDetail = fs.readFileSync(path.join(repoRoot, 'src/app/(homeowner)/project/[id]/index.tsx'), 'utf8');
+    const messages = fs.readFileSync(path.join(repoRoot, 'src/app/(homeowner)/messages.tsx'), 'utf8');
+
+    expect(helper).toContain('isMissingSupabaseSchemaObjectError');
+    expect(helper).toContain('/schema cache/');
+    expect(helper).toContain('/could not find the (table|column|relationship|function)/');
+    expect(helper).toContain('/relation .* does not exist/');
+
+    for (const source of [carousel, projects, projectDetail, messages]) {
+      expect(source).toContain("isMissingSupabaseSchemaObjectError");
+      expect(source).toContain("'general_contractor_projects'");
+    }
+
+    expect(carousel).toContain('setProjects(projectList);');
+    expect(projects).toContain('if (!isMissingSupabaseSchemaObjectError(gcContextError, \'general_contractor_projects\'))');
+    expect(projectDetail).toContain('setGcProjectContext(gcContextResult.error ? null');
+    expect(messages).toContain('const gcContextUnavailable = isMissingSupabaseSchemaObjectError(gcResult.error, \'general_contractor_projects\');');
+    expect(messages).toContain('gcContextUnavailable ? [] : (gcResult.data ?? [])');
+  });
+});

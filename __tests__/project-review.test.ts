@@ -14,7 +14,8 @@ describe('project review closeout screens', () => {
     );
 
     expect(source).toContain('const [targetError, setTargetError]');
-    expect(source).toContain('const loadError = quotesRes.error ?? slotsRes.error ?? legacyRes.error ?? gcRes.error');
+    expect(source).toContain("isMissingSupabaseSchemaObjectError(gcRes.error, 'general_contractor_projects')");
+    expect(source).toContain('const loadError = quotesRes.error ?? slotsRes.error ?? legacyRes.error ?? (gcContextUnavailable ? null : gcRes.error)');
     expect(source).toContain('setTargetError(loadError.message)');
     expect(source).toContain('Could not load contractors');
     expect(source).toContain("disabled={!!targetError || !selectedTarget || projectStatus !== 'completed'}");
@@ -36,6 +37,7 @@ describe('project review closeout screens', () => {
     expect(source).toContain(".from('general_contractor_projects')");
     expect(source).toContain("general_contractor:general_contractors(id, user_id, business_name)");
     expect(source).toContain("target_type: 'general_contractor'");
+    expect(source).toContain('for (const assignment of gcContextUnavailable ? [] : gcRes.data ?? [])');
     expect(source).toContain("selectedTarget.target_type === 'company'");
     expect(source).toContain("p_company_id: selectedTarget.target_id");
 
