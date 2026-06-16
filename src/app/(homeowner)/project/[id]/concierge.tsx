@@ -288,6 +288,9 @@ export default function ProjectConciergeScreen() {
   const assignedGcConciergeEligible = assignedGc?.verified === true && assignedGc.concierge_enabled === true;
   const assignedGcCanRequestConcierge = assignedGcConciergeEligible;
   const canApproveGcPaymentRequests = currentAssignment?.status === 'active' && assignedGc?.verified === true;
+  const canConfirmGcManagement = currentAssignment?.status === 'invited'
+    && currentAssignment.initiated_by_gc === true
+    && assignedGc?.verified === true;
 
   const handleApprovalResponse = async (request: ApprovalRequest, status: 'approved' | 'rejected') => {
     const currentUser = user ?? (await supabase.auth.getUser()).data.user;
@@ -568,6 +571,10 @@ export default function ProjectConciergeScreen() {
       Alert.alert('Not allowed', 'Only the homeowner can confirm GC management for this project.');
       return;
     }
+    if (!canConfirmGcManagement) {
+      Alert.alert('GC management locked', 'WalkerAI verification is required before this GC management request can be confirmed.');
+      return;
+    }
 
     Alert.alert(
       'Confirm GC management?',
@@ -688,14 +695,22 @@ export default function ProjectConciergeScreen() {
                   ) : null}
                 </View>
                 {currentAssignment.status === 'invited' && currentAssignment.initiated_by_gc ? (
-                  <GlassButton
-                    label="Confirm GC Management"
-                    onPress={handleConfirmGcManagement}
-                    loading={respondingId === currentAssignment.id}
-                    fullWidth
-                    size="sm"
-                    style={styles.inviteButton}
-                  />
+                  <>
+                    {!canConfirmGcManagement ? (
+                      <Text style={styles.emptySubText}>
+                        WalkerAI verification is required before this GC management request can be confirmed.
+                      </Text>
+                    ) : null}
+                    <GlassButton
+                      label="Confirm GC Management"
+                      onPress={handleConfirmGcManagement}
+                      loading={respondingId === currentAssignment.id}
+                      disabled={!canConfirmGcManagement}
+                      fullWidth
+                      size="sm"
+                      style={styles.inviteButton}
+                    />
+                  </>
                 ) : currentAssignment.status === 'invited' ? (
                   <Text style={styles.waitingText}>Waiting for the GC to accept your invite.</Text>
                 ) : null}

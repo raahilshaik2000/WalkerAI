@@ -199,6 +199,10 @@ describe('general contractor account type', () => {
       path.join(repoRoot, 'src/app/(general-contractor)/project/[id]/index.tsx'),
       'utf8',
     );
+    const homeownerConcierge = fs.readFileSync(
+      path.join(repoRoot, 'src/app/(homeowner)/project/[id]/concierge.tsx'),
+      'utf8',
+    );
 
     expect(migration).toContain('CREATE OR REPLACE FUNCTION public.accept_gc_management_invite');
     expect(migration).toContain('CREATE OR REPLACE FUNCTION public.confirm_gc_management_assignment');
@@ -216,6 +220,10 @@ describe('general contractor account type', () => {
     expect(gcProjectDetail).toContain('WalkerAI verification is required before you can accept this management invite.');
     expect(gcProjectDetail).toContain('WalkerAI verification is required before project controls are available.');
     expect(gcProjectDetail).toContain("assignment.status === 'invited' && !assignment.initiated_by_gc && gcVerified");
+    expect(homeownerConcierge).toContain("assignedGc?.verified === true");
+    expect(homeownerConcierge).toContain('canConfirmGcManagement');
+    expect(homeownerConcierge).toContain('WalkerAI verification is required before this GC management request can be confirmed.');
+    expect(homeownerConcierge).toContain('disabled={!canConfirmGcManagement}');
   });
 
   it('requires current GC verification for project-control request inserts', () => {
