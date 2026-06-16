@@ -130,6 +130,7 @@ export default function GeneralContractorTradesScreen() {
   const [submitting, setSubmitting] = useState(false);
   const [generatingSlots, setGeneratingSlots] = useState(false);
   const [dispatchingTrades, setDispatchingTrades] = useState(false);
+  const [cancellingNegotiationId, setCancellingNegotiationId] = useState<string | null>(null);
   const [gcVerified, setGcVerified] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
@@ -457,6 +458,49 @@ export default function GeneralContractorTradesScreen() {
     }
   };
 
+  const handleCancelNegotiation = async (negotiation: TradeNegotiation) => {
+    if (negotiation.status !== 'pending') {
+      Alert.alert('Negotiation already finalized', 'Only pending trade negotiation requests can be cancelled.');
+      return;
+    }
+    if (!assignment?.general_contractor_id) {
+      Alert.alert('Negotiation unavailable', 'Refresh trade management and try again.');
+      return;
+    }
+
+    Alert.alert(
+      'Cancel trade negotiation?',
+      'This removes the pending counteroffer or revision request. It does not change the homeowner-facing quote.',
+      [
+        { text: 'Keep Request', style: 'cancel' },
+        {
+          text: 'Cancel Request',
+          style: 'destructive',
+          onPress: async () => {
+            setCancellingNegotiationId(negotiation.id);
+            const { error } = await supabase
+              .from('gc_trade_quote_negotiations')
+              .update({
+                status: 'cancelled',
+                cancelled_at: new Date().toISOString(),
+              })
+              .eq('id', negotiation.id)
+              .eq('project_id', projectId)
+              .eq('general_contractor_id', assignment.general_contractor_id)
+              .eq('status', 'pending');
+
+            if (error) {
+              Alert.alert('Could not cancel negotiation', error.message);
+            } else {
+              await fetchData();
+            }
+            setCancellingNegotiationId(null);
+          },
+        },
+      ],
+    );
+  };
+
   return (
     <GradientBackground glow="top-right">
       <SafeAreaView style={styles.safe}>
@@ -625,6 +669,17 @@ export default function GeneralContractorTradesScreen() {
                                     {negotiation.company_response_note ? (
                                       <Text style={styles.negotiationResponse} numberOfLines={2}>Trade: {negotiation.company_response_note}</Text>
                                     ) : null}
+                                    {negotiation.status === 'pending' ? (
+                                      <GlassButton
+                                        label="Cancel Request"
+                                        onPress={() => handleCancelNegotiation(negotiation)}
+                                        loading={cancellingNegotiationId === negotiation.id}
+                                        disabled={!!cancellingNegotiationId}
+                                        variant="secondary"
+                                        size="sm"
+                                        style={styles.cancelNegotiationButton}
+                                      />
+                                    ) : null}
                                   </View>
                                 ))}
                               </View>
@@ -670,6 +725,17 @@ export default function GeneralContractorTradesScreen() {
                             <Text style={styles.negotiationNote} numberOfLines={2}>{negotiation.scope_note}</Text>
                             {negotiation.company_response_note ? (
                               <Text style={styles.negotiationResponse} numberOfLines={2}>Trade: {negotiation.company_response_note}</Text>
+                            ) : null}
+                            {negotiation.status === 'pending' ? (
+                              <GlassButton
+                                label="Cancel Request"
+                                onPress={() => handleCancelNegotiation(negotiation)}
+                                loading={cancellingNegotiationId === negotiation.id}
+                                disabled={!!cancellingNegotiationId}
+                                variant="secondary"
+                                size="sm"
+                                style={styles.cancelNegotiationButton}
+                              />
                             ) : null}
                           </View>
                         ))}
@@ -852,6 +918,7 @@ const styles = StyleSheet.create({
   negotiationMeta: { ...Typography.caption, color: Colors.text.secondary, fontWeight: '800' },
   negotiationNote: { ...Typography.caption, marginTop: 3, lineHeight: 17 },
   negotiationResponse: { ...Typography.caption, color: Colors.success, marginTop: 3, lineHeight: 17 },
+  cancelNegotiationButton: { marginTop: 8, alignSelf: 'flex-start' },
   formInput: { marginBottom: Spacing.sm },
   submitButton: { marginTop: 2 },
 });

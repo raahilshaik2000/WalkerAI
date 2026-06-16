@@ -1505,6 +1505,13 @@ describe('general contractor account type', () => {
     expect(migration).toContain('REVOKE ALL ON FUNCTION public.respond_to_gc_trade_quote_negotiation');
     expect(migration).not.toContain('UPDATE public.quotes');
     expect(gcTrades).toContain("from('gc_trade_quote_negotiations').insert");
+    expect(gcTrades).toContain('handleCancelNegotiation');
+    expect(gcTrades).toContain("status: 'cancelled'");
+    expect(gcTrades).toContain('cancelled_at: new Date().toISOString()');
+    expect(gcTrades).toContain(".eq('general_contractor_id', assignment.general_contractor_id)");
+    expect(gcTrades).toContain(".eq('status', 'pending')");
+    expect(gcTrades).toContain('It does not change the homeowner-facing quote.');
+    expect(gcTrades).toContain('disabled={!!cancellingNegotiationId}');
     expect(gcTrades).toContain('Counteroffer / revision request');
     expect(companyJob).toContain("from('gc_trade_quote_negotiations')");
     expect(companyJob).toContain('general_contractors(business_name, verified)');
