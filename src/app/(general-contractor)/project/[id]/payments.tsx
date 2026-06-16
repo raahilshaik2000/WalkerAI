@@ -36,9 +36,21 @@ const PAYMENT_KIND_OPTIONS: Array<{ value: PaymentKind; label: string; icon: str
 
 function statusVariant(status: string): 'pending' | 'completed' | 'error' | 'neutral' {
   if (status === 'approved') return 'completed';
-  if (status === 'rejected') return 'error';
+  if (status === 'rejected' || status === 'cancelled') return 'error';
   if (status === 'pending') return 'pending';
   return 'neutral';
+}
+
+function statusIcon(status: string) {
+  if (status === 'approved') return 'check-circle-outline';
+  if (status === 'rejected' || status === 'cancelled') return 'close-circle-outline';
+  return 'clock-outline';
+}
+
+function statusColor(status: string) {
+  if (status === 'approved') return Colors.success;
+  if (status === 'rejected' || status === 'cancelled') return Colors.error;
+  return Colors.warning;
 }
 
 function defaultTitle(kind: PaymentKind) {
@@ -60,6 +72,7 @@ export default function GeneralContractorPaymentsScreen() {
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [submitting, setSubmitting] = useState(false);
+  const [cancellingRequestId, setCancellingRequestId] = useState<string | null>(null);
   const [gcVerified, setGcVerified] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
@@ -162,6 +175,49 @@ export default function GeneralContractorPaymentsScreen() {
     } finally {
       setSubmitting(false);
     }
+  };
+
+  const handleCancelRequest = async (request: GcPaymentRequest) => {
+    if (request.status !== 'pending') {
+      Alert.alert('Request already finalized', 'Only pending payment requests can be cancelled.');
+      return;
+    }
+    if (!assignment || assignment.general_contractor_id !== request.general_contractor_id) {
+      Alert.alert('Request unavailable', 'Refresh payment requests and try again.');
+      return;
+    }
+
+    Alert.alert(
+      'Cancel payment request?',
+      'This removes the pending homeowner authorization request. No escrow or milestone funds are moved.',
+      [
+        { text: 'Keep Request', style: 'cancel' },
+        {
+          text: 'Cancel Request',
+          style: 'destructive',
+          onPress: async () => {
+            setCancellingRequestId(request.id);
+            const { error } = await supabase
+              .from('gc_payment_requests')
+              .update({
+                status: 'cancelled',
+                cancelled_at: new Date().toISOString(),
+              })
+              .eq('id', request.id)
+              .eq('project_id', projectId)
+              .eq('general_contractor_id', assignment.general_contractor_id)
+              .eq('status', 'pending');
+
+            if (error) {
+              Alert.alert('Could not cancel request', error.message);
+            } else {
+              await fetchData();
+            }
+            setCancellingRequestId(null);
+          },
+        },
+      ],
+    );
   };
 
   return (
@@ -270,28 +326,42 @@ export default function GeneralContractorPaymentsScreen() {
                 <Text style={styles.sectionTitle}>Request history</Text>
                 {requests.length === 0 ? (
                   <Text style={styles.bodyText}>No payment requests have been sent yet.</Text>
-                ) : requests.map((request) => (
-                  <View key={request.id} style={styles.requestRow}>
-                    <View style={styles.requestIcon}>
-                      <Icon
-                        name={request.status === 'approved' ? 'check-circle-outline' : request.status === 'rejected' ? 'close-circle-outline' : 'clock-outline'}
-                        size={18}
-                        color={request.status === 'approved' ? Colors.success : request.status === 'rejected' ? Colors.error : Colors.warning}
-                      />
-                    </View>
-                    <View style={styles.requestBody}>
-                      <View style={styles.requestHeader}>
-                        <Text style={styles.requestTitle}>{request.title}</Text>
-                        <StatusBadge label={formatStatusLabel(request.status)} variant={statusVariant(request.status)} size="sm" />
+                ) : requests.map((request) => {
+                  const pending = request.status === 'pending';
+                  return (
+                    <View key={request.id} style={styles.requestRow}>
+                      <View style={styles.requestIcon}>
+                        <Icon
+                          name={statusIcon(request.status)}
+                          size={18}
+                          color={statusColor(request.status)}
+                        />
                       </View>
-                      <Text style={styles.requestMeta}>
-                        {formatStatusLabel(request.request_kind)} · {formatCadCents(request.amount_cents)}
-                      </Text>
-                      {request.description ? <Text style={styles.requestDescription}>{request.description}</Text> : null}
-                      {request.response_note ? <Text style={styles.responseNote}>Homeowner note: {request.response_note}</Text> : null}
+                      <View style={styles.requestBody}>
+                        <View style={styles.requestHeader}>
+                          <Text style={styles.requestTitle}>{request.title}</Text>
+                          <StatusBadge label={formatStatusLabel(request.status)} variant={statusVariant(request.status)} size="sm" />
+                        </View>
+                        <Text style={styles.requestMeta}>
+                          {formatStatusLabel(request.request_kind)} · {formatCadCents(request.amount_cents)}
+                        </Text>
+                        {request.description ? <Text style={styles.requestDescription}>{request.description}</Text> : null}
+                        {request.response_note ? <Text style={styles.responseNote}>Homeowner note: {request.response_note}</Text> : null}
+                        {pending ? (
+                          <GlassButton
+                            label="Cancel Request"
+                            onPress={() => handleCancelRequest(request)}
+                            loading={cancellingRequestId === request.id}
+                            disabled={!!cancellingRequestId}
+                            variant="secondary"
+                            size="sm"
+                            style={styles.cancelButton}
+                          />
+                        ) : null}
+                      </View>
                     </View>
-                  </View>
-                ))}
+                  );
+                })}
               </GlassCard>
             </>
           )}
@@ -357,4 +427,5 @@ const styles = StyleSheet.create({
   requestMeta: { ...Typography.caption, marginTop: 3 },
   requestDescription: { ...Typography.bodySecondary, lineHeight: 21, marginTop: 8 },
   responseNote: { ...Typography.caption, color: Colors.text.secondary, marginTop: 8, lineHeight: 18 },
+  cancelButton: { marginTop: 10, alignSelf: 'flex-start' },
 });
