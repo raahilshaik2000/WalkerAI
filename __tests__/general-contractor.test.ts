@@ -1539,6 +1539,10 @@ describe('general contractor account type', () => {
       path.join(repoRoot, 'src/app/(company)/job/[id]/index.tsx'),
       'utf8',
     );
+    const databaseTypes = fs.readFileSync(
+      path.join(repoRoot, 'src/types/database.types.ts'),
+      'utf8',
+    );
 
     expect(migration).toContain('CREATE TABLE IF NOT EXISTS public.gc_trade_quote_negotiations');
     expect(migration).toContain('CREATE OR REPLACE FUNCTION public.respond_to_gc_trade_quote_negotiation');
@@ -1547,6 +1551,9 @@ describe('general contractor account type', () => {
     expect(migration).toContain('REVOKE ALL ON FUNCTION public.respond_to_gc_trade_quote_negotiation');
     expect(migration).not.toContain('UPDATE public.quotes');
     expect(gcTrades).toContain("from('gc_trade_quote_negotiations').insert");
+    expect(gcTrades).toContain("import type { GcTradeQuoteNegotiation } from '@/types/database.types'");
+    expect(gcTrades).not.toContain('interface TradeNegotiation');
+    expect(gcTrades).toContain('useState<GcTradeQuoteNegotiation[]>([])');
     expect(gcTrades).toContain('handleCancelNegotiation');
     expect(gcTrades).toContain("status: 'cancelled'");
     expect(gcTrades).toContain('cancelled_at: new Date().toISOString()');
@@ -1556,6 +1563,8 @@ describe('general contractor account type', () => {
     expect(gcTrades).toContain('disabled={!!cancellingNegotiationId}');
     expect(gcTrades).toContain('Counteroffer / revision request');
     expect(companyJob).toContain("from('gc_trade_quote_negotiations')");
+    expect(companyJob).toContain("import type { GcTradeQuoteNegotiation } from '@/types/database.types'");
+    expect(companyJob).toContain('interface TradeNegotiation extends GcTradeQuoteNegotiation');
     expect(companyJob).toContain('general_contractors(business_name, verified)');
     expect(companyJob).toContain("supabase.rpc('respond_to_gc_trade_quote_negotiation'");
     expect(companyJob).toContain('GC quote negotiation');
@@ -1567,6 +1576,9 @@ describe('general contractor account type', () => {
     expect(companyJob).toContain('accepted_counteroffer_cents');
     expect(companyJob).toContain('gc_negotiation_note');
     expect(companyJob).toContain("navigation.navigate('QuoteBuilder', quoteParams)");
+    expect(databaseTypes).toContain('export interface GcTradeQuoteNegotiation');
+    expect(databaseTypes).toContain("export type GcTradeQuoteNegotiationStatus = 'pending' | 'accepted' | 'rejected' | 'revision_requested' | 'cancelled'");
+    expect(databaseTypes).toContain('cancelled_at: string | null');
   });
 
   it('collects accepted GC concierge booking payments through Stripe PaymentSheet', () => {

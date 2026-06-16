@@ -18,6 +18,7 @@ import { formatSupabaseFunctionError } from '@/lib/supabase/functions';
 import { getRequiredStringParam } from '@/lib/navigation-params';
 import { Colors, Spacing, Typography } from '@/constants/theme';
 import { GlassButton, GlassCard, GlassInput, GradientBackground, StatusBadge } from '@/components/ui';
+import type { GcTradeQuoteNegotiation } from '@/types/database.types';
 
 const TRADE_LABELS: Record<string, string> = {
   general_contractor: 'General Contractor',
@@ -53,19 +54,6 @@ interface Quote {
   status: string;
   submitted_at: string | null;
   company?: { name: string | null } | Array<{ name: string | null }> | null;
-}
-
-interface TradeNegotiation {
-  id: string;
-  quote_id: string;
-  slot_id: string | null;
-  company_id: string;
-  offer_amount_cents: number | null;
-  scope_note: string;
-  status: string;
-  company_response_note: string | null;
-  created_at: string;
-  responded_at: string | null;
 }
 
 interface Assignment {
@@ -115,7 +103,7 @@ export default function GeneralContractorTradesScreen() {
   const [assignment, setAssignment] = useState<Assignment | null>(null);
   const [slots, setSlots] = useState<Slot[]>([]);
   const [quotes, setQuotes] = useState<Quote[]>([]);
-  const [negotiations, setNegotiations] = useState<TradeNegotiation[]>([]);
+  const [negotiations, setNegotiations] = useState<GcTradeQuoteNegotiation[]>([]);
   const [selectedSlotId, setSelectedSlotId] = useState<string | null>(null);
   const [selectedQuoteId, setSelectedQuoteId] = useState<string | null>(null);
   const [recommendedTradeName, setRecommendedTradeName] = useState('');
@@ -146,7 +134,7 @@ export default function GeneralContractorTradesScreen() {
   }, [quotes]);
 
   const negotiationsByQuote = useMemo(() => {
-    const grouped = new Map<string, TradeNegotiation[]>();
+    const grouped = new Map<string, GcTradeQuoteNegotiation[]>();
     for (const negotiation of negotiations) {
       const existing = grouped.get(negotiation.quote_id) ?? [];
       existing.push(negotiation);
@@ -209,7 +197,7 @@ export default function GeneralContractorTradesScreen() {
           .order('submitted_at', { ascending: false }),
         supabase
           .from('gc_trade_quote_negotiations')
-          .select('id, quote_id, slot_id, company_id, offer_amount_cents, scope_note, status, company_response_note, created_at, responded_at')
+          .select('id, project_id, slot_id, quote_id, general_contractor_id, company_id, homeowner_id, offer_amount_cents, scope_note, status, company_response_note, created_at, responded_at, cancelled_at')
           .eq('project_id', projectId)
           .order('created_at', { ascending: false }),
       ]);
@@ -222,7 +210,7 @@ export default function GeneralContractorTradesScreen() {
       setAssignment(assignmentResult.data as Assignment | null);
       setSlots((slotResult.data ?? []) as Slot[]);
       setQuotes((quoteResult.data ?? []) as Quote[]);
-      setNegotiations((negotiationResult.data ?? []) as TradeNegotiation[]);
+      setNegotiations((negotiationResult.data ?? []) as GcTradeQuoteNegotiation[]);
     } catch (err) {
       setErrorMessage(err instanceof Error ? err.message : 'Could not load trade management.');
       setAssignment(null);
@@ -469,7 +457,7 @@ export default function GeneralContractorTradesScreen() {
     }
   };
 
-  const handleCancelNegotiation = async (negotiation: TradeNegotiation) => {
+  const handleCancelNegotiation = async (negotiation: GcTradeQuoteNegotiation) => {
     if (negotiation.status !== 'pending') {
       Alert.alert('Negotiation already finalized', 'Only pending trade negotiation requests can be cancelled.');
       return;

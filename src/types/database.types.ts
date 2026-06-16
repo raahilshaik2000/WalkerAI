@@ -217,6 +217,25 @@ export interface GcPaymentRequest {
   cancelled_at: string | null;
 }
 
+export type GcTradeQuoteNegotiationStatus = 'pending' | 'accepted' | 'rejected' | 'revision_requested' | 'cancelled';
+
+export interface GcTradeQuoteNegotiation {
+  id: string;
+  project_id: string;
+  slot_id: string | null;
+  quote_id: string;
+  general_contractor_id: string;
+  company_id: string;
+  homeowner_id: string;
+  offer_amount_cents: number | null;
+  scope_note: string;
+  status: GcTradeQuoteNegotiationStatus;
+  company_response_note: string | null;
+  created_at: string;
+  responded_at: string | null;
+  cancelled_at: string | null;
+}
+
 export interface GcConciergeBooking {
   id: string;
   project_id: string;

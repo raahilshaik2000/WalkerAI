@@ -28,6 +28,7 @@ import {
   TradePanel,
   TradeSection,
 } from '@/components/company/TradeUI';
+import type { GcTradeQuoteNegotiation } from '@/types/database.types';
 
 const TRADE_LABELS: Record<string, string> = {
   general_contractor: 'General Contractor',
@@ -94,14 +95,7 @@ interface CompanyPayoutProfile {
   stripe_transfers_active?: boolean | null;
 }
 
-interface TradeNegotiation {
-  id: string;
-  quote_id: string;
-  slot_id: string | null;
-  offer_amount_cents: number | null;
-  scope_note: string;
-  status: string;
-  created_at: string;
+interface TradeNegotiation extends GcTradeQuoteNegotiation {
   general_contractors?: { business_name: string | null; verified: boolean | null } | Array<{ business_name: string | null; verified: boolean | null }> | null;
 }
 
@@ -235,7 +229,7 @@ export default function JobBriefScreen() {
 
       const negotiationQuery = supabase
         .from('gc_trade_quote_negotiations')
-        .select('id, quote_id, slot_id, offer_amount_cents, scope_note, status, created_at, general_contractors(business_name, verified)')
+        .select('id, project_id, slot_id, quote_id, general_contractor_id, company_id, homeowner_id, offer_amount_cents, scope_note, status, company_response_note, created_at, responded_at, cancelled_at, general_contractors(business_name, verified)')
         .eq('project_id', projectId)
         .eq('company_id', companyId)
         .eq('status', 'pending')
