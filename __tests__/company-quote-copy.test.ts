@@ -18,31 +18,40 @@ describe('company quote copy', () => {
     expect(source).not.toContain('You\\\'ll hear back within 48 hours.');
   });
 
-  it('does not silently submit payable quotes without line-item rows', () => {
+  it('submits payable quote packages through the atomic quote RPC', () => {
     const repoRoot = path.resolve(__dirname, '..');
     const source = fs.readFileSync(
       path.join(repoRoot, 'src/app/(company)/job/[id]/quote-builder.tsx'),
       'utf8'
     );
 
-    expect(source).toContain("await supabase.from('quote_line_items').insert(lineItemRows)");
-    expect(source).toContain('throw new Error(`Quote line items were not saved: ${itemsError.message}`);');
-    expect(source).toContain("await supabase.from('quotes').delete().eq('id', createdQuoteId)");
-    expect(source).not.toContain('quote saved without line item rows');
-    expect(source).not.toContain('isMissingRelationError(itemsError)');
+    expect(source).toContain("supabase.rpc('submit_company_quote'");
+    expect(source).toContain('p_milestones: milestoneRows');
+    expect(source).toContain('p_line_items: lineItemRows');
+    expect(source).not.toContain("await supabase.from('quote_line_items').insert(lineItemRows)");
+    expect(source).not.toContain("await supabase.from('quotes').delete().eq('id', createdQuoteId)");
+    expect(source).not.toContain('coreQuoteSaved');
+    expect(source).not.toContain('rollbackMessage');
   });
 
   it('lets companies replace unfunded pending quotes for GC-requested revisions', () => {
     const repoRoot = path.resolve(__dirname, '..');
-    const source = fs.readFileSync(
+    const screenSource = fs.readFileSync(
       path.join(repoRoot, 'src/app/(company)/job/[id]/quote-builder.tsx'),
       'utf8'
     );
+    const migration = fs.readFileSync(
+      path.join(repoRoot, 'supabase/migrations/20260616003336_submit_company_quote_rpc.sql'),
+      'utf8'
+    );
 
-    expect(source).toContain('stripe_payment_intent_id');
-    expect(source).toContain('The homeowner has already started payment for this quote');
-    expect(source).toContain("await supabase\n          .from('quotes')\n          .delete()");
-    expect(source).not.toContain('Wait for the homeowner to review it before submitting another.');
+    expect(screenSource).toContain("supabase.rpc('submit_company_quote'");
+    expect(migration).toContain('CREATE OR REPLACE FUNCTION public.submit_company_quote');
+    expect(migration).toContain('q.stripe_payment_intent_id IS NOT NULL');
+    expect(migration).toContain('The homeowner has already started payment for this quote');
+    expect(migration).toContain('DELETE FROM public.quotes q');
+    expect(migration).toContain('q.stripe_payment_intent_id IS NULL');
+    expect(screenSource).not.toContain('Wait for the homeowner to review it before submitting another.');
   });
 
   it('offers a cents-safe milestone split to prevent quote total mismatch errors', () => {

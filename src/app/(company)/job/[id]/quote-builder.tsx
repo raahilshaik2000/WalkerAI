@@ -81,13 +81,6 @@ function invalidMoneyInputs(items: Array<{ amount: string }>): string[] {
     .map((item) => item.amount.trim());
 }
 
-function isMissingColumnError(error: { message?: string } | null | undefined) {
-  const message = error?.message;
-  if (!message) return false;
-  return /column .* does not exist/i.test(message)
-    || /could not find the .* column of/i.test(message);
-}
-
 function lineItemType(description: string, index: number): 'labour' | 'material' | 'other' {
   const normalized = description.toLowerCase();
   if (normalized.includes('material')) return 'material';
@@ -252,155 +245,17 @@ export default function QuoteBuilderScreen() {
     }
 
     setSubmitting(true);
-    let createdQuoteId: string | null = null;
-    let coreQuoteSaved = false;
     try {
-      // Get company
-      const { data: company, error: companyError } = await supabase
-        .from('companies')
-        .select('id')
-        .eq('user_id', user.id)
-        .order('created_at', { ascending: false })
-        .limit(1)
-        .maybeSingle();
-
-      if (companyError) throw companyError;
-      if (!company) throw new Error('Company not found');
-
-      const [{ data: projectAssignment, error: projectAssignmentError }, { data: assignedSlots, error: slotsError }] = await Promise.all([
-        supabase
-          .from('projects')
-          .select('assigned_company_id')
-          .eq('id', projectId)
-          .maybeSingle(),
-        supabase
-          .from('project_slots')
-          .select('id, assigned_company_id, status, trade_type')
-          .eq('project_id', projectId)
-          .eq('assigned_company_id', company.id)
-          .in('status', ['filled', 'scheduled']),
-      ]);
-
-      if (projectAssignmentError) throw projectAssignmentError;
-      if (slotsError) throw slotsError;
-
-      const projectAssignedToCompany = projectAssignment?.assigned_company_id === company.id;
-      const slotAssignedToCompany = (assignedSlots ?? []).some((slot) => (
-        slot.assigned_company_id === company.id && ['filled', 'scheduled'].includes(slot.status)
-      ));
-      const assignedSlotRows = (assignedSlots ?? []) as Array<{ id: string; assigned_company_id: string | null; status: string; trade_type?: string | null }>;
-      const routeSlot = slotId ? assignedSlotRows.find((slot) => slot.id === slotId) : null;
-      if (slotId && !routeSlot) {
-        throw new Error('This trade slot is not assigned to your company.');
-      }
-
-      if (!projectAssignedToCompany && !slotAssignedToCompany) {
-        throw new Error('You can only submit a quote after accepting this project or one of its trade slots.');
-      }
-
-      const quoteSlotId = routeSlot?.id
-        ?? (!projectAssignedToCompany && assignedSlotRows.length === 1 ? assignedSlotRows[0].id : null);
-
-      if (!projectAssignedToCompany && !quoteSlotId) {
-        throw new Error('Open this job from the specific trade slot you want to quote.');
-      }
-
-      let existingQuoteResult: any = await supabase
-        .from('quotes')
-        .select('id, status, submitted_at, slot_id, stripe_payment_intent_id')
-        .eq('project_id', projectId)
-        .eq('company_id', company.id)
-        .in('status', ['pending', 'approved'])
-        .order('submitted_at', { ascending: false });
-
-      if (isMissingColumnError(existingQuoteResult.error)) {
-        existingQuoteResult = await supabase
-          .from('quotes')
-          .select('id, status, submitted_at')
-          .eq('project_id', projectId)
-          .eq('company_id', company.id)
-          .in('status', ['pending', 'approved'])
-          .order('submitted_at', { ascending: false });
-      }
-
-      if (existingQuoteResult.error) throw existingQuoteResult.error;
-      const existingQuotes = ((existingQuoteResult.data ?? []) as Array<{
-        id: string;
-        status: string;
-        submitted_at: string | null;
-        slot_id?: string | null;
-        stripe_payment_intent_id?: string | null;
-      }>)
-        .filter((quote) => {
-          if (!('slot_id' in quote)) return true;
-          return quoteSlotId ? quote.slot_id === quoteSlotId : quote.slot_id === null;
-        });
-      const existingQuote = existingQuotes[0];
-      if (existingQuote?.status === 'approved') {
-        throw new Error('This trade already has a paid quote from your company.');
-      }
-      if (existingQuote?.status === 'pending') {
-        if (existingQuote.stripe_payment_intent_id) {
-          throw new Error('The homeowner has already started payment for this quote. Ask them to reject it before submitting a revision.');
-        }
-        const { error: deleteExistingQuoteError } = await supabase
-          .from('quotes')
-          .delete()
-          .eq('id', existingQuote.id)
-          .eq('status', 'pending');
-        if (deleteExistingQuoteError) {
-          throw new Error(`Existing pending quote could not be replaced: ${deleteExistingQuoteError.message}`);
-        }
-      }
-
-      // Create quote
-      const quotePayload: Record<string, unknown> = {
-        project_id: projectId,
-        company_id: company.id,
-        total_amount: totalAmountCents,
-        status: 'pending',
-        submitted_at: new Date().toISOString(),
-      };
-      if (quoteSlotId) quotePayload.slot_id = quoteSlotId;
-
-      let quoteResult = await supabase
-        .from('quotes')
-        .insert(quotePayload)
-        .select('id')
-        .maybeSingle();
-
-      if (quoteSlotId && isMissingColumnError(quoteResult.error)) {
-        const legacyPayload = { ...quotePayload };
-        delete legacyPayload.slot_id;
-        quoteResult = await supabase
-          .from('quotes')
-          .insert(legacyPayload)
-          .select('id')
-          .maybeSingle();
-      }
-
-      const { data: quote, error: quoteError } = quoteResult;
-      if (quoteError) throw quoteError;
-      if (!quote) throw new Error('Quote was not saved.');
-      createdQuoteId = quote.id;
-
-      // Insert milestones
       const milestoneRows = milestones.map((m, i) => ({
-        quote_id: quote.id,
         title: m.title.trim(),
         amount: parseMoneyToCents(m.amount),
-        status: 'pending',
         sort_order: i + 1,
         due_date: normalizeOptionalIsoDate(m.due_date, 'milestone due date'),
       }));
 
-      const { error: msError } = await supabase.from('milestones').insert(milestoneRows);
-      if (msError) throw msError;
-
       const noteText = notes.trim();
       const lineItemRows = [
         ...pricedLineItems.map((item, index) => ({
-          quote_id: quote.id,
           type: lineItemType(item.description, item.index),
           description: item.description,
           quantity: 1,
@@ -411,7 +266,6 @@ export default function QuoteBuilderScreen() {
         })),
         ...(noteText
           ? [{
-              quote_id: quote.id,
               type: 'other' as const,
               description: `Contractor notes: ${noteText}`,
               quantity: 1,
@@ -423,36 +277,15 @@ export default function QuoteBuilderScreen() {
           : []),
       ];
 
-      if (lineItemRows.length > 0) {
-        const { error: itemsError } = await supabase.from('quote_line_items').insert(lineItemRows);
-        if (itemsError) {
-          throw new Error(`Quote line items were not saved: ${itemsError.message}`);
-        }
-      }
-      coreQuoteSaved = true;
-
-      // Notify homeowner
-      const { data: project, error: projectError } = await supabase
-        .from('projects')
-        .select('homeowner_id')
-        .eq('id', projectId)
-        .maybeSingle();
-      if (projectError) throw projectError;
-      if (!project) throw new Error('Project not found while notifying homeowner.');
-
-      const { error: notificationError } = await supabase.from('notifications').insert({
-        user_id: project.homeowner_id,
-        type: 'quote_submitted',
-        payload: {
-          project_id: projectId,
-          quote_id: quote.id,
-          slot_id: quoteSlotId,
-          total_amount: totalAmountCents,
-          deep_link: `/(homeowner)/project/${projectId}/quote`,
-        },
+      const { error: quoteError } = await supabase.rpc('submit_company_quote', {
+        p_project_id: projectId,
+        p_slot_id: slotId ?? null,
+        p_total_amount: totalAmountCents,
+        p_milestones: milestoneRows,
+        p_line_items: lineItemRows,
       });
-      if (notificationError) {
-        console.warn('quote_submitted notification failed:', notificationError);
+      if (quoteError) {
+        throw quoteError;
       }
 
       Alert.alert(
@@ -461,14 +294,12 @@ export default function QuoteBuilderScreen() {
         [{ text: 'Done', onPress: () => navigation.goBack() }]
       );
     } catch (err) {
-      let rollbackMessage: string | null = null;
-      if (createdQuoteId && !coreQuoteSaved) {
-        const { error: rollbackError } = await supabase.from('quotes').delete().eq('id', createdQuoteId);
-        if (rollbackError) {
-          rollbackMessage = ` Also, the partial quote could not be removed automatically: ${rollbackError.message}`;
-        }
-      }
-      Alert.alert('Error', `${err instanceof Error ? err.message : 'Failed to submit quote.'}${rollbackMessage ?? ''}`);
+      const message = err instanceof Error
+        ? err.message
+        : typeof err === 'object' && err && 'message' in err
+          ? String((err as { message?: unknown }).message)
+          : 'Failed to submit quote.';
+      Alert.alert('Error', message);
     } finally {
       setSubmitting(false);
     }

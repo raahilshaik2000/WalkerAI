@@ -325,6 +325,31 @@ describe('quote submission status sync migration', () => {
     expect(source).toContain("WHEN (NEW.status = 'pending')");
     expect(source).toContain('EXECUTE FUNCTION public.sync_project_status_on_quote_submission()');
   });
+
+  it('submits company quote packages atomically with server-side ownership checks', () => {
+    const source = fs.readFileSync(
+      path.join(__dirname, '../supabase/migrations/20260616003336_submit_company_quote_rpc.sql'),
+      'utf8',
+    );
+
+    expect(source).toContain('CREATE OR REPLACE FUNCTION public.submit_company_quote');
+    expect(source).toContain('SECURITY DEFINER');
+    expect(source).toContain('SET search_path = public');
+    expect(source).toContain('WHERE user_id = v_user_id');
+    expect(source).toContain('AND verified = TRUE');
+    expect(source).toContain('pg_advisory_xact_lock');
+    expect(source).toContain('assigned_company_id = v_company_id');
+    expect(source).toContain("ps.status IN ('filled', 'scheduled')");
+    expect(source).toContain('q.stripe_payment_intent_id IS NOT NULL');
+    expect(source).toContain('DELETE FROM public.quotes q');
+    expect(source).toContain('INSERT INTO public.quotes');
+    expect(source).toContain('INSERT INTO public.milestones');
+    expect(source).toContain('INSERT INTO public.quote_line_items');
+    expect(source).toContain('ABS(v_milestone_total - p_total_amount) > 1');
+    expect(source).toContain('At least one priced quote line item is required');
+    expect(source).toContain('quote_submitted');
+    expect(source).toContain('GRANT EXECUTE ON FUNCTION public.submit_company_quote(UUID, UUID, INTEGER, JSONB, JSONB) TO authenticated');
+  });
 });
 
 describe('stripe-webhook source guards', () => {
