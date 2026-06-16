@@ -284,6 +284,10 @@ export default function ProjectConciergeScreen() {
     fetchData();
   };
 
+  const assignedGc = getAssignedGc(currentAssignment);
+  const assignedGcCanRequestConcierge = assignedGc?.verified === true && assignedGc.concierge_enabled === true;
+  const canApproveGcPaymentRequests = currentAssignment?.status === 'active' && assignedGc?.verified === true;
+
   const handleApprovalResponse = async (request: ApprovalRequest, status: 'approved' | 'rejected') => {
     const currentUser = user ?? (await supabase.auth.getUser()).data.user;
     if (!currentUser?.id || projectHomeownerId !== currentUser.id) {
@@ -369,6 +373,10 @@ export default function ProjectConciergeScreen() {
     const currentUser = user ?? (await supabase.auth.getUser()).data.user;
     if (!currentUser?.id || projectHomeownerId !== currentUser.id) {
       Alert.alert('Not allowed', 'Only the homeowner can respond to payment requests.');
+      return;
+    }
+    if (status === 'approved' && !canApproveGcPaymentRequests) {
+      Alert.alert('Payment request locked', 'Active verified GC management is required before a payment request can be approved.');
       return;
     }
 
@@ -608,9 +616,6 @@ export default function ProjectConciergeScreen() {
     );
   };
 
-  const assignedGc = getAssignedGc(currentAssignment);
-  const assignedGcCanRequestConcierge = assignedGc?.verified === true && assignedGc.concierge_enabled === true;
-
   return (
     <GradientBackground glow="top-right">
       <SafeAreaView style={styles.safe}>
@@ -807,23 +812,31 @@ export default function ProjectConciergeScreen() {
                       </View>
                       {request.description ? <Text style={styles.approvalDescription}>{request.description}</Text> : null}
                       {pending ? (
-                        <View style={styles.approvalActions}>
-                          <GlassButton
-                            label="Approve"
-                            onPress={() => handlePaymentResponse(request, 'approved')}
-                            loading={responding}
-                            size="sm"
-                            style={styles.approvalButton}
-                          />
-                          <GlassButton
-                            label="Reject"
-                            onPress={() => handlePaymentResponse(request, 'rejected')}
-                            loading={responding}
-                            variant="destructive"
-                            size="sm"
-                            style={styles.approvalButton}
-                          />
-                        </View>
+                        <>
+                          {!canApproveGcPaymentRequests ? (
+                            <Text style={styles.emptySubText}>
+                              Active verified GC management is required before this payment request can be approved.
+                            </Text>
+                          ) : null}
+                          <View style={styles.approvalActions}>
+                            <GlassButton
+                              label="Approve"
+                              onPress={() => handlePaymentResponse(request, 'approved')}
+                              loading={responding}
+                              disabled={!canApproveGcPaymentRequests}
+                              size="sm"
+                              style={styles.approvalButton}
+                            />
+                            <GlassButton
+                              label="Reject"
+                              onPress={() => handlePaymentResponse(request, 'rejected')}
+                              loading={responding}
+                              variant="destructive"
+                              size="sm"
+                              style={styles.approvalButton}
+                            />
+                          </View>
+                        </>
                       ) : null}
                     </View>
                   );

@@ -479,6 +479,10 @@ describe('general contractor account type', () => {
       path.join(repoRoot, 'supabase/migrations/20260615234901_restrict_gc_payment_trade_status_transitions.sql'),
       'utf8',
     );
+    const paymentApprovalMigration = fs.readFileSync(
+      path.join(repoRoot, 'supabase/migrations/20260616000856_require_verified_gc_payment_approval.sql'),
+      'utf8',
+    );
 
     expect(migration).toContain('CREATE OR REPLACE FUNCTION public.guard_gc_payment_request_updates()');
     expect(migration).toContain("IF NEW.status IN ('approved', 'rejected') THEN");
@@ -488,6 +492,12 @@ describe('general contractor account type', () => {
     expect(migration).toContain('Only the requesting GC can cancel a GC payment request');
     expect(migration).toContain('GC payment request cancellations must include a cancellation timestamp');
     expect(migration).toContain('GC payment request cancellations cannot include response details');
+    expect(paymentApprovalMigration).toContain('CREATE OR REPLACE FUNCTION public.guard_gc_payment_request_updates()');
+    expect(paymentApprovalMigration).toContain("NEW.status = 'approved'");
+    expect(paymentApprovalMigration).toContain('JOIN public.general_contractors gc ON gc.id = gcp.general_contractor_id');
+    expect(paymentApprovalMigration).toContain("gcp.status = 'active'");
+    expect(paymentApprovalMigration).toContain('gc.verified IS TRUE');
+    expect(paymentApprovalMigration).toContain('Active verified GC management is required before approving a GC payment request');
 
     expect(migration).toContain('CREATE OR REPLACE FUNCTION public.guard_gc_trade_negotiation_updates()');
     expect(migration).toContain("IF NEW.status IN ('accepted', 'rejected', 'revision_requested') THEN");
@@ -932,6 +942,10 @@ describe('general contractor account type', () => {
     expect(homeownerConcierge).toContain("from('gc_payment_requests')");
     expect(homeownerConcierge).toContain("supabase.rpc('respond_to_gc_payment_request'");
     expect(homeownerConcierge).toContain('Approving this records your authorization. It does not bypass milestone escrow release.');
+    expect(homeownerConcierge).toContain("currentAssignment?.status === 'active' && assignedGc?.verified === true");
+    expect(homeownerConcierge).toContain("status === 'approved' && !canApproveGcPaymentRequests");
+    expect(homeownerConcierge).toContain('Active verified GC management is required before a payment request can be approved.');
+    expect(homeownerConcierge).toContain('disabled={!canApproveGcPaymentRequests}');
   });
 
   it('lets GCs recommend material substitutions without bypassing homeowner approval', () => {
