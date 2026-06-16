@@ -40,10 +40,15 @@ describe('company quote copy', () => {
       path.join(repoRoot, 'src/app/(company)/job/[id]/quote-builder.tsx'),
       'utf8'
     );
-    const migration = fs.readFileSync(
+    const baseMigration = fs.readFileSync(
       path.join(repoRoot, 'supabase/migrations/20260616003336_submit_company_quote_rpc.sql'),
       'utf8'
     );
+    const revisionMigration = fs.readFileSync(
+      path.join(repoRoot, 'supabase/migrations/20260616011036_preserve_gc_negotiations_on_quote_revision.sql'),
+      'utf8'
+    );
+    const migration = `${baseMigration}\n${revisionMigration}`;
 
     expect(screenSource).toContain("supabase.rpc('submit_company_quote'");
     expect(migration).toContain('CREATE OR REPLACE FUNCTION public.submit_company_quote');
@@ -52,6 +57,34 @@ describe('company quote copy', () => {
     expect(migration).toContain('DELETE FROM public.quotes q');
     expect(migration).toContain('q.stripe_payment_intent_id IS NULL');
     expect(screenSource).not.toContain('Wait for the homeowner to review it before submitting another.');
+  });
+
+  it('preserves GC negotiation history when revised quotes replace pending quotes', () => {
+    const repoRoot = path.resolve(__dirname, '..');
+    const migration = fs.readFileSync(
+      path.join(repoRoot, 'supabase/migrations/20260616011036_preserve_gc_negotiations_on_quote_revision.sql'),
+      'utf8'
+    );
+    const gcTrades = fs.readFileSync(
+      path.join(repoRoot, 'src/app/(general-contractor)/project/[id]/trades.tsx'),
+      'utf8'
+    );
+
+    expect(migration).toContain('v_replaced_quote_ids UUID[]');
+    expect(migration).toContain('CREATE OR REPLACE FUNCTION public.guard_gc_trade_negotiation_updates');
+    expect(migration).toContain('IF NEW.quote_id IS DISTINCT FROM OLD.quote_id THEN');
+    expect(migration).toContain('GC trade negotiation quote links can only move to a replacement pending quote for the same trade');
+    expect(migration).toContain("q.status = 'pending'");
+    expect(migration).toContain('SELECT COALESCE(array_agg(q.id), ARRAY[]::UUID[])');
+    expect(migration).toContain("SET status = 'rejected'");
+    expect(migration).toContain('UPDATE public.gc_trade_quote_negotiations negotiation');
+    expect(migration).toContain('SET quote_id = v_quote_id');
+    expect(migration).toContain('WHERE negotiation.quote_id = ANY(v_replaced_quote_ids)');
+    expect(migration).toContain('DELETE FROM public.quotes q');
+    expect(migration.indexOf('UPDATE public.gc_trade_quote_negotiations negotiation')).toBeLessThan(
+      migration.indexOf('DELETE FROM public.quotes q')
+    );
+    expect(gcTrades).toContain('const negotiationsByQuote = useMemo');
   });
 
   it('offers a cents-safe milestone split to prevent quote total mismatch errors', () => {
