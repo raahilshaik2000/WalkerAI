@@ -303,7 +303,7 @@ export default function GeneralContractorApprovals() {
                                 label="Accept"
                                 onPress={() => handleBookingResponse(booking, 'accepted')}
                                 loading={responding}
-                                disabled={!canAcceptConciergeBookings}
+                                disabled={!canAcceptConciergeBookings || !!respondingBookingId}
                                 size="sm"
                                 style={styles.bookingButton}
                               />
@@ -311,6 +311,7 @@ export default function GeneralContractorApprovals() {
                                 label="Reject"
                                 onPress={() => handleBookingResponse(booking, 'rejected')}
                                 loading={responding}
+                                disabled={!!respondingBookingId}
                                 variant="destructive"
                                 size="sm"
                                 style={styles.bookingButton}

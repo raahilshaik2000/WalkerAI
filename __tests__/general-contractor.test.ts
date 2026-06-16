@@ -1349,7 +1349,8 @@ describe('general contractor account type', () => {
     expect(gcApprovals).toContain('setCanAcceptConciergeBookings(gc.verified === true && gc.concierge_enabled === true)');
     expect(gcApprovals).toContain("status === 'accepted' && !canAcceptConciergeBookings");
     expect(gcApprovals).toContain('WalkerAI verification and concierge marketplace access are required before this request can be accepted.');
-    expect(gcApprovals).toContain('disabled={!canAcceptConciergeBookings}');
+    expect(gcApprovals).toContain('disabled={!canAcceptConciergeBookings || !!respondingBookingId}');
+    expect(gcApprovals).toContain('disabled={!!respondingBookingId}');
     expect(homeownerConcierge).toContain('concierge_enabled, verified');
     expect(homeownerConcierge).toContain("Pick<GeneralContractor, 'id' | 'business_name' | 'concierge_enabled' | 'verified'>");
     expect(homeownerConcierge).toContain('assignedGc?.verified === true && assignedGc.concierge_enabled === true');
