@@ -1186,6 +1186,10 @@ describe('general contractor account type', () => {
       path.join(repoRoot, 'supabase/migrations/20260615000900_add_gc_material_recommendations.sql'),
       'utf8',
     );
+    const activeMaterialReadMigration = fs.readFileSync(
+      path.join(repoRoot, 'supabase/migrations/20260616032000_lock_gc_material_reads_to_active.sql'),
+      'utf8',
+    );
     const navigator = fs.readFileSync(
       path.join(repoRoot, 'src/navigation/GeneralContractorNavigator.tsx'),
       'utf8',
@@ -1206,6 +1210,10 @@ describe('general contractor account type', () => {
     expect(migration).toContain('materials_gc_managed_select');
     expect(migration).toContain("v_request.request_type = 'material_substitution'");
     expect(migration).toContain('specific_model = v_product_name');
+    expect(activeMaterialReadMigration).toContain('DROP POLICY IF EXISTS "materials_gc_managed_select"');
+    expect(activeMaterialReadMigration).toContain('DROP POLICY IF EXISTS "material_orders_gc_managed_select"');
+    expect(activeMaterialReadMigration).toContain("gcp.status IN ('active', 'completed')");
+    expect(activeMaterialReadMigration).not.toContain("'invited'");
     expect(navigator).toContain('GeneralContractorMaterials');
     expect(gcProjectDetail).toContain("navigation.navigate('GeneralContractorMaterials'");
     expect(gcMaterials).toContain("request_type: 'material_substitution'");
