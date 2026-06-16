@@ -860,6 +860,10 @@ describe('general contractor account type', () => {
       path.join(repoRoot, 'supabase/migrations/20260615002600_apply_gc_budget_approval.sql'),
       'utf8',
     );
+    const duplicateActionMigration = fs.readFileSync(
+      path.join(repoRoot, 'supabase/migrations/20260616015426_prevent_duplicate_pending_gc_actions.sql'),
+      'utf8',
+    );
     const gcProjectDetail = fs.readFileSync(
       path.join(repoRoot, 'src/app/(general-contractor)/project/[id]/index.tsx'),
       'utf8',
@@ -875,6 +879,12 @@ describe('general contractor account type', () => {
     expect(gcProjectDetail).toContain('proposed_ai_cost_max: budgetMax');
     expect(gcProjectDetail).toContain('Send Terms for Approval');
     expect(gcProjectDetail).toContain("action: 'update_gc_terms'");
+    expect(gcProjectDetail).toContain("const pendingBudgetRequest = pendingApprovalRequests.find((request) => getApprovalAction(request) === 'update_gc_budget');");
+    expect(gcProjectDetail).toContain("const pendingTermsRequest = pendingApprovalRequests.find((request) => getApprovalAction(request) === 'update_gc_terms');");
+    expect(gcProjectDetail).toContain('disabled={submittingBudget || !!pendingBudgetRequest}');
+    expect(gcProjectDetail).toContain('disabled={submittingTerms || !!pendingTermsRequest}');
+    expect(gcProjectDetail).toContain('Budget request pending');
+    expect(gcProjectDetail).toContain('Terms request pending');
     expect(gcProjectDetail).toContain("from('project_approval_requests').insert");
     expect(migration).toContain("v_request.metadata->>'action' = 'update_gc_terms'");
     expect(migration).toContain('markup_pct = v_markup_pct');
@@ -884,6 +894,9 @@ describe('general contractor account type', () => {
     expect(budgetMigration).toContain('ai_cost_min = v_budget_min');
     expect(budgetMigration).toContain('ai_cost_max = v_budget_max');
     expect(budgetMigration).toContain("status = CASE WHEN status = 'draft' THEN 'brief_ready' ELSE status END");
+    expect(duplicateActionMigration).toContain("v_action IN ('update_gc_budget', 'update_gc_terms', 'complete_project')");
+    expect(duplicateActionMigration).toContain("request.metadata->>'action' = v_action");
+    expect(duplicateActionMigration).toContain('Resolve the existing pending GC recommendation before submitting another request for this action');
   });
 
   it('supports externally managed trades without treating them as WalkerAI verified', () => {

@@ -81,6 +81,7 @@ interface ApprovalRequest {
   timeline_delta_days: number | null;
   status: string;
   response_note: string | null;
+  metadata: Record<string, unknown> | null;
   created_at: string;
 }
 
@@ -109,6 +110,10 @@ function parsePercent(value: string): number | null {
 function getCompanyName(slot: Slot) {
   const company = Array.isArray(slot.assigned_company) ? slot.assigned_company[0] : slot.assigned_company;
   return company?.name ?? null;
+}
+
+function getApprovalAction(request: ApprovalRequest) {
+  return typeof request.metadata?.action === 'string' ? request.metadata.action : null;
 }
 
 export default function GeneralContractorProjectDetail() {
@@ -185,7 +190,7 @@ export default function GeneralContractorProjectDetail() {
           .order('created_at', { ascending: false }),
         supabase
           .from('project_approval_requests')
-          .select('id, request_type, title, description, cost_delta, timeline_delta_days, status, response_note, created_at')
+          .select('id, request_type, title, description, cost_delta, timeline_delta_days, status, response_note, metadata, created_at')
           .eq('project_id', projectId)
           .eq('requested_by_gc_id', gc.id)
           .order('created_at', { ascending: false }),
@@ -239,6 +244,16 @@ export default function GeneralContractorProjectDetail() {
     setRefreshing(true);
     fetchData();
   };
+
+  const pendingChangeOrders = changeOrders.filter((order) => (
+    order.status === 'proposed' && order.signed_by_company && !order.signed_by_homeowner
+  ));
+  const pendingApprovalRequests = approvalRequests.filter((request) => request.status === 'pending');
+  const pendingBudgetRequest = pendingApprovalRequests.find((request) => getApprovalAction(request) === 'update_gc_budget');
+  const pendingTermsRequest = pendingApprovalRequests.find((request) => getApprovalAction(request) === 'update_gc_terms');
+  const pendingApprovals = pendingChangeOrders.length + pendingApprovalRequests.length;
+  const pendingDecisionApprovalRequests = pendingApprovalRequests.slice(0, 5);
+  const pendingDecisionChangeOrders = pendingChangeOrders.slice(0, Math.max(0, 5 - pendingDecisionApprovalRequests.length));
 
   const handleAcceptInvite = async () => {
     if (!assignment?.id) return;
@@ -500,6 +515,10 @@ export default function GeneralContractorProjectDetail() {
       Alert.alert('Verification required', 'WalkerAI must verify your GC profile before terms changes can be requested.');
       return;
     }
+    if (pendingTermsRequest) {
+      Alert.alert('Terms request pending', 'Cancel or wait for the homeowner to respond to the existing terms update before submitting another one.');
+      return;
+    }
 
     const markupPct = parsePercent(proposedMarkupPct);
     if (markupPct == null || markupPct < 0 || markupPct > 50) {
@@ -562,6 +581,10 @@ export default function GeneralContractorProjectDetail() {
       Alert.alert('Verification required', 'WalkerAI must verify your GC profile before budget changes can be requested.');
       return;
     }
+    if (pendingBudgetRequest) {
+      Alert.alert('Budget request pending', 'Cancel or wait for the homeowner to respond to the existing budget update before submitting another one.');
+      return;
+    }
 
     const budgetMin = parseNonNegativeCadToCents(proposedBudgetMin);
     const budgetMax = parseNonNegativeCadToCents(proposedBudgetMax);
@@ -611,13 +634,6 @@ export default function GeneralContractorProjectDetail() {
     : project?.ai_cost_max != null || project?.ai_cost_min != null
     ? formatCad(project.ai_cost_max ?? project.ai_cost_min ?? 0)
     : 'Pending';
-  const pendingChangeOrders = changeOrders.filter((order) => (
-    order.status === 'proposed' && order.signed_by_company && !order.signed_by_homeowner
-  ));
-  const pendingApprovalRequests = approvalRequests.filter((request) => request.status === 'pending');
-  const pendingApprovals = pendingChangeOrders.length + pendingApprovalRequests.length;
-  const pendingDecisionApprovalRequests = pendingApprovalRequests.slice(0, 5);
-  const pendingDecisionChangeOrders = pendingChangeOrders.slice(0, Math.max(0, 5 - pendingDecisionApprovalRequests.length));
   const assignedTrades = slots.filter((slot) => !!getCompanyName(slot)).length;
   const assignmentIsActive = assignment?.status === 'active' && gcVerified;
   const markupSummary = assignment && project
@@ -954,10 +970,16 @@ export default function GeneralContractorProjectDetail() {
                         label="Send Budget for Approval"
                         onPress={handleSubmitBudgetUpdate}
                         loading={submittingBudget}
+                        disabled={submittingBudget || !!pendingBudgetRequest}
                         fullWidth
                         size="sm"
                         style={styles.submitApprovalButton}
                       />
+                      {pendingBudgetRequest ? (
+                        <Text style={styles.approvalHint}>
+                          A budget request is already waiting for homeowner response. Cancel it or wait for a decision before sending another budget update.
+                        </Text>
+                      ) : null}
                       <View style={styles.controlDivider} />
                       <Text style={styles.sectionSubTitle}>Management terms</Text>
                       <Text style={styles.bodyText}>
@@ -983,10 +1005,16 @@ export default function GeneralContractorProjectDetail() {
                         label="Send Terms for Approval"
                         onPress={handleSubmitTermsUpdate}
                         loading={submittingTerms}
+                        disabled={submittingTerms || !!pendingTermsRequest}
                         fullWidth
                         size="sm"
                         style={styles.submitApprovalButton}
                       />
+                      {pendingTermsRequest ? (
+                        <Text style={styles.approvalHint}>
+                          A terms request is already waiting for homeowner response. Cancel it or wait for a decision before sending another terms update.
+                        </Text>
+                      ) : null}
                     </View>
                   ) : null}
                 </GlassCard>
