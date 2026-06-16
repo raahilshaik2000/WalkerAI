@@ -74,6 +74,21 @@ describe('company quote copy', () => {
     expect(source).toContain('Back to Job');
   });
 
+  it('only labels the company quote action as approved when an approved quote exists', () => {
+    const repoRoot = path.resolve(__dirname, '..');
+    const source = fs.readFileSync(
+      path.join(repoRoot, 'src/app/(company)/job/[id]/index.tsx'),
+      'utf8'
+    );
+
+    expect(source).toContain('const [hasApprovedQuote, setHasApprovedQuote] = useState(false);');
+    expect(source).toContain(".from('quotes')");
+    expect(source).toContain(".eq('status', 'approved')");
+    expect(source).toContain('setHasApprovedQuote(!!approvedQuoteResult.data);');
+    expect(source).toContain("meta: hasApprovedQuote ? 'View approved' : 'Build quote'");
+    expect(source).not.toContain("meta: job.status === 'active' ? 'View approved' : 'Build quote'");
+  });
+
   it('preserves GC negotiation history when revised quotes replace pending quotes', () => {
     const repoRoot = path.resolve(__dirname, '..');
     const migration = fs.readFileSync(

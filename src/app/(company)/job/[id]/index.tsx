@@ -138,6 +138,7 @@ export default function JobBriefScreen() {
   const [tradeNegotiations, setTradeNegotiations] = useState<TradeNegotiation[]>([]);
   const [respondingNegotiationId, setRespondingNegotiationId] = useState<string | null>(null);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  const [hasApprovedQuote, setHasApprovedQuote] = useState(false);
   const finishSelections = readPersistedSurfaceSelections(job?.questionnaire_answers);
 
   const fetchJob = useCallback(async () => {
@@ -150,7 +151,15 @@ export default function JobBriefScreen() {
 
     try {
       setErrorMessage(null);
-      const [projectResult, slotResult, companyData] = await Promise.all([
+      let approvedQuoteQuery = supabase
+        .from('quotes')
+        .select('id')
+        .eq('project_id', projectId)
+        .eq('status', 'approved')
+        .limit(1);
+      approvedQuoteQuery = slotId ? approvedQuoteQuery.eq('slot_id', slotId) : approvedQuoteQuery.is('slot_id', null);
+
+      const [projectResult, slotResult, companyData, approvedQuoteResult] = await Promise.all([
         supabase
           .from('projects')
           .select(`
@@ -171,10 +180,12 @@ export default function JobBriefScreen() {
               .maybeSingle()
           : Promise.resolve({ data: null, error: null }),
         fetchCompanyPayoutProfile(user.id),
+        approvedQuoteQuery.maybeSingle(),
       ]);
 
       if (projectResult.error) throw projectResult.error;
       if (slotResult.error) throw slotResult.error;
+      if (approvedQuoteResult.error) throw approvedQuoteResult.error;
       if (!projectResult.data) throw new Error('Job not found or no longer available.');
       if (slotId && !slotResult.data) throw new Error('This trade slot is no longer available.');
       if (!companyData) throw new Error('Company profile is missing. Complete contractor onboarding before accepting jobs.');
@@ -185,6 +196,7 @@ export default function JobBriefScreen() {
       setJob(projectData as JobBrief);
       if (slotData) setSlot(slotData as Slot);
       setPayoutReady(isStripePayoutLocallyReady(companyData));
+      setHasApprovedQuote(!!approvedQuoteResult.data);
       const companyId = companyData?.id;
       const slotInfo = slotData as Slot | null;
       const projectInfo = projectData as JobBrief | null;
@@ -235,6 +247,7 @@ export default function JobBriefScreen() {
       setSlot(null);
       setAlreadyAccepted(false);
       setUnavailable(false);
+      setHasApprovedQuote(false);
       setTradeNegotiations([]);
       setLoading(false);
     }
@@ -628,7 +641,7 @@ export default function JobBriefScreen() {
                     label: 'Quote',
                     iconName: 'file-document-edit-outline',
                     route: 'QuoteBuilder',
-                    meta: job.status === 'active' ? 'View approved' : 'Build quote',
+                    meta: hasApprovedQuote ? 'View approved' : 'Build quote',
                   },
                   { label: 'Payments', iconName: 'cash-multiple', route: 'JobMilestones', meta: 'Milestones' },
                   { label: 'Materials', iconName: 'cube-outline', route: 'JobMaterials', meta: 'Verify counts' },
