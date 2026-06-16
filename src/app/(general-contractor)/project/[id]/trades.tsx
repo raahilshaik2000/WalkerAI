@@ -153,6 +153,9 @@ export default function GeneralContractorTradesScreen() {
   const selectedSlot = useMemo(() => slots.find((slot) => slot.id === selectedSlotId) ?? null, [slots, selectedSlotId]);
   const selectedSlotAssignedCompany = selectedSlot ? getCompany(selectedSlot) : null;
   const selectedSlotHasAssignedCompany = !!selectedSlotAssignedCompany;
+  const selectedSlotHasApprovedQuote = selectedSlot
+    ? (quotesBySlot.get(selectedSlot.id) ?? []).some((quote) => quote.status === 'approved')
+    : false;
 
   const fetchData = useCallback(async () => {
     const currentUser = (await supabase.auth.getUser()).data.user;
@@ -328,6 +331,14 @@ export default function GeneralContractorTradesScreen() {
       return;
     }
     const assignedCompany = getCompany(slot);
+    const slotHasApprovedQuote = (quotesBySlot.get(slot.id) ?? []).some((quote) => quote.status === 'approved');
+    if (assignedCompany?.id && slotHasApprovedQuote) {
+      Alert.alert(
+        'Funded quote locked',
+        'This WalkerAI trade has a funded quote. Resolve escrow and milestones before recommending a replacement.',
+      );
+      return;
+    }
     if (!recommendedTradeName.trim() && !recommendedCompany.trim()) {
       Alert.alert('Recommendation required', 'Enter the trade contact or company you recommend.');
       return;
@@ -779,6 +790,11 @@ export default function GeneralContractorTradesScreen() {
                       This slot already has a WalkerAI company. Homeowner approval can replace it only before that quote is funded; funded quotes stay locked until escrow and milestones are resolved.
                     </Text>
                   ) : null}
+                  {selectedSlotHasApprovedQuote ? (
+                    <Text style={styles.warning}>
+                      Replacement is locked because this slot already has a funded quote.
+                    </Text>
+                  ) : null}
                   <GlassInput
                     label="Recommended trade contact"
                     value={recommendedTradeName}
@@ -815,7 +831,7 @@ export default function GeneralContractorTradesScreen() {
                     label="Send Trade Recommendation"
                     onPress={handleSubmit}
                     loading={submitting}
-                    disabled={submitting}
+                    disabled={submitting || selectedSlotHasApprovedQuote}
                     fullWidth
                     size="sm"
                     style={styles.submitButton}

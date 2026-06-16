@@ -1015,8 +1015,12 @@ describe('general contractor account type', () => {
     expect(gcTrades).toContain('external_management_requested');
     expect(gcTrades).toContain('walker_ai_replacement_requested');
     expect(gcTrades).toContain('const selectedSlotHasAssignedCompany = !!selectedSlotAssignedCompany;');
+    expect(gcTrades).toContain('const selectedSlotHasApprovedQuote = selectedSlot');
+    expect(gcTrades).toContain("quote.status === 'approved'");
+    expect(gcTrades).toContain('Funded quote locked');
+    expect(gcTrades).toContain('Replacement is locked because this slot already has a funded quote.');
     expect(gcTrades).toContain('Homeowner approval can replace it only before that quote is funded');
-    expect(gcTrades).toContain('disabled={submitting}');
+    expect(gcTrades).toContain('disabled={submitting || selectedSlotHasApprovedQuote}');
     expect(gcTrades).not.toContain('WalkerAI trade already assigned');
   });
 
