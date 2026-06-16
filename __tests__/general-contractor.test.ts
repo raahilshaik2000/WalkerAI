@@ -714,6 +714,10 @@ describe('general contractor account type', () => {
       path.join(repoRoot, 'supabase/migrations/20260615003700_remove_gc_management_assignment.sql'),
       'utf8',
     );
+    const removedAssignmentVisibilityMigration = fs.readFileSync(
+      path.join(repoRoot, 'supabase/migrations/20260616023000_hide_removed_gc_assignments_from_gc.sql'),
+      'utf8',
+    );
     const navigator = fs.readFileSync(
       path.join(repoRoot, 'src/navigation/GeneralContractorNavigator.tsx'),
       'utf8',
@@ -830,6 +834,10 @@ describe('general contractor account type', () => {
     expect(homeownerRemovalMigration).toContain("v_assignment.status NOT IN ('invited', 'active')");
     expect(homeownerRemovalMigration).toContain("SET status = 'removed'");
     expect(homeownerRemovalMigration).toContain('GRANT EXECUTE ON FUNCTION public.remove_gc_management_assignment(UUID) TO authenticated');
+    expect(removedAssignmentVisibilityMigration).toContain('DROP POLICY IF EXISTS "gc_projects_select_participants"');
+    expect(removedAssignmentVisibilityMigration).toContain('homeowner_id = (SELECT auth.uid())');
+    expect(removedAssignmentVisibilityMigration).toContain("status <> 'removed'");
+    expect(removedAssignmentVisibilityMigration).toMatch(/status <> 'removed'[\s\S]*public\.general_contractors gc/);
   });
 
   it('counts real GC homeowner actions on the dashboard approval metric', () => {
