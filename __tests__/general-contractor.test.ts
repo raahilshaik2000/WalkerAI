@@ -155,6 +155,10 @@ describe('general contractor account type', () => {
       path.join(repoRoot, 'src/app/(homeowner)/project/[id]/concierge.tsx'),
       'utf8',
     );
+    const inviteMigration = fs.readFileSync(
+      path.join(repoRoot, 'supabase/migrations/20260616004913_invite_gc_to_project_rpc.sql'),
+      'utf8',
+    );
 
     expect(projectDetail).toContain("label: 'Concierge'");
     expect(projectDetail).toContain("screen: 'Concierge'");
@@ -167,6 +171,18 @@ describe('general contractor account type', () => {
     expect(conciergeScreen).toContain("supabase.rpc('general_contractors_for_project'");
     expect(conciergeScreen).toContain('fetchDiscoverableGeneralContractors(projectId)');
     expect(conciergeScreen).toContain('formatGcDistance(gc)');
+    expect(conciergeScreen).toContain("supabase.rpc('invite_gc_to_project'");
+    expect(conciergeScreen).toContain('p_project_id: projectId');
+    expect(conciergeScreen).toContain('p_general_contractor_id: gc.id');
+    expect(conciergeScreen).not.toContain("from('general_contractor_projects').insert");
+    expect(inviteMigration).toContain('DROP POLICY IF EXISTS "gc_projects_homeowner_insert"');
+    expect(inviteMigration).toContain('CREATE OR REPLACE FUNCTION public.invite_gc_to_project');
+    expect(inviteMigration).toContain('homeowner_id = (SELECT auth.uid())');
+    expect(inviteMigration).toContain('FOR UPDATE');
+    expect(inviteMigration).toContain('verified IS TRUE');
+    expect(inviteMigration).toContain('v_gc.default_markup_pct');
+    expect(inviteMigration).toContain('v_gc.default_concierge_fee_pct');
+    expect(inviteMigration).toContain('GRANT EXECUTE ON FUNCTION public.invite_gc_to_project(UUID, UUID) TO authenticated');
   });
 
   it('lets invited GCs activate their project management assignment', () => {

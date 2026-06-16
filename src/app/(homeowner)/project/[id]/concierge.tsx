@@ -458,13 +458,9 @@ export default function ProjectConciergeScreen() {
           text: 'Invite',
           onPress: async () => {
             setInvitingId(gc.id);
-            const { error } = await supabase.from('general_contractor_projects').insert({
-              project_id: projectId,
-              general_contractor_id: gc.id,
-              homeowner_id: currentUser.id,
-              status: 'invited',
-              markup_pct: gc.default_markup_pct,
-              concierge_fee_pct: gc.default_concierge_fee_pct,
+            const { error } = await supabase.rpc('invite_gc_to_project', {
+              p_project_id: projectId,
+              p_general_contractor_id: gc.id,
             });
             if (error) {
               Alert.alert('Could not invite GC', error.message);
