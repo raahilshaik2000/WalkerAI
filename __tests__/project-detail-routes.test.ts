@@ -35,7 +35,22 @@ describe('homeowner project detail routes', () => {
     expect(detailSource).toContain('const shouldShowScheduleAction =');
     expect(detailSource).toContain("project.status === 'quoting' && project.scheduling_status === 'pending_homeowner'");
     expect(detailSource).toMatch(
-      /shouldShowScheduleAction[\s\S]*?\? \[\{ label: 'Schedule', icon: '📅', screen: 'ProjectSchedule' \}\]/
+      /shouldShowScheduleAction[\s\S]*?\? \[\{ label: 'Schedule', iconName: 'calendar-outline', screen: 'ProjectSchedule' \}\]/
     );
+  });
+
+  it('uses native vector icons for project action tiles instead of unsupported emoji glyphs', () => {
+    const repoRoot = path.resolve(__dirname, '..');
+    const detailSource = fs.readFileSync(
+      path.join(repoRoot, 'src/app/(homeowner)/project/[id]/index.tsx'),
+      'utf8',
+    );
+
+    expect(detailSource).toContain("import Ionicons from 'react-native-vector-icons/Ionicons'");
+    expect(detailSource).toContain("<Ionicons name={action.iconName}");
+    expect(detailSource).toContain("iconName: 'reader-outline'");
+    expect(detailSource).not.toContain("icon: '📋'");
+    expect(detailSource).not.toContain("icon: '💬'");
+    expect(detailSource).not.toContain("icon: '📄'");
   });
 });

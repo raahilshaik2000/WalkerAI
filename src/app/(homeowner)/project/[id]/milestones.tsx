@@ -327,32 +327,34 @@ export default function MilestonesScreen() {
 
                 return (
                   <GlassCard key={milestone.id} style={styles.milestoneCard}>
-                    {/* Step indicator */}
-                    <View style={styles.stepRow}>
-                      <View style={[styles.stepDot, isPaid && styles.stepDotPaid, canApprove && styles.stepDotApprove]}>
-                        <Text style={styles.stepDotText}>
-                          {isPaid ? '✓' : String(index + 1)}
-                        </Text>
-                      </View>
-                      {index < milestones.length - 1 && (
-                        <View style={[styles.stepLine, isPaid && styles.stepLinePaid]} />
-                      )}
-                    </View>
-
-                    <View style={styles.milestoneContent}>
-                      <View style={styles.milestoneHeader}>
-                        <View style={styles.milestoneTitleWrap}>
-                          <Text style={styles.milestoneTitle}>{milestone.title}</Text>
-                          {milestone.company_name ? (
-                            <Text style={styles.companyName}>{milestone.company_name}</Text>
-                          ) : null}
+                    <View style={styles.milestoneRowLayout}>
+                      {/* Step indicator */}
+                      <View style={styles.stepRow}>
+                        <View style={[styles.stepDot, isPaid && styles.stepDotPaid, canApprove && styles.stepDotApprove]}>
+                          <Text style={styles.stepDotText}>
+                            {isPaid ? '✓' : String(index + 1)}
+                          </Text>
                         </View>
-                        <StatusBadge
-                          label={milestone.status.replace('_', ' ')}
-                          variant={MILESTONE_STATUS_VARIANT[milestone.status]}
-                          size="sm"
-                        />
+                        {index < milestones.length - 1 && (
+                          <View style={[styles.stepLine, isPaid && styles.stepLinePaid]} />
+                        )}
                       </View>
+
+                      <View style={styles.milestoneContent}>
+                        <View style={styles.milestoneHeader}>
+                          <View style={styles.milestoneTitleWrap}>
+                            <Text style={styles.milestoneTitle} numberOfLines={2}>{milestone.title}</Text>
+                            {milestone.company_name ? (
+                              <Text style={styles.companyName} numberOfLines={1}>{milestone.company_name}</Text>
+                            ) : null}
+                          </View>
+                          <StatusBadge
+                            label={milestone.status.replace('_', ' ')}
+                            variant={MILESTONE_STATUS_VARIANT[milestone.status]}
+                            size="sm"
+                            style={styles.milestoneStatusBadge}
+                          />
+                        </View>
 
                       <Text style={styles.milestoneAmount}>{formatCad(milestone.amount)}</Text>
 
@@ -415,6 +417,7 @@ export default function MilestonesScreen() {
                       {isPaid && (
                         <Text style={styles.paidNote}>✓ Payment released</Text>
                       )}
+                      </View>
                     </View>
                   </GlassCard>
                 );
@@ -482,8 +485,9 @@ const styles = StyleSheet.create({
   disputeTitle: { ...Typography.h3, color: Colors.error, marginBottom: 6 },
   disputeBody: { ...Typography.bodySecondary, lineHeight: 20, marginBottom: 8 },
   disputeReason: { ...Typography.caption, color: Colors.text.primary },
-  milestoneCard: { marginBottom: 10, flexDirection: 'row', gap: 14 },
-  stepRow: { alignItems: 'center', paddingTop: 2 },
+  milestoneCard: { marginBottom: 10 },
+  milestoneRowLayout: { flexDirection: 'row', gap: 14, alignItems: 'stretch' },
+  stepRow: { width: 28, flexShrink: 0, alignItems: 'center', paddingTop: 2 },
   stepDot: {
     width: 28, height: 28, borderRadius: 14,
     backgroundColor: Colors.glass.surface,
@@ -495,11 +499,12 @@ const styles = StyleSheet.create({
   stepDotText: { fontSize: 12, fontWeight: '700', color: Colors.text.primary },
   stepLine: { width: 1, flex: 1, backgroundColor: Colors.glass.border, marginTop: 4 },
   stepLinePaid: { backgroundColor: Colors.success },
-  milestoneContent: { flex: 1 },
-  milestoneHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 6 },
-  milestoneTitleWrap: { flex: 1, marginRight: 8 },
-  milestoneTitle: { ...Typography.h3 },
+  milestoneContent: { flex: 1, minWidth: 0 },
+  milestoneHeader: { flexDirection: 'row', alignItems: 'flex-start', justifyContent: 'space-between', gap: 8, marginBottom: 6 },
+  milestoneTitleWrap: { flex: 1, minWidth: 0 },
+  milestoneTitle: { ...Typography.h3, lineHeight: 22 },
   companyName: { ...Typography.caption, marginTop: 2 },
+  milestoneStatusBadge: { flexShrink: 0 },
   milestoneAmount: { fontSize: 20, fontWeight: '700', color: Colors.text.primary, marginBottom: 4 },
   dueDate: { ...Typography.caption, marginBottom: 10 },
   evidenceSection: { marginTop: 4, marginBottom: 10 },

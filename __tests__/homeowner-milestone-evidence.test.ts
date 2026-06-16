@@ -33,4 +33,18 @@ describe('homeowner milestone evidence visibility', () => {
     expect(source).toContain('disabled={!canApprove}');
     expect(source).toContain('Progress photo evidence is missing. Ask the contractor to upload proof before approving.');
   });
+
+  it('keeps milestone card text in a real content column instead of collapsing vertically', () => {
+    const source = fs.readFileSync(
+      path.join(__dirname, '../src/app/(homeowner)/project/[id]/milestones.tsx'),
+      'utf8',
+    );
+
+    expect(source).toContain('<View style={styles.milestoneRowLayout}>');
+    expect(source).toContain("milestoneRowLayout: { flexDirection: 'row'");
+    expect(source).toContain('milestoneContent: { flex: 1, minWidth: 0 }');
+    expect(source).toContain('milestoneTitleWrap: { flex: 1, minWidth: 0 }');
+    expect(source).toContain('<Text style={styles.milestoneTitle} numberOfLines={2}>');
+    expect(source).toContain('<Text style={styles.companyName} numberOfLines={1}>');
+  });
 });

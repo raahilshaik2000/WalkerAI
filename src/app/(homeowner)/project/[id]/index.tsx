@@ -12,6 +12,7 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useNavigation } from '@react-navigation/native'
 import { useRoute } from '@react-navigation/native';
+import Ionicons from 'react-native-vector-icons/Ionicons';
 import { supabase } from '@/lib/supabase/client';
 import { isMissingSupabaseSchemaObjectError } from '@/lib/supabase/errors';
 import { restartProjectDispatch } from '@/lib/project-dispatch';
@@ -300,19 +301,19 @@ export default function ProjectDetailScreen() {
     project.status === 'scheduling' ||
     (project.status === 'quoting' && project.scheduling_status === 'pending_homeowner');
   const actions = [
-    { label: 'Milestones', icon: '📋', screen: 'Milestones' },
-    { label: 'Messages',   icon: '💬', screen: 'Messages'   },
-    { label: 'Quote',      icon: '📄', screen: 'Quote'      },
-    { label: 'Materials',  icon: '📦', screen: 'Materials'  },
-    { label: 'Concierge',  icon: '🧭', screen: 'Concierge'  },
+    { label: 'Milestones', iconName: 'reader-outline', screen: 'Milestones' },
+    { label: 'Messages',   iconName: 'chatbubbles-outline', screen: 'Messages'   },
+    { label: 'Quote',      iconName: 'document-text-outline', screen: 'Quote'      },
+    { label: 'Materials',  iconName: 'cube-outline', screen: 'Materials'  },
+    { label: 'Concierge',  iconName: 'compass-outline', screen: 'Concierge'  },
     ...(shouldShowScheduleAction
-      ? [{ label: 'Schedule', icon: '📅', screen: 'ProjectSchedule' }]
+      ? [{ label: 'Schedule', iconName: 'calendar-outline', screen: 'ProjectSchedule' }]
       : []),
-    { label: 'Permits',    icon: '🏛', screen: 'Permits'    },
-    { label: 'Warranties', icon: '🛡', screen: 'Warranties' },
-    { label: 'Changes',    icon: '📝', screen: 'ChangeOrders' },
+    { label: 'Permits',    iconName: 'business-outline', screen: 'Permits'    },
+    { label: 'Warranties', iconName: 'shield-checkmark-outline', screen: 'Warranties' },
+    { label: 'Changes',    iconName: 'create-outline', screen: 'ChangeOrders' },
     ...(project.status === 'completed'
-      ? [{ label: 'Review', icon: '⭐', screen: 'Review' }]
+      ? [{ label: 'Review', iconName: 'star-outline', screen: 'Review' }]
       : []),
   ];
 
@@ -450,7 +451,7 @@ export default function ProjectDetailScreen() {
                 onPress={() => navigation.navigate(action.screen as any, { id })}
                 activeOpacity={0.8}
               >
-                <Text style={styles.actionIcon}>{action.icon}</Text>
+                <Ionicons name={action.iconName} size={28} color={Colors.text.primary} />
                 <Text style={styles.actionLabel}>{action.label}</Text>
               </TouchableOpacity>
             ))}
@@ -525,6 +526,5 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     gap: 8,
   },
-  actionIcon: { fontSize: 28 },
   actionLabel: { ...Typography.label },
 });
