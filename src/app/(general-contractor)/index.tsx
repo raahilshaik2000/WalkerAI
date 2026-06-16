@@ -100,9 +100,17 @@ export default function GeneralContractorDashboard() {
         .eq('user_id', currentUser.id)
         .maybeSingle();
       if (profileError) throw profileError;
-      setGc(profile as GeneralContractor | null);
+      const profileRecord = profile as GeneralContractor | null;
+      setGc(profileRecord);
 
-      if (!profile?.id) {
+      if (!profileRecord?.id) {
+        setAssignments([]);
+        setPendingApprovals(0);
+        return;
+      }
+
+      const profileSetupRoute = nextGeneralContractorOnboardingRoute(profileRecord);
+      if (profileSetupRoute || profileRecord.verified !== true) {
         setAssignments([]);
         setPendingApprovals(0);
         return;
@@ -115,7 +123,7 @@ export default function GeneralContractorDashboard() {
           homeowner_contact_name, homeowner_contact_email, homeowner_contact_phone,
           project:projects ( id, address, city, room_type, status, ai_cost_min, ai_cost_max )
         `)
-        .eq('general_contractor_id', profile.id)
+        .eq('general_contractor_id', profileRecord.id)
         .neq('status', 'removed')
         .order('created_at', { ascending: false });
       if (assignmentError) throw assignmentError;
@@ -140,19 +148,19 @@ export default function GeneralContractorDashboard() {
         supabase
           .from('project_approval_requests')
           .select('id', { count: 'exact', head: true })
-          .eq('requested_by_gc_id', profile.id)
+          .eq('requested_by_gc_id', profileRecord.id)
           .in('project_id', projectIds)
           .eq('status', 'pending'),
         supabase
           .from('gc_payment_requests')
           .select('id', { count: 'exact', head: true })
-          .eq('general_contractor_id', profile.id)
+          .eq('general_contractor_id', profileRecord.id)
           .in('project_id', projectIds)
           .eq('status', 'pending'),
         supabase
           .from('gc_concierge_bookings')
           .select('id', { count: 'exact', head: true })
-          .eq('general_contractor_id', profile.id)
+          .eq('general_contractor_id', profileRecord.id)
           .in('project_id', projectIds)
           .eq('status', 'accepted')
           .eq('payment_status', 'paid')

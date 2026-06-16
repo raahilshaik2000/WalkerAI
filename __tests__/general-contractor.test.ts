@@ -497,6 +497,10 @@ describe('general contractor account type', () => {
       path.join(repoRoot, 'supabase/migrations/20260615003900_guard_gc_trust_fields.sql'),
       'utf8',
     );
+    const deverifyMigration = fs.readFileSync(
+      path.join(repoRoot, 'supabase/migrations/20260616037000_deverify_gc_on_trust_profile_change.sql'),
+      'utf8',
+    );
     const businessOnboarding = fs.readFileSync(
       path.join(repoRoot, 'src/app/(general-contractor)/onboarding/business.tsx'),
       'utf8',
@@ -517,6 +521,14 @@ describe('general contractor account type', () => {
     expect(migration).toContain('GC verification and review metrics are maintained by WalkerAI backend services');
     expect(migration).toContain('guard_gc_trust_fields_trigger');
     expect(migration).toContain('REVOKE ALL ON FUNCTION public.guard_gc_trust_fields()');
+    expect(deverifyMigration).toContain('CREATE OR REPLACE FUNCTION public.guard_gc_trust_fields()');
+    expect(deverifyMigration).toContain('v_trust_profile_changed BOOLEAN');
+    expect(deverifyMigration).toContain('NEW.business_name IS DISTINCT FROM OLD.business_name');
+    expect(deverifyMigration).toContain('NEW.license_doc_url IS DISTINCT FROM OLD.license_doc_url');
+    expect(deverifyMigration).toContain('NEW.insurance_doc_url IS DISTINCT FROM OLD.insurance_doc_url');
+    expect(deverifyMigration).toContain('NEW.verified := FALSE');
+    expect(deverifyMigration).toContain('OLD.verified IS TRUE AND v_trust_profile_changed');
+    expect(deverifyMigration).toContain('GC verification and review metrics are maintained by WalkerAI backend services');
     expect(businessOnboarding).not.toContain('verified:');
     expect(businessOnboarding).not.toContain('rating:');
     expect(businessOnboarding).not.toContain('total_reviews:');
@@ -892,10 +904,15 @@ describe('general contractor account type', () => {
     expect(dashboard).toContain("from('project_approval_requests')");
     expect(dashboard).toContain("from('gc_payment_requests')");
     expect(dashboard).toContain("from('gc_concierge_bookings')");
-    expect(dashboard).toContain("eq('requested_by_gc_id', profile.id)");
-    expect(dashboard).toContain("eq('general_contractor_id', profile.id)");
+    expect(dashboard).toContain('const profileSetupRoute = nextGeneralContractorOnboardingRoute(profileRecord);');
+    expect(dashboard).toContain('if (profileSetupRoute || profileRecord.verified !== true)');
+    expect(dashboard).toContain("eq('requested_by_gc_id', profileRecord.id)");
+    expect(dashboard).toContain("eq('general_contractor_id', profileRecord.id)");
     expect(dashboard).toContain('const projectIds = normalized.map');
     expect(dashboard).toContain("setPendingApprovals(0)");
+    expect(dashboard.indexOf('if (profileSetupRoute || profileRecord.verified !== true)')).toBeLessThan(
+      dashboard.indexOf("from('general_contractor_projects')"),
+    );
     expect(dashboard.split(".in('project_id', projectIds)").length - 1).toBeGreaterThanOrEqual(3);
     expect(dashboard).toContain("eq('payment_status', 'paid')");
     expect(dashboard).toContain("is('payout_released_at', null)");
@@ -1514,6 +1531,10 @@ describe('general contractor account type', () => {
     expect(migration).toContain('GRANT EXECUTE ON FUNCTION public.respond_to_gc_concierge_booking(UUID, TEXT, TEXT) TO authenticated');
     expect(gcApprovals).toContain(".select('id, verified, concierge_enabled')");
     expect(gcApprovals).toContain('setCanAcceptConciergeBookings(gc.verified === true && gc.concierge_enabled === true)');
+    expect(gcApprovals).toContain('if (gc.verified !== true)');
+    expect(gcApprovals.indexOf('if (gc.verified !== true)')).toBeLessThan(
+      gcApprovals.indexOf("from('general_contractor_projects')"),
+    );
     expect(gcApprovals).toContain("status === 'accepted' && !canAcceptConciergeBookings");
     expect(gcApprovals).toContain('WalkerAI verification and concierge marketplace access are required before this request can be accepted.');
     expect(gcApprovals).toContain('disabled={!canAcceptConciergeBookings || !!respondingBookingId}');

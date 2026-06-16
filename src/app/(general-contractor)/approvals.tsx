@@ -109,6 +109,14 @@ export default function GeneralContractorApprovals() {
       }
       setCanAcceptConciergeBookings(gc.verified === true && gc.concierge_enabled === true);
 
+      if (gc.verified !== true) {
+        setApprovals([]);
+        setRecommendationRequests([]);
+        setPaymentRequests([]);
+        setBookingRequests([]);
+        return;
+      }
+
       const { data: assignments, error: assignmentError } = await supabase
         .from('general_contractor_projects')
         .select('project_id, project_type')
