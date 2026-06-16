@@ -1537,7 +1537,7 @@ describe('general contractor account type', () => {
       'utf8',
     );
     const readinessMigration = fs.readFileSync(
-      path.join(repoRoot, 'supabase/migrations/20260616005234_guard_gc_completion_readiness.sql'),
+      path.join(repoRoot, 'supabase/migrations/20260616031000_guard_gc_completion_closeout_readiness.sql'),
       'utf8',
     );
     const gcCompletion = fs.readFileSync(
