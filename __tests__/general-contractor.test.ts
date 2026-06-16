@@ -575,6 +575,10 @@ describe('general contractor account type', () => {
       path.join(repoRoot, 'supabase/migrations/20260615004400_require_gc_project_coordinates.sql'),
       'utf8',
     );
+    const requiredContextMigration = fs.readFileSync(
+      path.join(repoRoot, 'supabase/migrations/20260616002245_require_gc_project_scope_contact.sql'),
+      'utf8',
+    );
     const homeownerConfirmationMigration = fs.readFileSync(
       path.join(repoRoot, 'supabase/migrations/20260615003200_secure_homeowner_gc_confirmation.sql'),
       'utf8',
@@ -631,6 +635,8 @@ describe('general contractor account type', () => {
     expect(enums).toContain("'addition'");
     expect(createProject).toContain('Homeowner name');
     expect(createProject).toContain('Homeowner phone');
+    expect(createProject).toContain('Homeowner name required');
+    expect(createProject).toContain('Scope required');
     expect(createProject).toContain('p_homeowner_contact_name: contactName');
     expect(createProject).toContain('p_homeowner_contact_phone: contactPhone || null');
     expect(createProject).not.toContain(".from('general_contractor_projects')\n        .update");
@@ -673,6 +679,15 @@ describe('general contractor account type', () => {
     expect(coordinateMigration).toContain('p_lng > 180');
     expect(coordinateMigration).toContain('Valid project coordinates are required before creating managed projects');
     expect(coordinateMigration).toContain("CASE WHEN v_project_type IN ('kitchen', 'bathroom') THEN v_project_type ELSE NULL END");
+    expect(requiredContextMigration).toContain('CREATE OR REPLACE FUNCTION public.create_gc_managed_project');
+    expect(requiredContextMigration).toContain('v_scope_summary TEXT');
+    expect(requiredContextMigration).toContain('v_homeowner_contact_name TEXT');
+    expect(requiredContextMigration).toContain("IF v_scope_summary = '' THEN");
+    expect(requiredContextMigration).toContain('Scope summary is required before creating managed projects');
+    expect(requiredContextMigration).toContain("IF v_homeowner_contact_name = '' THEN");
+    expect(requiredContextMigration).toContain('Homeowner contact name is required before creating managed projects');
+    expect(requiredContextMigration).toContain('REVOKE ALL ON FUNCTION public.create_gc_managed_project');
+    expect(requiredContextMigration).toContain('GRANT EXECUTE ON FUNCTION public.create_gc_managed_project');
     expect(homeownerConfirmationMigration).toContain('DROP POLICY IF EXISTS "gc_projects_homeowner_update"');
     expect(homeownerConfirmationMigration).toContain('CREATE OR REPLACE FUNCTION public.confirm_gc_management_assignment');
     expect(homeownerConfirmationMigration).toContain('homeowner_id = (SELECT auth.uid())');
