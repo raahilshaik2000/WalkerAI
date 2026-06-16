@@ -993,9 +993,9 @@ describe('general contractor account type', () => {
     expect(gcProjectDetail).toContain('No license or insurance documents uploaded');
   });
 
-  it('applies approved GC external trade recommendations only for unassigned slots', () => {
+  it('applies approved GC trade replacements while protecting funded WalkerAI quotes', () => {
     const migration = fs.readFileSync(
-      path.join(repoRoot, 'supabase/migrations/20260615002000_apply_trade_substitution_approval.sql'),
+      path.join(repoRoot, 'supabase/migrations/20260616025000_apply_gc_assigned_trade_replacement.sql'),
       'utf8',
     );
     const gcTrades = fs.readFileSync(
@@ -1006,14 +1006,18 @@ describe('general contractor account type', () => {
     expect(migration).toContain("v_request.request_type = 'trade_substitution'");
     expect(migration).toContain("fulfillment_type = 'external'");
     expect(migration).toContain("external_trade_verification_status = 'unverified'");
-    expect(migration).toContain('assigned_company_id IS NULL');
-    expect(migration).toContain('no WalkerAI escrow protection');
+    expect(migration).toContain("q.status = 'approved'");
+    expect(migration).toContain('This WalkerAI trade has a funded quote. Resolve escrow and milestones before replacing the trade');
+    expect(migration).toContain("SET status = 'rejected'");
+    expect(migration).toContain('assigned_company_id = NULL');
+    expect(migration).toContain('Homeowner approved GC trade replacement. Previous unfunded WalkerAI trade was removed. Unverified external trade; no WalkerAI escrow protection.');
+    expect(migration).toContain("type, payload)\n      SELECT c.user_id,\n             'job_filled'");
     expect(gcTrades).toContain('external_management_requested');
-    expect(gcTrades).toContain('WalkerAI-assigned trades are not removed automatically');
-    expect(gcTrades).toContain('const selectedSlotCanRecordExternalTrade = selectedSlot ? !selectedSlotAssignedCompany : false;');
-    expect(gcTrades).toContain('This slot already has a WalkerAI company. External replacement cannot be applied from this form');
-    expect(gcTrades).toContain('disabled={!selectedSlotCanRecordExternalTrade || submitting}');
-    expect(gcTrades).toContain('WalkerAI trade already assigned');
+    expect(gcTrades).toContain('walker_ai_replacement_requested');
+    expect(gcTrades).toContain('const selectedSlotHasAssignedCompany = !!selectedSlotAssignedCompany;');
+    expect(gcTrades).toContain('Homeowner approval can replace it only before that quote is funded');
+    expect(gcTrades).toContain('disabled={submitting}');
+    expect(gcTrades).not.toContain('WalkerAI trade already assigned');
   });
 
   it('routes GC schedule recommendations through homeowner approval before dates apply', () => {
