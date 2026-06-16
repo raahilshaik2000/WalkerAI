@@ -76,6 +76,7 @@ export default function GeneralContractorApprovals() {
   const [recommendationRequests, setRecommendationRequests] = useState<RecommendationApprovalRow[]>([]);
   const [paymentRequests, setPaymentRequests] = useState<PaymentRequestRow[]>([]);
   const [bookingRequests, setBookingRequests] = useState<GcConciergeBooking[]>([]);
+  const [canAcceptConciergeBookings, setCanAcceptConciergeBookings] = useState(false);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [respondingBookingId, setRespondingBookingId] = useState<string | null>(null);
@@ -94,7 +95,7 @@ export default function GeneralContractorApprovals() {
       setErrorMessage(null);
       const { data: gc, error: profileError } = await supabase
         .from('general_contractors')
-        .select('id')
+        .select('id, verified, concierge_enabled')
         .eq('user_id', currentUser.id)
         .maybeSingle();
       if (profileError) throw profileError;
@@ -103,8 +104,10 @@ export default function GeneralContractorApprovals() {
         setRecommendationRequests([]);
         setPaymentRequests([]);
         setBookingRequests([]);
+        setCanAcceptConciergeBookings(false);
         return;
       }
+      setCanAcceptConciergeBookings(gc.verified === true && gc.concierge_enabled === true);
 
       const [assignmentResult, bookingResult, recommendationResult, paymentResult] = await Promise.all([
         supabase
@@ -179,6 +182,7 @@ export default function GeneralContractorApprovals() {
       setRecommendationRequests([]);
       setPaymentRequests([]);
       setBookingRequests([]);
+      setCanAcceptConciergeBookings(false);
     } finally {
       setLoading(false);
       setRefreshing(false);
@@ -197,6 +201,11 @@ export default function GeneralContractorApprovals() {
   };
 
   const handleBookingResponse = async (booking: GcConciergeBooking, status: 'accepted' | 'rejected') => {
+    if (status === 'accepted' && !canAcceptConciergeBookings) {
+      Alert.alert('Concierge unavailable', 'WalkerAI verification and concierge marketplace access are required before you can accept concierge requests.');
+      return;
+    }
+
     Alert.alert(
       status === 'accepted' ? 'Accept concierge request?' : 'Reject concierge request?',
       status === 'accepted'
@@ -283,23 +292,31 @@ export default function GeneralContractorApprovals() {
                           <StatusBadge label={formatStatusLabel(booking.status)} variant={pending ? 'pending' : ['accepted', 'completed'].includes(booking.status) ? 'completed' : 'error'} dot />
                         </View>
                         {pending ? (
-                          <View style={styles.bookingActions}>
-                            <GlassButton
-                              label="Accept"
-                              onPress={() => handleBookingResponse(booking, 'accepted')}
-                              loading={responding}
-                              size="sm"
-                              style={styles.bookingButton}
-                            />
-                            <GlassButton
-                              label="Reject"
-                              onPress={() => handleBookingResponse(booking, 'rejected')}
-                              loading={responding}
-                              variant="destructive"
-                              size="sm"
-                              style={styles.bookingButton}
-                            />
-                          </View>
+                          <>
+                            {!canAcceptConciergeBookings ? (
+                              <Text style={styles.lockedText}>
+                                WalkerAI verification and concierge marketplace access are required before this request can be accepted.
+                              </Text>
+                            ) : null}
+                            <View style={styles.bookingActions}>
+                              <GlassButton
+                                label="Accept"
+                                onPress={() => handleBookingResponse(booking, 'accepted')}
+                                loading={responding}
+                                disabled={!canAcceptConciergeBookings}
+                                size="sm"
+                                style={styles.bookingButton}
+                              />
+                              <GlassButton
+                                label="Reject"
+                                onPress={() => handleBookingResponse(booking, 'rejected')}
+                                loading={responding}
+                                variant="destructive"
+                                size="sm"
+                                style={styles.bookingButton}
+                              />
+                            </View>
+                          </>
                         ) : null}
                       </View>
                     );
@@ -453,6 +470,7 @@ const styles = StyleSheet.create({
   description: { ...Typography.body, marginBottom: 8 },
   costText: { ...Typography.caption, color: Colors.text.secondary },
   waitingText: { ...Typography.caption, color: Colors.warning, marginTop: 8, fontWeight: '700' },
+  lockedText: { ...Typography.caption, color: Colors.warning, marginTop: 2, marginBottom: 8, lineHeight: 18 },
   bodyText: { ...Typography.bodySecondary },
   bookingItem: {
     paddingVertical: 12,

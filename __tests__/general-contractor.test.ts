@@ -1135,6 +1135,10 @@ describe('general contractor account type', () => {
       path.join(repoRoot, 'supabase/migrations/20260615004300_require_available_gc_concierge_acceptance.sql'),
       'utf8',
     );
+    const gcApprovals = fs.readFileSync(
+      path.join(repoRoot, 'src/app/(general-contractor)/approvals.tsx'),
+      'utf8',
+    );
 
     expect(migration).toContain('CREATE OR REPLACE FUNCTION public.respond_to_gc_concierge_booking');
     expect(migration).toContain("p_status = 'accepted'");
@@ -1143,6 +1147,11 @@ describe('general contractor account type', () => {
     expect(migration).toContain('Only verified concierge-enabled GCs can accept concierge bookings');
     expect(migration).toContain('Only the requested GC can respond to this booking');
     expect(migration).toContain('GRANT EXECUTE ON FUNCTION public.respond_to_gc_concierge_booking(UUID, TEXT, TEXT) TO authenticated');
+    expect(gcApprovals).toContain(".select('id, verified, concierge_enabled')");
+    expect(gcApprovals).toContain('setCanAcceptConciergeBookings(gc.verified === true && gc.concierge_enabled === true)');
+    expect(gcApprovals).toContain("status === 'accepted' && !canAcceptConciergeBookings");
+    expect(gcApprovals).toContain('WalkerAI verification and concierge marketplace access are required before this request can be accepted.');
+    expect(gcApprovals).toContain('disabled={!canAcceptConciergeBookings}');
   });
 
   it('adds a deterministic GC project assistant from live project records', () => {
