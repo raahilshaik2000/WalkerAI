@@ -18,6 +18,7 @@ import { formatSignedCadCents, parseNonNegativeCadToCents, parseSignedCadToCents
 import { calculateGcMarkup } from '@/lib/gc-markup';
 import { formatGcProjectType } from '@/lib/gc-project-type';
 import { getRequiredStringParam } from '@/lib/navigation-params';
+import { formatTradeLabel } from '@/lib/trade-labels';
 import { getUploadMetadata, uploadFile } from '@/lib/supabase/storage';
 import { Colors, Spacing, Typography } from '@/constants/theme';
 import { GradientBackground, GlassButton, GlassCard, GlassInput, StatusBadge } from '@/components/ui';
@@ -102,10 +103,7 @@ function assignmentStatusVariant(status: string): 'active' | 'completed' | 'pend
 }
 
 function formatTrade(tradeType: string) {
-  return tradeType
-    .split('_')
-    .map((part) => `${part.charAt(0).toUpperCase()}${part.slice(1)}`)
-    .join(' ');
+  return formatTradeLabel(tradeType) ?? 'Trade';
 }
 
 function parsePercent(value: string): number | null {

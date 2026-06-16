@@ -45,6 +45,29 @@ describe('homeowner schedule helpers', () => {
     });
   });
 
+  it('labels legacy general_contractor slots as lead contractor slots', () => {
+    const items = mapHomeownerScheduleItems(
+      projects,
+      [
+        {
+          id: 'slot-legacy-gc',
+          project_id: 'project-1',
+          trade_type: 'general_contractor',
+          status: 'scheduled',
+          scheduled_start_date: '2026-06-20',
+          scheduled_end_date: '2026-06-21',
+          companies: { name: 'Legacy Renovations Co' },
+        },
+      ],
+      [],
+    );
+
+    expect(items[0]).toMatchObject({
+      title: 'Lead contractor scheduled',
+      subtitle: 'Legacy Renovations Co - Kitchen renovation - 1 Main St, Toronto',
+    });
+  });
+
   it('excludes unscheduled slots and milestones from unapproved quotes', () => {
     const items = mapHomeownerScheduleItems(
       projects,

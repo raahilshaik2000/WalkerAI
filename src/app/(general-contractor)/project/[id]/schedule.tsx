@@ -14,20 +14,9 @@ import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
 import { supabase } from '@/lib/supabase/client';
 import { isValidIsoDate } from '@/lib/dates';
 import { getRequiredStringParam } from '@/lib/navigation-params';
+import { formatTradeLabel } from '@/lib/trade-labels';
 import { Colors, Spacing, Typography } from '@/constants/theme';
 import { GlassButton, GlassCard, GlassInput, GradientBackground, StatusBadge } from '@/components/ui';
-
-const TRADE_LABELS: Record<string, string> = {
-  general_contractor: 'General Contractor',
-  plumber: 'Plumber',
-  electrician: 'Electrician',
-  tile_installer: 'Tile Installer',
-  cabinet_installer: 'Cabinet Installer',
-  painter: 'Painter',
-  flooring_installer: 'Flooring Installer',
-  drywall: 'Drywall',
-  demolition: 'Demolition',
-};
 
 interface Slot {
   id: string;
@@ -58,7 +47,7 @@ function formatDate(iso: string | null) {
 }
 
 function formatTrade(tradeType: string) {
-  return TRADE_LABELS[tradeType] ?? tradeType.replace(/_/g, ' ');
+  return formatTradeLabel(tradeType) ?? 'Trade';
 }
 
 export default function GeneralContractorScheduleScreen() {

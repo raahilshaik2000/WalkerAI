@@ -21,6 +21,7 @@ import { useAuthStore } from '@/stores/auth.store';
 import { Colors, Radius, Spacing, Typography } from '@/constants/theme';
 import { GlassButton, GlassCard, GradientBackground, StatusBadge, CardSkeleton } from '@/components/ui';
 import { formatStatusLabel, formatCad } from '@/lib/formatters';
+import { formatTradeLabel } from '@/lib/trade-labels';
 import { readPersistedSurfaceSelections, surfaceSelectionSourceLabel } from '@/lib/room-customizer';
 import {
   TradeActionTile,
@@ -29,18 +30,6 @@ import {
   TradeSection,
 } from '@/components/company/TradeUI';
 import type { GcTradeQuoteNegotiation } from '@/types/database.types';
-
-const TRADE_LABELS: Record<string, string> = {
-  general_contractor: 'General Contractor',
-  plumber: 'Plumber',
-  electrician: 'Electrician',
-  tile_installer: 'Tile Installer',
-  cabinet_installer: 'Cabinet Installer',
-  painter: 'Painter',
-  flooring_installer: 'Flooring Installer',
-  drywall: 'Drywall',
-  demolition: 'Demolition',
-};
 
 function formatLocation(address?: string | null, city?: string | null) {
   if (address && city) return `${address}, ${city}`;
@@ -428,7 +417,7 @@ export default function JobBriefScreen() {
                 <Ionicons name="construct-outline" size={18} color="#FF6B00" />
               </View>
               <View style={styles.slotBannerBody}>
-                <Text style={styles.slotBannerTrade}>{TRADE_LABELS[slot.trade_type] ?? slot.trade_type} Slot</Text>
+                <Text style={styles.slotBannerTrade}>{formatTradeLabel(slot.trade_type) ?? 'Trade'} Slot</Text>
                 {slot.description ? (
                   <Text style={styles.slotBannerDesc} numberOfLines={2}>{slot.description}</Text>
                 ) : null}

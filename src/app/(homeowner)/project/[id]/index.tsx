@@ -18,6 +18,7 @@ import { restartProjectDispatch } from '@/lib/project-dispatch';
 import { getRequiredStringParam } from '@/lib/navigation-params';
 import { formatGcProjectType } from '@/lib/gc-project-type';
 import { readPersistedSurfaceSelections, surfaceSelectionSourceLabel } from '@/lib/room-customizer';
+import { formatTradeLabel } from '@/lib/trade-labels';
 import { Colors, Radius, Spacing, Typography } from '@/constants/theme';
 import { GlassCard, GradientBackground, StatusBadge, CardSkeleton } from '@/components/ui';
 import type { ProjectStatus } from '@/constants/enums';
@@ -70,18 +71,6 @@ type AssignedTradeSlotRow = Omit<AssignedTradeSlot, 'assigned_company'> & {
 function formatCad(cents: number) {
   return new Intl.NumberFormat('en-CA', { style: 'currency', currency: 'CAD', maximumFractionDigits: 0 }).format(cents / 100);
 }
-
-const TRADE_LABELS: Record<string, string> = {
-  general_contractor: 'General contractor',
-  plumber: 'Plumber',
-  electrician: 'Electrician',
-  tile_installer: 'Tile installer',
-  cabinet_installer: 'Cabinet installer',
-  painter: 'Painter',
-  flooring_installer: 'Flooring installer',
-  drywall: 'Drywall',
-  demolition: 'Demolition',
-};
 
 const STATUS_VARIANT: Record<string, 'pending' | 'dispatching' | 'active' | 'completed' | 'error' | 'neutral'> = {
   draft: 'neutral',
@@ -384,7 +373,7 @@ export default function ProjectDetailScreen() {
                 <View key={slot.id} style={styles.tradeRow}>
                   <View style={styles.tradeInfo}>
                     <Text style={styles.tradeType}>
-                      {TRADE_LABELS[slot.trade_type] ?? slot.trade_type.replace(/_/g, ' ')}
+                      {formatTradeLabel(slot.trade_type) ?? 'Trade'}
                     </Text>
                     <Text style={styles.companyName}>
                       {slot.fulfillment_type === 'external'

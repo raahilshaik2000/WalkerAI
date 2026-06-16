@@ -15,6 +15,7 @@ import ReactNativeHapticFeedback from 'react-native-haptic-feedback';
 import { supabase } from '@/lib/supabase/client';
 import { isMissingSupabaseSchemaObjectError } from '@/lib/supabase/errors';
 import { getRequiredStringParam } from '@/lib/navigation-params';
+import { formatTradeLabel } from '@/lib/trade-labels';
 import { useAuthStore } from '@/stores/auth.store';
 import { Colors, Radius, Spacing, Typography } from '@/constants/theme';
 import { GlassButton, GlassCard, GradientBackground } from '@/components/ui';
@@ -351,8 +352,8 @@ export default function ReviewScreen() {
                     ]}>
                       {target.name}
                     </Text>
-                    {target.trade_type ? (
-                      <Text style={styles.targetTrade}>{target.trade_type.replace(/_/g, ' ')}</Text>
+                    {formatTradeLabel(target.trade_type) ? (
+                      <Text style={styles.targetTrade}>{formatTradeLabel(target.trade_type)}</Text>
                     ) : null}
                   </TouchableOpacity>
                 ))}
@@ -362,8 +363,8 @@ export default function ReviewScreen() {
             <GlassCard style={styles.dimCard}>
               <Text style={styles.sectionLabel}>Reviewing</Text>
               <Text style={styles.reviewingName}>{selectedTarget?.name}</Text>
-              {selectedTarget?.trade_type ? (
-                <Text style={styles.targetTrade}>{selectedTarget.trade_type.replace(/_/g, ' ')}</Text>
+              {formatTradeLabel(selectedTarget?.trade_type) ? (
+                <Text style={styles.targetTrade}>{formatTradeLabel(selectedTarget?.trade_type)}</Text>
               ) : null}
             </GlassCard>
           ) : (

@@ -24,6 +24,7 @@ import { supabase } from '@/lib/supabase/client';
 import { formatCadCents } from '@/lib/currency';
 import { formatSupabaseFunctionError } from '@/lib/supabase/functions';
 import { getPaymentSheetConfig } from '@/lib/payments';
+import { formatTradeLabel } from '@/lib/trade-labels';
 import { Colors, Spacing, Typography, Radius } from '@/constants/theme';
 import { getRequiredStringParam } from '@/lib/navigation-params';
 import { GlassCard, GradientBackground } from '@/components/ui';
@@ -73,18 +74,6 @@ function formatCad(cents: number) {
 
 const MILESTONE_COLORS = ['#FF6B00', '#60A5FA', '#34D399'];
 
-const TRADE_LABELS: Record<string, string> = {
-  general_contractor: 'General Contractor',
-  plumber: 'Plumber',
-  electrician: 'Electrician',
-  tile_installer: 'Tile Installer',
-  cabinet_installer: 'Cabinet Installer',
-  painter: 'Painter',
-  flooring_installer: 'Flooring Installer',
-  drywall: 'Drywall',
-  demolition: 'Demolition',
-};
-
 function normalizeQuote(row: any): Quote {
   const company = Array.isArray(row.companies) ? row.companies[0] : row.companies;
   const slot = Array.isArray(row.project_slots) ? row.project_slots[0] : row.project_slots;
@@ -93,7 +82,7 @@ function normalizeQuote(row: any): Quote {
     ...row,
     slot_id: row.slot_id ?? null,
     company_name: company?.name ?? null,
-    trade_label: tradeType ? (TRADE_LABELS[tradeType] ?? tradeType.replace(/_/g, ' ')) : null,
+    trade_label: formatTradeLabel(tradeType),
   };
 }
 

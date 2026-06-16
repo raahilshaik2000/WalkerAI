@@ -16,21 +16,10 @@ import { formatCadCents, parseNonNegativeCadToCents, parseSignedCadToCents } fro
 import { formatStatusLabel } from '@/lib/formatters';
 import { formatSupabaseFunctionError } from '@/lib/supabase/functions';
 import { getRequiredStringParam } from '@/lib/navigation-params';
+import { formatTradeLabel } from '@/lib/trade-labels';
 import { Colors, Spacing, Typography } from '@/constants/theme';
 import { GlassButton, GlassCard, GlassInput, GradientBackground, StatusBadge } from '@/components/ui';
 import type { GcTradeQuoteNegotiation } from '@/types/database.types';
-
-const TRADE_LABELS: Record<string, string> = {
-  general_contractor: 'General Contractor',
-  plumber: 'Plumber',
-  electrician: 'Electrician',
-  tile_installer: 'Tile Installer',
-  cabinet_installer: 'Cabinet Installer',
-  painter: 'Painter',
-  flooring_installer: 'Flooring Installer',
-  drywall: 'Drywall',
-  demolition: 'Demolition',
-};
 
 interface Slot {
   id: string;
@@ -70,7 +59,7 @@ interface DispatchResult {
 }
 
 function formatTrade(tradeType: string) {
-  return TRADE_LABELS[tradeType] ?? tradeType.replace(/_/g, ' ');
+  return formatTradeLabel(tradeType) ?? 'Trade';
 }
 
 function getCompany(slot: Slot) {

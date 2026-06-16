@@ -15,6 +15,7 @@ import { formatCadCents, formatSignedCadCents } from '@/lib/currency';
 import { formatStatusLabel } from '@/lib/formatters';
 import { formatGcProjectType } from '@/lib/gc-project-type';
 import { getRequiredStringParam } from '@/lib/navigation-params';
+import { formatTradeLabel } from '@/lib/trade-labels';
 import { Colors, Spacing, Typography } from '@/constants/theme';
 import { GlassCard, GradientBackground, StatusBadge } from '@/components/ui';
 
@@ -77,10 +78,7 @@ interface AssignmentRow {
 }
 
 function formatTrade(tradeType: string) {
-  return tradeType
-    .split('_')
-    .map((part) => `${part.charAt(0).toUpperCase()}${part.slice(1)}`)
-    .join(' ');
+  return formatTradeLabel(tradeType) ?? 'Trade';
 }
 
 function todayIso() {

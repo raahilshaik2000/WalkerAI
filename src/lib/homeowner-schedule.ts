@@ -1,3 +1,5 @@
+import { formatTradeLabel } from '@/lib/trade-labels';
+
 export type HomeownerScheduleItemType = 'trade' | 'milestone';
 
 export interface ScheduleProject {
@@ -39,18 +41,6 @@ export interface HomeownerScheduleItem {
   project: ScheduleProject;
 }
 
-const TRADE_LABELS: Record<string, string> = {
-  general_contractor: 'General Contractor',
-  plumber: 'Plumber',
-  electrician: 'Electrician',
-  tile_installer: 'Tile Installer',
-  cabinet_installer: 'Cabinet Installer',
-  painter: 'Painter',
-  flooring_installer: 'Flooring Installer',
-  drywall: 'Drywall',
-  demolition: 'Demolition',
-};
-
 function getCompanyName(value: RawScheduledSlot['companies']) {
   if (Array.isArray(value)) return value[0]?.name ?? null;
   return value?.name ?? null;
@@ -79,7 +69,7 @@ export function mapHomeownerScheduleItems(
     .map((slot): HomeownerScheduleItem | null => {
       const project = projectById.get(slot.project_id);
       if (!project || !slot.scheduled_start_date) return null;
-      const tradeLabel = TRADE_LABELS[slot.trade_type] ?? slot.trade_type.replace(/_/g, ' ');
+      const tradeLabel = formatTradeLabel(slot.trade_type) ?? 'Trade';
       const company = getCompanyName(slot.companies);
       return {
         id: `trade:${slot.id}`,

@@ -15,6 +15,7 @@ import { supabase } from '@/lib/supabase/client';
 import { signOut } from '@/lib/supabase/auth';
 import { useAuthStore } from '@/stores/auth.store';
 import { formatCad, formatStatusLabel } from '@/lib/formatters';
+import { formatTradeLabel } from '@/lib/trade-labels';
 import { Colors, Radius, Spacing, Typography } from '@/constants/theme';
 import { AnimatedPressable, GradientBackground, ListItemSkeleton, StatusBadge } from '@/components/ui';
 import { NotificationButton } from '@/components/notifications/NotificationButton';
@@ -84,11 +85,7 @@ function formatLocation(city?: string | null, address?: string | null) {
 }
 
 function formatTrade(tradeType?: string | null) {
-  if (!tradeType) return null;
-  return tradeType
-    .split('_')
-    .map((part) => `${part.charAt(0).toUpperCase()}${part.slice(1)}`)
-    .join(' ');
+  return formatTradeLabel(tradeType);
 }
 
 function projectStatusVariant(status: string): 'active' | 'completed' | 'pending' | 'dispatching' | 'neutral' {
@@ -436,8 +433,8 @@ export default function CompanyJobFeed() {
                       <View style={styles.activeJobContent}>
                         <Text style={styles.activeJobRoom}>{formatRoom(job.room_type)}</Text>
                         <Text style={styles.activeJobCity}>{formatLocation(job.city, job.address)}</Text>
-                        {job.trade_type ? (
-                          <Text style={styles.activeJobTrade}>{job.trade_type.replace(/_/g, ' ')}</Text>
+                        {formatTrade(job.trade_type) ? (
+                          <Text style={styles.activeJobTrade}>{formatTrade(job.trade_type)}</Text>
                         ) : null}
                       </View>
                       <View style={styles.rowRight}>

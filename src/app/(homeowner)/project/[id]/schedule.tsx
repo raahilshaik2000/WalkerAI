@@ -19,20 +19,9 @@ import { supabase } from '@/lib/supabase/client';
 import { isValidIsoDate } from '@/lib/dates';
 import { getRequiredStringParam } from '@/lib/navigation-params';
 import { allSchedulableSlotsHaveApprovedQuotes } from '@/lib/project-activation';
+import { formatTradeLabel } from '@/lib/trade-labels';
 import { GlassButton, GradientBackground } from '@/components/ui';
 import { Colors, Radius, Spacing, Typography } from '@/constants/theme';
-
-const TRADE_LABELS: Record<string, string> = {
-  general_contractor: 'General Contractor',
-  plumber: 'Plumber',
-  electrician: 'Electrician',
-  tile_installer: 'Tile Installer',
-  cabinet_installer: 'Cabinet Installer',
-  painter: 'Painter',
-  flooring_installer: 'Flooring Installer',
-  drywall: 'Drywall',
-  demolition: 'Demolition',
-};
 
 interface Slot {
   id: string;
@@ -374,7 +363,7 @@ export default function ScheduleScreen() {
                     <Ionicons name="construct-outline" size={20} color="#FF6B00" />
                   </View>
                   <View style={styles.slotInfo}>
-                    <Text style={styles.tradeName}>{TRADE_LABELS[slot.trade_type] ?? slot.trade_type}</Text>
+                    <Text style={styles.tradeName}>{formatTradeLabel(slot.trade_type) ?? 'Trade'}</Text>
                     <Text style={styles.companyName}>{slotParticipantName(slot)}</Text>
                     {isExternalSlot(slot) ? (
                       <Text style={styles.externalNotice}>External scope is not managed by WalkerAI escrow.</Text>
