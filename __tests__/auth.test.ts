@@ -51,6 +51,38 @@ describe('Supabase auth helpers', () => {
     );
   });
 
+  it('allows general contractor as a public self-service signup role', async () => {
+    mockSignUp.mockResolvedValue({
+      data: {
+        user: { id: 'gc-user-1' },
+        session: { access_token: 'token' },
+      },
+      error: null,
+    });
+    mockUpsert.mockResolvedValue({ error: null });
+
+    await authHelpers.signUp('gc@example.com', 'password123', 'general_contractor');
+
+    expect(mockSignUp).toHaveBeenCalledWith({
+      email: 'gc@example.com',
+      password: 'password123',
+      options: { data: { role: 'general_contractor' } },
+    });
+    expect(mockUpsert).toHaveBeenCalledWith(
+      { id: 'gc-user-1', email: 'gc@example.com', role: 'general_contractor' },
+      { onConflict: 'id' },
+    );
+  });
+
+  it('rejects internal roles before self-service auth signup', async () => {
+    await expect(authHelpers.signUp('admin@example.com', 'password123', 'admin' as any)).rejects.toThrow(
+      'Unsupported self-service account role.',
+    );
+
+    expect(mockSignUp).not.toHaveBeenCalled();
+    expect(mockUpsert).not.toHaveBeenCalled();
+  });
+
   it('normalizes login email before signing in', async () => {
     mockSignInWithPassword.mockResolvedValue({ data: { session: null }, error: null });
 

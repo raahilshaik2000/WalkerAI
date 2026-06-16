@@ -1,4 +1,5 @@
 export type UserRole = 'homeowner' | 'company' | 'supplier' | 'general_contractor' | 'admin';
+export type PublicSignupRole = Exclude<UserRole, 'admin'>;
 
 export type ProjectStatus =
   | 'draft'

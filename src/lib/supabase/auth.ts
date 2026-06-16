@@ -1,7 +1,16 @@
 import { supabase } from './client';
-import type { UserRole } from '@/constants/enums';
+import type { PublicSignupRole } from '@/constants/enums';
 
-export async function signUp(email: string, password: string, role: UserRole) {
+const PUBLIC_SIGNUP_ROLES: readonly PublicSignupRole[] = ['homeowner', 'company', 'supplier', 'general_contractor'];
+
+function assertPublicSignupRole(role: string): asserts role is PublicSignupRole {
+  if (!PUBLIC_SIGNUP_ROLES.includes(role as PublicSignupRole)) {
+    throw new Error('Unsupported self-service account role.');
+  }
+}
+
+export async function signUp(email: string, password: string, role: PublicSignupRole) {
+  assertPublicSignupRole(role);
   const normalizedEmail = email.trim().toLowerCase();
   const { data, error } = await supabase.auth.signUp({
     email: normalizedEmail,

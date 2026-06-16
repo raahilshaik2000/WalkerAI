@@ -15,11 +15,11 @@ import { signUp } from '@/lib/supabase/auth';
 import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
 import { Colors, Radius, Spacing, Typography } from '@/constants/theme';
 import { GlassButton, GlassInput, GradientBackground } from '@/components/ui';
-import type { UserRole } from '@/constants/enums';
+import type { PublicSignupRole } from '@/constants/enums';
 
 export default function RegisterScreen() {
   const navigation = useNavigation<any>();
-  const [role, setRole] = useState<UserRole>('homeowner');
+  const [role, setRole] = useState<PublicSignupRole>('homeowner');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
