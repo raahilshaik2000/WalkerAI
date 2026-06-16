@@ -44,6 +44,54 @@ BEGIN
     ) THEN
       RAISE EXCEPTION 'Resolve pending change orders before completing this GC-managed project';
     END IF;
+
+    IF EXISTS (
+      SELECT 1
+        FROM public.permits permit
+       WHERE permit.project_id = NEW.project_id
+         AND permit.status <> 'passed'
+    ) THEN
+      RAISE EXCEPTION 'Resolve open permits and inspections before completing this GC-managed project';
+    END IF;
+
+    IF EXISTS (
+      SELECT 1
+        FROM public.material_orders material_order
+       WHERE material_order.project_id = NEW.project_id
+         AND material_order.status NOT IN ('confirmed', 'paid', 'cancelled')
+    ) THEN
+      RAISE EXCEPTION 'Resolve active material orders before completing this GC-managed project';
+    END IF;
+
+    IF EXISTS (
+      SELECT 1
+        FROM public.gc_trade_quote_negotiations negotiation
+       WHERE negotiation.project_id = NEW.project_id
+         AND negotiation.status = 'pending'
+    ) THEN
+      RAISE EXCEPTION 'Resolve pending trade pricing negotiations before completing this GC-managed project';
+    END IF;
+
+    IF EXISTS (
+      SELECT 1
+        FROM public.quotes quote
+       WHERE quote.project_id = NEW.project_id
+         AND quote.status = 'pending'
+    ) THEN
+      RAISE EXCEPTION 'Resolve pending trade quotes before completing this GC-managed project';
+    END IF;
+
+    IF EXISTS (
+      SELECT 1
+        FROM public.quotes quote
+        JOIN public.milestones milestone
+          ON milestone.quote_id = quote.id
+       WHERE quote.project_id = NEW.project_id
+         AND quote.status = 'approved'
+         AND milestone.status <> 'paid'
+    ) THEN
+      RAISE EXCEPTION 'Resolve unpaid quote milestones before completing this GC-managed project';
+    END IF;
   END IF;
 
   RETURN NEW;

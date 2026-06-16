@@ -1340,7 +1340,9 @@ describe('general contractor account type', () => {
     expect(gcCompletion).toContain('{completedMaterialOrders.map((order) => (');
     expect(gcCompletion).not.toContain('const paidMaterials = materialOrders.reduce');
     expect(gcCompletion).not.toContain('{materialOrders.map((order) => (');
-    expect(gcCompletion).toContain('Resolve pending approvals, payment requests, and change orders before requesting final project completion.');
+    expect(gcCompletion).toContain('Resolve pending approvals, payment requests, change orders, permits, material orders, trade negotiations, pending quotes, and unpaid milestones before requesting final project completion.');
+    expect(gcCompletion).toContain('Closeout blockers');
+    expect(gcCompletion).toContain('Unpaid milestones');
     expect(gcCompletion).toContain('Change orders');
     expect(gcCompletion).toContain('pending homeowner decision');
     expect(gcCompletion).toContain('Digital project binder');
@@ -1552,6 +1554,10 @@ describe('general contractor account type', () => {
     expect(gcCompletion).toContain('formatGcProjectType(assignment?.project_type, project.room_type)');
     expect(gcCompletion).toContain("metadata: { action: 'complete_project' }");
     expect(gcCompletion).toContain('This does not release escrow funds.');
+    expect(gcCompletion).toContain("from('gc_trade_quote_negotiations')");
+    expect(gcCompletion).toContain("from('quotes')");
+    expect(gcCompletion).toContain('const closeoutBlockers = openPermits.length');
+    expect(gcCompletion).toContain('Resolve active permits, material orders, trade negotiations, pending quotes, and unpaid milestones before requesting final project completion.');
     expect(readinessMigration).toContain('CREATE OR REPLACE FUNCTION public.guard_gc_completion_approval_ready()');
     expect(readinessMigration).toContain("NEW.metadata->>'action' = 'complete_project'");
     expect(readinessMigration).toContain('request.id <> NEW.id');
@@ -1562,6 +1568,16 @@ describe('general contractor account type', () => {
     expect(readinessMigration).toContain("change_order.status = 'proposed'");
     expect(readinessMigration).toContain('change_order.signed_by_company IS TRUE');
     expect(readinessMigration).toContain('change_order.signed_by_homeowner IS NOT TRUE');
+    expect(readinessMigration).toContain('FROM public.permits permit');
+    expect(readinessMigration).toContain("permit.status <> 'passed'");
+    expect(readinessMigration).toContain('FROM public.material_orders material_order');
+    expect(readinessMigration).toContain("material_order.status NOT IN ('confirmed', 'paid', 'cancelled')");
+    expect(readinessMigration).toContain('FROM public.gc_trade_quote_negotiations negotiation');
+    expect(readinessMigration).toContain("negotiation.status = 'pending'");
+    expect(readinessMigration).toContain('FROM public.quotes quote');
+    expect(readinessMigration).toContain("quote.status = 'pending'");
+    expect(readinessMigration).toContain('JOIN public.milestones milestone');
+    expect(readinessMigration).toContain("milestone.status <> 'paid'");
     expect(readinessMigration).toContain('guard_gc_completion_approval_ready_trigger');
   });
 

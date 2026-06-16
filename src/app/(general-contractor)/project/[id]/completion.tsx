@@ -47,6 +47,22 @@ interface MaterialOrderRecord {
   final_price: number | null;
 }
 
+interface TradeNegotiationRecord {
+  id: string;
+  status: string;
+}
+
+interface MilestoneRecord {
+  id: string;
+  status: string;
+}
+
+interface QuoteRecord {
+  id: string;
+  status: string;
+  milestones?: MilestoneRecord[];
+}
+
 interface ApprovalRecord {
   id: string;
   request_type: string;
@@ -88,6 +104,8 @@ export default function GeneralContractorCompletionScreen() {
   const [permits, setPermits] = useState<PermitRecord[]>([]);
   const [warranties, setWarranties] = useState<WarrantyRecord[]>([]);
   const [materialOrders, setMaterialOrders] = useState<MaterialOrderRecord[]>([]);
+  const [tradeNegotiations, setTradeNegotiations] = useState<TradeNegotiationRecord[]>([]);
+  const [quotes, setQuotes] = useState<QuoteRecord[]>([]);
   const [approvals, setApprovals] = useState<ApprovalRecord[]>([]);
   const [paymentRequests, setPaymentRequests] = useState<PaymentRequestRecord[]>([]);
   const [changeOrders, setChangeOrders] = useState<ChangeOrder[]>([]);
@@ -113,7 +131,17 @@ export default function GeneralContractorCompletionScreen() {
       if (!gc?.id) throw new Error('GC profile not found.');
       setGcVerified(gc.verified === true);
 
-      const [projectResult, permitResult, warrantyResult, materialResult, approvalResult, paymentResult, changeOrderResult] = await Promise.all([
+      const [
+        projectResult,
+        permitResult,
+        warrantyResult,
+        materialResult,
+        tradeNegotiationResult,
+        quoteResult,
+        approvalResult,
+        paymentResult,
+        changeOrderResult,
+      ] = await Promise.all([
         supabase
           .from('projects')
           .select('id, status, address, room_type, ai_cost_min, ai_cost_max')
@@ -134,6 +162,17 @@ export default function GeneralContractorCompletionScreen() {
           .select('id, status, final_price')
           .eq('project_id', projectId)
           .order('created_at', { ascending: false }),
+        supabase
+          .from('gc_trade_quote_negotiations')
+          .select('id, status')
+          .eq('project_id', projectId)
+          .eq('general_contractor_id', gc.id)
+          .order('created_at', { ascending: false }),
+        supabase
+          .from('quotes')
+          .select('id, status, milestones(id, status)')
+          .eq('project_id', projectId)
+          .order('submitted_at', { ascending: false }),
         supabase
           .from('project_approval_requests')
           .select('id, request_type, title, status, cost_delta, metadata')
@@ -157,6 +196,8 @@ export default function GeneralContractorCompletionScreen() {
         ?? permitResult.error
         ?? warrantyResult.error
         ?? materialResult.error
+        ?? tradeNegotiationResult.error
+        ?? quoteResult.error
         ?? approvalResult.error
         ?? paymentResult.error
         ?? changeOrderResult.error;
@@ -166,6 +207,8 @@ export default function GeneralContractorCompletionScreen() {
       setPermits((permitResult.data ?? []) as PermitRecord[]);
       setWarranties((warrantyResult.data ?? []) as WarrantyRecord[]);
       setMaterialOrders((materialResult.data ?? []) as MaterialOrderRecord[]);
+      setTradeNegotiations((tradeNegotiationResult.data ?? []) as TradeNegotiationRecord[]);
+      setQuotes((quoteResult.data ?? []) as QuoteRecord[]);
       setApprovals((approvalResult.data ?? []) as ApprovalRecord[]);
       setPaymentRequests((paymentResult.data ?? []) as PaymentRequestRecord[]);
       setChangeOrders((changeOrderResult.data ?? []) as ChangeOrder[]);
@@ -185,6 +228,8 @@ export default function GeneralContractorCompletionScreen() {
       setPermits([]);
       setWarranties([]);
       setMaterialOrders([]);
+      setTradeNegotiations([]);
+      setQuotes([]);
       setApprovals([]);
       setPaymentRequests([]);
       setChangeOrders([]);
@@ -207,8 +252,16 @@ export default function GeneralContractorCompletionScreen() {
   };
 
   const passedPermits = permits.filter((permit) => permit.status === 'passed').length;
+  const openPermits = permits.filter((permit) => permit.status !== 'passed');
   const completedMaterialOrders = materialOrders.filter((order) => ['confirmed', 'paid'].includes(order.status));
+  const activeMaterialOrders = materialOrders.filter((order) => !['confirmed', 'paid', 'cancelled'].includes(order.status));
   const completedMaterials = completedMaterialOrders.length;
+  const pendingTradeNegotiations = tradeNegotiations.filter((negotiation) => negotiation.status === 'pending').length;
+  const pendingQuotes = quotes.filter((quote) => quote.status === 'pending').length;
+  const unresolvedMilestones = quotes
+    .filter((quote) => quote.status === 'approved')
+    .flatMap((quote) => quote.milestones ?? [])
+    .filter((milestone) => milestone.status !== 'paid').length;
   const pendingChangeOrders = changeOrders.filter((order) => (
     order.status === 'proposed' && order.signed_by_company && !order.signed_by_homeowner
   )).length;
@@ -219,11 +272,17 @@ export default function GeneralContractorCompletionScreen() {
   const completionRequests = approvals.filter((approval) => approval.metadata?.action === 'complete_project');
   const latestCompletionRequest = completionRequests[0];
   const pendingCompletionRequest = completionRequests.find((approval) => approval.status === 'pending');
+  const closeoutBlockers = openPermits.length
+    + activeMaterialOrders.length
+    + pendingTradeNegotiations
+    + pendingQuotes
+    + unresolvedMilestones;
   const canRequestCompletion = assignment?.status === 'active'
     && gcVerified
     && project?.status !== 'completed'
     && !pendingCompletionRequest
-    && pendingApprovals === 0;
+    && pendingApprovals === 0
+    && closeoutBlockers === 0;
 
   const handleRequestCompletion = async () => {
     if (!assignment || assignment.status !== 'active') {
@@ -236,6 +295,10 @@ export default function GeneralContractorCompletionScreen() {
     }
     if (pendingApprovals > 0) {
       Alert.alert('Pending approvals remain', 'Resolve existing approvals, payment requests, and change orders before requesting final project completion.');
+      return;
+    }
+    if (closeoutBlockers > 0) {
+      Alert.alert('Closeout items remain', 'Resolve active permits, material orders, trade negotiations, pending quotes, and unpaid milestones before requesting final project completion.');
       return;
     }
 
@@ -309,6 +372,7 @@ export default function GeneralContractorCompletionScreen() {
                   <SummaryTile label="Materials complete" value={`${completedMaterials}/${materialOrders.length}`} />
                   <SummaryTile label="Warranties" value={warranties.length} />
                   <SummaryTile label="Pending approvals" value={pendingApprovals} warning={pendingApprovals > 0} />
+                  <SummaryTile label="Closeout blockers" value={closeoutBlockers} warning={closeoutBlockers > 0} />
                 </View>
                 {latestCompletionRequest ? (
                   <View style={styles.completionStatus}>
@@ -330,7 +394,7 @@ export default function GeneralContractorCompletionScreen() {
                   </Text>
                 ) : project?.status !== 'completed' && !pendingCompletionRequest ? (
                   <Text style={styles.completionNote}>
-                    Resolve pending approvals, payment requests, and change orders before requesting final project completion.
+                    Resolve pending approvals, payment requests, change orders, permits, material orders, trade negotiations, pending quotes, and unpaid milestones before requesting final project completion.
                   </Text>
                 ) : null}
               </GlassCard>
@@ -341,6 +405,8 @@ export default function GeneralContractorCompletionScreen() {
                 <InfoRow label="Material receipts" value={formatCadCents(paidMaterials)} />
                 <InfoRow label="Change orders" value={`${pendingChangeOrders} pending homeowner decision`} />
                 <InfoRow label="GC payment requests" value={`${paymentRequests.filter((request) => request.status === 'approved').length}/${paymentRequests.length} approved`} />
+                <InfoRow label="Pending trade pricing" value={`${pendingTradeNegotiations + pendingQuotes} open`} />
+                <InfoRow label="Unpaid milestones" value={`${unresolvedMilestones} remaining`} />
               </GlassCard>
 
               <BinderSection title="Permits & inspections" emptyText="No permit or inspection records yet.">
