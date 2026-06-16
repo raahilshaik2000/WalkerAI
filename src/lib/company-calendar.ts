@@ -11,11 +11,13 @@ export interface CompanyCalendarMilestone {
   amount: number;
   status: string;
   due_date: string | null;
+  slot_id: string | null;
   project: CompanyCalendarProject;
 }
 
 interface QuoteWithProject {
   status: string | null;
+  slot_id?: string | null;
   project?: CompanyCalendarProject | CompanyCalendarProject[] | null;
 }
 
@@ -51,6 +53,7 @@ export function mapCompanyCalendarMilestones(rows: RawCalendarMilestone[]): Comp
       amount: milestone.amount,
       status: milestone.status,
       due_date: milestone.due_date,
+      slot_id: getQuote(milestone.quote)?.slot_id ?? null,
       project: getProject(getQuote(milestone.quote)?.project) ?? {
         id: '',
         address: '',

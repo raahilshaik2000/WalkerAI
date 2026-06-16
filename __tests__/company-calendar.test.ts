@@ -1,5 +1,13 @@
 import { mapCompanyCalendarMilestones } from '../src/lib/company-calendar';
 
+declare const require: (moduleName: string) => any;
+declare const __dirname: string;
+
+const fs = require('fs');
+const path = require('path');
+
+const repoRoot = path.join(__dirname, '..');
+
 describe('company calendar milestone mapping', () => {
   it('includes only unreleased milestones from approved quotes', () => {
     const rows = [
@@ -11,6 +19,7 @@ describe('company calendar milestone mapping', () => {
         due_date: '2026-06-15',
         quote: {
           status: 'approved',
+          slot_id: 'slot-rough-in',
           project: { id: 'project-1', address: '1 Main St', city: 'Toronto', room_type: 'kitchen' },
         },
       },
@@ -45,8 +54,16 @@ describe('company calendar milestone mapping', () => {
         amount: 100000,
         status: 'pending',
         due_date: '2026-06-15',
+        slot_id: 'slot-rough-in',
         project: { id: 'project-1', address: '1 Main St', city: 'Toronto', room_type: 'kitchen' },
       },
     ]);
+  });
+
+  it('passes the approved quote slot into milestone navigation', () => {
+    const source = fs.readFileSync(path.join(repoRoot, 'src/app/(company)/calendar.tsx'), 'utf8');
+
+    expect(source).toContain('company_id, status, slot_id');
+    expect(source).toContain('params: { id: m.project.id, slot: m.slot_id ?? undefined }');
   });
 });

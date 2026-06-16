@@ -107,7 +107,7 @@ export default function CalendarScreen() {
       .from('milestones')
       .select(`
         id, title, amount, status, due_date,
-        quote:quotes!inner ( company_id, status, project:projects ( id, address, city, room_type ) )
+        quote:quotes!inner ( company_id, status, slot_id, project:projects ( id, address, city, room_type ) )
       `)
       .eq('quote.company_id', co.id)
       .eq('quote.status', 'approved')
@@ -203,7 +203,7 @@ export default function CalendarScreen() {
                     disabled={!m.project.id}
                     onPress={() => navigation.navigate('JobDetail', {
                       screen: 'JobMilestones',
-                      params: { id: m.project.id },
+                      params: { id: m.project.id, slot: m.slot_id ?? undefined },
                     })}
                   >
                     <GlassCard style={styles.card}>
