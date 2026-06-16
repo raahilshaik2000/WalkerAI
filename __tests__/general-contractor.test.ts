@@ -887,7 +887,7 @@ describe('general contractor account type', () => {
       'utf8',
     );
     const duplicateActionMigration = fs.readFileSync(
-      path.join(repoRoot, 'supabase/migrations/20260616015426_prevent_duplicate_pending_gc_actions.sql'),
+      path.join(repoRoot, 'supabase/migrations/20260616030000_prevent_duplicate_targeted_gc_requests.sql'),
       'utf8',
     );
     const gcProjectDetail = fs.readFileSync(
@@ -923,6 +923,11 @@ describe('general contractor account type', () => {
     expect(duplicateActionMigration).toContain("v_action IN ('update_gc_budget', 'update_gc_terms', 'complete_project')");
     expect(duplicateActionMigration).toContain("request.metadata->>'action' = v_action");
     expect(duplicateActionMigration).toContain('Resolve the existing pending GC recommendation before submitting another request for this action');
+    expect(duplicateActionMigration).toContain("NEW.request_type IN ('schedule_change', 'trade_substitution', 'material_substitution')");
+    expect(duplicateActionMigration).toContain("WHEN NEW.request_type IN ('schedule_change', 'trade_substitution') THEN 'slot_id'");
+    expect(duplicateActionMigration).toContain("WHEN NEW.request_type = 'material_substitution' THEN 'material_id'");
+    expect(duplicateActionMigration).toContain('Target metadata is required for this GC approval request');
+    expect(duplicateActionMigration).toContain('Resolve the existing pending GC request for this target before submitting another');
   });
 
   it('supports externally managed trades without treating them as WalkerAI verified', () => {
