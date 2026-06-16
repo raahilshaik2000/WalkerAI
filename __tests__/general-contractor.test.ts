@@ -1802,6 +1802,10 @@ describe('general contractor account type', () => {
       path.join(repoRoot, 'supabase/migrations/20260616200000_guard_gc_schedule_and_closeout_slots.sql'),
       'utf8',
     );
+    const completionNotificationMigration = fs.readFileSync(
+      path.join(repoRoot, 'supabase/migrations/20260616202000_notify_gc_completion_approval.sql'),
+      'utf8',
+    );
     const gcCompletion = fs.readFileSync(
       path.join(repoRoot, 'src/app/(general-contractor)/project/[id]/completion.tsx'),
       'utf8',
@@ -1852,6 +1856,14 @@ describe('general contractor account type', () => {
     expect(readinessMigration).toContain('JOIN public.milestones milestone');
     expect(readinessMigration).toContain("milestone.status <> 'paid'");
     expect(readinessMigration).toContain('guard_gc_completion_approval_ready_trigger');
+    expect(completionNotificationMigration).toContain('CREATE OR REPLACE FUNCTION public.notify_gc_completion_approval()');
+    expect(completionNotificationMigration).toContain("NEW.metadata->>'action' = 'complete_project'");
+    expect(completionNotificationMigration).toContain("'project_complete'");
+    expect(completionNotificationMigration).toContain('Your GC-managed renovation is complete');
+    expect(completionNotificationMigration).toContain('JOIN public.companies company ON company.id = quote.company_id');
+    expect(completionNotificationMigration).toContain('JOIN public.general_contractors gc ON gc.id = gcp.general_contractor_id');
+    expect(completionNotificationMigration).toContain("gcp.status IN ('active', 'completed')");
+    expect(completionNotificationMigration).toContain('notify_gc_completion_approval_trigger');
   });
 
   it('notifies homeowners and GCs about GC workflow actions', () => {
