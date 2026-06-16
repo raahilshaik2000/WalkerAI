@@ -1253,6 +1253,11 @@ describe('general contractor account type', () => {
     expect(gcCompletion).toContain('const pendingChangeOrders = changeOrders.filter');
     expect(gcCompletion).toContain("order.status === 'proposed' && order.signed_by_company && !order.signed_by_homeowner");
     expect(gcCompletion).toContain('+ pendingChangeOrders');
+    expect(gcCompletion).toContain("const completedMaterialOrders = materialOrders.filter((order) => ['confirmed', 'paid'].includes(order.status));");
+    expect(gcCompletion).toContain('const paidMaterials = completedMaterialOrders.reduce');
+    expect(gcCompletion).toContain('{completedMaterialOrders.map((order) => (');
+    expect(gcCompletion).not.toContain('const paidMaterials = materialOrders.reduce');
+    expect(gcCompletion).not.toContain('{materialOrders.map((order) => (');
     expect(gcCompletion).toContain('Resolve pending approvals, payment requests, and change orders before requesting final project completion.');
     expect(gcCompletion).toContain('Change orders');
     expect(gcCompletion).toContain('pending homeowner decision');

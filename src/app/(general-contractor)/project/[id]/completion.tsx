@@ -213,14 +213,15 @@ export default function GeneralContractorCompletionScreen() {
   };
 
   const passedPermits = permits.filter((permit) => permit.status === 'passed').length;
-  const completedMaterials = materialOrders.filter((order) => ['confirmed', 'paid'].includes(order.status)).length;
+  const completedMaterialOrders = materialOrders.filter((order) => ['confirmed', 'paid'].includes(order.status));
+  const completedMaterials = completedMaterialOrders.length;
   const pendingChangeOrders = changeOrders.filter((order) => (
     order.status === 'proposed' && order.signed_by_company && !order.signed_by_homeowner
   )).length;
   const pendingApprovals = approvals.filter((approval) => approval.status === 'pending').length
     + paymentRequests.filter((request) => request.status === 'pending').length
     + pendingChangeOrders;
-  const paidMaterials = materialOrders.reduce((sum, order) => sum + (order.final_price ?? 0), 0);
+  const paidMaterials = completedMaterialOrders.reduce((sum, order) => sum + (order.final_price ?? 0), 0);
   const completionRequests = approvals.filter((approval) => approval.metadata?.action === 'complete_project');
   const latestCompletionRequest = completionRequests[0];
   const pendingCompletionRequest = completionRequests.find((approval) => approval.status === 'pending');
@@ -366,7 +367,7 @@ export default function GeneralContractorCompletionScreen() {
               </BinderSection>
 
               <BinderSection title="Material receipts" emptyText="No completed material orders yet.">
-                {materialOrders.map((order) => (
+                {completedMaterialOrders.map((order) => (
                   <RecordRow
                     key={order.id}
                     title={order.final_price != null ? formatCadCents(order.final_price) : 'Material order'}
