@@ -28,6 +28,25 @@ describe('notification display metadata', () => {
     expect(notificationScreen).not.toContain("textTransform: 'capitalize'");
   });
 
+  it('keeps live notification handlers in the shared notification type union', () => {
+    const enums = fs.readFileSync(
+      path.join(__dirname, '../src/constants/enums.ts'),
+      'utf8',
+    );
+    const navigation = fs.readFileSync(
+      path.join(__dirname, '../src/lib/notifications/navigation.ts'),
+      'utf8',
+    );
+    const sendPush = fs.readFileSync(
+      path.join(__dirname, '../supabase/functions/send-push/index.ts'),
+      'utf8',
+    );
+
+    expect(navigation).toContain("case 'milestone_completed'");
+    expect(sendPush).toContain("case 'milestone_completed'");
+    expect(enums).toContain("| 'milestone_completed'");
+  });
+
   it('falls back to readable text for unknown notification types', () => {
     expect(notificationDisplayMeta('custom_internal_type')).toMatchObject({
       title: 'custom internal type',

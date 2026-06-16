@@ -104,6 +104,7 @@ export type NotificationType =
   | 'quote_submitted'
   | 'quote_approved'
   | 'milestone_needs_approval'
+  | 'milestone_completed'
   | 'milestone_paid'
   | 'project_complete'
   | 'new_message'
