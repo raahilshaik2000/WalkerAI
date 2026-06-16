@@ -285,7 +285,8 @@ export default function ProjectConciergeScreen() {
   };
 
   const assignedGc = getAssignedGc(currentAssignment);
-  const assignedGcCanRequestConcierge = assignedGc?.verified === true && assignedGc.concierge_enabled === true;
+  const assignedGcConciergeEligible = assignedGc?.verified === true && assignedGc.concierge_enabled === true;
+  const assignedGcCanRequestConcierge = assignedGcConciergeEligible;
   const canApproveGcPaymentRequests = currentAssignment?.status === 'active' && assignedGc?.verified === true;
 
   const handleApprovalResponse = async (request: ApprovalRequest, status: 'approved' | 'rejected') => {
@@ -338,6 +339,10 @@ export default function ProjectConciergeScreen() {
     }
     if (booking.payment_status !== 'paid') {
       Alert.alert('Payment required', 'Pay the concierge booking before releasing the GC payout.');
+      return;
+    }
+    if (!assignedGcConciergeEligible) {
+      Alert.alert('Payout locked', 'WalkerAI verification and concierge marketplace access are required before this GC can receive concierge payouts.');
       return;
     }
 
@@ -507,6 +512,10 @@ export default function ProjectConciergeScreen() {
     }
     if (booking.payment_status === 'paid') {
       Alert.alert('Already paid', 'This concierge booking has already been paid.');
+      return;
+    }
+    if (!assignedGcConciergeEligible) {
+      Alert.alert('Payment locked', 'WalkerAI verification and concierge marketplace access are required before this concierge booking can be paid.');
       return;
     }
 
@@ -732,23 +741,35 @@ export default function ProjectConciergeScreen() {
                       <StatusBadge label={formatStatusLabel(booking.status)} variant={['accepted', 'completed'].includes(booking.status) ? 'completed' : booking.status === 'rejected' ? 'error' : 'pending'} size="sm" />
                     </View>
                     {booking.status === 'accepted' && booking.payment_status !== 'paid' ? (
-                      <GlassButton
-                        label={booking.payment_status === 'payment_pending' ? 'Continue Payment' : 'Pay Booking'}
-                        onPress={() => handlePayBooking(booking)}
-                        loading={payingBookingId === booking.id}
-                        disabled={!!payingBookingId}
-                        fullWidth
-                        size="sm"
-                        style={styles.inviteButton}
-                      />
+                      <>
+                        {!assignedGcConciergeEligible ? (
+                          <Text style={styles.emptySubText}>
+                            WalkerAI verification and concierge marketplace access are required before this concierge booking can be paid.
+                          </Text>
+                        ) : null}
+                        <GlassButton
+                          label={booking.payment_status === 'payment_pending' ? 'Continue Payment' : 'Pay Booking'}
+                          onPress={() => handlePayBooking(booking)}
+                          loading={payingBookingId === booking.id}
+                          disabled={!assignedGcConciergeEligible || !!payingBookingId}
+                          fullWidth
+                          size="sm"
+                          style={styles.inviteButton}
+                        />
+                      </>
                     ) : booking.payment_status === 'paid' && booking.status === 'accepted' ? (
                       <>
                         <Text style={styles.paidText}>Paid{booking.paid_at ? ` · ${new Date(booking.paid_at).toLocaleDateString('en-CA')}` : ''}</Text>
+                        {!assignedGcConciergeEligible ? (
+                          <Text style={styles.emptySubText}>
+                            WalkerAI verification and concierge marketplace access are required before this concierge payout can be released.
+                          </Text>
+                        ) : null}
                         <GlassButton
                           label="Confirm Complete & Release Payout"
                           onPress={() => handleReleaseBookingPayout(booking)}
                           loading={releasingBookingId === booking.id}
-                          disabled={!!releasingBookingId}
+                          disabled={!assignedGcConciergeEligible || !!releasingBookingId}
                           fullWidth
                           size="sm"
                           style={styles.inviteButton}

@@ -1371,6 +1371,33 @@ describe('general contractor account type', () => {
     expect(homeownerConcierge).not.toContain('payment collection is still handled separately');
   });
 
+  it('locks stale GC concierge booking payment and payout actions when GC eligibility changes', () => {
+    const homeownerConcierge = fs.readFileSync(
+      path.join(repoRoot, 'src/app/(homeowner)/project/[id]/concierge.tsx'),
+      'utf8',
+    );
+    const paymentFunction = fs.readFileSync(
+      path.join(repoRoot, 'supabase/functions/create-gc-concierge-payment-intent/index.ts'),
+      'utf8',
+    );
+    const payoutFunction = fs.readFileSync(
+      path.join(repoRoot, 'supabase/functions/gc-concierge-payout/index.ts'),
+      'utf8',
+    );
+
+    expect(homeownerConcierge).toContain('const assignedGcConciergeEligible = assignedGc?.verified === true && assignedGc.concierge_enabled === true');
+    expect(homeownerConcierge).toContain("Alert.alert('Payment locked'");
+    expect(homeownerConcierge).toContain("Alert.alert('Payout locked'");
+    expect(homeownerConcierge).toContain('WalkerAI verification and concierge marketplace access are required before this concierge booking can be paid.');
+    expect(homeownerConcierge).toContain('WalkerAI verification and concierge marketplace access are required before this concierge payout can be released.');
+    expect(homeownerConcierge).toContain('disabled={!assignedGcConciergeEligible || !!payingBookingId}');
+    expect(homeownerConcierge).toContain('disabled={!assignedGcConciergeEligible || !!releasingBookingId}');
+    expect(paymentFunction).toContain('gc.verified !== true || gc.concierge_enabled !== true');
+    expect(paymentFunction).toContain('Concierge booking is no longer available for payment');
+    expect(payoutFunction).toContain('gc.verified !== true || gc.concierge_enabled !== true');
+    expect(payoutFunction).toContain('General contractor is no longer eligible for concierge payouts');
+  });
+
   it('adds GC Stripe Connect setup for concierge payouts', () => {
     const migration = fs.readFileSync(
       path.join(repoRoot, 'supabase/migrations/20260615001800_add_gc_stripe_connect_fields.sql'),
