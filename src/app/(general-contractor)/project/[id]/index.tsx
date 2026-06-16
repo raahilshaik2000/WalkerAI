@@ -642,6 +642,7 @@ export default function GeneralContractorProjectDetail() {
     : 'Pending';
   const assignedTrades = slots.filter((slot) => !!getCompanyName(slot)).length;
   const assignmentIsActive = assignment?.status === 'active' && gcVerified;
+  const headerStatus = assignment?.status ?? project?.status ?? null;
   const markupSummary = assignment && project
     ? calculateGcMarkup({
       baseMinCents: project.ai_cost_min,
@@ -667,8 +668,12 @@ export default function GeneralContractorProjectDetail() {
               <Text style={styles.title}>{formatGcProjectType(assignment?.project_type, project?.room_type)}</Text>
               <Text style={styles.subtitle}>{project?.city || project?.address || 'Managed project'}</Text>
             </View>
-            {project?.status ? (
-              <StatusBadge label={formatStatusLabel(project.status)} variant={projectStatusVariant(project.status)} dot />
+            {headerStatus ? (
+              <StatusBadge
+                label={formatStatusLabel(headerStatus)}
+                variant={assignment ? assignmentStatusVariant(headerStatus) : projectStatusVariant(headerStatus)}
+                dot
+              />
             ) : null}
           </View>
 

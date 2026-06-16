@@ -52,6 +52,11 @@ interface Assignment {
   general_contractor_id: string;
 }
 
+interface ProjectBudget {
+  ai_cost_min: number | null;
+  ai_cost_max: number | null;
+}
+
 interface DispatchResult {
   success?: boolean;
   dispatched?: number;
@@ -71,6 +76,9 @@ function getQuoteCompany(quote: Quote) {
 }
 
 function estimateLabel(slot: Slot) {
+  if ((slot.estimated_cost_min ?? 0) <= 0 && (slot.estimated_cost_max ?? 0) <= 0) {
+    return 'Estimate pending';
+  }
   if (slot.estimated_cost_min != null && slot.estimated_cost_max != null) {
     return `${formatCadCents(slot.estimated_cost_min)} - ${formatCadCents(slot.estimated_cost_max)}`;
   }
@@ -90,6 +98,7 @@ export default function GeneralContractorTradesScreen() {
   const route = useRoute<any>();
   const projectId = getRequiredStringParam(route.params, 'id');
   const [assignment, setAssignment] = useState<Assignment | null>(null);
+  const [projectBudget, setProjectBudget] = useState<ProjectBudget | null>(null);
   const [slots, setSlots] = useState<Slot[]>([]);
   const [quotes, setQuotes] = useState<Quote[]>([]);
   const [negotiations, setNegotiations] = useState<GcTradeQuoteNegotiation[]>([]);
@@ -145,6 +154,7 @@ export default function GeneralContractorTradesScreen() {
   const selectedSlotHasApprovedQuote = selectedSlot
     ? (quotesBySlot.get(selectedSlot.id) ?? []).some((quote) => quote.status === 'approved')
     : false;
+  const projectBudgetReady = (projectBudget?.ai_cost_min ?? 0) > 0 && (projectBudget?.ai_cost_max ?? 0) > 0;
 
   const fetchData = useCallback(async () => {
     const currentUser = (await supabase.auth.getUser()).data.user;
@@ -166,12 +176,17 @@ export default function GeneralContractorTradesScreen() {
       if (!gc?.id) throw new Error('GC profile not found.');
       setGcVerified(gc.verified === true);
 
-      const [assignmentResult, slotResult, quoteResult, negotiationResult] = await Promise.all([
+      const [assignmentResult, projectResult, slotResult, quoteResult, negotiationResult] = await Promise.all([
         supabase
           .from('general_contractor_projects')
           .select('id, status, homeowner_id, general_contractor_id')
           .eq('project_id', projectId)
           .eq('general_contractor_id', gc.id)
+          .maybeSingle(),
+        supabase
+          .from('projects')
+          .select('ai_cost_min, ai_cost_max')
+          .eq('id', projectId)
           .maybeSingle(),
         supabase
           .from('project_slots')
@@ -195,17 +210,20 @@ export default function GeneralContractorTradesScreen() {
       ]);
 
       if (assignmentResult.error) throw assignmentResult.error;
+      if (projectResult.error) throw projectResult.error;
       if (slotResult.error) throw slotResult.error;
       if (quoteResult.error) throw quoteResult.error;
       if (negotiationResult.error) throw negotiationResult.error;
 
       setAssignment(assignmentResult.data as Assignment | null);
+      setProjectBudget(projectResult.data as ProjectBudget | null);
       setSlots((slotResult.data ?? []) as Slot[]);
       setQuotes((quoteResult.data ?? []) as Quote[]);
       setNegotiations((negotiationResult.data ?? []) as GcTradeQuoteNegotiation[]);
     } catch (err) {
       setErrorMessage(err instanceof Error ? err.message : 'Could not load trade management.');
       setAssignment(null);
+      setProjectBudget(null);
       setSlots([]);
       setQuotes([]);
       setNegotiations([]);
@@ -238,6 +256,10 @@ export default function GeneralContractorTradesScreen() {
     }
     if (!gcVerified) {
       Alert.alert('Verification required', 'WalkerAI must verify your GC profile before you can generate trade slots.');
+      return;
+    }
+    if (!projectBudgetReady) {
+      Alert.alert('Budget required', 'Generate or approve the project budget before WalkerAI can create priced trade slots.');
       return;
     }
 
@@ -530,7 +552,7 @@ export default function GeneralContractorTradesScreen() {
           ) : slots.length === 0 ? (
             <GlassCard style={styles.card}>
               <Text style={styles.bodyText}>Trade slots have not been generated yet.</Text>
-              {assignment?.status === 'active' && gcVerified ? (
+              {assignment?.status === 'active' && gcVerified && projectBudgetReady ? (
                 <GlassButton
                   label="Generate Trade Plan"
                   onPress={handleGenerateSlots}
@@ -542,7 +564,9 @@ export default function GeneralContractorTradesScreen() {
                 />
               ) : (
                 <Text style={styles.emptyHint}>
-                  {assignment?.status === 'active'
+                  {assignment?.status === 'active' && gcVerified && !projectBudgetReady
+                    ? 'Generate or approve the project budget before WalkerAI can create priced trade slots.'
+                    : assignment?.status === 'active'
                     ? 'WalkerAI verification is required before a GC can generate the trade plan.'
                     : 'Homeowner confirmation is required before a GC can generate the trade plan.'}
                 </Text>

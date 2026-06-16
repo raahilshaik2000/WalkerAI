@@ -62,6 +62,13 @@ function projectStatusVariant(status: string): 'active' | 'completed' | 'pending
   return 'neutral';
 }
 
+function dashboardAssignmentStatus(assignmentStatus: string, projectStatus?: string | null) {
+  if (assignmentStatus === 'invited' || assignmentStatus === 'active' || assignmentStatus === 'completed') {
+    return assignmentStatus;
+  }
+  return projectStatus ?? assignmentStatus;
+}
+
 function formatLocation(city?: string | null, address?: string | null) {
   return city || address || 'Location pending';
 }
@@ -306,9 +313,7 @@ export default function GeneralContractorDashboard() {
             <TradeSection title="Managed projects">
               {assignments.map((assignment) => {
                 const project = assignment.project;
-                const dashboardStatus = assignment.status === 'invited'
-                  ? assignment.status
-                  : project?.status ?? assignment.status;
+                const dashboardStatus = dashboardAssignmentStatus(assignment.status, project?.status);
                 return (
                   <TouchableOpacity
                     key={assignment.id}

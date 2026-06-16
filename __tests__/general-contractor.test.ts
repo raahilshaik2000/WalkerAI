@@ -832,7 +832,9 @@ describe('general contractor account type', () => {
     expect(dashboard).toContain('projectContact');
     expect(dashboard).toContain('project_type, scope_summary');
     expect(dashboard).toContain('formatGcProjectType(assignment.project_type, project?.room_type)');
-    expect(dashboard).toContain("const dashboardStatus = assignment.status === 'invited'");
+    expect(dashboard).toContain('function dashboardAssignmentStatus(assignmentStatus: string, projectStatus?: string | null)');
+    expect(dashboard).toContain("assignmentStatus === 'invited' || assignmentStatus === 'active' || assignmentStatus === 'completed'");
+    expect(dashboard).toContain('const dashboardStatus = dashboardAssignmentStatus(assignment.status, project?.status)');
     expect(dashboard).toContain('label={formatStatusLabel(dashboardStatus)}');
     expect(dashboard).toContain('variant={projectStatusVariant(dashboardStatus)}');
     expect(dashboard).toContain('When you create a homeowner draft, a homeowner invites you, or a project is assigned for concierge management, it will appear here.');
@@ -871,6 +873,9 @@ describe('general contractor account type', () => {
     expect(homeownerConcierge).not.toContain('label={formatStatusLabel(currentAssignment.status)} variant="pending"');
     expect(gcProjectDetail).toContain('function assignmentStatusVariant');
     expect(gcProjectDetail).toContain("if (status === 'removed') return 'error'");
+    expect(gcProjectDetail).toContain('const headerStatus = assignment?.status ?? project?.status ?? null;');
+    expect(gcProjectDetail).toContain('variant={assignment ? assignmentStatusVariant(headerStatus) : projectStatusVariant(headerStatus)}');
+    expect(gcProjectDetail).not.toContain('StatusBadge label={formatStatusLabel(project.status)} variant={projectStatusVariant(project.status)}');
     expect(gcProjectDetail).toContain('variant={assignmentStatusVariant(assignment.status)}');
     expect(gcProjectDetail).not.toContain("variant={assignment.status === 'active' ? 'active' : 'pending'}");
     expect(gcProjectDetail).toContain('homeowner_contact_name, homeowner_contact_email, homeowner_contact_phone');
@@ -923,6 +928,19 @@ describe('general contractor account type', () => {
     expect(removedAssignmentVisibilityMigration).toContain('homeowner_id = (SELECT auth.uid())');
     expect(removedAssignmentVisibilityMigration).toContain("status <> 'removed'");
     expect(removedAssignmentVisibilityMigration).toMatch(/status <> 'removed'[\s\S]*public\.general_contractors gc/);
+  });
+
+  it('shows active GC management on the dashboard even when the homeowner project remains a draft', () => {
+    const dashboard = fs.readFileSync(
+      path.join(repoRoot, 'src/app/(general-contractor)/index.tsx'),
+      'utf8',
+    );
+
+    expect(dashboard).toContain('function dashboardAssignmentStatus(assignmentStatus: string, projectStatus?: string | null)');
+    expect(dashboard).toContain("assignmentStatus === 'invited' || assignmentStatus === 'active' || assignmentStatus === 'completed'");
+    expect(dashboard).toContain('return assignmentStatus;');
+    expect(dashboard).toContain('return projectStatus ?? assignmentStatus;');
+    expect(dashboard).not.toContain("assignment.status === 'invited'\n                  ? assignment.status\n                  : project?.status ?? assignment.status");
   });
 
   it('counts real GC homeowner actions on the dashboard approval metric', () => {
@@ -1502,9 +1520,14 @@ describe('general contractor account type', () => {
     expect(navigator).toContain('GeneralContractorTrades');
     expect(gcProjectDetail).toContain("navigation.navigate('GeneralContractorTrades'");
     expect(gcTrades).toContain("from('project_slots')");
+    expect(gcTrades).toContain("from('projects')");
+    expect(gcTrades).toContain("select('ai_cost_min, ai_cost_max')");
+    expect(gcTrades).toContain('const projectBudgetReady = (projectBudget?.ai_cost_min ?? 0) > 0 && (projectBudget?.ai_cost_max ?? 0) > 0;');
+    expect(gcTrades).toContain("return 'Estimate pending';");
     expect(gcTrades).toContain("from('quotes')");
     expect(gcTrades).toContain("supabase.functions.invoke('generate-trade-slots'");
     expect(gcTrades).toContain('Generate Trade Plan');
+    expect(gcTrades).toContain('Generate or approve the project budget before WalkerAI can create priced trade slots.');
     expect(gcTrades).toContain('The homeowner must confirm GC management before you can generate trade slots.');
     expect(gcTrades).toContain("supabase.functions.invoke<DispatchResult>('dispatch-slots'");
     expect(gcTrades).toContain('WalkerAI trade marketplace');
