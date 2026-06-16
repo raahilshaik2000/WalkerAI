@@ -1292,17 +1292,23 @@ describe('general contractor account type', () => {
   });
 
   it('uses supported icons for GC project controls', () => {
+    const gcAppDir = path.join(repoRoot, 'src/app/(general-contractor)');
+    const readGcSources = (dir: string): string[] => fs.readdirSync(dir, { withFileTypes: true }).flatMap((entry: any) => {
+      const entryPath = path.join(dir, entry.name);
+      if (entry.isDirectory()) return readGcSources(entryPath);
+      if (entry.isFile() && /\.(ts|tsx)$/.test(entry.name)) return [fs.readFileSync(entryPath, 'utf8')];
+      return [];
+    });
     const gcProjectDetail = fs.readFileSync(
       path.join(repoRoot, 'src/app/(general-contractor)/project/[id]/index.tsx'),
       'utf8',
     );
+    const gcSources = readGcSources(gcAppDir).join('\n');
 
     expect(gcProjectDetail).not.toContain('file-document-check-outline');
-    expect(gcProjectDetail).not.toContain('cash-clock');
-    expect(gcProjectDetail).not.toContain('account-hard-hat-outline');
     expect(gcProjectDetail).toContain('file-check-outline');
-    expect(gcProjectDetail).toContain('cash');
-    expect(gcProjectDetail).toContain('account-hard-hat');
+    expect(gcSources).not.toContain('cash-clock');
+    expect(gcSources).not.toContain('account-hard-hat-outline');
   });
 
   it('lets GCs recommend material substitutions without bypassing homeowner approval', () => {

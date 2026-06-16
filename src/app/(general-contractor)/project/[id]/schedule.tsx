@@ -255,7 +255,7 @@ export default function GeneralContractorScheduleScreen() {
                     <GlassCard style={[styles.card, selected && styles.cardSelected]}>
                       <View style={styles.slotHeader}>
                         <View style={styles.slotIcon}>
-                          <Icon name={slot.fulfillment_type === 'external' ? 'account-hard-hat-outline' : 'calendar-clock'} size={20} color={selected ? Colors.accent : Colors.text.secondary} />
+                          <Icon name={slot.fulfillment_type === 'external' ? 'account-hard-hat' : 'calendar-clock'} size={20} color={selected ? Colors.accent : Colors.text.secondary} />
                         </View>
                         <View style={styles.slotBody}>
                           <Text style={styles.slotTitle}>{formatTrade(slot.trade_type)}</Text>

@@ -232,7 +232,7 @@ export default function GeneralContractorDashboard() {
           <View style={styles.pendingContainer}>
             <View style={styles.onboardIconWrap}>
               <Icon
-                name={setupIncomplete ? 'clipboard-text-outline' : gc ? 'magnify' : 'account-hard-hat-outline'}
+                name={setupIncomplete ? 'clipboard-text-outline' : gc ? 'magnify' : 'account-hard-hat'}
                 size={36}
                 color={setupIncomplete || gc ? Colors.warning : Colors.success}
               />

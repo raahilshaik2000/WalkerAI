@@ -616,7 +616,7 @@ export default function GeneralContractorTradesScreen() {
                       <View style={styles.slotHeader}>
                         <View style={styles.slotIcon}>
                           <Icon
-                            name={slot.fulfillment_type === 'external' ? 'account-hard-hat-outline' : company ? 'account-check-outline' : 'account-search-outline'}
+                            name={slot.fulfillment_type === 'external' ? 'account-hard-hat' : company ? 'account-check-outline' : 'account-search-outline'}
                             size={20}
                             color={selected ? Colors.accent : Colors.text.secondary}
                           />

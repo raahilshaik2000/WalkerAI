@@ -396,7 +396,7 @@ export default function GeneralContractorApprovals() {
                           <View style={styles.cardHeader}>
                             <View style={styles.iconWrap}>
                               <Icon
-                                name={pending ? 'cash-clock' : request.status === 'approved' ? 'cash-check' : 'cash-remove'}
+                                name={pending ? 'cash' : request.status === 'approved' ? 'cash-check' : 'cash-remove'}
                                 size={20}
                                 color={pending ? Colors.warning : request.status === 'approved' ? Colors.success : Colors.error}
                               />
