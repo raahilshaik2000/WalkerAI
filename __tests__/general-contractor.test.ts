@@ -218,6 +218,10 @@ describe('general contractor account type', () => {
       path.join(repoRoot, 'supabase/migrations/20260616004913_invite_gc_to_project_rpc.sql'),
       'utf8',
     );
+    const inviteContextMigration = fs.readFileSync(
+      path.join(repoRoot, 'supabase/migrations/20260616020800_copy_project_context_to_gc_invites.sql'),
+      'utf8',
+    );
 
     expect(projectDetail).toContain("label: 'Concierge'");
     expect(projectDetail).toContain("screen: 'Concierge'");
@@ -250,6 +254,13 @@ describe('general contractor account type', () => {
     expect(inviteMigration).toContain('v_gc.default_markup_pct');
     expect(inviteMigration).toContain('v_gc.default_concierge_fee_pct');
     expect(inviteMigration).toContain('GRANT EXECUTE ON FUNCTION public.invite_gc_to_project(UUID, UUID) TO authenticated');
+    expect(inviteContextMigration).toContain('CREATE OR REPLACE FUNCTION public.invite_gc_to_project');
+    expect(inviteContextMigration).toContain('v_project_type := COALESCE(v_project.room_type::TEXT, \'other\')');
+    expect(inviteContextMigration).toContain('v_scope_summary := NULLIF(trim(COALESCE(v_project.description, \'\')), \'\')');
+    expect(inviteContextMigration).toContain('homeowner_contact_name');
+    expect(inviteContextMigration).toContain('COALESCE(NULLIF(trim(COALESCE(v_homeowner.full_name, \'\')), \'\'), v_homeowner.email)');
+    expect(inviteContextMigration).toContain('homeowner_contact_email');
+    expect(inviteContextMigration).toContain('homeowner_contact_phone');
   });
 
   it('lets invited GCs activate their project management assignment', () => {
