@@ -1677,6 +1677,8 @@ describe('general contractor account type', () => {
     expect(gcAssistant).toContain("from('material_orders')");
     expect(gcAssistant).toContain("from('messages')");
     expect(gcAssistant).toContain('No manual edits or AI assumptions are applied.');
+    expect(gcAssistant).toContain("&& ['filled', 'scheduled'].includes(slot.status)");
+    expect(gcAssistant).not.toContain("slot.status !== 'scheduled'");
   });
 
   it('shows modern GC approval requests in the GC approvals inbox', () => {

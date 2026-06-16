@@ -223,7 +223,11 @@ export default function GeneralContractorAssistantScreen() {
     const pendingPayments = paymentRequests.filter((item) => item.status === 'pending');
     const openPermits = permits.filter((permit) => !['passed', 'approved'].includes(permit.status));
     const unscheduledSlots = slots.filter((slot) => !slot.scheduled_start_date && ['filled', 'scheduled'].includes(slot.status));
-    const overdueSlots = slots.filter((slot) => slot.scheduled_end_date && slot.scheduled_end_date < today && slot.status !== 'scheduled');
+    const overdueSlots = slots.filter((slot) => (
+      slot.scheduled_end_date
+      && slot.scheduled_end_date < today
+      && ['filled', 'scheduled'].includes(slot.status)
+    ));
     const externalSlots = slots.filter((slot) => slot.fulfillment_type === 'external');
     const lateMaterialOrders = materialOrders.filter((order) => (
       order.delivery_deadline
