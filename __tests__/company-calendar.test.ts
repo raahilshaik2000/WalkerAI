@@ -45,6 +45,18 @@ describe('company calendar milestone mapping', () => {
           project: { id: 'project-3', address: '3 Main St', city: 'Toronto', room_type: 'bathroom' },
         },
       },
+      {
+        id: 'gc-non-room',
+        title: 'Flooring install',
+        amount: 75000,
+        status: 'pending',
+        due_date: '2026-06-18',
+        quote: {
+          status: 'approved',
+          slot_id: 'slot-flooring',
+          project: { id: 'project-4', address: '4 Main St', city: 'Toronto', room_type: null },
+        },
+      },
     ];
 
     expect(mapCompanyCalendarMilestones(rows)).toEqual([
@@ -57,6 +69,15 @@ describe('company calendar milestone mapping', () => {
         slot_id: 'slot-rough-in',
         project: { id: 'project-1', address: '1 Main St', city: 'Toronto', room_type: 'kitchen' },
       },
+      {
+        id: 'gc-non-room',
+        title: 'Flooring install',
+        amount: 75000,
+        status: 'pending',
+        due_date: '2026-06-18',
+        slot_id: 'slot-flooring',
+        project: { id: 'project-4', address: '4 Main St', city: 'Toronto', room_type: null },
+      },
     ]);
   });
 
@@ -65,5 +86,15 @@ describe('company calendar milestone mapping', () => {
 
     expect(source).toContain('company_id, status, slot_id');
     expect(source).toContain('params: { id: m.project.id, slot: m.slot_id ?? undefined }');
+  });
+
+  it('does not render unknown project rooms as bathroom milestones', () => {
+    const source = fs.readFileSync(path.join(repoRoot, 'src/app/(company)/calendar.tsx'), 'utf8');
+    const mapper = fs.readFileSync(path.join(repoRoot, 'src/lib/company-calendar.ts'), 'utf8');
+
+    expect(source).toContain('gcProjectTypeIcon(null, m.project.room_type)');
+    expect(source).not.toContain("m.project.room_type === 'kitchen' ? 'countertop-outline' : 'shower'");
+    expect(mapper).toContain('room_type: string | null;');
+    expect(mapper).toContain('room_type: null');
   });
 });

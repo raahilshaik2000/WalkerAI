@@ -5,6 +5,7 @@ import { useNavigation } from '@react-navigation/native';
 import Ionicons from 'react-native-vector-icons/Ionicons';
 import { AnimatedPressable, GlassButton, GlassCard, GradientBackground } from '@/components/ui';
 import { Colors } from '@/constants/theme';
+import { formatGcProjectType } from '@/lib/gc-project-type';
 import { supabase } from '@/lib/supabase/client';
 import { useAuthStore } from '@/stores/auth.store';
 
@@ -13,7 +14,7 @@ interface ProjectAddressRow {
   address: string | null;
   city: string | null;
   province: string | null;
-  room_type: string;
+  room_type: string | null;
   status: string;
   created_at: string;
 }
@@ -22,13 +23,13 @@ interface SavedAddress {
   key: string;
   address: string;
   projectCount: number;
-  rooms: string[];
+  rooms: Array<string | null>;
   latestProjectId: string;
   latestCreatedAt: string;
 }
 
-function formatRoom(roomType: string) {
-  return roomType.replace(/_/g, ' ');
+function formatRoom(roomType: string | null) {
+  return formatGcProjectType(null, roomType);
 }
 
 function formatAddress(row: ProjectAddressRow) {

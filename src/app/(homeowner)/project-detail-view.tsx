@@ -22,6 +22,7 @@ import { Colors, Radius } from '@/constants/theme';
 import { supabase } from '@/lib/supabase/client';
 import { restartProjectDispatch } from '@/lib/project-dispatch';
 import { buildProjectShareMessage } from '@/lib/project-share';
+import { formatGcProjectType } from '@/lib/gc-project-type';
 
 const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = Dimensions.get('window');
 const HERO_HEIGHT = SCREEN_HEIGHT * 0.38;
@@ -30,7 +31,7 @@ const HERO_HEIGHT = SCREEN_HEIGHT * 0.38;
 
 interface RealProject {
   id: string;
-  room_type: string;
+  room_type: string | null;
   status: string;
   description: string | null;
   address: string | null;
@@ -345,10 +346,8 @@ export default function ProjectDetailViewScreen() {
 
   const statusMeta = STATUS_META[project.status] ?? { label: project.status, color: '#6B7280' };
   const contractorCopy = getContractorCopy(project.status);
-  const roomLabel  = project.room_type
-    ? project.room_type.charAt(0).toUpperCase() + project.room_type.slice(1)
-    : 'Home';
-  const title = `${roomLabel} Renovation`;
+  const projectTypeLabel = formatGcProjectType(null, project.room_type);
+  const title = projectTypeLabel;
 
   const handleShare = async () => {
     try {
@@ -713,7 +712,7 @@ export default function ProjectDetailViewScreen() {
               <Ionicons name="information-circle-outline" size={14} color="#FF6B00" />
               <Text style={styles.sectionTitle}>Project Info</Text>
             </View>
-            <InfoRow label="Room type" value={roomLabel} />
+            <InfoRow label="Project type" value={projectTypeLabel} />
             <View style={styles.infoDivider} />
             <InfoRow label="Status" value={statusMeta.label} valueStyle={{ color: statusMeta.color }} />
             <View style={styles.infoDivider} />

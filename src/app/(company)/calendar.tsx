@@ -13,6 +13,7 @@ import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
 import { supabase } from '@/lib/supabase/client';
 import { useAuthStore } from '@/stores/auth.store';
 import { formatCad } from '@/lib/formatters';
+import { gcProjectTypeIcon } from '@/lib/gc-project-type';
 import { mapCompanyCalendarMilestones, type CompanyCalendarMilestone } from '@/lib/company-calendar';
 import { Colors, Spacing, Typography } from '@/constants/theme';
 import { GlassCard, GradientBackground, ListItemSkeleton, StatusBadge } from '@/components/ui';
@@ -214,7 +215,7 @@ export default function CalendarScreen() {
                         <View style={{ flex: 1 }}>
                           <Text style={styles.cardTitle}>{m.title}</Text>
                           <View style={styles.cardMeta}>
-                            <Icon name={m.project.room_type === 'kitchen' ? 'countertop-outline' : 'shower'} size={13} color={Colors.text.tertiary} />
+                            <Icon name={gcProjectTypeIcon(null, m.project.room_type)} size={13} color={Colors.text.tertiary} />
                             <Text style={styles.cardAddress}>{m.project.city || 'Location pending'}</Text>
                             <Text style={styles.cardDot}>·</Text>
                             <Text style={styles.cardDate}>{formatDate(m.due_date)}</Text>

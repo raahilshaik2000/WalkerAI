@@ -33,7 +33,7 @@ interface ProjectData {
   ai_cost_min: number;
   ai_cost_max: number;
   status: string;
-  room_type: string;
+  room_type: string | null;
   ai_analysis: any;
 }
 

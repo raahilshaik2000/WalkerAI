@@ -11,6 +11,7 @@ import { useNavigation } from '@react-navigation/native';
 import Ionicons from 'react-native-vector-icons/Ionicons';
 import { AnimatedPressable, GradientBackground } from '@/components/ui';
 import { Colors, Radius } from '@/constants/theme';
+import { formatGcProjectType } from '@/lib/gc-project-type';
 import { supabase } from '@/lib/supabase/client';
 import { useAuthStore } from '@/stores/auth.store';
 
@@ -52,16 +53,14 @@ export default function SearchScreen() {
   const q = query.toLowerCase().trim();
   const results = q
     ? projects.filter((p) => {
-        const title = p.room_type ? p.room_type + ' renovation' : 'project';
+        const title = formatGcProjectType(null, p.room_type).toLowerCase();
         const location = [p.address, p.city].filter(Boolean).join(' ').toLowerCase();
         return title.includes(q) || location.includes(q);
       })
     : [];
 
   const getTitle = (p: Project) =>
-    p.room_type
-      ? p.room_type.charAt(0).toUpperCase() + p.room_type.slice(1) + ' Renovation'
-      : 'Project';
+    formatGcProjectType(null, p.room_type);
 
   const getLocation = (p: Project) =>
     [p.address, p.city].filter(Boolean).join(', ') || 'Address pending';

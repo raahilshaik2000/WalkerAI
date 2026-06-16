@@ -119,6 +119,23 @@ describe('company quote copy', () => {
     expect(source).not.toContain('By accepting, you agree to submit a detailed quote within 48 hours.');
   });
 
+  it('shows GC project type labels on job detail when room_type is nullable', () => {
+    const repoRoot = path.resolve(__dirname, '..');
+    const source = fs.readFileSync(
+      path.join(repoRoot, 'src/app/(company)/job/[id]/index.tsx'),
+      'utf8'
+    );
+
+    expect(source).toContain("from('general_contractor_projects')");
+    expect(source).toContain("isMissingSupabaseSchemaObjectError(gcContextResult.error, 'general_contractor_projects')");
+    expect(source).toContain('gc_project_type?: string | null;');
+    expect(source).toContain('formatGcProjectType(job.gc_project_type, job.room_type)');
+    expect(source).toContain('gcProjectTypeIcon(job.gc_project_type, job.room_type)');
+    expect(source).not.toContain('room_type: string;');
+    expect(source).not.toContain('job.room_type.charAt(0)');
+    expect(source).not.toContain("job.room_type === 'kitchen' ? 'countertop-outline' : 'shower'");
+  });
+
   it('preserves GC negotiation history when revised quotes replace pending quotes', () => {
     const repoRoot = path.resolve(__dirname, '..');
     const migration = fs.readFileSync(

@@ -2,7 +2,7 @@ export interface CompanyCalendarProject {
   id: string;
   address: string;
   city: string;
-  room_type: string;
+  room_type: string | null;
 }
 
 export interface CompanyCalendarMilestone {
@@ -58,7 +58,7 @@ export function mapCompanyCalendarMilestones(rows: RawCalendarMilestone[]): Comp
         id: '',
         address: '',
         city: '',
-        room_type: '',
+        room_type: null,
       },
     }));
 }

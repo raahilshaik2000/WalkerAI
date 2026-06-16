@@ -61,6 +61,20 @@ describe('company dashboard project list', () => {
     expect(source).toContain("key={`${job.id}:${job.slotId ?? 'legacy'}`}");
     expect(source).toContain("navigation.navigate('JobDetail', { screen: 'JobDetailMain', params: { id: job.id, slot: job.slotId } })");
   });
+
+  it('renders GC-created non-room projects without assuming kitchen or bathroom', () => {
+    const repoRoot = path.resolve(__dirname, '..');
+    const source = fs.readFileSync(path.join(repoRoot, 'src/app/(company)/index.tsx'), 'utf8');
+
+    expect(source).toContain("from('general_contractor_projects')");
+    expect(source).toContain("isMissingSupabaseSchemaObjectError(gcContextError, 'general_contractor_projects')");
+    expect(source).toContain('formatGcProjectType(projectType, roomType)');
+    expect(source).toContain('gcProjectTypeIcon(job.gc_project_type, job.room_type)');
+    expect(source).toContain('gcProjectTypeIcon(project.gc_project_type, project.room_type)');
+    expect(source).not.toContain('function formatRoom(roomType: string)');
+    expect(source).not.toContain("job.room_type === 'kitchen' ? 'countertop-outline' : 'shower'");
+    expect(source).not.toContain("project.room_type === 'kitchen' ? 'countertop-outline' : 'shower'");
+  });
 });
 
 describe('homeowner optional GC context', () => {
@@ -87,5 +101,20 @@ describe('homeowner optional GC context', () => {
     expect(projectDetail).toContain('setGcProjectContext(gcContextResult.error ? null');
     expect(messages).toContain('const gcContextUnavailable = isMissingSupabaseSchemaObjectError(gcResult.error, \'general_contractor_projects\');');
     expect(messages).toContain('gcContextUnavailable ? [] : (gcResult.data ?? [])');
+  });
+});
+
+describe('homeowner nullable project categories', () => {
+  it('keeps saved-address and search labels safe for GC-created non-room projects', () => {
+    const repoRoot = path.resolve(__dirname, '..');
+    const savedAddresses = fs.readFileSync(path.join(repoRoot, 'src/app/(homeowner)/saved-addresses.tsx'), 'utf8');
+    const search = fs.readFileSync(path.join(repoRoot, 'src/app/(homeowner)/search.tsx'), 'utf8');
+
+    expect(savedAddresses).toContain('room_type: string | null;');
+    expect(savedAddresses).toContain('rooms: Array<string | null>;');
+    expect(savedAddresses).toContain('formatGcProjectType(null, roomType)');
+    expect(search).toContain('formatGcProjectType(null, p.room_type)');
+    expect(search).not.toContain('p.room_type.charAt(0)');
+    expect(savedAddresses).not.toContain('roomType.replace(/_/g, ');
   });
 });

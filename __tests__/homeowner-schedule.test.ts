@@ -10,6 +10,7 @@ describe('homeowner schedule helpers', () => {
   const projects = [
     { id: 'project-1', address: '1 Main St', city: 'Toronto', room_type: 'kitchen' },
     { id: 'project-2', address: null, city: 'Ottawa', room_type: 'bathroom' },
+    { id: 'project-3', address: '3 Main St', city: 'Toronto', room_type: null },
   ];
 
   it('maps scheduled trades and approved quote milestones into a sorted schedule feed', () => {
@@ -41,7 +42,7 @@ describe('homeowner schedule helpers', () => {
     expect(items.map((item) => item.id)).toEqual(['milestone:milestone-1', 'trade:slot-1']);
     expect(items[1]).toMatchObject({
       title: 'Plumber scheduled',
-      subtitle: 'Pipe Co - Kitchen renovation - 1 Main St, Toronto',
+      subtitle: 'Pipe Co - Kitchen Renovation - 1 Main St, Toronto',
     });
   });
 
@@ -64,7 +65,30 @@ describe('homeowner schedule helpers', () => {
 
     expect(items[0]).toMatchObject({
       title: 'Lead contractor scheduled',
-      subtitle: 'Legacy Renovations Co - Kitchen renovation - 1 Main St, Toronto',
+      subtitle: 'Legacy Renovations Co - Kitchen Renovation - 1 Main St, Toronto',
+    });
+  });
+
+  it('labels nullable project room types without crashing', () => {
+    const items = mapHomeownerScheduleItems(
+      projects,
+      [
+        {
+          id: 'slot-flooring',
+          project_id: 'project-3',
+          trade_type: 'flooring',
+          status: 'scheduled',
+          scheduled_start_date: '2026-06-20',
+          scheduled_end_date: null,
+          companies: { name: 'Floor Co' },
+        },
+      ],
+      [],
+    );
+
+    expect(items[0]).toMatchObject({
+      title: 'Flooring scheduled',
+      subtitle: 'Floor Co - Renovation Project - 3 Main St, Toronto',
     });
   });
 

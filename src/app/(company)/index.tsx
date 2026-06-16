@@ -15,6 +15,8 @@ import { supabase } from '@/lib/supabase/client';
 import { signOut } from '@/lib/supabase/auth';
 import { useAuthStore } from '@/stores/auth.store';
 import { formatCad, formatStatusLabel } from '@/lib/formatters';
+import { formatGcProjectType, gcProjectTypeIcon } from '@/lib/gc-project-type';
+import { isMissingSupabaseSchemaObjectError } from '@/lib/supabase/errors';
 import { formatTradeLabel } from '@/lib/trade-labels';
 import { Colors, Radius, Spacing, Typography } from '@/constants/theme';
 import { AnimatedPressable, GradientBackground, ListItemSkeleton, StatusBadge } from '@/components/ui';
@@ -36,7 +38,8 @@ interface DispatchedJob {
     id: string;
     address: string;
     city: string;
-    room_type: string;
+    room_type: string | null;
+    gc_project_type?: string | null;
     status: string;
     ai_cost_min: number | null;
     ai_cost_max: number | null;
@@ -62,9 +65,15 @@ interface ActiveJob {
   slotId?: string | null;
   address: string | null;
   city: string | null;
-  room_type: string;
+  room_type: string | null;
+  gc_project_type?: string | null;
   status: string;
   trade_type?: string | null;
+}
+
+interface GcProjectTypeRow {
+  project_id: string;
+  project_type: string | null;
 }
 
 function timeRemaining(expiresAt: string | null): string {
@@ -76,8 +85,8 @@ function timeRemaining(expiresAt: string | null): string {
   return hrs > 0 ? `${hrs}h ${mins}m left` : `${mins}m left`;
 }
 
-function formatRoom(roomType: string) {
-  return `${roomType.charAt(0).toUpperCase()}${roomType.slice(1)} Renovation`;
+function formatRoom(projectType?: string | null, roomType?: string | null) {
+  return formatGcProjectType(projectType, roomType);
 }
 
 function formatLocation(city?: string | null, address?: string | null) {
@@ -195,7 +204,49 @@ export default function CompanyJobFeed() {
       if (legacyActiveResult.error) throw legacyActiveResult.error;
       if (slotActiveResult.error) throw slotActiveResult.error;
 
-      const acceptedDispatchActive = ((acceptedDispatchResult.data ?? []) as unknown as DispatchedJob[])
+      const pendingDispatchRows = (dispatchResult.data ?? []) as unknown as DispatchedJob[];
+      const acceptedDispatchRows = (acceptedDispatchResult.data ?? []) as unknown as DispatchedJob[];
+      const legacyActiveRows = (legacyActiveResult.data ?? []) as ActiveJob[];
+      const slotActiveRows = (slotActiveResult.data ?? []) as any[];
+      const projectIds = new Set<string>();
+
+      for (const dispatch of [...pendingDispatchRows, ...acceptedDispatchRows]) {
+        const project = Array.isArray(dispatch.project) ? dispatch.project[0] : dispatch.project;
+        if (project?.id) projectIds.add(project.id);
+      }
+      for (const project of legacyActiveRows) {
+        if (project.id) projectIds.add(project.id);
+      }
+      for (const slot of slotActiveRows) {
+        const project = Array.isArray(slot.project) ? slot.project[0] : slot.project;
+        if (project?.id) projectIds.add(project.id);
+      }
+
+      const gcProjectTypes = new Map<string, string | null>();
+      if (projectIds.size > 0) {
+        const { data: gcContextRows, error: gcContextError } = await supabase
+          .from('general_contractor_projects')
+          .select('project_id, project_type')
+          .in('project_id', Array.from(projectIds))
+          .in('status', ['invited', 'active', 'completed']);
+
+        if (gcContextError && !isMissingSupabaseSchemaObjectError(gcContextError, 'general_contractor_projects')) {
+          throw gcContextError;
+        }
+
+        for (const row of (gcContextRows ?? []) as GcProjectTypeRow[]) {
+          gcProjectTypes.set(row.project_id, row.project_type);
+        }
+      }
+
+      const enrichDispatchProject = (dispatch: DispatchedJob): DispatchedJob => {
+        const project = Array.isArray(dispatch.project) ? dispatch.project[0] : dispatch.project;
+        return project
+          ? { ...dispatch, project: { ...project, gc_project_type: gcProjectTypes.get(project.id) ?? null } }
+          : dispatch;
+      };
+
+      const acceptedDispatchActive = acceptedDispatchRows
         .map((dispatch): ActiveJob | null => {
           const project = Array.isArray(dispatch.project) ? dispatch.project[0] : dispatch.project;
           const slot = Array.isArray(dispatch.slot) ? dispatch.slot[0] : dispatch.slot;
@@ -206,18 +257,20 @@ export default function CompanyJobFeed() {
             address: project.address,
             city: project.city,
             room_type: project.room_type,
+            gc_project_type: gcProjectTypes.get(project.id) ?? null,
             status: project.status,
             trade_type: slot?.trade_type ?? null,
           };
         })
         .filter((job): job is ActiveJob => !!job);
 
-      const legacyActive = ((legacyActiveResult.data ?? []) as ActiveJob[]).map((job) => ({
+      const legacyActive = legacyActiveRows.map((job) => ({
         ...job,
         slotId: null,
+        gc_project_type: gcProjectTypes.get(job.id) ?? null,
       }));
 
-      const slotActive = ((slotActiveResult.data ?? []) as any[])
+      const slotActive = slotActiveRows
         .map((slot): ActiveJob | null => {
           const project = Array.isArray(slot.project) ? slot.project[0] : slot.project;
           if (!project) return null;
@@ -227,6 +280,7 @@ export default function CompanyJobFeed() {
             address: project.address,
             city: project.city,
             room_type: project.room_type,
+            gc_project_type: gcProjectTypes.get(project.id) ?? null,
             status: project.status ?? slot.status,
             trade_type: slot.trade_type,
           };
@@ -238,7 +292,7 @@ export default function CompanyJobFeed() {
         byKey.set(`${job.id}:${job.slotId ?? 'legacy'}`, job);
       });
 
-      setJobs((dispatchResult.data ?? []) as unknown as DispatchedJob[]);
+      setJobs(pendingDispatchRows.map(enrichDispatchProject));
       setActiveJobs(Array.from(byKey.values()));
     } catch (err) {
       setErrorMessage(err instanceof Error ? err.message : 'Could not load jobs.');
@@ -428,10 +482,10 @@ export default function CompanyJobFeed() {
                   <TradePanel>
                     <View style={styles.activeJobRow}>
                       <View style={styles.jobIcon}>
-                        <Icon name={job.room_type === 'kitchen' ? 'countertop-outline' : 'shower'} size={20} color={Colors.success} />
+                        <Icon name={gcProjectTypeIcon(job.gc_project_type, job.room_type)} size={20} color={Colors.success} />
                       </View>
                       <View style={styles.activeJobContent}>
-                        <Text style={styles.activeJobRoom}>{formatRoom(job.room_type)}</Text>
+                        <Text style={styles.activeJobRoom}>{formatRoom(job.gc_project_type, job.room_type)}</Text>
                         <Text style={styles.activeJobCity}>{formatLocation(job.city, job.address)}</Text>
                         {formatTrade(job.trade_type) ? (
                           <Text style={styles.activeJobTrade}>{formatTrade(job.trade_type)}</Text>
@@ -481,14 +535,14 @@ export default function CompanyJobFeed() {
                         ) : null}
                         <View style={styles.jobHeader}>
                           <View style={styles.jobIcon}>
-                            <Icon name={project.room_type === 'kitchen' ? 'countertop-outline' : 'shower'} size={20} color={Colors.warning} />
+                            <Icon name={gcProjectTypeIcon(project.gc_project_type, project.room_type)} size={20} color={Colors.warning} />
                           </View>
                           <View style={styles.pendingJobContent}>
                             <View style={styles.urgencyRow}>
                               <Icon name="timer-sand" size={13} color={Colors.warning} />
                               <Text style={styles.urgencyText}>{timeLeft}</Text>
                             </View>
-                            <Text style={styles.jobRoomType}>{formatRoom(project.room_type)}</Text>
+                            <Text style={styles.jobRoomType}>{formatRoom(project.gc_project_type, project.room_type)}</Text>
                             {tradeLabel ? <Text style={styles.jobTrade}>{tradeLabel}</Text> : null}
                             <Text style={styles.jobCity}>{formatLocation(project.city, project.address)}</Text>
                           </View>

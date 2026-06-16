@@ -1,3 +1,4 @@
+import { formatGcProjectType } from '@/lib/gc-project-type';
 import { formatTradeLabel } from '@/lib/trade-labels';
 
 export type HomeownerScheduleItemType = 'trade' | 'milestone';
@@ -52,7 +53,7 @@ function getQuote(value: RawMilestone['quote']) {
 }
 
 function projectLabel(project: ScheduleProject) {
-  const room = project.room_type ? `${project.room_type.charAt(0).toUpperCase()}${project.room_type.slice(1)} renovation` : 'Project';
+  const room = formatGcProjectType(null, project.room_type);
   const location = [project.address, project.city].filter(Boolean).join(', ');
   return location ? `${room} - ${location}` : room;
 }

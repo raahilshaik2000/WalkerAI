@@ -21,8 +21,10 @@ import { useAuthStore } from '@/stores/auth.store';
 import { Colors, Radius, Spacing, Typography } from '@/constants/theme';
 import { GlassButton, GlassCard, GradientBackground, StatusBadge, CardSkeleton } from '@/components/ui';
 import { formatStatusLabel, formatCad } from '@/lib/formatters';
+import { formatGcProjectType, gcProjectTypeIcon } from '@/lib/gc-project-type';
 import { formatTradeLabel } from '@/lib/trade-labels';
 import { readPersistedSurfaceSelections, surfaceSelectionSourceLabel } from '@/lib/room-customizer';
+import { isMissingSupabaseSchemaObjectError } from '@/lib/supabase/errors';
 import {
   TradeActionTile,
   TradeMetricStrip,
@@ -62,7 +64,8 @@ interface JobBrief {
   id: string;
   address: string;
   city: string;
-  room_type: string;
+  room_type: string | null;
+  gc_project_type?: string | null;
   status: string;
   ai_cost_min: number | null;
   ai_cost_max: number | null;
@@ -159,7 +162,7 @@ export default function JobBriefScreen() {
         .limit(1);
       approvedQuoteQuery = slotId ? approvedQuoteQuery.eq('slot_id', slotId) : approvedQuoteQuery.is('slot_id', null);
 
-      const [projectResult, slotResult, companyData, approvedQuoteResult] = await Promise.all([
+      const [projectResult, slotResult, companyData, approvedQuoteResult, gcContextResult] = await Promise.all([
         supabase
           .from('projects')
           .select(`
@@ -181,16 +184,30 @@ export default function JobBriefScreen() {
           : Promise.resolve({ data: null, error: null }),
         fetchCompanyPayoutProfile(user.id),
         approvedQuoteQuery.maybeSingle(),
+        supabase
+          .from('general_contractor_projects')
+          .select('project_type')
+          .eq('project_id', projectId)
+          .in('status', ['invited', 'active', 'completed'])
+          .order('created_at', { ascending: false })
+          .limit(1)
+          .maybeSingle(),
       ]);
 
       if (projectResult.error) throw projectResult.error;
       if (slotResult.error) throw slotResult.error;
       if (approvedQuoteResult.error) throw approvedQuoteResult.error;
+      if (gcContextResult.error && !isMissingSupabaseSchemaObjectError(gcContextResult.error, 'general_contractor_projects')) {
+        throw gcContextResult.error;
+      }
       if (!projectResult.data) throw new Error('Job not found or no longer available.');
       if (slotId && !slotResult.data) throw new Error('This trade slot is no longer available.');
       if (!companyData) throw new Error('Company profile is missing. Complete contractor onboarding before accepting jobs.');
 
-      const projectData = projectResult.data;
+      const projectData = {
+        ...projectResult.data,
+        gc_project_type: (gcContextResult.data as { project_type: string | null } | null)?.project_type ?? null,
+      };
       const slotData = slotResult.data;
 
       setJob(projectData as JobBrief);
@@ -449,7 +466,7 @@ export default function JobBriefScreen() {
           ) : (
             <View style={styles.heroFallback}>
               <Icon
-                name={job.room_type === 'kitchen' ? 'countertop-outline' : 'shower'}
+                name={gcProjectTypeIcon(job.gc_project_type, job.room_type)}
                 size={48}
                 color={Colors.text.tertiary}
               />
@@ -457,13 +474,9 @@ export default function JobBriefScreen() {
           )}
 
           <View style={styles.roomTypeRow}>
-            {job.room_type === 'kitchen' ? (
-              <Icon name="countertop-outline" size={18} color={Colors.text.primary} />
-            ) : (
-              <Icon name="shower" size={18} color={Colors.text.primary} />
-            )}
+            <Icon name={gcProjectTypeIcon(job.gc_project_type, job.room_type)} size={18} color={Colors.text.primary} />
             <Text style={styles.roomType}>
-              {job.room_type.charAt(0).toUpperCase() + job.room_type.slice(1)} Renovation
+              {formatGcProjectType(job.gc_project_type, job.room_type)}
             </Text>
           </View>
           <Text style={styles.address}>{formatLocation(job.address, job.city)}</Text>
