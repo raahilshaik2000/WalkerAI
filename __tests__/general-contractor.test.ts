@@ -312,9 +312,13 @@ describe('general contractor account type', () => {
     expect(homeownerConcierge).not.toContain('Any project updates still need to be applied by the appropriate workflow.');
   });
 
-  it('requires active GC management before approved recommendations apply project changes', () => {
+  it('requires active verified GC management before approved recommendations apply project changes', () => {
     const migration = fs.readFileSync(
       path.join(repoRoot, 'supabase/migrations/20260615003400_require_active_gc_for_approval_apply.sql'),
+      'utf8',
+    );
+    const verificationMigration = fs.readFileSync(
+      path.join(repoRoot, 'supabase/migrations/20260616000625_require_verified_gc_approval_apply.sql'),
       'utf8',
     );
 
@@ -327,6 +331,11 @@ describe('general contractor account type', () => {
     expect(migration).toContain("gcp.status = 'active'");
     expect(migration).toContain('Active GC management is required before this approval can apply project changes');
     expect(migration).toContain('guard_gc_approval_apply_active_assignment_trigger');
+    expect(verificationMigration).toContain('CREATE OR REPLACE FUNCTION public.guard_gc_approval_apply_active_assignment()');
+    expect(verificationMigration).toContain('JOIN public.general_contractors gc ON gc.id = gcp.general_contractor_id');
+    expect(verificationMigration).toContain("gcp.status = 'active'");
+    expect(verificationMigration).toContain('gc.verified IS TRUE');
+    expect(verificationMigration).toContain('Active verified GC management is required before this approval can apply project changes');
   });
 
   it('guards GC assignment creation against lifecycle and verification bypasses', () => {
