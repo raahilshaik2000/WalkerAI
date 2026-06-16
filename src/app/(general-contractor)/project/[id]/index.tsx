@@ -84,15 +84,6 @@ interface ApprovalRequest {
   created_at: string;
 }
 
-const APPROVAL_TYPES: Array<{ value: ApprovalRequestType; label: string }> = [
-  { value: 'general_recommendation', label: 'General' },
-  { value: 'scope_change', label: 'Scope' },
-  { value: 'material_substitution', label: 'Material' },
-  { value: 'trade_substitution', label: 'Trade' },
-  { value: 'schedule_change', label: 'Schedule' },
-  { value: 'change_order', label: 'Change order' },
-];
-
 function projectStatusVariant(status: string): 'active' | 'completed' | 'pending' | 'dispatching' | 'neutral' {
   if (status === 'completed') return 'completed';
   if (status === 'dispatching') return 'dispatching';
@@ -129,7 +120,6 @@ export default function GeneralContractorProjectDetail() {
   const [slots, setSlots] = useState<Slot[]>([]);
   const [changeOrders, setChangeOrders] = useState<ChangeOrder[]>([]);
   const [approvalRequests, setApprovalRequests] = useState<ApprovalRequest[]>([]);
-  const [approvalType, setApprovalType] = useState<ApprovalRequestType>('general_recommendation');
   const [approvalTitle, setApprovalTitle] = useState('');
   const [approvalDescription, setApprovalDescription] = useState('');
   const [approvalCostDelta, setApprovalCostDelta] = useState('');
@@ -348,7 +338,7 @@ export default function GeneralContractorProjectDetail() {
         project_id: project.id,
         requested_by_gc_id: gc.id,
         homeowner_id: projectRow.homeowner_id,
-        request_type: approvalType,
+        request_type: 'general_recommendation',
         title: approvalTitle.trim(),
         description: approvalDescription.trim() || null,
         cost_delta: costDelta,
@@ -360,7 +350,6 @@ export default function GeneralContractorProjectDetail() {
       setApprovalDescription('');
       setApprovalCostDelta('');
       setApprovalTimelineDelta('');
-      setApprovalType('general_recommendation');
       await fetchData();
     } catch (err) {
       Alert.alert('Could not submit approval request', err instanceof Error ? err.message : 'Please try again.');
@@ -1007,28 +996,11 @@ export default function GeneralContractorProjectDetail() {
                 <GlassCard style={styles.card}>
                   <Text style={styles.sectionTitle}>Request homeowner approval</Text>
                   <Text style={styles.bodyText}>
-                    Use this for recommendations. Nothing changes until the homeowner approves.
+                    Use this only for general recommendations that do not need schedule, trade, material, discovery, payment, or completion metadata.
                   </Text>
                   <Text style={styles.approvalHint}>
-                    Payment authorizations belong in Payment requests so escrow and milestone workflows stay separate.
+                    Use the dedicated project-control screens for workflow changes so homeowner approval has the required data to apply cleanly. Payment authorizations belong in Payment requests so escrow and milestone workflows stay separate.
                   </Text>
-                  <View style={styles.typeGrid}>
-                    {APPROVAL_TYPES.map((type) => {
-                      const selected = approvalType === type.value;
-                      return (
-                        <TouchableOpacity
-                          key={type.value}
-                          style={[styles.typeChip, selected && styles.typeChipActive]}
-                          onPress={() => setApprovalType(type.value)}
-                          activeOpacity={0.85}
-                        >
-                          <Text style={[styles.typeChipText, selected && styles.typeChipTextActive]}>
-                            {type.label}
-                          </Text>
-                        </TouchableOpacity>
-                      );
-                    })}
-                  </View>
                   <GlassInput
                     label="Request title"
                     value={approvalTitle}
@@ -1377,21 +1349,6 @@ const styles = StyleSheet.create({
   },
   lockedControlsTitle: { ...Typography.body, color: Colors.text.primary, fontWeight: '800' },
   approvalHint: { ...Typography.caption, color: Colors.warning, lineHeight: 18, marginTop: 8 },
-  typeGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginTop: 14, marginBottom: 12 },
-  typeChip: {
-    borderWidth: 1,
-    borderColor: Colors.surface.border,
-    borderRadius: 16,
-    paddingHorizontal: 10,
-    paddingVertical: 8,
-    backgroundColor: Colors.surface.default,
-  },
-  typeChipActive: {
-    borderColor: 'rgba(255,107,0,0.65)',
-    backgroundColor: 'rgba(255,107,0,0.14)',
-  },
-  typeChipText: { color: Colors.text.secondary, fontSize: 12, fontWeight: '700' },
-  typeChipTextActive: { color: Colors.text.primary },
   formInput: { marginBottom: Spacing.sm },
   formRow: { flexDirection: 'row', gap: 8 },
   formHalf: { flex: 1, marginBottom: Spacing.sm },

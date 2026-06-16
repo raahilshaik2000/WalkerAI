@@ -389,6 +389,12 @@ describe('general contractor account type', () => {
     expect(migration).toContain('approval_requests_homeowner_update');
     expect(gcProjectDetail).toContain('Send for Homeowner Approval');
     expect(gcProjectDetail).toContain("from('project_approval_requests').insert");
+    expect(gcProjectDetail).toContain("request_type: 'general_recommendation'");
+    expect(gcProjectDetail).toContain('Use this only for general recommendations that do not need schedule, trade, material, discovery, payment, or completion metadata.');
+    expect(gcProjectDetail).toContain('Use the dedicated project-control screens for workflow changes so homeowner approval has the required data to apply cleanly.');
+    expect(gcProjectDetail).not.toContain('const APPROVAL_TYPES');
+    expect(gcProjectDetail).not.toContain('setApprovalType');
+    expect(gcProjectDetail).not.toContain('request_type: approvalType');
     expect(homeownerConcierge).toContain("from('project_approval_requests')");
     expect(homeownerConcierge).toContain("handleApprovalResponse(request, 'approved')");
     expect(homeownerConcierge).toContain("handleApprovalResponse(request, 'rejected')");
