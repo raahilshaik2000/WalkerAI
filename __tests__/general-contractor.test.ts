@@ -1516,6 +1516,10 @@ describe('general contractor account type', () => {
       path.join(repoRoot, 'supabase/migrations/20260616036000_lock_gc_closeout_reads_to_active.sql'),
       'utf8',
     );
+    const completedQuoteReadMigration = fs.readFileSync(
+      path.join(repoRoot, 'supabase/migrations/20260616203000_allow_completed_gc_quote_reads.sql'),
+      'utf8',
+    );
     const navigator = fs.readFileSync(
       path.join(repoRoot, 'src/navigation/GeneralContractorNavigator.tsx'),
       'utf8',
@@ -1535,6 +1539,10 @@ describe('general contractor account type', () => {
     expect(scopedCloseoutMigration).toMatch(/warranties_gc_managed_select[\s\S]*gcp\.status IN \('active', 'completed'\)/);
     expect(scopedCloseoutMigration).toMatch(/change_orders_gc_managed_read[\s\S]*gcp\.status IN \('active', 'completed'\)/);
     expect(scopedCloseoutMigration).not.toContain("gcp.status IN ('invited', 'active', 'completed')");
+    expect(completedQuoteReadMigration).toContain('DROP POLICY IF EXISTS "quotes_select_participants"');
+    expect(completedQuoteReadMigration).toContain('CREATE POLICY "quotes_select_participants"');
+    expect(completedQuoteReadMigration).toContain("gcp.status IN ('active', 'completed')");
+    expect(completedQuoteReadMigration).toContain('Completed GC assignments still need read-only quote and milestone context');
     expect(navigator).toContain('GeneralContractorCompletion');
     expect(gcProjectDetail).toContain("navigation.navigate('GeneralContractorCompletion'");
     expect(gcCompletion).toContain("from('permits')");
