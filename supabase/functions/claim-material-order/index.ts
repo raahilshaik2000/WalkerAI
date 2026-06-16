@@ -299,7 +299,7 @@ Deno.serve(async (req) => {
       .is('final_price', null);
     if (finalPriceError) throw finalPriceError;
 
-    // Notify homeowner + every assigned contractor that material is being fulfilled.
+    // Notify homeowner, assigned contractors, and the active GC manager that material is being fulfilled.
     const { data: project } = await adminClient
       .from('projects')
       .select('homeowner_id, assigned_company_id, companies(user_id)')
@@ -307,17 +307,26 @@ Deno.serve(async (req) => {
       .single();
 
     if (project) {
-      const notifications = [];
+      const notifications: Array<{ user_id: string; type: string; payload: Record<string, unknown> }> = [];
+      const notifiedUserIds = new Set<string>();
+      const addNotification = (
+        userId: string | null | undefined,
+        payload: Record<string, unknown>,
+      ) => {
+        if (!userId || notifiedUserIds.has(userId)) return;
+        notifiedUserIds.add(userId);
+        notifications.push({
+          user_id: userId,
+          type: 'material_order_claimed',
+          payload,
+        });
+      };
 
-      notifications.push({
-        user_id: project.homeowner_id,
-        type: 'material_order_claimed',
-        payload: {
-          order_id,
-          project_id: order.project_id,
-          message: 'A supplier has claimed your material order and will begin processing.',
-          deep_link: `/(homeowner)/project/${order.project_id}`,
-        },
+      addNotification(project.homeowner_id, {
+        order_id,
+        project_id: order.project_id,
+        message: 'A supplier has claimed your material order and will begin processing.',
+        deep_link: `/(homeowner)/project/${order.project_id}`,
       });
 
       const companyUserIds = new Set<string>();
@@ -340,19 +349,39 @@ Deno.serve(async (req) => {
       }
 
       for (const userId of companyUserIds) {
-        notifications.push({
-          user_id: userId,
-          type: 'material_order_claimed',
-          payload: {
-            order_id,
-            project_id: order.project_id,
-            message: 'A material order for your project has been claimed by a supplier.',
-            deep_link: `/(company)/job/${order.project_id}`,
-          },
+        addNotification(userId, {
+          order_id,
+          project_id: order.project_id,
+          message: 'A material order for your project has been claimed by a supplier.',
+          deep_link: `/(company)/job/${order.project_id}`,
         });
       }
 
-      const { error: notificationError } = await adminClient.from('notifications').insert(notifications);
+      const { data: gcAssignments, error: gcAssignmentsError } = await adminClient
+        .from('general_contractor_projects')
+        .select('general_contractors!inner(user_id)')
+        .eq('project_id', order.project_id)
+        .eq('status', 'active');
+
+      if (gcAssignmentsError) {
+        console.warn('claim-material-order GC notification lookup error:', gcAssignmentsError.message);
+      }
+
+      for (const assignment of gcAssignments ?? []) {
+        const contractor = Array.isArray((assignment as any).general_contractors)
+          ? (assignment as any).general_contractors[0]
+          : (assignment as any).general_contractors;
+        addNotification(contractor?.user_id, {
+          order_id,
+          project_id: order.project_id,
+          message: 'A supplier has claimed a material order for a project you manage.',
+          deep_link: `/(general-contractor)/project/${order.project_id}/materials`,
+        });
+      }
+
+      const { error: notificationError } = notifications.length > 0
+        ? await adminClient.from('notifications').insert(notifications)
+        : { error: null };
       if (notificationError) {
         console.warn('claim-material-order notification error:', notificationError.message);
       }

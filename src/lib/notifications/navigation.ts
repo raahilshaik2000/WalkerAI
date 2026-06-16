@@ -84,13 +84,14 @@ export function resolveNotificationRoute(
         return { name: 'GeneralContractorProjectDetail', params: { id: projectId } };
       case 'gc_trade_negotiation_responded':
         return { name: 'GeneralContractorTrades', params: { id: projectId } };
-      case 'quote_submitted':
-      case 'milestone_needs_approval':
-      case 'schedule_confirmed':
       case 'material_order_claimed':
       case 'new_material_order':
       case 'order_shipped':
       case 'order_delivered':
+        return { name: 'GeneralContractorMaterials', params: { id: projectId } };
+      case 'quote_submitted':
+      case 'milestone_needs_approval':
+      case 'schedule_confirmed':
       case 'warranty_expiring':
       case 'new_message':
       case 'project_complete':

@@ -561,6 +561,29 @@ describe('claim-material-order source guards', () => {
       /const fallbackCanFulfill = canFulfillByLatLngFallback\(supplier, order\);[\s\S]*?fallbackCanFulfill === false[\s\S]*?SERVICE_AREA_MISMATCH/
     );
   });
+
+  it('notifies active GC managers when a supplier claims a project material order', () => {
+    const source = fs.readFileSync(
+      path.join(__dirname, '../supabase/functions/claim-material-order/index.ts'),
+      'utf8',
+    );
+
+    expect(source).toContain('Notify homeowner, assigned contractors, and the active GC manager');
+    expect(source).toContain('const notifiedUserIds = new Set<string>()');
+    expect(source).toContain(".from('general_contractor_projects')");
+    expect(source).toContain(".select('general_contractors!inner(user_id)')");
+    expect(source).toContain(".eq('project_id', order.project_id)");
+    expect(source).toContain(".eq('status', 'active')");
+    expect(source).toContain('claim-material-order GC notification lookup error');
+    expect(source).toContain('A supplier has claimed a material order for a project you manage.');
+    expect(source).toContain('`/(general-contractor)/project/${order.project_id}/materials`');
+    expect(source).toMatch(
+      /const addNotification[\s\S]*?type: 'material_order_claimed'/
+    );
+    expect(source).toMatch(
+      /for \(const assignment of gcAssignments \?\? \[\]\)[\s\S]*?addNotification\(contractor\?\.user_id,[\s\S]*?\}\);/
+    );
+  });
 });
 
 describe('accept-job source guards', () => {

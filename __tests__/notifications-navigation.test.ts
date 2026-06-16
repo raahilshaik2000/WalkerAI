@@ -170,6 +170,18 @@ describe('notification navigation', () => {
     });
   });
 
+  it('routes GC material notifications to managed project materials', () => {
+    expect(resolveNotificationRoute('material_order_claimed', { project_id: 'project-1', order_id: 'order-1' }, 'general_contractor')).toEqual({
+      name: 'GeneralContractorMaterials',
+      params: { id: 'project-1' },
+    });
+
+    expect(resolveNotificationRoute('order_delivered', { project_id: 'project-1', order_id: 'order-1' }, 'general_contractor')).toEqual({
+      name: 'GeneralContractorMaterials',
+      params: { id: 'project-1' },
+    });
+  });
+
   it('wraps local notification routes for root-level push deep links', () => {
     const gcRoute = resolveNotificationRoute('gc_trade_negotiation_responded', { project_id: 'project-1' }, 'general_contractor');
     expect(toRootNotificationRoute(gcRoute, 'general_contractor')).toEqual({
