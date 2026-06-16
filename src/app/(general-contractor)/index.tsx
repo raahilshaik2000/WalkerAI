@@ -126,6 +126,12 @@ export default function GeneralContractorDashboard() {
       }));
       setAssignments(normalized);
 
+      const projectIds = normalized.map((assignment) => assignment.project?.id).filter((id): id is string => !!id);
+      if (projectIds.length === 0) {
+        setPendingApprovals(0);
+        return;
+      }
+
       const [
         approvalCountResult,
         paymentCountResult,
@@ -135,16 +141,19 @@ export default function GeneralContractorDashboard() {
           .from('project_approval_requests')
           .select('id', { count: 'exact', head: true })
           .eq('requested_by_gc_id', profile.id)
+          .in('project_id', projectIds)
           .eq('status', 'pending'),
         supabase
           .from('gc_payment_requests')
           .select('id', { count: 'exact', head: true })
           .eq('general_contractor_id', profile.id)
+          .in('project_id', projectIds)
           .eq('status', 'pending'),
         supabase
           .from('gc_concierge_bookings')
           .select('id', { count: 'exact', head: true })
           .eq('general_contractor_id', profile.id)
+          .in('project_id', projectIds)
           .eq('status', 'accepted')
           .eq('payment_status', 'paid')
           .is('payout_released_at', null),

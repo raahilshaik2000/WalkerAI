@@ -109,16 +109,32 @@ export default function GeneralContractorApprovals() {
       }
       setCanAcceptConciergeBookings(gc.verified === true && gc.concierge_enabled === true);
 
-      const [assignmentResult, bookingResult, recommendationResult, paymentResult] = await Promise.all([
-        supabase
-          .from('general_contractor_projects')
-          .select('project_id, project_type')
-          .eq('general_contractor_id', gc.id)
-          .neq('status', 'removed'),
+      const { data: assignments, error: assignmentError } = await supabase
+        .from('general_contractor_projects')
+        .select('project_id, project_type')
+        .eq('general_contractor_id', gc.id)
+        .neq('status', 'removed');
+      if (assignmentError) throw assignmentError;
+
+      const projectIds = (assignments ?? []).map((row) => row.project_id).filter(Boolean);
+      const projectTypeById = new Map(
+        ((assignments ?? []) as GcProjectAssignmentRow[]).map((assignment) => [assignment.project_id, assignment.project_type]),
+      );
+
+      if (projectIds.length === 0) {
+        setApprovals([]);
+        setRecommendationRequests([]);
+        setPaymentRequests([]);
+        setBookingRequests([]);
+        return;
+      }
+
+      const [bookingResult, recommendationResult, paymentResult, changeOrderResult] = await Promise.all([
         supabase
           .from('gc_concierge_bookings')
           .select('id, project_id, general_contractor_id, homeowner_id, service_kind, title, duration_minutes, price_cents, contractor_payout_cents, walker_fee_cents, status, payment_status, stripe_payment_intent_id, stripe_transfer_id, paid_at, payout_released_at, response_note, created_at, responded_at')
           .eq('general_contractor_id', gc.id)
+          .in('project_id', projectIds)
           .order('created_at', { ascending: false }),
         supabase
           .from('project_approval_requests')
@@ -127,6 +143,7 @@ export default function GeneralContractorApprovals() {
             project:projects ( room_type, city, address )
           `)
           .eq('requested_by_gc_id', gc.id)
+          .in('project_id', projectIds)
           .order('created_at', { ascending: false }),
         supabase
           .from('gc_payment_requests')
@@ -136,17 +153,21 @@ export default function GeneralContractorApprovals() {
             project:projects ( room_type, city, address )
           `)
           .eq('general_contractor_id', gc.id)
+          .in('project_id', projectIds)
+          .order('created_at', { ascending: false }),
+        supabase
+          .from('change_orders')
+          .select(`
+            id, description, cost_delta, status, signed_by_homeowner, signed_by_company, project_id,
+            project:projects ( room_type, city, address )
+          `)
+          .in('project_id', projectIds)
           .order('created_at', { ascending: false }),
       ]);
-      const assignments = assignmentResult.data;
-      const assignmentError = assignmentResult.error;
-      if (assignmentError) throw assignmentError;
       if (bookingResult.error) throw bookingResult.error;
       if (recommendationResult.error) throw recommendationResult.error;
       if (paymentResult.error) throw paymentResult.error;
-      const projectTypeById = new Map(
-        ((assignments ?? []) as GcProjectAssignmentRow[]).map((assignment) => [assignment.project_id, assignment.project_type]),
-      );
+      if (changeOrderResult.error) throw changeOrderResult.error;
       setBookingRequests((bookingResult.data ?? []) as GcConciergeBooking[]);
       setRecommendationRequests(((recommendationResult.data ?? []) as RecommendationApprovalRow[]).map((request) => ({
         ...request,
@@ -157,22 +178,7 @@ export default function GeneralContractorApprovals() {
         project_type: projectTypeById.get(request.project_id) ?? null,
       })));
 
-      const projectIds = (assignments ?? []).map((row) => row.project_id).filter(Boolean);
-      if (projectIds.length === 0) {
-        setApprovals([]);
-        return;
-      }
-
-      const { data, error } = await supabase
-        .from('change_orders')
-        .select(`
-          id, description, cost_delta, status, signed_by_homeowner, signed_by_company, project_id,
-          project:projects ( room_type, city, address )
-        `)
-        .in('project_id', projectIds)
-        .order('created_at', { ascending: false });
-      if (error) throw error;
-      setApprovals(((data ?? []) as ApprovalRow[]).map((approval) => ({
+      setApprovals(((changeOrderResult.data ?? []) as ApprovalRow[]).map((approval) => ({
         ...approval,
         project_type: projectTypeById.get(approval.project_id) ?? null,
       })));

@@ -842,6 +842,9 @@ describe('general contractor account type', () => {
     expect(dashboard).toContain("from('gc_concierge_bookings')");
     expect(dashboard).toContain("eq('requested_by_gc_id', profile.id)");
     expect(dashboard).toContain("eq('general_contractor_id', profile.id)");
+    expect(dashboard).toContain('const projectIds = normalized.map');
+    expect(dashboard).toContain("setPendingApprovals(0)");
+    expect(dashboard.split(".in('project_id', projectIds)").length - 1).toBeGreaterThanOrEqual(3);
     expect(dashboard).toContain("eq('payment_status', 'paid')");
     expect(dashboard).toContain("is('payout_released_at', null)");
     expect(dashboard).not.toContain("from('change_orders')");
@@ -1461,6 +1464,11 @@ describe('general contractor account type', () => {
     expect(gcApprovals).toContain("from('project_approval_requests')");
     expect(gcApprovals).toContain("eq('requested_by_gc_id', gc.id)");
     expect(gcApprovals).toContain("select('project_id, project_type')");
+    expect(gcApprovals).toContain('const projectIds = (assignments ?? []).map');
+    expect(gcApprovals).toContain("setRecommendationRequests([])");
+    expect(gcApprovals).toContain("setPaymentRequests([])");
+    expect(gcApprovals).toContain("setBookingRequests([])");
+    expect(gcApprovals.split(".in('project_id', projectIds)").length - 1).toBeGreaterThanOrEqual(4);
     expect(gcApprovals).toContain('projectTypeById.get(request.project_id)');
     expect(gcApprovals).toContain('formatGcProjectType(request.project_type, project?.room_type)');
     expect(gcApprovals).toContain('formatGcProjectType(approval.project_type, project?.room_type)');
