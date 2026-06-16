@@ -90,7 +90,6 @@ const APPROVAL_TYPES: Array<{ value: ApprovalRequestType; label: string }> = [
   { value: 'material_substitution', label: 'Material' },
   { value: 'trade_substitution', label: 'Trade' },
   { value: 'schedule_change', label: 'Schedule' },
-  { value: 'payment_release', label: 'Payment' },
   { value: 'change_order', label: 'Change order' },
 ];
 
@@ -1010,6 +1009,9 @@ export default function GeneralContractorProjectDetail() {
                   <Text style={styles.bodyText}>
                     Use this for recommendations. Nothing changes until the homeowner approves.
                   </Text>
+                  <Text style={styles.approvalHint}>
+                    Payment authorizations belong in Payment requests so escrow and milestone workflows stay separate.
+                  </Text>
                   <View style={styles.typeGrid}>
                     {APPROVAL_TYPES.map((type) => {
                       const selected = approvalType === type.value;
@@ -1374,6 +1376,7 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   lockedControlsTitle: { ...Typography.body, color: Colors.text.primary, fontWeight: '800' },
+  approvalHint: { ...Typography.caption, color: Colors.warning, lineHeight: 18, marginTop: 8 },
   typeGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginTop: 14, marginBottom: 12 },
   typeChip: {
     borderWidth: 1,

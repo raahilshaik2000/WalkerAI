@@ -1076,6 +1076,8 @@ describe('general contractor account type', () => {
     expect(migration).not.toContain('stripe.transfers');
     expect(navigator).toContain('GeneralContractorPayments');
     expect(gcProjectDetail).toContain("navigation.navigate('GeneralContractorPayments'");
+    expect(gcProjectDetail).not.toContain("{ value: 'payment_release', label: 'Payment' }");
+    expect(gcProjectDetail).toContain('Payment authorizations belong in Payment requests so escrow and milestone workflows stay separate.');
     expect((gcPayments.match(/\.eq\('general_contractor_id', gc\.id\)/g) ?? []).length).toBeGreaterThanOrEqual(2);
     expect(gcPayments).toContain("from('gc_payment_requests').insert");
     expect(gcPayments).toContain('handleCancelRequest');
