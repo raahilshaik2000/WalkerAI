@@ -1047,6 +1047,10 @@ describe('general contractor account type', () => {
       path.join(repoRoot, 'supabase/migrations/20260615232959_require_verified_gc_direct_writes.sql'),
       'utf8',
     );
+    const externalActivationMigration = fs.readFileSync(
+      path.join(repoRoot, 'supabase/migrations/20260616053000_activate_gc_external_trade_projects.sql'),
+      'utf8',
+    );
     const gcProjectDetail = fs.readFileSync(
       path.join(repoRoot, 'src/app/(general-contractor)/project/[id]/index.tsx'),
       'utf8',
@@ -1065,6 +1069,14 @@ describe('general contractor account type', () => {
     expect(migration).toContain('Active GC management is required before marking external trades');
     expect(directWriteMigration).toContain('CREATE OR REPLACE FUNCTION public.mark_project_slot_externally_managed');
     expect(directWriteMigration).toContain('Only verified General Contractors can mark external trades');
+    expect(externalActivationMigration).toContain('Only verified General Contractors can mark external trades');
+    expect(externalActivationMigration).toContain('Active GC management is required before marking external trades');
+    expect(externalActivationMigration).toContain("v_project.status IN ('draft', 'brief_ready', 'dispatching')");
+    expect(externalActivationMigration).toContain('v_project.ai_cost_min > 0');
+    expect(externalActivationMigration).toContain("slot.fulfillment_type <> 'external'");
+    expect(externalActivationMigration).toContain("slot.status <> 'filled'");
+    expect(externalActivationMigration).toContain("SET status = 'active'");
+    expect(externalActivationMigration).toContain('dispatch_expires_at = NULL');
     expect(migration).toContain("status = 'filled'");
     expect(gcProjectDetail).toContain("supabase.rpc('mark_project_slot_externally_managed'");
     expect(gcProjectDetail).toContain('Mark externally managed');
