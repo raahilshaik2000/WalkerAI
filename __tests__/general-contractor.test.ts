@@ -1184,6 +1184,10 @@ describe('general contractor account type', () => {
       path.join(repoRoot, 'src/app/(homeowner)/project/[id]/concierge.tsx'),
       'utf8',
     );
+    const scheduleGuardMigration = fs.readFileSync(
+      path.join(repoRoot, 'supabase/migrations/20260616200000_guard_gc_schedule_and_closeout_slots.sql'),
+      'utf8',
+    );
 
     expect(migration).toContain('respond_to_project_approval_request');
     expect(migration).toContain("v_request.request_type = 'schedule_change'");
@@ -1194,9 +1198,16 @@ describe('general contractor account type', () => {
     expect(slotReadMigration).not.toContain("gcp.status IN ('invited', 'active', 'completed')");
     expect(navigator).toContain('GeneralContractorSchedule');
     expect(gcProjectDetail).toContain("navigation.navigate('GeneralContractorSchedule'");
+    expect(gcSchedule).toContain('function canScheduleSlot(slot: Slot)');
+    expect(gcSchedule).toContain("slot.status === 'filled' || slot.status === 'scheduled'");
+    expect(gcSchedule).toContain('Assign a WalkerAI trade or mark this scope externally managed before recommending schedule dates.');
     expect(gcSchedule).toContain("request_type: 'schedule_change'");
     expect(gcSchedule).toContain('Send Schedule for Approval');
     expect(homeownerConcierge).toContain("supabase.rpc('respond_to_project_approval_request'");
+    expect(scheduleGuardMigration).toContain('CREATE OR REPLACE FUNCTION public.guard_gc_schedule_approval_ready()');
+    expect(scheduleGuardMigration).toContain("NEW.request_type = 'schedule_change'");
+    expect(scheduleGuardMigration).toContain("slot.status IN ('filled', 'scheduled')");
+    expect(scheduleGuardMigration).toContain('Assign the trade before approving schedule dates');
   });
 
   it('allows active GCs to coordinate permits and inspections for managed projects', () => {
@@ -1542,7 +1553,11 @@ describe('general contractor account type', () => {
     expect(gcCompletion).toContain('const pendingChangeOrders = changeOrders.filter');
     expect(gcCompletion).toContain("order.status === 'proposed' && order.signed_by_company && !order.signed_by_homeowner");
     expect(gcCompletion).toContain('+ pendingChangeOrders');
+    expect(gcCompletion).not.toContain(".in('status', ['filled', 'scheduled'])");
+    expect(gcCompletion).toContain("const unresolvedTradeSlots = projectSlots.filter((slot) => !['filled', 'scheduled'].includes(slot.status));");
     expect(gcCompletion).toContain('const unscheduledTradeSlots = projectSlots.filter');
+    expect(gcCompletion).toContain("['filled', 'scheduled'].includes(slot.status) && !slot.scheduled_start_date");
+    expect(gcCompletion).toContain('+ unresolvedTradeSlots.length');
     expect(gcCompletion).toContain('+ unscheduledTradeSlots.length');
     expect(gcCompletion).toContain("const completedMaterialOrders = materialOrders.filter((order) => ['confirmed', 'paid'].includes(order.status));");
     expect(gcCompletion).toContain('const paidMaterials = completedMaterialOrders.reduce');
@@ -1552,8 +1567,9 @@ describe('general contractor account type', () => {
     expect(gcCompletion).toContain("const projectReadyForCloseout = project?.status === 'active';");
     expect(gcCompletion).toContain('const budgetReadyForCloseout = (project?.ai_cost_min ?? 0) > 0 && (project?.ai_cost_max ?? 0) > 0;');
     expect(gcCompletion).toContain('The project must be active with an approved budget before final completion can be requested.');
-    expect(gcCompletion).toContain('Resolve project readiness, pending approvals, payment requests, change orders, unscheduled trades, permits, material orders, trade negotiations, pending quotes, and unpaid milestones before requesting final project completion.');
+    expect(gcCompletion).toContain('Resolve project readiness, pending approvals, payment requests, change orders, open trade slots, unscheduled trades, permits, material orders, trade negotiations, pending quotes, and unpaid milestones before requesting final project completion.');
     expect(gcCompletion).toContain('Closeout blockers');
+    expect(gcCompletion).toContain('Open trade slots');
     expect(gcCompletion).toContain('Unscheduled trades');
     expect(gcCompletion).toContain('Unpaid milestones');
     expect(gcCompletion).toContain('Change orders');
@@ -1782,6 +1798,10 @@ describe('general contractor account type', () => {
       path.join(repoRoot, 'supabase/migrations/20260616165804_guard_gc_completion_schedule_readiness.sql'),
       'utf8',
     );
+    const slotReadinessMigration = fs.readFileSync(
+      path.join(repoRoot, 'supabase/migrations/20260616200000_guard_gc_schedule_and_closeout_slots.sql'),
+      'utf8',
+    );
     const gcCompletion = fs.readFileSync(
       path.join(repoRoot, 'src/app/(general-contractor)/project/[id]/completion.tsx'),
       'utf8',
@@ -1799,7 +1819,7 @@ describe('general contractor account type', () => {
     expect(gcCompletion).toContain("from('gc_trade_quote_negotiations')");
     expect(gcCompletion).toContain("from('quotes')");
     expect(gcCompletion).toContain('const closeoutBlockers = (projectReadyForCloseout ? 0 : 1)');
-    expect(gcCompletion).toContain('Resolve project readiness, unscheduled trades, active permits, material orders, trade negotiations, pending quotes, and unpaid milestones before requesting final project completion.');
+    expect(gcCompletion).toContain('Resolve project readiness, open trade slots, unscheduled trades, active permits, material orders, trade negotiations, pending quotes, and unpaid milestones before requesting final project completion.');
     expect(readinessMigration).toContain('CREATE OR REPLACE FUNCTION public.guard_gc_completion_approval_ready()');
     expect(readinessMigration).toContain("NEW.metadata->>'action' = 'complete_project'");
     expect(readinessMigration).toContain('request.id <> NEW.id');
@@ -1812,6 +1832,9 @@ describe('general contractor account type', () => {
     expect(scheduleReadinessMigration).toContain("slot.status IN ('filled', 'scheduled')");
     expect(scheduleReadinessMigration).toContain('slot.scheduled_start_date IS NULL');
     expect(scheduleReadinessMigration).toContain('Resolve unscheduled trade slots before completing this GC-managed project');
+    expect(slotReadinessMigration).toContain('CREATE OR REPLACE FUNCTION public.guard_gc_completion_approval_ready()');
+    expect(slotReadinessMigration).toContain("slot.status NOT IN ('filled', 'scheduled')");
+    expect(slotReadinessMigration).toContain('Resolve open trade slots before completing this GC-managed project');
     expect(readinessMigration).toContain('FROM public.gc_payment_requests payment');
     expect(readinessMigration).toContain("payment.status = 'pending'");
     expect(readinessMigration).toContain('FROM public.change_orders change_order');

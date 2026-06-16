@@ -50,6 +50,10 @@ function formatTrade(tradeType: string) {
   return formatTradeLabel(tradeType) ?? 'Trade';
 }
 
+function canScheduleSlot(slot: Slot) {
+  return slot.status === 'filled' || slot.status === 'scheduled';
+}
+
 export default function GeneralContractorScheduleScreen() {
   const navigation = useNavigation<any>();
   const route = useRoute<any>();
@@ -131,6 +135,10 @@ export default function GeneralContractorScheduleScreen() {
   };
 
   const selectSlot = (slot: Slot) => {
+    if (!canScheduleSlot(slot)) {
+      Alert.alert('Trade not ready', 'Assign a WalkerAI trade or mark this scope externally managed before recommending schedule dates.');
+      return;
+    }
     setSelectedSlotId(slot.id);
     setStartDate(slot.scheduled_start_date ?? '');
     setEndDate(slot.scheduled_end_date ?? '');
@@ -149,6 +157,10 @@ export default function GeneralContractorScheduleScreen() {
     const slot = slots.find((s) => s.id === selectedSlotId);
     if (!slot) {
       Alert.alert('Trade required', 'Choose the trade schedule you want to recommend.');
+      return;
+    }
+    if (!canScheduleSlot(slot)) {
+      Alert.alert('Trade not ready', 'Assign a WalkerAI trade or mark this scope externally managed before recommending schedule dates.');
       return;
     }
     if (!isValidIsoDate(startDate.trim())) {
@@ -247,11 +259,12 @@ export default function GeneralContractorScheduleScreen() {
 
               {slots.map((slot) => {
                 const selected = selectedSlotId === slot.id;
+                const schedulable = canScheduleSlot(slot);
                 const participant = slot.fulfillment_type === 'external'
                   ? slot.external_trade_name ?? 'External trade'
                   : getCompany(slot)?.name ?? 'Unassigned';
                 return (
-                  <TouchableOpacity key={slot.id} onPress={() => selectSlot(slot)} activeOpacity={0.85}>
+                  <TouchableOpacity key={slot.id} onPress={() => selectSlot(slot)} activeOpacity={schedulable ? 0.85 : 1}>
                     <GlassCard style={[styles.card, selected && styles.cardSelected]}>
                       <View style={styles.slotHeader}>
                         <View style={styles.slotIcon}>
@@ -261,7 +274,11 @@ export default function GeneralContractorScheduleScreen() {
                           <Text style={styles.slotTitle}>{formatTrade(slot.trade_type)}</Text>
                           <Text style={styles.slotMeta}>{participant}</Text>
                         </View>
-                        <StatusBadge label={slot.fulfillment_type === 'external' ? 'external' : slot.status} variant={slot.status === 'scheduled' ? 'completed' : 'pending'} size="sm" />
+                        <StatusBadge
+                          label={schedulable ? (slot.fulfillment_type === 'external' ? 'external' : slot.status) : 'needs trade'}
+                          variant={slot.status === 'scheduled' ? 'completed' : schedulable ? 'pending' : 'neutral'}
+                          size="sm"
+                        />
                       </View>
                       <View style={styles.dateLine}>
                         <Text style={styles.dateText}>Start: {formatDate(slot.scheduled_start_date)}</Text>
