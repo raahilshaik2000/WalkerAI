@@ -28,7 +28,6 @@ export const useAuthStore = create<AuthState>()(
         set({
           session,
           user: session?.user ?? null,
-          role: (session?.user?.user_metadata?.role as UserRole) ?? null,
         }),
 
       setRole: (role) => set({ role }),
@@ -43,7 +42,6 @@ export const useAuthStore = create<AuthState>()(
       storage: createJSONStorage(() => AsyncStorage),
       partialize: (state) => ({
         session: state.session,
-        role: state.role,
       }),
       onRehydrateStorage: () => (state) => {
         if (state?.session) {

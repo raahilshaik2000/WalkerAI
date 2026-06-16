@@ -100,6 +100,7 @@ describe('general contractor account type', () => {
   it('adds the GC role to registration and root routing without falling through to company', () => {
     const register = fs.readFileSync(path.join(repoRoot, 'src/app/(auth)/register.tsx'), 'utf8');
     const rootNavigator = fs.readFileSync(path.join(repoRoot, 'src/navigation/RootNavigator.tsx'), 'utf8');
+    const authStore = fs.readFileSync(path.join(repoRoot, 'src/stores/auth.store.ts'), 'utf8');
 
     expect(register).toContain("value: 'general_contractor'");
     expect(register).toContain("label: 'General Contractor'");
@@ -109,6 +110,12 @@ describe('general contractor account type', () => {
     expect(rootNavigator).toContain('component={GeneralContractorNavigator}');
     expect(rootNavigator).toContain('isMissingUserProfileColumn');
     expect(rootNavigator).toContain('schema cache');
+    expect(rootNavigator).toContain('authRoleResolved');
+    expect(rootNavigator).toContain('if (!hydrated || !authRoleResolved) return null;');
+    expect(rootNavigator).toContain("setRole((data?.role as UserRole | undefined) ?? null)");
+    expect(rootNavigator).not.toContain('metadataRole');
+    expect(authStore).not.toContain('user_metadata?.role');
+    expect(authStore).not.toContain('role: state.role');
   });
 
   it('adds a database constraint and tables for GC profiles and assignments', () => {

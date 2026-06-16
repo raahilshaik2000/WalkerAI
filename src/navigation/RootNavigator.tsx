@@ -340,16 +340,19 @@ export function RootNavigator() {
   const { session, role, hydrated, setSession, setHydrated, setRole } = useAuthStore();
   const updateProfile = useProfileStore((state) => state.updateProfile);
   const resetProfile = useProfileStore((state) => state.resetProfile);
+  const [authRoleResolved, setAuthRoleResolved] = useState(false);
 
   const applySession = useCallback(async (nextSession: typeof session) => {
+    setAuthRoleResolved(false);
     setSession(nextSession);
     if (!nextSession?.user?.id) {
+      setRole(null);
       resetProfile();
       setHydrated(true);
+      setAuthRoleResolved(true);
       return;
     }
 
-    const metadataRole = nextSession.user.user_metadata?.role as UserRole | undefined;
     let userResult: any = await supabase
       .from('users')
       .select('role, full_name, phone, avatar_url, address, city, province, postal_code')
@@ -391,8 +394,9 @@ export function RootNavigator() {
         province: data.province ?? '',
       });
     }
-    setRole(((data?.role as UserRole | undefined) ?? metadataRole ?? null));
+    setRole((data?.role as UserRole | undefined) ?? null);
     setHydrated(true);
+    setAuthRoleResolved(true);
   }, [resetProfile, setHydrated, setRole, setSession, updateProfile]);
 
   useEffect(() => {
@@ -438,7 +442,7 @@ export function RootNavigator() {
     lastPushUserId.current = currentUserId;
   }, [hydrated, session?.user?.id, role]);
 
-  if (!hydrated) return null;
+  if (!hydrated || !authRoleResolved) return null;
 
   const resolvedRole = role === 'homeowner'
     || role === 'company'
