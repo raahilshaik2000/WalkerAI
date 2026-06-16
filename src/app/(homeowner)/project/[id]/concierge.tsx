@@ -186,6 +186,9 @@ function getApprovalConfirmMessage(request: ApprovalRequest, status: 'approved' 
   if (request.request_type === 'trade_substitution') {
     return 'Approving records the GC trade recommendation for this scope.';
   }
+  if (request.request_type === 'change_order') {
+    return 'Approving creates an approved project change order record.';
+  }
   return 'This records your approval for the GC recommendation.';
 }
 

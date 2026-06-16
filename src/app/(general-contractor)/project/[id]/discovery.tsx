@@ -58,6 +58,13 @@ function parseSignedWholeDays(value: string): number | null {
   return Number.isSafeInteger(parsed) ? parsed : null;
 }
 
+function approvalResultMessage(requestType: ApprovalRequestType) {
+  if (requestType === 'change_order') {
+    return 'After homeowner approval, WalkerAI creates an approved project change-order record. Escrow and milestone funding still stay separate.';
+  }
+  return 'No discovery or scope change becomes active until the homeowner approves it.';
+}
+
 export default function GeneralContractorDiscoveryScreen() {
   const navigation = useNavigation<any>();
   const route = useRoute<any>();
@@ -178,7 +185,7 @@ export default function GeneralContractorDiscoveryScreen() {
         },
       });
       if (error) throw error;
-      Alert.alert('Sent for approval', 'No discovery or scope change becomes active until the homeowner approves it.');
+      Alert.alert('Sent for approval', approvalResultMessage(requestType));
       setTitle('');
       setDescription('');
       setCostDelta('');
@@ -212,7 +219,7 @@ export default function GeneralContractorDiscoveryScreen() {
           <GlassCard style={styles.card}>
             <Text style={styles.sectionTitle}>Homeowner approval gate</Text>
             <Text style={styles.bodyText}>
-              No discovery or scope change becomes active until the homeowner approves it. This does not directly edit escrow, milestones, or contractor change orders.
+              No discovery or scope change becomes active until the homeowner approves it. Approved change-order requests create a project change-order record; escrow and milestone funding remain separate.
             </Text>
           </GlassCard>
 

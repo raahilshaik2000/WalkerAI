@@ -1164,7 +1164,11 @@ describe('general contractor account type', () => {
     expect(homeownerConcierge).toContain('Approving updates the project material preference fields.');
   });
 
-  it('gives GCs a discovery and scope-change approval workflow instead of bypassing change orders', () => {
+  it('turns approved GC discovery change-order requests into change order records', () => {
+    const migration = fs.readFileSync(
+      path.join(repoRoot, 'supabase/migrations/20260616020100_create_change_order_from_gc_approval.sql'),
+      'utf8',
+    );
     const navigator = fs.readFileSync(
       path.join(repoRoot, 'src/navigation/GeneralContractorNavigator.tsx'),
       'utf8',
@@ -1177,6 +1181,10 @@ describe('general contractor account type', () => {
       path.join(repoRoot, 'src/app/(general-contractor)/project/[id]/discovery.tsx'),
       'utf8',
     );
+    const homeownerConcierge = fs.readFileSync(
+      path.join(repoRoot, 'src/app/(homeowner)/project/[id]/concierge.tsx'),
+      'utf8',
+    );
 
     expect(navigator).toContain('GeneralContractorDiscovery');
     expect(gcProjectDetail).toContain("navigation.navigate('GeneralContractorDiscovery'");
@@ -1184,11 +1192,23 @@ describe('general contractor account type', () => {
     expect(gcDiscovery).toContain("from('project_approval_requests').insert");
     expect(gcDiscovery).toContain("request_type: requestType");
     expect(gcDiscovery).toContain("value: 'change_order'");
-    expect(gcDiscovery).toContain('No discovery or scope change becomes active until the homeowner approves it.');
+    expect(gcDiscovery).toContain('Approved change-order requests create a project change-order record');
+    expect(gcDiscovery).toContain('After homeowner approval, WalkerAI creates an approved project change-order record.');
     expect(gcDiscovery).toContain('function parseSignedWholeDays(value: string): number | null');
     expect(gcDiscovery).toContain("if (!/^-?\\d+$/.test(trimmed)) return null;");
     expect(gcDiscovery).not.toContain('Number.parseInt(timelineDelta');
     expect(gcDiscovery).not.toContain("from('change_orders').insert");
+    expect(homeownerConcierge).toContain('Approving creates an approved project change order record.');
+    expect(migration).toContain('CREATE OR REPLACE FUNCTION public.create_change_order_from_gc_approval()');
+    expect(migration).toContain("NEW.request_type IS DISTINCT FROM 'change_order'");
+    expect(migration).toContain("NEW.metadata->>'source' IS DISTINCT FROM 'gc_discovery'");
+    expect(migration).toContain("set_config('walker.internal_change_order_insert', 'gc_approved_change_order', true)");
+    expect(migration).toContain("current_setting('walker.internal_change_order_insert', true) = 'gc_approved_change_order'");
+    expect(migration).toContain('INSERT INTO public.change_orders');
+    expect(migration).toContain('signed_by_homeowner');
+    expect(migration).toContain('signed_by_company');
+    expect(migration).toContain("'approved'");
+    expect(migration).toContain('create_change_order_from_gc_approval_trigger');
   });
 
   it('lets GCs participate in the project communication thread', () => {
