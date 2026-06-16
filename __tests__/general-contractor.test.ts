@@ -1139,6 +1139,10 @@ describe('general contractor account type', () => {
       path.join(repoRoot, 'src/app/(general-contractor)/approvals.tsx'),
       'utf8',
     );
+    const homeownerConcierge = fs.readFileSync(
+      path.join(repoRoot, 'src/app/(homeowner)/project/[id]/concierge.tsx'),
+      'utf8',
+    );
 
     expect(migration).toContain('CREATE OR REPLACE FUNCTION public.respond_to_gc_concierge_booking');
     expect(migration).toContain("p_status = 'accepted'");
@@ -1152,6 +1156,11 @@ describe('general contractor account type', () => {
     expect(gcApprovals).toContain("status === 'accepted' && !canAcceptConciergeBookings");
     expect(gcApprovals).toContain('WalkerAI verification and concierge marketplace access are required before this request can be accepted.');
     expect(gcApprovals).toContain('disabled={!canAcceptConciergeBookings}');
+    expect(homeownerConcierge).toContain('concierge_enabled, verified');
+    expect(homeownerConcierge).toContain("Pick<GeneralContractor, 'id' | 'business_name' | 'concierge_enabled' | 'verified'>");
+    expect(homeownerConcierge).toContain('assignedGc?.verified === true && assignedGc.concierge_enabled === true');
+    expect(homeownerConcierge).toContain('WalkerAI verification is required before this GC can accept concierge service requests.');
+    expect(homeownerConcierge).toContain('WalkerAI verification is required before this GC can accept new concierge service requests.');
   });
 
   it('adds a deterministic GC project assistant from live project records', () => {

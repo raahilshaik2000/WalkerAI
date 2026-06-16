@@ -25,6 +25,8 @@ import { getRequiredStringParam } from '@/lib/navigation-params';
 import { Colors, Spacing, Typography } from '@/constants/theme';
 import { GlassButton, GlassCard, GradientBackground, StatusBadge } from '@/components/ui';
 
+type AssignedGeneralContractor = Pick<GeneralContractor, 'id' | 'business_name' | 'city' | 'province' | 'rating' | 'total_reviews' | 'concierge_enabled' | 'verified'>;
+
 interface CurrentAssignment {
   id: string;
   status: string;
@@ -33,7 +35,7 @@ interface CurrentAssignment {
   project_type: string | null;
   scope_summary: string | null;
   initiated_by_gc: boolean;
-  general_contractor?: Pick<GeneralContractor, 'id' | 'business_name' | 'city' | 'province' | 'rating' | 'total_reviews' | 'concierge_enabled'> | Array<Pick<GeneralContractor, 'id' | 'business_name' | 'city' | 'province' | 'rating' | 'total_reviews' | 'concierge_enabled'>> | null;
+  general_contractor?: AssignedGeneralContractor | AssignedGeneralContractor[] | null;
 }
 
 interface ApprovalRequest {
@@ -221,7 +223,7 @@ export default function ProjectConciergeScreen() {
           .from('general_contractor_projects')
           .select(`
             id, status, markup_pct, concierge_fee_pct, project_type, scope_summary, initiated_by_gc,
-            general_contractor:general_contractors ( id, business_name, city, province, rating, total_reviews, concierge_enabled )
+            general_contractor:general_contractors ( id, business_name, city, province, rating, total_reviews, concierge_enabled, verified )
           `)
           .eq('project_id', projectId)
           .neq('status', 'removed')
@@ -440,7 +442,7 @@ export default function ProjectConciergeScreen() {
   };
 
   const handleRequestBooking = async (
-    gc: Pick<GeneralContractor, 'id' | 'business_name' | 'concierge_enabled'>,
+    gc: Pick<GeneralContractor, 'id' | 'business_name' | 'concierge_enabled' | 'verified'>,
     serviceKind: ConciergeServiceKind,
   ) => {
     const currentUser = user ?? (await supabase.auth.getUser()).data.user;
@@ -450,6 +452,10 @@ export default function ProjectConciergeScreen() {
     }
     if (!gc.concierge_enabled) {
       Alert.alert('Concierge unavailable', 'This GC has not enabled concierge services.');
+      return;
+    }
+    if (gc.verified !== true) {
+      Alert.alert('Concierge unavailable', 'WalkerAI verification is required before this GC can accept concierge service requests.');
       return;
     }
 
@@ -603,6 +609,7 @@ export default function ProjectConciergeScreen() {
   };
 
   const assignedGc = getAssignedGc(currentAssignment);
+  const assignedGcCanRequestConcierge = assignedGc?.verified === true && assignedGc.concierge_enabled === true;
 
   return (
     <GradientBackground glow="top-right">
@@ -749,7 +756,7 @@ export default function ProjectConciergeScreen() {
                     ) : null}
                   </View>
                 ))}
-                {assignedGc.concierge_enabled ? (
+                {assignedGcCanRequestConcierge ? (
                   <View style={styles.serviceGrid}>
                     {CONCIERGE_SERVICE_OPTIONS.map((option) => (
                       <GlassButton
@@ -763,6 +770,10 @@ export default function ProjectConciergeScreen() {
                       />
                     ))}
                   </View>
+                ) : assignedGc.concierge_enabled ? (
+                  <Text style={styles.emptySubText}>
+                    WalkerAI verification is required before this GC can accept new concierge service requests.
+                  </Text>
                 ) : null}
               </GlassCard>
 
