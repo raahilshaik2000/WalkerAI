@@ -564,7 +564,7 @@ export default function JobBriefScreen() {
                 style={styles.acceptBtn}
               />
               <Text style={styles.acceptNote}>
-                By accepting, you agree to submit a detailed quote within 48 hours.
+                By accepting, you agree to submit a detailed quote before the homeowner can approve pricing.
               </Text>
             </>
           ) : alreadyAccepted ? (

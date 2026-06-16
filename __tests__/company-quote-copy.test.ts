@@ -89,6 +89,17 @@ describe('company quote copy', () => {
     expect(source).not.toContain("meta: job.status === 'active' ? 'View approved' : 'Build quote'");
   });
 
+  it('does not promise an unsupported 48 hour quote deadline when accepting a job', () => {
+    const repoRoot = path.resolve(__dirname, '..');
+    const source = fs.readFileSync(
+      path.join(repoRoot, 'src/app/(company)/job/[id]/index.tsx'),
+      'utf8'
+    );
+
+    expect(source).toContain('By accepting, you agree to submit a detailed quote before the homeowner can approve pricing.');
+    expect(source).not.toContain('By accepting, you agree to submit a detailed quote within 48 hours.');
+  });
+
   it('preserves GC negotiation history when revised quotes replace pending quotes', () => {
     const repoRoot = path.resolve(__dirname, '..');
     const migration = fs.readFileSync(
