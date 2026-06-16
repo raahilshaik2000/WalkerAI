@@ -47,3 +47,18 @@ describe('dashboard inspiration data', () => {
     expect(milestoneArticle).not.toMatch(/auto(?:matically)? release/i);
   });
 });
+
+describe('company dashboard project list', () => {
+  it('keeps accepted trade slots distinct before opening pricing and job controls', () => {
+    const repoRoot = path.resolve(__dirname, '..');
+    const source = fs.readFileSync(path.join(repoRoot, 'src/app/(company)/index.tsx'), 'utf8');
+
+    expect(source).toContain('slot:project_slots ( id, trade_type )');
+    expect(source).toContain('const slot = Array.isArray(dispatch.slot) ? dispatch.slot[0] : dispatch.slot;');
+    expect(source).toContain('trade_type: slot?.trade_type ?? null');
+    expect(source).toContain("[...legacyActive, ...acceptedDispatchActive, ...slotActive].forEach");
+    expect(source).toContain("byKey.set(`${job.id}:${job.slotId ?? 'legacy'}`, job)");
+    expect(source).toContain("key={`${job.id}:${job.slotId ?? 'legacy'}`}");
+    expect(source).toContain("navigation.navigate('JobDetail', { screen: 'JobDetailMain', params: { id: job.id, slot: job.slotId } })");
+  });
+});

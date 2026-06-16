@@ -172,7 +172,8 @@ export default function CompanyJobFeed() {
               id, address, city, room_type, status,
               renders ( url, selected ),
               project_photos ( url, storage_path )
-            )
+            ),
+            slot:project_slots ( id, trade_type )
           `)
           .eq('company_id', co.id)
           .eq('response', 'accepted')
@@ -200,6 +201,7 @@ export default function CompanyJobFeed() {
       const acceptedDispatchActive = ((acceptedDispatchResult.data ?? []) as unknown as DispatchedJob[])
         .map((dispatch): ActiveJob | null => {
           const project = Array.isArray(dispatch.project) ? dispatch.project[0] : dispatch.project;
+          const slot = Array.isArray(dispatch.slot) ? dispatch.slot[0] : dispatch.slot;
           if (!project) return null;
           return {
             id: project.id,
@@ -208,6 +210,7 @@ export default function CompanyJobFeed() {
             city: project.city,
             room_type: project.room_type,
             status: project.status,
+            trade_type: slot?.trade_type ?? null,
           };
         })
         .filter((job): job is ActiveJob => !!job);
@@ -234,7 +237,7 @@ export default function CompanyJobFeed() {
         .filter((job): job is ActiveJob => !!job);
 
       const byKey = new Map<string, ActiveJob>();
-      [...legacyActive, ...slotActive, ...acceptedDispatchActive].forEach((job) => {
+      [...legacyActive, ...acceptedDispatchActive, ...slotActive].forEach((job) => {
         byKey.set(`${job.id}:${job.slotId ?? 'legacy'}`, job);
       });
 
@@ -420,7 +423,7 @@ export default function CompanyJobFeed() {
             <TradeSection title="Projects">
               {activeJobs.map((job) => (
                 <TouchableOpacity
-                  key={job.id}
+                  key={`${job.id}:${job.slotId ?? 'legacy'}`}
                   style={styles.activeJobCard}
                   onPress={() => navigation.navigate('JobDetail', { screen: 'JobDetailMain', params: { id: job.id, slot: job.slotId } })}
                   activeOpacity={0.85}
