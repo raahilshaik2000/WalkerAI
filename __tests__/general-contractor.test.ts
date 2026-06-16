@@ -155,6 +155,10 @@ describe('general contractor account type', () => {
       path.join(repoRoot, 'supabase/migrations/20260615002500_general_contractors_for_project.sql'),
       'utf8',
     );
+    const discoveryExecuteMigration = fs.readFileSync(
+      path.join(repoRoot, 'supabase/migrations/20260616010006_restrict_gc_discovery_rpc_execute.sql'),
+      'utf8',
+    );
     const conciergeScreen = fs.readFileSync(
       path.join(repoRoot, 'src/app/(homeowner)/project/[id]/concierge.tsx'),
       'utf8',
@@ -175,8 +179,11 @@ describe('general contractor account type', () => {
     expect(authenticatedPolicyMigration).toContain('REVOKE SELECT ON public.general_contractors FROM anon');
     expect(authenticatedPolicyMigration).toContain('GRANT SELECT ON public.general_contractors TO authenticated');
     expect(discoveryMigration).toContain('CREATE OR REPLACE FUNCTION public.general_contractors_for_project');
+    expect(discoveryMigration).toContain('p.homeowner_id = (SELECT auth.uid())');
     expect(discoveryMigration).toContain('ST_DWithin(gc.location, target_project.project_geography, gc.service_radius_km * 1000)');
     expect(discoveryMigration).toContain('distance_km');
+    expect(discoveryExecuteMigration).toContain('REVOKE ALL ON FUNCTION public.general_contractors_for_project(UUID) FROM PUBLIC, anon');
+    expect(discoveryExecuteMigration).toContain('GRANT EXECUTE ON FUNCTION public.general_contractors_for_project(UUID) TO authenticated');
     expect(conciergeScreen).toContain("supabase.rpc('general_contractors_for_project'");
     expect(conciergeScreen).toContain('fetchDiscoverableGeneralContractors(projectId)');
     expect(conciergeScreen).toContain('formatGcDistance(gc)');
