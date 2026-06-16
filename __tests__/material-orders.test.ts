@@ -51,6 +51,16 @@ describe('supplier material order payout math', () => {
     expect(activeSource).not.toContain('maximumFractionDigits: 0');
   });
 
+  it('uses explicit material relationship names on company supplier-delivery queries', () => {
+    const companyMaterialsSource = fs.readFileSync(
+      path.join(__dirname, '../src/app/(company)/job/[id]/materials.tsx'),
+      'utf8',
+    );
+
+    expect(companyMaterialsSource).toContain('material:materials!material_orders_material_id_fkey(item)');
+    expect(companyMaterialsSource).not.toContain('material:materials(item)');
+  });
+
   it('guards supplier fulfillment updates by current status as well as supplier assignment', () => {
     const activeSource = fs.readFileSync(
       path.join(__dirname, '../src/app/(supplier)/orders/active.tsx'),

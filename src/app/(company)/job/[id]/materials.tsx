@@ -136,7 +136,7 @@ export default function ContractorMaterialsScreen() {
         .from('material_orders')
         .select(`
           id, status, final_price, quantity_needed, unit, accepted_supplier_id,
-          material:materials(item),
+          material:materials!material_orders_material_id_fkey(item),
           accepted_supplier:suppliers!accepted_supplier_id(business_name)
         `)
         .eq('project_id', projectId)
