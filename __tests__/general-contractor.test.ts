@@ -358,6 +358,10 @@ describe('general contractor account type', () => {
       path.join(repoRoot, 'supabase/migrations/20260615003800_guard_gc_assignment_creation.sql'),
       'utf8',
     );
+    const inviteTermsMigration = fs.readFileSync(
+      path.join(repoRoot, 'supabase/migrations/20260616004643_lock_homeowner_gc_invite_terms.sql'),
+      'utf8',
+    );
 
     expect(migration).toContain('CREATE OR REPLACE FUNCTION public.guard_gc_assignment_creation()');
     expect(migration).toContain("NEW.status <> 'invited'");
@@ -370,6 +374,13 @@ describe('general contractor account type', () => {
     expect(migration).toContain("existing.status <> 'removed'");
     expect(migration).toContain('This project already has a current GC assignment');
     expect(migration).toContain('guard_gc_assignment_creation_trigger');
+    expect(inviteTermsMigration).toContain('CREATE OR REPLACE FUNCTION public.guard_gc_assignment_creation()');
+    expect(inviteTermsMigration).toContain('v_gc public.general_contractors%ROWTYPE');
+    expect(inviteTermsMigration).toContain('gc.verified IS TRUE');
+    expect(inviteTermsMigration).toContain('NEW.markup_pct := v_gc.default_markup_pct');
+    expect(inviteTermsMigration).toContain('NEW.concierge_fee_pct := v_gc.default_concierge_fee_pct');
+    expect(inviteTermsMigration).toContain('Only the selected GC can create a GC-initiated assignment');
+    expect(inviteTermsMigration).toContain('Only the homeowner can invite a GC to this project');
   });
 
   it('keeps GC verification and review metrics backend maintained', () => {
