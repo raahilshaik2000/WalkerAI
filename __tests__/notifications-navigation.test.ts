@@ -182,6 +182,28 @@ describe('notification navigation', () => {
     });
   });
 
+  it('routes GC project workflow notifications to dedicated management screens', () => {
+    expect(resolveNotificationRoute('quote_submitted', { project_id: 'project-1' }, 'general_contractor')).toEqual({
+      name: 'GeneralContractorTrades',
+      params: { id: 'project-1' },
+    });
+
+    expect(resolveNotificationRoute('schedule_confirmed', { project_id: 'project-1' }, 'general_contractor')).toEqual({
+      name: 'GeneralContractorSchedule',
+      params: { id: 'project-1' },
+    });
+
+    expect(resolveNotificationRoute('milestone_needs_approval', { project_id: 'project-1' }, 'general_contractor')).toEqual({
+      name: 'GeneralContractorPayments',
+      params: { id: 'project-1' },
+    });
+
+    expect(resolveNotificationRoute('project_complete', { project_id: 'project-1' }, 'general_contractor')).toEqual({
+      name: 'GeneralContractorCompletion',
+      params: { id: 'project-1' },
+    });
+  });
+
   it('wraps local notification routes for root-level push deep links', () => {
     const gcRoute = resolveNotificationRoute('gc_trade_negotiation_responded', { project_id: 'project-1' }, 'general_contractor');
     expect(toRootNotificationRoute(gcRoute, 'general_contractor')).toEqual({

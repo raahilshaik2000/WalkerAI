@@ -14,7 +14,7 @@ const repoRoot = path.join(__dirname, '..');
 describe('general contractor account type', () => {
   it('routes general contractor notifications into the GC navigator', () => {
     expect(resolveNotificationRoute('new_message', { project_id: 'project-1' }, 'general_contractor')).toEqual({
-      name: 'GeneralContractorProjectDetail',
+      name: 'GeneralContractorMessages',
       params: { id: 'project-1' },
     });
 

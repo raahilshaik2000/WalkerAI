@@ -90,15 +90,22 @@ export function resolveNotificationRoute(
       case 'order_delivered':
         return { name: 'GeneralContractorMaterials', params: { id: projectId } };
       case 'quote_submitted':
-      case 'milestone_needs_approval':
+        return { name: 'GeneralContractorTrades', params: { id: projectId } };
       case 'schedule_confirmed':
-      case 'warranty_expiring':
-      case 'new_message':
-      case 'project_complete':
+        return { name: 'GeneralContractorSchedule', params: { id: projectId } };
+      case 'milestone_needs_approval':
       case 'dispute_raised':
       case 'quote_approved':
       case 'milestone_paid':
       case 'milestone_completed':
+        return { name: 'GeneralContractorPayments', params: { id: projectId } };
+      case 'new_message':
+        return { name: 'GeneralContractorMessages', params: { id: projectId } };
+      case 'warranty_expiring':
+      case 'project_complete':
+        return { name: 'GeneralContractorCompletion', params: { id: projectId } };
+      case 'gc_approval_requested':
+      case 'gc_payment_requested':
         return { name: 'GeneralContractorProjectDetail', params: { id: projectId } };
       default:
         return { name: 'GeneralContractorProjectDetail', params: { id: projectId } };
