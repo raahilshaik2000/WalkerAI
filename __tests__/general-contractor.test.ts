@@ -1139,6 +1139,9 @@ describe('general contractor account type', () => {
     expect(gcMaterials).toContain('applyCatalogSuggestion');
     expect(gcMaterials).toContain('lead_time_days');
     expect(gcMaterials).toContain('price_per_unit');
+    expect(gcMaterials).toContain('function parseWholeDays(value: string): number | null');
+    expect(gcMaterials).toContain("if (!/^\\d+$/.test(trimmed)) return null;");
+    expect(gcMaterials).not.toContain('Number.parseInt(leadTimeInput');
     expect(gcMaterials).toContain('Send Material Recommendation');
     expect(gcMaterials).toContain('Homeowner approval is required before the material preference changes.');
     expect(homeownerConcierge).toContain('Approving updates the project material preference fields.');
@@ -1165,6 +1168,9 @@ describe('general contractor account type', () => {
     expect(gcDiscovery).toContain("request_type: requestType");
     expect(gcDiscovery).toContain("value: 'change_order'");
     expect(gcDiscovery).toContain('No discovery or scope change becomes active until the homeowner approves it.');
+    expect(gcDiscovery).toContain('function parseSignedWholeDays(value: string): number | null');
+    expect(gcDiscovery).toContain("if (!/^-?\\d+$/.test(trimmed)) return null;");
+    expect(gcDiscovery).not.toContain('Number.parseInt(timelineDelta');
     expect(gcDiscovery).not.toContain("from('change_orders').insert");
   });
 

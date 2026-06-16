@@ -50,6 +50,14 @@ function statusVariant(status: string): 'pending' | 'completed' | 'error' | 'neu
   return 'neutral';
 }
 
+function parseSignedWholeDays(value: string): number | null {
+  const trimmed = value.trim();
+  if (!trimmed) return null;
+  if (!/^-?\d+$/.test(trimmed)) return null;
+  const parsed = Number(trimmed);
+  return Number.isSafeInteger(parsed) ? parsed : null;
+}
+
 export default function GeneralContractorDiscoveryScreen() {
   const navigation = useNavigation<any>();
   const route = useRoute<any>();
@@ -147,8 +155,8 @@ export default function GeneralContractorDiscoveryScreen() {
       Alert.alert('Invalid cost impact', 'Enter a signed CAD amount, like +500 or -200.');
       return;
     }
-    const parsedTimelineDelta = timelineDelta.trim() ? Number.parseInt(timelineDelta, 10) : null;
-    if (timelineDelta.trim() && (parsedTimelineDelta == null || !Number.isInteger(parsedTimelineDelta))) {
+    const parsedTimelineDelta = parseSignedWholeDays(timelineDelta);
+    if (timelineDelta.trim() && parsedTimelineDelta == null) {
       Alert.alert('Invalid timeline impact', 'Enter timeline impact as whole days, like 3 or -1.');
       return;
     }

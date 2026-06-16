@@ -82,6 +82,14 @@ function materialCatalogScore(material: Material, item: CatalogSuggestion) {
   return score;
 }
 
+function parseWholeDays(value: string): number | null {
+  const trimmed = value.trim();
+  if (!trimmed) return null;
+  if (!/^\d+$/.test(trimmed)) return null;
+  const parsed = Number(trimmed);
+  return Number.isSafeInteger(parsed) ? parsed : null;
+}
+
 export default function GeneralContractorMaterialsScreen() {
   const navigation = useNavigation<any>();
   const route = useRoute<any>();
@@ -222,8 +230,8 @@ export default function GeneralContractorMaterialsScreen() {
       return;
     }
     const leadTimeInput = leadTimeDays.trim();
-    const leadTime = leadTimeInput ? Number.parseInt(leadTimeInput, 10) : null;
-    if (leadTimeInput && (leadTime == null || !Number.isInteger(leadTime) || leadTime < 0)) {
+    const leadTime = parseWholeDays(leadTimeInput);
+    if (leadTimeInput && leadTime == null) {
       Alert.alert('Invalid lead time', 'Enter lead time as whole days.');
       return;
     }
