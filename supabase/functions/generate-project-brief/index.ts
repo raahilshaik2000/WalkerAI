@@ -43,8 +43,19 @@ async function isActiveGeneralContractorForProject(
   return !!data;
 }
 
+const PROJECT_TYPES = ['kitchen', 'bathroom', 'flooring', 'painting', 'basement', 'addition', 'other'] as const;
+type ProjectType = typeof PROJECT_TYPES[number];
+
+function isProjectType(value: unknown): value is ProjectType {
+  return typeof value === 'string' && PROJECT_TYPES.includes(value as ProjectType);
+}
+
+function formatProjectType(projectType: ProjectType) {
+  return projectType.replace(/_/g, ' ');
+}
+
 // CAD cents — regional labour cost baselines
-const CANADIAN_COST_RANGES: Record<string, Record<string, { min: number; max: number }>> = {
+const CANADIAN_COST_RANGES: Record<string, Partial<Record<ProjectType, { min: number; max: number }>>> = {
   ON: { kitchen: { min: 2500000, max: 7500000 }, bathroom: { min: 800000, max: 2500000 } },
   BC: { kitchen: { min: 2800000, max: 8500000 }, bathroom: { min: 900000, max: 2800000 } },
   AB: { kitchen: { min: 2200000, max: 6500000 }, bathroom: { min: 750000, max: 2200000 } },
@@ -57,7 +68,15 @@ const CANADIAN_COST_RANGES: Record<string, Record<string, { min: number; max: nu
   PE: { kitchen: { min: 1800000, max: 4500000 }, bathroom: { min: 600000, max: 1600000 } },
 };
 
-const DEFAULT_COST = { min: 2000000, max: 6000000 };
+const DEFAULT_PROJECT_COSTS: Record<ProjectType, { min: number; max: number }> = {
+  kitchen: { min: 2000000, max: 6000000 },
+  bathroom: { min: 700000, max: 2000000 },
+  flooring: { min: 500000, max: 1800000 },
+  painting: { min: 300000, max: 1200000 },
+  basement: { min: 3000000, max: 9000000 },
+  addition: { min: 8000000, max: 25000000 },
+  other: { min: 1000000, max: 4000000 },
+};
 const POSTGRES_INTEGER_MAX = 2147483647;
 
 const CANADIAN_PROVINCE_CODES = new Set(['AB', 'BC', 'MB', 'NB', 'NL', 'NS', 'NT', 'NU', 'ON', 'PE', 'QC', 'SK', 'YT']);
@@ -163,15 +182,36 @@ function hasAnyAnswerPrefix(questionnaireAnswers: unknown, prefix: string) {
   return answerValues(questionnaireAnswers).some((answer) => answer.startsWith(prefix));
 }
 
+function projectCostRange(provinceCode: string, projectType: ProjectType) {
+  return CANADIAN_COST_RANGES[provinceCode]?.[projectType] ?? DEFAULT_PROJECT_COSTS[projectType];
+}
+
+async function gcProjectTypeForProject(
+  supabase: ReturnType<typeof createClient>,
+  projectId: string,
+): Promise<ProjectType | null> {
+  const { data, error } = await supabase
+    .from('general_contractor_projects')
+    .select('project_type')
+    .eq('project_id', projectId)
+    .neq('status', 'removed')
+    .order('updated_at', { ascending: false })
+    .limit(1)
+    .maybeSingle();
+
+  if (error) throw error;
+  return isProjectType(data?.project_type) ? data.project_type : null;
+}
+
 function fallbackBrief({
-  roomType,
+  projectType,
   questionnaireAnswers,
   provinceCode,
   forcedCostMin,
   forcedCostMax,
   reason,
 }: {
-  roomType: string;
+  projectType: ProjectType;
   questionnaireAnswers: unknown;
   provinceCode: string;
   forcedCostMin?: number;
@@ -179,9 +219,7 @@ function fallbackBrief({
   reason: string;
 }): GeneratedBrief {
   const qualityTier = inferQualityTier(questionnaireAnswers);
-  const regionalCosts =
-    CANADIAN_COST_RANGES[provinceCode]?.[roomType] ??
-    (roomType === 'kitchen' ? DEFAULT_COST : { min: 700000, max: 2000000 });
+  const regionalCosts = projectCostRange(provinceCode, projectType);
   const materials: GeneratedBrief['materials'] = [
     { item: 'Site protection and dust-control materials', quantity: 1, unit: 'allowance', quality_tier: qualityTier },
     { item: 'Construction disposal and cleanup supplies', quantity: 1, unit: 'allowance', quality_tier: qualityTier },
@@ -194,7 +232,7 @@ function fallbackBrief({
   ];
   const permits: GeneratedBrief['permits'] = [];
 
-  if (roomType === 'bathroom') {
+  if (projectType === 'bathroom') {
     const tileWorkSelected = !hasAnswer(questionnaireAnswers, 'b_tile_keep');
     const showerWorkSelected = !hasAnswer(questionnaireAnswers, 'b_sh_keep');
     const vanityWorkSelected = !hasAnswer(questionnaireAnswers, 'b_van_keep');
@@ -225,7 +263,7 @@ function fallbackBrief({
     if (!hasAnswer(questionnaireAnswers, 'b_plumb_none')) {
       permits.push({ permit_type: 'Plumbing permit', required: true });
     }
-  } else {
+  } else if (projectType === 'kitchen') {
     const hasCabinetAnswer = hasAnyAnswerPrefix(questionnaireAnswers, 'k_cab_');
     const replacesCabinets = !hasCabinetAnswer || hasAnswer(questionnaireAnswers, 'k_cab_full');
     const replacesCountertops = !hasAnswer(questionnaireAnswers, 'k_ct_keep');
@@ -260,6 +298,36 @@ function fallbackBrief({
     } else if (hasAnswer(questionnaireAnswers, 'k_lay_minor')) {
       permits.push({ permit_type: 'Electrical permit', required: true });
     }
+  } else if (projectType === 'flooring') {
+    materials.push(
+      { item: 'Flooring material package', quantity: 1, unit: 'allowance', quality_tier: qualityTier },
+      { item: 'Underlayment, transitions, and trim', quantity: 1, unit: 'allowance', quality_tier: qualityTier },
+    );
+    scope.splice(2, 0, { phase: 'installation', description: 'Prepare subfloor, install selected flooring, transitions, trim, and site cleanup.', sort_order: 2 });
+  } else if (projectType === 'painting') {
+    materials.push(
+      { item: 'Paint, primer, and sundries', quantity: 1, unit: 'allowance', quality_tier: qualityTier },
+      { item: 'Patching, masking, and surface preparation materials', quantity: 1, unit: 'allowance', quality_tier: qualityTier },
+    );
+    scope.splice(1, 1, { phase: 'rough-in', description: 'Patch, sand, protect adjacent areas, and prepare surfaces for paint.', sort_order: 1 });
+  } else if (projectType === 'basement') {
+    materials.push(
+      { item: 'Basement framing and drywall materials', quantity: 1, unit: 'allowance', quality_tier: qualityTier },
+      { item: 'Basement electrical and lighting allowance', quantity: 1, unit: 'allowance', quality_tier: qualityTier },
+      { item: 'Basement flooring and trim package', quantity: 1, unit: 'allowance', quality_tier: qualityTier },
+    );
+    permits.push({ permit_type: 'Building permit', required: true });
+    permits.push({ permit_type: 'Electrical permit', required: true });
+  } else if (projectType === 'addition') {
+    materials.push(
+      { item: 'Framing, sheathing, and structural materials', quantity: 1, unit: 'allowance', quality_tier: qualityTier },
+      { item: 'Exterior envelope, windows, and door allowance', quantity: 1, unit: 'allowance', quality_tier: qualityTier },
+      { item: 'Drywall, insulation, and interior finish materials', quantity: 1, unit: 'allowance', quality_tier: qualityTier },
+    );
+    permits.push({ permit_type: 'Building permit', required: true });
+    permits.push({ permit_type: 'Electrical permit', required: true });
+  } else {
+    materials.push({ item: `${formatProjectType(projectType)} project material allowance`, quantity: 1, unit: 'allowance', quality_tier: qualityTier });
   }
 
   return {
@@ -268,7 +336,7 @@ function fallbackBrief({
     ai_cost_min: forcedCostMin ?? regionalCosts.min,
     ai_cost_max: forcedCostMax ?? regionalCosts.max,
     permits,
-    ai_observations: `The project brief was generated from homeowner answers, deterministic pricing, and required contractor verification because AI brief generation was unavailable (${reason}). Material quantities and field conditions must be confirmed by the contractor before quoting.`,
+    ai_observations: `The ${formatProjectType(projectType)} project brief was generated from homeowner answers, deterministic pricing, and required contractor verification because AI brief generation was unavailable (${reason}). Material quantities and field conditions must be confirmed by the contractor before quoting.`,
     confidence_score: 62,
     confidence_notes: ['AI provider unavailable; estimate relies on homeowner inputs and pricing rules.', 'Contractor verification is required before final quote approval.'],
   };
@@ -335,7 +403,8 @@ Deno.serve(async (req) => {
       });
     }
 
-    const roomType = project.room_type ?? 'kitchen';
+    const gcProjectType = await gcProjectTypeForProject(adminClient, project_id);
+    const projectType = gcProjectType ?? (isProjectType(project.room_type) ? project.room_type : 'kitchen');
     const provinceCode = normalizeCanadianProvince(province ?? project.province);
 
     // Use caller-provided prompt if available (client has richer pricing logic),
@@ -344,10 +413,8 @@ Deno.serve(async (req) => {
     if (custom_prompt) {
       promptToUse = custom_prompt;
     } else {
-      const regionalCosts =
-        CANADIAN_COST_RANGES[provinceCode]?.[roomType] ??
-        (roomType === 'kitchen' ? DEFAULT_COST : { min: 700000, max: 2000000 });
-      promptToUse = `Generate a detailed renovation project brief for a ${roomType} in ${provinceCode}, Canada.
+      const regionalCosts = projectCostRange(provinceCode, projectType);
+      promptToUse = `Generate a detailed renovation project brief for a ${formatProjectType(projectType)} project in ${provinceCode}, Canada.
 
 Room Analysis: ${JSON.stringify(analysis)}
 Homeowner Preferences (questionnaire answers): ${JSON.stringify(questionnaire_answers)}
@@ -388,7 +455,7 @@ Rules:
     } catch (providerError) {
       console.error('OpenAI brief generation failed, using fallback:', providerError);
       brief = fallbackBrief({
-        roomType,
+        projectType,
         questionnaireAnswers: questionnaire_answers,
         provinceCode,
         forcedCostMin,

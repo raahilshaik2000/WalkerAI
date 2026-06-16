@@ -205,6 +205,32 @@ describe('generate-project-brief source guards', () => {
     expect(source).toContain('if (!requesterIsHomeowner && !requesterIsActiveGc)');
     expect(source).toContain("JSON.stringify({ error: 'Forbidden' })");
   });
+
+  it('uses GC project type when generating non-kitchen managed project briefs', () => {
+    const source = fs.readFileSync(
+      path.join(__dirname, '../supabase/functions/generate-project-brief/index.ts'),
+      'utf8',
+    );
+
+    expect(source).toContain("const PROJECT_TYPES = ['kitchen', 'bathroom', 'flooring', 'painting', 'basement', 'addition', 'other'] as const;");
+    expect(source).toContain('function gcProjectTypeForProject');
+    expect(source).toContain(".from('general_contractor_projects')");
+    expect(source).toContain(".select('project_type')");
+    expect(source).toContain("const gcProjectType = await gcProjectTypeForProject(adminClient, project_id);");
+    expect(source).toContain("const projectType = gcProjectType ?? (isProjectType(project.room_type) ? project.room_type : 'kitchen');");
+    expect(source).toContain('projectCostRange(provinceCode, projectType)');
+    expect(source).toContain('Generate a detailed renovation project brief for a ${formatProjectType(projectType)} project');
+    expect(source).toContain('projectType,');
+    expect(source).toContain("projectType === 'flooring'");
+    expect(source).toContain('Flooring material package');
+    expect(source).toContain("projectType === 'painting'");
+    expect(source).toContain('Paint, primer, and sundries');
+    expect(source).toContain("projectType === 'basement'");
+    expect(source).toContain('Basement framing and drywall materials');
+    expect(source).toContain("projectType === 'addition'");
+    expect(source).toContain('Framing, sheathing, and structural materials');
+    expect(source).not.toContain("const roomType = project.room_type ?? 'kitchen';");
+  });
 });
 
 describe('generate-trade-slots source guards', () => {
