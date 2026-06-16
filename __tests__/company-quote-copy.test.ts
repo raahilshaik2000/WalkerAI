@@ -66,12 +66,31 @@ describe('company quote copy', () => {
       'utf8'
     );
 
-    expect(source).toContain(".eq('status', 'approved')");
+    expect(source).toContain(".or('status.eq.approved,stripe_payment_intent_id.not.is.null')");
     expect(source).toContain('Approved Quote');
     expect(source).toContain('This quote is already funded. Price changes after funding should be submitted as change orders.');
     expect(source).toContain('setApprovedLineItems');
     expect(source).toContain('setApprovedMilestones');
     expect(source).toContain('Back to Job');
+  });
+
+  it('shows payment-started pending quotes read-only before the server rejects revisions', () => {
+    const repoRoot = path.resolve(__dirname, '..');
+    const source = fs.readFileSync(
+      path.join(repoRoot, 'src/app/(company)/job/[id]/quote-builder.tsx'),
+      'utf8'
+    );
+    const migration = fs.readFileSync(
+      path.join(repoRoot, 'supabase/migrations/20260616003336_submit_company_quote_rpc.sql'),
+      'utf8'
+    );
+
+    expect(source).toContain('stripe_payment_intent_id: string | null;');
+    expect(source).toContain("const paymentStarted = approvedQuote.status === 'pending' && !!approvedQuote.stripe_payment_intent_id;");
+    expect(source).toContain("paymentStarted ? 'Payment Started' : 'Approved Quote'");
+    expect(source).toContain("paymentStarted ? 'Quote payment in progress' : 'Funded quote'");
+    expect(source).toContain('The homeowner has already started payment for this quote. Ask them to reject it before submitting a revision.');
+    expect(migration).toContain('The homeowner has already started payment for this quote. Ask them to reject it before submitting a revision.');
   });
 
   it('only labels the company quote action as approved when an approved quote exists', () => {

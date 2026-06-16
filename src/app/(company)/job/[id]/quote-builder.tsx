@@ -41,6 +41,7 @@ interface ExistingQuote {
   total_amount: number;
   status: string;
   submitted_at: string | null;
+  stripe_payment_intent_id: string | null;
 }
 
 interface ExistingLineItem {
@@ -174,9 +175,9 @@ export default function QuoteBuilderScreen() {
       setLoadingApprovedQuote(true);
       let query = supabase
         .from('quotes')
-        .select('id, total_amount, status, submitted_at')
+        .select('id, total_amount, status, submitted_at, stripe_payment_intent_id')
         .eq('project_id', projectId)
-        .eq('status', 'approved')
+        .or('status.eq.approved,stripe_payment_intent_id.not.is.null')
         .order('submitted_at', { ascending: false })
         .limit(1);
 
@@ -415,6 +416,7 @@ export default function QuoteBuilderScreen() {
   }
 
   if (approvedQuote) {
+    const paymentStarted = approvedQuote.status === 'pending' && !!approvedQuote.stripe_payment_intent_id;
     return (
       <GradientBackground glow="top-right">
         <SafeAreaView style={styles.safe}>
@@ -423,15 +425,17 @@ export default function QuoteBuilderScreen() {
               <TouchableOpacity onPress={() => navigation.goBack()}>
                 <Ionicons name="arrow-back" size={22} color={Colors.text.secondary} />
               </TouchableOpacity>
-              <Text style={styles.title}>Approved Quote</Text>
+              <Text style={styles.title}>{paymentStarted ? 'Payment Started' : 'Approved Quote'}</Text>
               <View style={styles.headerSpacer} />
             </View>
 
             <GlassCard style={styles.card}>
-              <Text style={styles.sectionTitle}>Funded quote</Text>
+              <Text style={styles.sectionTitle}>{paymentStarted ? 'Quote payment in progress' : 'Funded quote'}</Text>
               <Text style={styles.approvedTotal}>{formatCadCents(approvedQuote.total_amount)}</Text>
               <Text style={styles.sectionSub}>
-                This quote is already funded. Price changes after funding should be submitted as change orders.
+                {paymentStarted
+                  ? 'The homeowner has already started payment for this quote. Ask them to reject it before submitting a revision.'
+                  : 'This quote is already funded. Price changes after funding should be submitted as change orders.'}
               </Text>
             </GlassCard>
 
