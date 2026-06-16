@@ -734,6 +734,18 @@ describe('general contractor account type', () => {
       path.join(repoRoot, 'src/app/(homeowner)/project/[id]/concierge.tsx'),
       'utf8',
     );
+    const homeownerProjectDetail = fs.readFileSync(
+      path.join(repoRoot, 'src/app/(homeowner)/project/[id]/index.tsx'),
+      'utf8',
+    );
+    const homeownerProjects = fs.readFileSync(
+      path.join(repoRoot, 'src/app/(homeowner)/projects.tsx'),
+      'utf8',
+    );
+    const projectsCarousel = fs.readFileSync(
+      path.join(repoRoot, 'src/components/dashboard/ProjectsCarousel.tsx'),
+      'utf8',
+    );
     const gcProjectDetail = fs.readFileSync(
       path.join(repoRoot, 'src/app/(general-contractor)/project/[id]/index.tsx'),
       'utf8',
@@ -781,6 +793,13 @@ describe('general contractor account type', () => {
     expect(homeownerConcierge).toContain('project_type, scope_summary');
     expect(homeownerConcierge).toContain('formatGcProjectType(currentAssignment.project_type)');
     expect(homeownerConcierge).toContain('currentAssignment.scope_summary');
+    expect(homeownerProjectDetail).toContain("from('general_contractor_projects')");
+    expect(homeownerProjectDetail).toContain('formatGcProjectType(gcProjectContext?.project_type, project.room_type)');
+    expect(homeownerProjectDetail).not.toContain("project.room_type === 'kitchen' ? '🍳' : '🚿'} {project.room_type}");
+    expect(homeownerProjects).toContain("from('general_contractor_projects')");
+    expect(homeownerProjects).toContain('formatGcProjectType(item.gc_project_type, item.room_type)');
+    expect(projectsCarousel).toContain("from('general_contractor_projects')");
+    expect(projectsCarousel).toContain('formatGcProjectType(item.gc_project_type, item.room_type)');
     expect(homeownerConcierge).toContain('function gcAssignmentStatusVariant');
     expect(homeownerConcierge).toContain('variant={gcAssignmentStatusVariant(currentAssignment.status)}');
     expect(homeownerConcierge).not.toContain('label={formatStatusLabel(currentAssignment.status)} variant="pending"');

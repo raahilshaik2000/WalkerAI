@@ -19,6 +19,7 @@ import { AnimatedPressable, GlassButton, GradientBackground } from '@/components
 import { ProgressRing } from '@/components/dashboard/ProgressRing';
 import { Colors, Radius } from '@/constants/theme';
 import { supabase } from '@/lib/supabase/client';
+import { formatGcProjectType } from '@/lib/gc-project-type';
 import { useAuthStore } from '@/stores/auth.store';
 import { useDIYWizardStore, type DIYGuide } from '@/stores/diy-wizard.store';
 
@@ -34,6 +35,12 @@ interface RealProject {
   created_at: string;
   renders: Array<{ url: string; selected?: boolean | null }>;
   project_photos: Array<{ url: string }>;
+  gc_project_type?: string | null;
+}
+
+interface GcProjectContextRow {
+  project_id: string;
+  project_type: string | null;
 }
 
 const STATUS_LABEL: Record<string, { label: string; color: string }> = {
@@ -226,12 +233,32 @@ export default function HomeownerProjects() {
 
       if (projectResult.error) throw projectResult.error;
 
-      const projectList = ((projectResult.data ?? []) as Array<Omit<RealProject, 'description'> & { description?: string | null }>)
+      let projectList = ((projectResult.data ?? []) as Array<Omit<RealProject, 'description'> & { description?: string | null }>)
         .map((project) => ({ ...project, description: project.description ?? null }));
+      const ids = projectList.map((p) => p.id);
+      if (ids.length > 0) {
+        const { data: gcContextData, error: gcContextError } = await supabase
+          .from('general_contractor_projects')
+          .select('project_id, project_type')
+          .in('project_id', ids)
+          .neq('status', 'removed')
+          .order('created_at', { ascending: false });
+        if (gcContextError) throw gcContextError;
+
+        const gcProjectTypes = new Map<string, string | null>();
+        ((gcContextData ?? []) as GcProjectContextRow[]).forEach((row) => {
+          if (!gcProjectTypes.has(row.project_id)) {
+            gcProjectTypes.set(row.project_id, row.project_type);
+          }
+        });
+        projectList = projectList.map((project) => ({
+          ...project,
+          gc_project_type: gcProjectTypes.get(project.id) ?? null,
+        }));
+      }
       setProjects(projectList);
 
       // Fetch milestone-based progress for all projects
-      const ids = projectList.map((p) => p.id);
       if (ids.length > 0) {
         const { data: quoteData, error: quoteError } = await supabase
           .from('quotes')
@@ -330,8 +357,8 @@ export default function HomeownerProjects() {
     const statusInfo = STATUS_LABEL[item.status] ?? { label: item.status, color: '#6B7280' };
     const selectedRender = item.renders?.find((render) => render.selected);
     const coverImage = selectedRender?.url ?? item.renders?.[0]?.url ?? item.project_photos?.[0]?.url;
-    const title = item.room_type
-      ? item.room_type.charAt(0).toUpperCase() + item.room_type.slice(1) + ' Renovation'
+    const title = item.gc_project_type || item.room_type
+      ? formatGcProjectType(item.gc_project_type, item.room_type)
       : item.description?.slice(0, 40) ?? 'Project';
     const location = [item.address, item.city].filter(Boolean).join(', ') || 'Address not set';
     const budgetText = item.ai_cost_min && item.ai_cost_max

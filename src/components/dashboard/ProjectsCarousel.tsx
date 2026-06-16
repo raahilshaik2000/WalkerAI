@@ -13,6 +13,7 @@ import Ionicons from 'react-native-vector-icons/Ionicons';
 import LinearGradient from 'react-native-linear-gradient';
 import { useNavigation } from '@react-navigation/native';
 import { supabase } from '@/lib/supabase/client';
+import { formatGcProjectType } from '@/lib/gc-project-type';
 import { useAuthStore } from '@/stores/auth.store';
 import { AnimatedPressable, GlassButton } from '@/components/ui';
 import { Colors, Spacing } from '@/constants/theme';
@@ -38,7 +39,7 @@ const STATUS_META: Record<string, { label: string; color: string }> = {
 
 interface Project {
   id: string;
-  room_type: string;
+  room_type: string | null;
   status: string;
   address: string | null;
   city: string | null;
@@ -46,6 +47,12 @@ interface Project {
   ai_cost_max: number | null;
   renders: Array<{ url: string; selected?: boolean | null }>;
   project_photos: Array<{ url: string }>;
+  gc_project_type?: string | null;
+}
+
+interface GcProjectContextRow {
+  project_id: string;
+  project_type: string | null;
 }
 
 function getProjectProgress(status: string) {
@@ -102,7 +109,36 @@ export function ProjectsCarousel({ refreshKey = 0, onRefreshDone }: { refreshKey
         setErrorMessage(error.message);
         return;
       }
-      setProjects((data as Project[]) ?? []);
+      let projectList = ((data as Project[]) ?? []).map((project) => ({
+        ...project,
+        room_type: project.room_type ?? null,
+      }));
+      const ids = projectList.map((project) => project.id);
+      if (ids.length > 0) {
+        const { data: gcContextData, error: gcContextError } = await supabase
+          .from('general_contractor_projects')
+          .select('project_id, project_type')
+          .in('project_id', ids)
+          .neq('status', 'removed')
+          .order('created_at', { ascending: false });
+        if (gcContextError) {
+          setProjects([]);
+          setErrorMessage(gcContextError.message);
+          return;
+        }
+
+        const gcProjectTypes = new Map<string, string | null>();
+        ((gcContextData ?? []) as GcProjectContextRow[]).forEach((row) => {
+          if (!gcProjectTypes.has(row.project_id)) {
+            gcProjectTypes.set(row.project_id, row.project_type);
+          }
+        });
+        projectList = projectList.map((project) => ({
+          ...project,
+          gc_project_type: gcProjectTypes.get(project.id) ?? null,
+        }));
+      }
+      setProjects(projectList);
     } finally {
       setLoading(false);
       onRefreshDone?.();
@@ -118,9 +154,7 @@ export function ProjectsCarousel({ refreshKey = 0, onRefreshDone }: { refreshKey
       const meta = STATUS_META[item.status] ?? { label: item.status, color: '#6B7280' };
       const selectedRender = item.renders?.find((render) => render.selected);
       const coverImage = selectedRender?.url ?? item.renders?.[0]?.url ?? item.project_photos?.[0]?.url;
-      const title = item.room_type
-        ? item.room_type.charAt(0).toUpperCase() + item.room_type.slice(1) + ' Renovation'
-        : 'Project';
+      const title = formatGcProjectType(item.gc_project_type, item.room_type);
       const location = [item.address, item.city].filter(Boolean).join(', ') || 'Address pending';
       const budget = item.ai_cost_min && item.ai_cost_max
         ? `$${Math.round(item.ai_cost_min / 100).toLocaleString()}–$${Math.round(item.ai_cost_max / 100).toLocaleString()}`

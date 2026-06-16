@@ -15,6 +15,7 @@ import { useRoute } from '@react-navigation/native';
 import { supabase } from '@/lib/supabase/client';
 import { restartProjectDispatch } from '@/lib/project-dispatch';
 import { getRequiredStringParam } from '@/lib/navigation-params';
+import { formatGcProjectType } from '@/lib/gc-project-type';
 import { readPersistedSurfaceSelections, surfaceSelectionSourceLabel } from '@/lib/room-customizer';
 import { Colors, Radius, Spacing, Typography } from '@/constants/theme';
 import { GlassCard, GradientBackground, StatusBadge, CardSkeleton } from '@/components/ui';
@@ -23,7 +24,7 @@ import type { ProjectStatus } from '@/constants/enums';
 interface Project {
   id: string;
   address: string;
-  room_type: string;
+  room_type: string | null;
   status: ProjectStatus;
   scheduling_status: 'pending_homeowner' | 'confirmed' | null;
   ai_cost_min: number | null;
@@ -35,6 +36,10 @@ interface Project {
     rating: number;
     total_reviews: number;
   } | null;
+}
+
+interface GcProjectContext {
+  project_type: string | null;
 }
 
 interface AssignedTradeSlot {
@@ -143,6 +148,7 @@ export default function ProjectDetailScreen() {
   const id = getRequiredStringParam(route.params, 'id');
   const navigation = useNavigation<any>();
   const [project, setProject] = useState<Project | null>(null);
+  const [gcProjectContext, setGcProjectContext] = useState<GcProjectContext | null>(null);
   const [assignedTradeSlots, setAssignedTradeSlots] = useState<AssignedTradeSlot[]>([]);
   const [loading, setLoading] = useState(true);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
@@ -153,12 +159,13 @@ export default function ProjectDetailScreen() {
     if (!id) {
       setErrorMessage('Project is missing. Reopen the project from your dashboard.');
       setProject(null);
+      setGcProjectContext(null);
       setAssignedTradeSlots([]);
       setLoading(false);
       return;
     }
 
-    const [projectResult, slotsResult] = await Promise.all([
+    const [projectResult, slotsResult, gcContextResult] = await Promise.all([
       supabase
         .from('projects')
         .select(`
@@ -177,11 +184,20 @@ export default function ProjectDetailScreen() {
         .eq('project_id', id)
         .in('status', ['filled', 'scheduled'])
         .order('created_at', { ascending: true }),
+      supabase
+        .from('general_contractor_projects')
+        .select('project_type')
+        .eq('project_id', id)
+        .neq('status', 'removed')
+        .order('created_at', { ascending: false })
+        .limit(1)
+        .maybeSingle(),
     ]);
 
     if (projectResult.error) {
       setErrorMessage(`Could not load project: ${projectResult.error.message}`);
       setProject(null);
+      setGcProjectContext(null);
       setAssignedTradeSlots([]);
       setLoading(false);
       return;
@@ -189,6 +205,15 @@ export default function ProjectDetailScreen() {
     if (slotsResult.error) {
       setErrorMessage(`Could not load assigned trades: ${slotsResult.error.message}`);
       setProject(null);
+      setGcProjectContext(null);
+      setAssignedTradeSlots([]);
+      setLoading(false);
+      return;
+    }
+    if (gcContextResult.error) {
+      setErrorMessage(`Could not load GC project context: ${gcContextResult.error.message}`);
+      setProject(null);
+      setGcProjectContext(null);
       setAssignedTradeSlots([]);
       setLoading(false);
       return;
@@ -197,6 +222,7 @@ export default function ProjectDetailScreen() {
     const row = projectResult.data as ProjectRow | null;
     const slotRows = (slotsResult.data ?? []) as AssignedTradeSlotRow[];
     setErrorMessage(null);
+    setGcProjectContext((gcContextResult.data as GcProjectContext | null) ?? null);
     setProject(row
       ? {
           ...row,
@@ -277,6 +303,7 @@ export default function ProjectDetailScreen() {
   }
 
   const isDispatching = project.status === 'dispatching';
+  const projectTitle = formatGcProjectType(gcProjectContext?.project_type, project.room_type);
   const shouldShowScheduleAction =
     project.status === 'scheduling' ||
     (project.status === 'quoting' && project.scheduling_status === 'pending_homeowner');
@@ -313,7 +340,7 @@ export default function ProjectDetailScreen() {
             />
           </View>
 
-          <Text style={styles.roomType}>{project.room_type === 'kitchen' ? '🍳' : '🚿'} {project.room_type}</Text>
+          <Text style={styles.roomType}>{projectTitle}</Text>
           <Text style={styles.address}>{project.address}</Text>
 
           {/* Dispatch radar */}
