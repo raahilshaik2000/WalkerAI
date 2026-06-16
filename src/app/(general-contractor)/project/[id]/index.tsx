@@ -44,6 +44,9 @@ interface Slot {
   fulfillment_type?: 'walker_ai' | 'external' | null;
   external_trade_name?: string | null;
   external_trade_company?: string | null;
+  external_trade_email?: string | null;
+  external_trade_phone?: string | null;
+  external_trade_notes?: string | null;
   external_trade_verification_status?: 'unverified' | 'documents_uploaded' | 'walker_verified' | null;
   external_trade_document_urls?: string[] | null;
   assigned_company?: { name: string | null } | Array<{ name: string | null }> | null;
@@ -183,7 +186,8 @@ export default function GeneralContractorProjectDetail() {
           .from('project_slots')
           .select(`
             id, trade_type, status, fulfillment_type,
-            external_trade_name, external_trade_company, external_trade_verification_status,
+            external_trade_name, external_trade_company, external_trade_email, external_trade_phone,
+            external_trade_notes, external_trade_verification_status,
             external_trade_document_urls,
             assigned_company:companies!assigned_company_id(name)
           `)
@@ -423,9 +427,9 @@ export default function GeneralContractorProjectDetail() {
     setExternalSlotId(slot.id);
     setExternalTradeName(slot.external_trade_name ?? '');
     setExternalTradeCompany(slot.external_trade_company ?? '');
-    setExternalTradeEmail('');
-    setExternalTradePhone('');
-    setExternalTradeNotes('');
+    setExternalTradeEmail(slot.external_trade_email ?? '');
+    setExternalTradePhone(slot.external_trade_phone ?? '');
+    setExternalTradeNotes(slot.external_trade_notes ?? '');
   };
 
   const handleSaveExternalTrade = async () => {

@@ -1084,6 +1084,11 @@ describe('general contractor account type', () => {
     expect(externalActivationMigration).toContain('dispatch_expires_at = NULL');
     expect(migration).toContain("status = 'filled'");
     expect(gcProjectDetail).toContain("supabase.rpc('mark_project_slot_externally_managed'");
+    expect(gcProjectDetail).toContain('external_trade_name, external_trade_company, external_trade_email, external_trade_phone,');
+    expect(gcProjectDetail).toContain('external_trade_notes, external_trade_verification_status,');
+    expect(gcProjectDetail).toContain("setExternalTradeEmail(slot.external_trade_email ?? '')");
+    expect(gcProjectDetail).toContain("setExternalTradePhone(slot.external_trade_phone ?? '')");
+    expect(gcProjectDetail).toContain("setExternalTradeNotes(slot.external_trade_notes ?? '')");
     expect(gcProjectDetail).toContain('Mark externally managed');
     expect(gcProjectDetail).toContain('No escrow protection');
     expect(homeownerProject).toContain('Externally managed by GC');
