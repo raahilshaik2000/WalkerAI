@@ -69,12 +69,16 @@ function labelKeywords(label: string) {
 }
 
 const NUMBER_WORDS: Record<string, number> = {
+  won: 1,
   one: 1,
   first: 1,
+  too: 2,
+  to: 2,
   two: 2,
   second: 2,
   three: 3,
   third: 3,
+  for: 4,
   four: 4,
   fourth: 4,
   five: 5,
@@ -83,11 +87,23 @@ const NUMBER_WORDS: Record<string, number> = {
   sixth: 6,
   seven: 7,
   seventh: 7,
+  ate: 8,
   eight: 8,
   eighth: 8,
   nine: 9,
   ninth: 9,
 };
+
+function optionIdFromPosition(value: string, question: QuestionnaireQuestion) {
+  if (value === 'last' || value === 'final') {
+    return question.options[question.options.length - 1]?.id ?? null;
+  }
+
+  const number = /^\d+$/.test(value) ? Number(value) : NUMBER_WORDS[value];
+  if (!number) return null;
+
+  return question.options[number - 1]?.id ?? null;
+}
 
 export function matchTranscriptToQuestionOption(
   transcript: string,
@@ -96,18 +112,12 @@ export function matchTranscriptToQuestionOption(
   const normalizedTranscript = normalize(transcript);
   if (!normalizedTranscript) return null;
 
-  const numericMatch = normalizedTranscript.match(/\b(?:option|number|choice)\s*(\d+)\b/) ?? normalizedTranscript.match(/^(\d+)$/);
-  if (numericMatch) {
-    const index = Number(numericMatch[1]) - 1;
-    if (question.options[index]) return question.options[index].id;
-  }
-
-  const spokenOptionMatch = normalizedTranscript.match(/\b(?:option|number|choice)\s+([a-z]+)\b/)
-    ?? normalizedTranscript.match(/^([a-z]+)$/)
-    ?? normalizedTranscript.match(/^the\s+([a-z]+)\s+(?:one|option|choice)$/);
+  const spokenOptionMatch = normalizedTranscript.match(/\b(?:option|number|choice)\s+(\d+|[a-z]+)\b/)
+    ?? normalizedTranscript.match(/\b(?:the\s+)?(\d+|[a-z]+)\s+(?:one|option|choice)\b/)
+    ?? normalizedTranscript.match(/^(\d+|[a-z]+)$/);
   if (spokenOptionMatch) {
-    const number = NUMBER_WORDS[spokenOptionMatch[1]];
-    if (number && question.options[number - 1]) return question.options[number - 1].id;
+    const optionId = optionIdFromPosition(spokenOptionMatch[1], question);
+    if (optionId) return optionId;
   }
 
   let best: { id: string; score: number } | null = null;

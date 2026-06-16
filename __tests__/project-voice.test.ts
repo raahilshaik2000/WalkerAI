@@ -16,8 +16,12 @@ const question: QuestionnaireQuestion = {
 describe('project voice answer matching', () => {
   it('matches spoken option numbers', () => {
     expect(matchTranscriptToQuestionOption('I choose option two', question)).toBe('k_ct_granite');
+    expect(matchTranscriptToQuestionOption('I choose option too', question)).toBe('k_ct_granite');
+    expect(matchTranscriptToQuestionOption('I want option to', question)).toBe('k_ct_granite');
     expect(matchTranscriptToQuestionOption('choice 3', question)).toBe('k_ct_marble');
     expect(matchTranscriptToQuestionOption('the second one', question)).toBe('k_ct_granite');
+    expect(matchTranscriptToQuestionOption('I want the second option', question)).toBe('k_ct_granite');
+    expect(matchTranscriptToQuestionOption('go with the last one', question)).toBe('k_ct_marble');
   });
 
   it('matches spoken material words to an option', () => {
