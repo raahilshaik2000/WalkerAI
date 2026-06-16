@@ -309,6 +309,7 @@ export default function ProjectConciergeScreen() {
   const assignedGcConciergeEligible = assignedGc?.verified === true && assignedGc.concierge_enabled === true;
   const assignedGcCanRequestConcierge = assignedGcConciergeEligible;
   const canApproveGcPaymentRequests = currentAssignment?.status === 'active' && assignedGc?.verified === true;
+  const canApproveGcProjectRecommendations = currentAssignment?.status === 'active' && assignedGc?.verified === true;
   const canConfirmGcManagement = currentAssignment?.status === 'invited'
     && currentAssignment.initiated_by_gc === true
     && assignedGc?.verified === true;
@@ -317,6 +318,10 @@ export default function ProjectConciergeScreen() {
     const currentUser = user ?? (await supabase.auth.getUser()).data.user;
     if (!currentUser?.id || projectHomeownerId !== currentUser.id) {
       Alert.alert('Not allowed', 'Only the homeowner can respond to approval requests.');
+      return;
+    }
+    if (status === 'approved' && !canApproveGcProjectRecommendations) {
+      Alert.alert('Approval request locked', 'Active verified GC management is required before this recommendation can apply project changes.');
       return;
     }
 
@@ -990,6 +995,7 @@ export default function ProjectConciergeScreen() {
                 ) : approvalRequests.map((request) => {
                   const pending = request.status === 'pending';
                   const responding = respondingId === request.id;
+                  const approvalLocked = pending && !canApproveGcProjectRecommendations;
                   return (
                     <View key={request.id} style={styles.approvalItem}>
                       <View style={styles.approvalHeader}>
@@ -1014,12 +1020,18 @@ export default function ProjectConciergeScreen() {
                       {getApprovalDetailRows(request).map((row) => (
                         <Text key={row} style={styles.approvalDetail}>{row}</Text>
                       ))}
+                      {approvalLocked ? (
+                        <Text style={styles.approvalDetail}>
+                          Active verified GC management is required before this recommendation can apply project changes.
+                        </Text>
+                      ) : null}
                       {pending ? (
                         <View style={styles.approvalActions}>
                           <GlassButton
                             label="Approve"
                             onPress={() => handleApprovalResponse(request, 'approved')}
                             loading={responding}
+                            disabled={approvalLocked}
                             size="sm"
                             style={styles.approvalButton}
                           />

@@ -419,6 +419,10 @@ describe('general contractor account type', () => {
       path.join(repoRoot, 'supabase/migrations/20260616000625_require_verified_gc_approval_apply.sql'),
       'utf8',
     );
+    const homeownerConcierge = fs.readFileSync(
+      path.join(repoRoot, 'src/app/(homeowner)/project/[id]/concierge.tsx'),
+      'utf8',
+    );
 
     expect(migration).toContain('CREATE OR REPLACE FUNCTION public.guard_gc_approval_apply_active_assignment()');
     expect(migration).toContain("NEW.status = 'approved'");
@@ -434,6 +438,11 @@ describe('general contractor account type', () => {
     expect(verificationMigration).toContain("gcp.status = 'active'");
     expect(verificationMigration).toContain('gc.verified IS TRUE');
     expect(verificationMigration).toContain('Active verified GC management is required before this approval can apply project changes');
+    expect(homeownerConcierge).toContain("const canApproveGcProjectRecommendations = currentAssignment?.status === 'active' && assignedGc?.verified === true;");
+    expect(homeownerConcierge).toContain("status === 'approved' && !canApproveGcProjectRecommendations");
+    expect(homeownerConcierge).toContain('Active verified GC management is required before this recommendation can apply project changes.');
+    expect(homeownerConcierge).toContain('const approvalLocked = pending && !canApproveGcProjectRecommendations;');
+    expect(homeownerConcierge).toContain('disabled={approvalLocked}');
   });
 
   it('guards GC assignment creation against lifecycle and verification bypasses', () => {
