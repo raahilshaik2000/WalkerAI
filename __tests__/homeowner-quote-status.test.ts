@@ -33,4 +33,17 @@ describe('homeowner quote status copy', () => {
     expect(source).not.toContain('Walker AI Fixed Price');
     expect(source).not.toContain('Set by AI · confirmed by your contractor');
   });
+
+  it('labels payment-started pending quotes as a continuation instead of a fresh payment', () => {
+    const source = fs.readFileSync(
+      path.join(__dirname, '../src/app/(homeowner)/project/[id]/quote.tsx'),
+      'utf8',
+    );
+
+    expect(source).toContain('stripe_payment_intent_id: string | null;');
+    expect(source).toContain('submitted_at, stripe_payment_intent_id, companies(name)');
+    expect(source).toContain("if (quote.status === 'pending' && quote.stripe_payment_intent_id) return 'Payment started';");
+    expect(source).toContain('const paymentStarted = quote?.status === \'pending\' && !!quote.stripe_payment_intent_id;');
+    expect(source).toContain('paymentStarted ? `Continue Payment — ${formatCad(quote.total_amount)}` : `Pay ${formatCad(quote.total_amount)} to Start`');
+  });
 });

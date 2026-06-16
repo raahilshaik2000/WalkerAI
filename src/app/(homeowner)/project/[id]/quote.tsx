@@ -61,6 +61,7 @@ interface Quote {
   total_amount: number;
   status: string;
   submitted_at: string | null;
+  stripe_payment_intent_id: string | null;
   milestones: Milestone[];
   company_name: string | null;
   trade_label: string | null;
@@ -99,11 +100,12 @@ function isMissingLineItemsError(error: { message?: string } | null | undefined)
     || /schema cache/i.test(error.message);
 }
 
-function quoteStatusLabel(status: string) {
-  if (status === 'approved') return 'Paid';
-  if (status === 'pending') return 'Ready to pay';
-  if (status === 'rejected') return 'Rejected';
-  return status.replace(/_/g, ' ');
+function quoteStatusLabel(quote: Pick<Quote, 'status' | 'stripe_payment_intent_id'>) {
+  if (quote.status === 'approved') return 'Paid';
+  if (quote.status === 'pending' && quote.stripe_payment_intent_id) return 'Payment started';
+  if (quote.status === 'pending') return 'Ready to pay';
+  if (quote.status === 'rejected') return 'Rejected';
+  return quote.status.replace(/_/g, ' ');
 }
 
 function milestoneStatusLabel(status: string) {
@@ -149,7 +151,7 @@ export default function CostBreakdownScreen() {
       .maybeSingle();
     const quotesPromise = supabase
       .from('quotes')
-      .select('id, slot_id, total_amount, status, submitted_at, companies(name), project_slots(trade_type), milestones ( title, amount, sort_order, status )')
+      .select('id, slot_id, total_amount, status, submitted_at, stripe_payment_intent_id, companies(name), project_slots(trade_type), milestones ( title, amount, sort_order, status )')
       .eq('project_id', projectId)
       .order('submitted_at', { ascending: false });
 
@@ -164,7 +166,7 @@ export default function CostBreakdownScreen() {
     if (isMissingQuoteSlotSelectError(quoteError)) {
       const legacyQuotes = await supabase
         .from('quotes')
-        .select('id, total_amount, status, submitted_at, companies(name), milestones ( title, amount, sort_order, status )')
+        .select('id, total_amount, status, submitted_at, stripe_payment_intent_id, companies(name), milestones ( title, amount, sort_order, status )')
         .eq('project_id', projectId)
         .order('submitted_at', { ascending: false });
       quotes = legacyQuotes.data;
@@ -335,6 +337,7 @@ export default function CostBreakdownScreen() {
   const payableProjectStatuses = ['dispatching', 'accepted', 'quoting', 'scheduling', 'active'];
   const canPay = !!quote && quote.status === 'pending' && payableProjectStatuses.includes(project?.status ?? '');
   const isPaid = quote?.status === 'approved';
+  const paymentStarted = quote?.status === 'pending' && !!quote.stripe_payment_intent_id;
   const pendingQuoteCount = quotes.filter((q) => q.status === 'pending').length;
   const paidBannerText = project?.status === 'active'
     ? 'Payment received — project is active'
@@ -422,7 +425,7 @@ export default function CostBreakdownScreen() {
                       <View style={{ flex: 1 }}>
                         <Text style={styles.quoteCompany}>{q.company_name ?? 'Contractor quote'}</Text>
                         <Text style={styles.quoteStatusText}>
-                          {q.trade_label ? `${q.trade_label} · ${quoteStatusLabel(q.status)}` : quoteStatusLabel(q.status)}
+                          {q.trade_label ? `${q.trade_label} · ${quoteStatusLabel(q)}` : quoteStatusLabel(q)}
                         </Text>
                       </View>
                     </View>
@@ -631,7 +634,7 @@ export default function CostBreakdownScreen() {
             <TouchableOpacity style={styles.payCta} onPress={handlePay} activeOpacity={0.85} disabled={paying}>
               <Ionicons name="card-outline" size={20} color="#000" />
               <Text style={styles.payCtaText}>
-                {paying ? 'Processing…' : `Pay ${formatCad(quote.total_amount)} to Start`}
+                {paying ? 'Processing…' : paymentStarted ? `Continue Payment — ${formatCad(quote.total_amount)}` : `Pay ${formatCad(quote.total_amount)} to Start`}
               </Text>
             </TouchableOpacity>
           )}
