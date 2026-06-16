@@ -162,6 +162,9 @@ export default function GeneralContractorTradesScreen() {
       && ['open', 'dispatching'].includes(slot.status)
     )).length
   ), [slots]);
+  const selectedSlot = useMemo(() => slots.find((slot) => slot.id === selectedSlotId) ?? null, [slots, selectedSlotId]);
+  const selectedSlotAssignedCompany = selectedSlot ? getCompany(selectedSlot) : null;
+  const selectedSlotCanRecordExternalTrade = selectedSlot ? !selectedSlotAssignedCompany : false;
 
   const fetchData = useCallback(async () => {
     const currentUser = (await supabase.auth.getUser()).data.user;
@@ -336,6 +339,14 @@ export default function GeneralContractorTradesScreen() {
       Alert.alert('Trade required', 'Choose the trade you want to recommend changing.');
       return;
     }
+    const assignedCompany = getCompany(slot);
+    if (assignedCompany?.id) {
+      Alert.alert(
+        'WalkerAI trade already assigned',
+        'This slot already has a WalkerAI company. Use quote negotiation for pricing or create a separate homeowner approval note before operations replaces the assigned trade.',
+      );
+      return;
+    }
     if (!recommendedTradeName.trim() && !recommendedCompany.trim()) {
       Alert.alert('Recommendation required', 'Enter the trade contact or company you recommend.');
       return;
@@ -346,7 +357,7 @@ export default function GeneralContractorTradesScreen() {
       return;
     }
 
-    const currentCompany = getCompany(slot)?.name;
+    const currentCompany = assignedCompany?.name;
     const title = `${formatTrade(slot.trade_type)} trade recommendation`;
     const details = [
       currentCompany ? `Current WalkerAI trade: ${currentCompany}` : null,
@@ -781,6 +792,11 @@ export default function GeneralContractorTradesScreen() {
                   <Text style={styles.bodyText}>
                     This creates a homeowner approval request. If the slot is unassigned, approval records the contact as an unverified external trade. WalkerAI-assigned trades are not removed automatically.
                   </Text>
+                  {!selectedSlotCanRecordExternalTrade ? (
+                    <Text style={styles.warning}>
+                      This slot already has a WalkerAI company. External replacement cannot be applied from this form; negotiate the quote or coordinate a dedicated replacement approval.
+                    </Text>
+                  ) : null}
                   <GlassInput
                     label="Recommended trade contact"
                     value={recommendedTradeName}
@@ -817,6 +833,7 @@ export default function GeneralContractorTradesScreen() {
                     label="Send Trade Recommendation"
                     onPress={handleSubmit}
                     loading={submitting}
+                    disabled={!selectedSlotCanRecordExternalTrade || submitting}
                     fullWidth
                     size="sm"
                     style={styles.submitButton}

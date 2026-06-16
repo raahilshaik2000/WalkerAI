@@ -971,6 +971,10 @@ describe('general contractor account type', () => {
     expect(migration).toContain('no WalkerAI escrow protection');
     expect(gcTrades).toContain('external_management_requested');
     expect(gcTrades).toContain('WalkerAI-assigned trades are not removed automatically');
+    expect(gcTrades).toContain('const selectedSlotCanRecordExternalTrade = selectedSlot ? !selectedSlotAssignedCompany : false;');
+    expect(gcTrades).toContain('This slot already has a WalkerAI company. External replacement cannot be applied from this form');
+    expect(gcTrades).toContain('disabled={!selectedSlotCanRecordExternalTrade || submitting}');
+    expect(gcTrades).toContain('WalkerAI trade already assigned');
   });
 
   it('routes GC schedule recommendations through homeowner approval before dates apply', () => {
