@@ -1,4 +1,4 @@
-import { resolveNotificationRoute } from '../src/lib/notifications/navigation';
+import { resolveNotificationRoute, toRootNotificationRoute } from '../src/lib/notifications/navigation';
 
 describe('notification navigation', () => {
   it('routes homeowner quote notifications to the quote screen', () => {
@@ -167,6 +167,41 @@ describe('notification navigation', () => {
     expect(resolveNotificationRoute('gc_trade_negotiation_responded', { project_id: 'project-1' }, 'general_contractor')).toEqual({
       name: 'GeneralContractorTrades',
       params: { id: 'project-1' },
+    });
+  });
+
+  it('wraps local notification routes for root-level push deep links', () => {
+    const gcRoute = resolveNotificationRoute('gc_trade_negotiation_responded', { project_id: 'project-1' }, 'general_contractor');
+    expect(toRootNotificationRoute(gcRoute, 'general_contractor')).toEqual({
+      name: 'GeneralContractor',
+      params: {
+        screen: 'GeneralContractorTrades',
+        params: { id: 'project-1' },
+      },
+    });
+
+    const homeownerRoute = resolveNotificationRoute('quote_submitted', { project_id: 'project-1' }, 'homeowner');
+    expect(toRootNotificationRoute(homeownerRoute, 'homeowner')).toEqual({
+      name: 'Homeowner',
+      params: {
+        screen: 'ProjectDetail',
+        params: {
+          screen: 'Quote',
+          params: { id: 'project-1' },
+        },
+      },
+    });
+
+    const companyRoute = resolveNotificationRoute('gc_trade_negotiation_requested', { project_id: 'project-1', slot_id: 'slot-1' }, 'company');
+    expect(toRootNotificationRoute(companyRoute, 'company')).toEqual({
+      name: 'Company',
+      params: {
+        screen: 'JobDetail',
+        params: {
+          screen: 'JobDetailMain',
+          params: { id: 'project-1', slot: 'slot-1' },
+        },
+      },
     });
   });
 });

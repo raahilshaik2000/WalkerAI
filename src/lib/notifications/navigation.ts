@@ -7,6 +7,14 @@ export interface NotificationRoute {
   params?: Record<string, unknown>;
 }
 
+const ROOT_ROUTE_BY_ROLE: Partial<Record<UserRole, string>> = {
+  homeowner: 'Homeowner',
+  company: 'Company',
+  admin: 'Company',
+  supplier: 'Supplier',
+  general_contractor: 'GeneralContractor',
+};
+
 function stringValue(value: unknown): string | undefined {
   return typeof value === 'string' && value.trim().length > 0 ? value : undefined;
 }
@@ -178,4 +186,24 @@ export function navigateToNotification(
   if (!route) return false;
   navigation.navigate(route.name, route.params);
   return true;
+}
+
+export function toRootNotificationRoute(
+  route: NotificationRoute | null,
+  role: UserRole | null | undefined,
+): NotificationRoute | null {
+  if (!route) return null;
+
+  const rootName = role ? ROOT_ROUTE_BY_ROLE[role] : undefined;
+  if (!rootName) return route;
+
+  if (route.name === rootName) return route;
+
+  return {
+    name: rootName,
+    params: {
+      screen: route.name,
+      params: route.params,
+    },
+  };
 }

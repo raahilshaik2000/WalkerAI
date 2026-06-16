@@ -16,6 +16,7 @@ import { useProfileStore } from '@/stores/profile.store';
 import { supabase } from '@/lib/supabase/client';
 import { FloatingTabBar } from '@/components/ui/FloatingTabBar';
 import type { UserRole } from '@/constants/enums';
+import { toRootNotificationRoute } from '@/lib/notifications/navigation';
 import { initPushForUser, deactivatePushForUser, setPushDeepLinkHandler } from '@/lib/push';
 
 // Shared navigation ref so the push module can deep-link without prop-drilling.
@@ -415,12 +416,14 @@ export function RootNavigator() {
   useEffect(() => {
     setPushDeepLinkHandler((route) => {
       if (!route || !navigationRef.isReady()) return;
+      const rootRoute = toRootNotificationRoute(route, role);
+      if (!rootRoute) return;
       // CommonActions.navigate bypasses the strict per-stack typing the
       // direct navigationRef.navigate enforces; routes come from a runtime
       // string lookup, so static types don't help here anyway.
-      navigationRef.dispatch(CommonActions.navigate({ name: route.name, params: route.params }));
+      navigationRef.dispatch(CommonActions.navigate({ name: rootRoute.name, params: rootRoute.params }));
     });
-  }, []);
+  }, [role]);
 
   const lastPushUserId = useRef<string | null>(null);
   useEffect(() => {
