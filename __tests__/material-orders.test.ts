@@ -68,6 +68,22 @@ describe('supplier material order payout math', () => {
     );
   });
 
+  it('notifies active GC managers when supplier material orders ship or are delivered', () => {
+    const migration = fs.readFileSync(
+      path.join(__dirname, '../supabase/migrations/20260616024000_notify_gc_material_fulfillment.sql'),
+      'utf8',
+    );
+
+    expect(migration).toContain('CREATE OR REPLACE FUNCTION public.notify_material_order_fulfillment_update()');
+    expect(migration).toContain("OLD.status = 'processing' AND NEW.status = 'shipped'");
+    expect(migration).toContain("OLD.status = 'shipped' AND NEW.status = 'delivered'");
+    expect(migration).toContain('JOIN public.general_contractors gc ON gc.id = gcp.general_contractor_id');
+    expect(migration).toContain("gcp.status = 'active'");
+    expect(migration).toContain("gc.user_id <> v_project.homeowner_id");
+    expect(migration).toContain("COALESCE(v_company_user_ids, ARRAY[]::uuid[])");
+    expect(migration).toContain("'/(general-contractor)/project/' || NEW.project_id || '/materials'");
+  });
+
   it('does not let homeowners release supplier payout without delivery proof', () => {
     const homeownerMaterialsSource = fs.readFileSync(
       path.join(__dirname, '../src/app/(homeowner)/project/[id]/materials.tsx'),
