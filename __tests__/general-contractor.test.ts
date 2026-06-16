@@ -1679,6 +1679,8 @@ describe('general contractor account type', () => {
     expect(gcAssistant).toContain('No manual edits or AI assumptions are applied.');
     expect(gcAssistant).toContain("&& ['filled', 'scheduled'].includes(slot.status)");
     expect(gcAssistant).not.toContain("slot.status !== 'scheduled'");
+    expect(gcAssistant).toContain("permit.status !== 'passed'");
+    expect(gcAssistant).not.toContain("!['passed', 'approved'].includes(permit.status)");
   });
 
   it('shows modern GC approval requests in the GC approvals inbox', () => {
