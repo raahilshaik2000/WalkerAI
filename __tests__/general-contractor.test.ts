@@ -1074,6 +1074,10 @@ describe('general contractor account type', () => {
       path.join(repoRoot, 'supabase/migrations/20260615000600_apply_schedule_approval_requests.sql'),
       'utf8',
     );
+    const slotReadMigration = fs.readFileSync(
+      path.join(repoRoot, 'supabase/migrations/20260616035000_lock_gc_slot_reads_to_active.sql'),
+      'utf8',
+    );
     const navigator = fs.readFileSync(
       path.join(repoRoot, 'src/navigation/GeneralContractorNavigator.tsx'),
       'utf8',
@@ -1094,6 +1098,10 @@ describe('general contractor account type', () => {
     expect(migration).toContain('respond_to_project_approval_request');
     expect(migration).toContain("v_request.request_type = 'schedule_change'");
     expect(migration).toContain('scheduled_start_date = v_start_date');
+    expect(slotReadMigration).toContain('DROP POLICY IF EXISTS "slots_gc_managed_read"');
+    expect(slotReadMigration).toContain('CREATE POLICY "slots_gc_managed_read"');
+    expect(slotReadMigration).toContain("gcp.status IN ('active', 'completed')");
+    expect(slotReadMigration).not.toContain("gcp.status IN ('invited', 'active', 'completed')");
     expect(navigator).toContain('GeneralContractorSchedule');
     expect(gcProjectDetail).toContain("navigation.navigate('GeneralContractorSchedule'");
     expect(gcSchedule).toContain("request_type: 'schedule_change'");
@@ -1108,6 +1116,10 @@ describe('general contractor account type', () => {
     );
     const directWriteMigration = fs.readFileSync(
       path.join(repoRoot, 'supabase/migrations/20260615232959_require_verified_gc_direct_writes.sql'),
+      'utf8',
+    );
+    const scopedReadWriteMigration = fs.readFileSync(
+      path.join(repoRoot, 'supabase/migrations/20260616034000_scope_gc_permit_reads_and_writes.sql'),
       'utf8',
     );
     const navigator = fs.readFileSync(
@@ -1132,6 +1144,15 @@ describe('general contractor account type', () => {
     expect(directWriteMigration).toMatch(/permits_gc_managed[\s\S]*gc\.verified IS TRUE/);
     expect(directWriteMigration).toMatch(/permits_gc_managed_insert[\s\S]*gc\.verified IS TRUE/);
     expect(directWriteMigration).toMatch(/permits_gc_managed_update[\s\S]*gc\.verified IS TRUE/);
+    expect(scopedReadWriteMigration).toContain('DROP POLICY IF EXISTS "permits_gc_managed" ON public.permits');
+    expect(scopedReadWriteMigration).toContain('CREATE POLICY "permits_gc_managed_select" ON public.permits');
+    expect(scopedReadWriteMigration).toMatch(/permits_gc_managed_select[\s\S]*gcp\.status IN \('active', 'completed'\)/);
+    expect(scopedReadWriteMigration).toContain('CREATE POLICY "permits_gc_managed_insert_row" ON public.permits');
+    expect(scopedReadWriteMigration).toMatch(/permits_gc_managed_insert_row[\s\S]*gcp\.status = 'active'[\s\S]*gc\.verified IS TRUE/);
+    expect(scopedReadWriteMigration).toContain('CREATE POLICY "permits_gc_managed_update_row" ON public.permits');
+    expect(scopedReadWriteMigration).toMatch(/permits_gc_managed_update_row[\s\S]*gcp\.status = 'active'[\s\S]*gc\.verified IS TRUE/);
+    expect(scopedReadWriteMigration).toMatch(/CREATE POLICY "permits_gc_managed_select" ON storage\.objects[\s\S]*gcp\.status IN \('active', 'completed'\)/);
+    expect(scopedReadWriteMigration).not.toContain("gcp.status IN ('invited', 'active', 'completed')");
     expect(navigator).toContain('GeneralContractorPermits');
     expect(gcProjectDetail).toContain("navigation.navigate('GeneralContractorPermits'");
     expect(gcPermits).toContain("select('id, status')");
@@ -1352,6 +1373,10 @@ describe('general contractor account type', () => {
       path.join(repoRoot, 'supabase/migrations/20260615001100_allow_gc_warranty_binder_read.sql'),
       'utf8',
     );
+    const scopedCloseoutMigration = fs.readFileSync(
+      path.join(repoRoot, 'supabase/migrations/20260616036000_lock_gc_closeout_reads_to_active.sql'),
+      'utf8',
+    );
     const navigator = fs.readFileSync(
       path.join(repoRoot, 'src/navigation/GeneralContractorNavigator.tsx'),
       'utf8',
@@ -1366,6 +1391,11 @@ describe('general contractor account type', () => {
     );
 
     expect(migration).toContain('warranties_gc_managed_select');
+    expect(scopedCloseoutMigration).toContain('DROP POLICY IF EXISTS "warranties_gc_managed_select"');
+    expect(scopedCloseoutMigration).toContain('DROP POLICY IF EXISTS "change_orders_gc_managed_read"');
+    expect(scopedCloseoutMigration).toMatch(/warranties_gc_managed_select[\s\S]*gcp\.status IN \('active', 'completed'\)/);
+    expect(scopedCloseoutMigration).toMatch(/change_orders_gc_managed_read[\s\S]*gcp\.status IN \('active', 'completed'\)/);
+    expect(scopedCloseoutMigration).not.toContain("gcp.status IN ('invited', 'active', 'completed')");
     expect(navigator).toContain('GeneralContractorCompletion');
     expect(gcProjectDetail).toContain("navigation.navigate('GeneralContractorCompletion'");
     expect(gcCompletion).toContain("from('permits')");
