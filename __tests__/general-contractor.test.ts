@@ -1408,6 +1408,13 @@ describe('general contractor account type', () => {
     expect(gcProjectDetail).toContain('pendingDecisionChangeOrders.map');
     expect(gcProjectDetail).toContain("key={`approval-${request.id}`}");
     expect(gcProjectDetail).toContain("key={`change-order-${order.id}`}");
+    expect(gcProjectDetail).toContain('handleCancelApprovalRequest');
+    expect(gcProjectDetail).toContain("from('project_approval_requests')");
+    expect(gcProjectDetail).toContain("update({ status: 'cancelled' })");
+    expect(gcProjectDetail).toContain(".eq('requested_by_gc_id', assignment.general_contractor_id)");
+    expect(gcProjectDetail).toContain(".eq('status', 'pending')");
+    expect(gcProjectDetail).toContain('No project budget, schedule, trade, material, or completion change will be applied.');
+    expect(gcProjectDetail).toContain('disabled={!!cancellingApprovalId}');
   });
 
   it('routes GC project completion through homeowner approval before closing records', () => {

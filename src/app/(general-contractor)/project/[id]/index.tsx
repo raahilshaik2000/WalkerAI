@@ -151,6 +151,7 @@ export default function GeneralContractorProjectDetail() {
   const [submittingApproval, setSubmittingApproval] = useState(false);
   const [submittingBudget, setSubmittingBudget] = useState(false);
   const [submittingTerms, setSubmittingTerms] = useState(false);
+  const [cancellingApprovalId, setCancellingApprovalId] = useState<string | null>(null);
   const [savingExternalTrade, setSavingExternalTrade] = useState(false);
   const [uploadingExternalDocSlotId, setUploadingExternalDocSlotId] = useState<string | null>(null);
   const [gcVerified, setGcVerified] = useState(false);
@@ -367,6 +368,46 @@ export default function GeneralContractorProjectDetail() {
     } finally {
       setSubmittingApproval(false);
     }
+  };
+
+  const handleCancelApprovalRequest = async (request: ApprovalRequest) => {
+    if (request.status !== 'pending') {
+      Alert.alert('Request already finalized', 'Only pending homeowner approval requests can be cancelled.');
+      return;
+    }
+    if (!assignment?.general_contractor_id) {
+      Alert.alert('Request unavailable', 'Refresh the project and try again.');
+      return;
+    }
+
+    Alert.alert(
+      'Cancel approval request?',
+      'This removes the pending homeowner decision. No project budget, schedule, trade, material, or completion change will be applied.',
+      [
+        { text: 'Keep Request', style: 'cancel' },
+        {
+          text: 'Cancel Request',
+          style: 'destructive',
+          onPress: async () => {
+            setCancellingApprovalId(request.id);
+            const { error } = await supabase
+              .from('project_approval_requests')
+              .update({ status: 'cancelled' })
+              .eq('id', request.id)
+              .eq('project_id', projectId)
+              .eq('requested_by_gc_id', assignment.general_contractor_id)
+              .eq('status', 'pending');
+
+            if (error) {
+              Alert.alert('Could not cancel request', error.message);
+            } else {
+              await fetchData();
+            }
+            setCancellingApprovalId(null);
+          },
+        },
+      ],
+    );
   };
 
   const startExternalTrade = (slot: Slot) => {
@@ -1188,6 +1229,15 @@ export default function GeneralContractorProjectDetail() {
                             {request.cost_delta != null ? ` · ${formatSignedCadCents(request.cost_delta)}` : ''}
                             {request.timeline_delta_days != null ? ` · ${request.timeline_delta_days > 0 ? '+' : ''}${request.timeline_delta_days} days` : ''}
                           </Text>
+                          <GlassButton
+                            label="Cancel Request"
+                            onPress={() => handleCancelApprovalRequest(request)}
+                            loading={cancellingApprovalId === request.id}
+                            disabled={!!cancellingApprovalId}
+                            variant="secondary"
+                            size="sm"
+                            style={styles.cancelRequestButton}
+                          />
                         </View>
                       </View>
                     ))}
@@ -1354,6 +1404,7 @@ const styles = StyleSheet.create({
   rowBody: { flex: 1 },
   rowTitle: { ...Typography.body, fontWeight: '700' },
   rowSub: { ...Typography.caption, marginTop: 3 },
+  cancelRequestButton: { marginTop: 9, alignSelf: 'flex-start' },
   externalWarning: { ...Typography.caption, color: Colors.warning, marginTop: 5, lineHeight: 17 },
   externalDocumentRow: { marginTop: 8 },
   externalDocumentText: { ...Typography.caption, color: Colors.text.secondary, marginBottom: 6 },
