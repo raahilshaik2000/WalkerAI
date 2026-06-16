@@ -21,6 +21,16 @@ interface MatchedCompany {
   service_radius_km?: number | null;
 }
 
+function formatProjectTypeLabel(projectType?: string | null, roomType?: string | null) {
+  const type = projectType || roomType;
+  if (!type) return 'Renovation project';
+  const label = type
+    .split('_')
+    .map((part) => `${part.charAt(0).toUpperCase()}${part.slice(1)}`)
+    .join(' ');
+  return type === 'kitchen' || type === 'bathroom' ? `${label} renovation` : label;
+}
+
 function isMissingColumnError(error: { message?: string } | null | undefined) {
   return !!error?.message && /column .* does not exist/i.test(error.message);
 }
@@ -146,6 +156,21 @@ Deno.serve(async (req) => {
       );
     }
 
+    let gcProjectType: string | null = null;
+    const { data: gcProjectRows, error: gcProjectError } = await supabase
+      .from('general_contractor_projects')
+      .select('project_type')
+      .eq('project_id', project_id)
+      .neq('status', 'removed')
+      .order('updated_at', { ascending: false })
+      .limit(1);
+    if (gcProjectError) {
+      console.warn('dispatch-slots GC project type lookup failed:', gcProjectError.message);
+    } else {
+      gcProjectType = (gcProjectRows?.[0]?.project_type as string | null | undefined) ?? null;
+    }
+    const projectTypeLabel = formatProjectTypeLabel(gcProjectType, project.room_type);
+
     // Load slots that still need a company. A previously-dispatched slot remains
     // "dispatching" while waiting for responses, and should be eligible for
     // radius expansion after the dispatch window expires.
@@ -247,12 +272,14 @@ Deno.serve(async (req) => {
           slot_id: slot.id,
           trade_type: slot.trade_type,
           description: slot.description,
+          project_type: gcProjectType,
           room_type: project.room_type,
           city: project.city,
           province: project.province,
           estimated_cost_min: slot.estimated_cost_min,
           estimated_cost_max: slot.estimated_cost_max,
           expires_at: dispatchExpiresAt,
+          message: `${projectTypeLabel} ${slot.trade_type.replace(/_/g, ' ')} slot available${project.city ? ` in ${project.city}` : ''}.`,
           deep_link: `/(company)/job/${project_id}?slot=${slot.id}`,
         },
       }));

@@ -348,6 +348,30 @@ describe('dispatch-slots source guards', () => {
     expect(source).not.toContain(".filter('trade_types', 'cs', '{general_contractor}')");
     expect(source).not.toContain('fall back to general contractors');
   });
+
+  it('includes GC project type and slot estimates in trade dispatch notifications', () => {
+    const dispatchSlots = fs.readFileSync(
+      path.join(__dirname, '../supabase/functions/dispatch-slots/index.ts'),
+      'utf8',
+    );
+    const sendPush = fs.readFileSync(
+      path.join(__dirname, '../supabase/functions/send-push/index.ts'),
+      'utf8',
+    );
+
+    expect(dispatchSlots).toContain("select('project_type')");
+    expect(dispatchSlots).toContain('const projectTypeLabel = formatProjectTypeLabel(gcProjectType, project.room_type);');
+    expect(dispatchSlots).toContain('project_type: gcProjectType');
+    expect(dispatchSlots).toContain('estimated_cost_min: slot.estimated_cost_min');
+    expect(dispatchSlots).toContain('estimated_cost_max: slot.estimated_cost_max');
+    expect(dispatchSlots).toContain('message: `${projectTypeLabel} ${slot.trade_type.replace(/_/g, ');
+
+    expect(sendPush).toContain('function dispatchEstimateText');
+    expect(sendPush).toContain('payload.estimated_cost_min');
+    expect(sendPush).toContain('payload.estimated_cost_max');
+    expect(sendPush).toContain('projectTypeLabel(payload.project_type, payload.room_type)');
+    expect(sendPush).not.toContain("body: `${payload.room_type ?? 'Renovation'}");
+  });
 });
 
 describe('quote submission status sync migration', () => {

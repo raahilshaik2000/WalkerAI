@@ -21,6 +21,36 @@ function moneySuffix(value: unknown, prefix: string): string {
   return typeof value === 'number' ? `${prefix}$${formatCad(value)}` : '';
 }
 
+function projectTypeLabel(projectType: unknown, roomType: unknown): string {
+  const value = typeof projectType === 'string' && projectType.trim().length > 0
+    ? projectType
+    : typeof roomType === 'string' && roomType.trim().length > 0
+      ? roomType
+      : null;
+  if (!value) return 'Renovation';
+  const label = value
+    .split('_')
+    .map((part) => `${part.charAt(0).toUpperCase()}${part.slice(1)}`)
+    .join(' ');
+  return value === 'kitchen' || value === 'bathroom' ? `${label} Renovation` : label;
+}
+
+function dispatchEstimateText(payload: Record<string, unknown>): string {
+  const min = typeof payload.estimated_cost_min === 'number'
+    ? payload.estimated_cost_min
+    : payload.ai_cost_min;
+  const max = typeof payload.estimated_cost_max === 'number'
+    ? payload.estimated_cost_max
+    : payload.ai_cost_max;
+
+  if (typeof min === 'number' && typeof max === 'number') {
+    return ` — estimated $${formatCad(min)}–$${formatCad(max)}`;
+  }
+  if (typeof min === 'number') return ` — estimated from $${formatCad(min)}`;
+  if (typeof max === 'number') return ` — estimated up to $${formatCad(max)}`;
+  return '';
+}
+
 // Apple-specific response codes that mean the token is dead and should be
 // marked inactive in device_tokens so we stop trying to deliver to it.
 const DEAD_TOKEN_REASONS = new Set([
@@ -257,7 +287,7 @@ function buildNotificationContent(
     case 'slot_dispatched':
       return {
         title: '⚡ New Job Available — Act Fast',
-        body: `${payload.room_type ?? 'Renovation'} in ${payload.city ?? 'your area'} — estimated $${formatCad(payload.ai_cost_min)}–$${formatCad(payload.ai_cost_max)}. First to accept wins.`,
+        body: `${projectTypeLabel(payload.project_type, payload.room_type)} in ${payload.city ?? 'your area'}${dispatchEstimateText(payload)}. First to accept wins.`,
         priority: 'high',
         ttl: 7200, // 2 hours — matches dispatch window
       };
