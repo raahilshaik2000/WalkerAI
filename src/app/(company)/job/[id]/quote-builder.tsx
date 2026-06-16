@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import {
   Alert,
   KeyboardAvoidingView,
@@ -34,6 +34,28 @@ interface MilestoneInput {
   title: string;
   amount: string; // CAD dollars
   due_date: string;
+}
+
+interface ExistingQuote {
+  id: string;
+  total_amount: number;
+  status: string;
+  submitted_at: string | null;
+}
+
+interface ExistingLineItem {
+  id: string;
+  description: string;
+  total_cost: number | null;
+  sort_order: number | null;
+}
+
+interface ExistingMilestone {
+  id: string;
+  title: string;
+  amount: number;
+  status: string;
+  sort_order: number | null;
 }
 
 function formatTotal(items: LineItem[]): number {
@@ -135,6 +157,69 @@ export default function QuoteBuilderScreen() {
   const [milestones, setMilestones] = useState<MilestoneInput[]>(() => defaultMilestones(acceptedCounterofferCents));
   const [notes, setNotes] = useState(() => defaultNotes(route.params?.gc_negotiation_note));
   const [submitting, setSubmitting] = useState(false);
+  const [loadingApprovedQuote, setLoadingApprovedQuote] = useState(true);
+  const [approvedQuote, setApprovedQuote] = useState<ExistingQuote | null>(null);
+  const [approvedLineItems, setApprovedLineItems] = useState<ExistingLineItem[]>([]);
+  const [approvedMilestones, setApprovedMilestones] = useState<ExistingMilestone[]>([]);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    async function loadApprovedQuote() {
+      if (!projectId) {
+        setLoadingApprovedQuote(false);
+        return;
+      }
+
+      setLoadingApprovedQuote(true);
+      let query = supabase
+        .from('quotes')
+        .select('id, total_amount, status, submitted_at')
+        .eq('project_id', projectId)
+        .eq('status', 'approved')
+        .order('submitted_at', { ascending: false })
+        .limit(1);
+
+      query = slotId ? query.eq('slot_id', slotId) : query.is('slot_id', null);
+
+      const { data, error } = await query.maybeSingle();
+      if (cancelled) return;
+      if (error || !data) {
+        setApprovedQuote(null);
+        setApprovedLineItems([]);
+        setApprovedMilestones([]);
+        setLoadingApprovedQuote(false);
+        return;
+      }
+
+      const quote = data as ExistingQuote;
+      setApprovedQuote(quote);
+
+      const [itemsResult, milestonesResult] = await Promise.all([
+        supabase
+          .from('quote_line_items')
+          .select('id, description, total_cost, sort_order')
+          .eq('quote_id', quote.id)
+          .order('sort_order', { ascending: true }),
+        supabase
+          .from('milestones')
+          .select('id, title, amount, status, sort_order')
+          .eq('quote_id', quote.id)
+          .order('sort_order', { ascending: true }),
+      ]);
+
+      if (cancelled) return;
+      setApprovedLineItems((itemsResult.data as ExistingLineItem[] | null) ?? []);
+      setApprovedMilestones((milestonesResult.data as ExistingMilestone[] | null) ?? []);
+      setLoadingApprovedQuote(false);
+    }
+
+    loadApprovedQuote();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [projectId, slotId]);
 
   const addLineItem = () => {
     setLineItems((prev) => [...prev, { id: Date.now().toString(), description: '', amount: '' }]);
@@ -317,6 +402,81 @@ export default function QuoteBuilderScreen() {
   const totalDollars = quoteTotalCents / 100;
   const splitLabel = milestones.length === 3 ? 'Split total 30/40/30' : 'Split total evenly';
 
+  if (loadingApprovedQuote) {
+    return (
+      <GradientBackground>
+        <SafeAreaView style={styles.safe}>
+          <View style={styles.center}>
+            <Text style={Typography.bodySecondary}>Loading quote...</Text>
+          </View>
+        </SafeAreaView>
+      </GradientBackground>
+    );
+  }
+
+  if (approvedQuote) {
+    return (
+      <GradientBackground glow="top-right">
+        <SafeAreaView style={styles.safe}>
+          <ScrollView contentContainerStyle={styles.scroll} showsVerticalScrollIndicator={false}>
+            <View style={styles.header}>
+              <TouchableOpacity onPress={() => navigation.goBack()}>
+                <Ionicons name="arrow-back" size={22} color={Colors.text.secondary} />
+              </TouchableOpacity>
+              <Text style={styles.title}>Approved Quote</Text>
+              <View style={styles.headerSpacer} />
+            </View>
+
+            <GlassCard style={styles.card}>
+              <Text style={styles.sectionTitle}>Funded quote</Text>
+              <Text style={styles.approvedTotal}>{formatCadCents(approvedQuote.total_amount)}</Text>
+              <Text style={styles.sectionSub}>
+                This quote is already funded. Price changes after funding should be submitted as change orders.
+              </Text>
+            </GlassCard>
+
+            {approvedLineItems.length > 0 ? (
+              <GlassCard style={styles.card}>
+                <Text style={styles.sectionTitle}>Line Items</Text>
+                {approvedLineItems.map((item) => (
+                  <View key={item.id} style={styles.readOnlyRow}>
+                    <Text style={styles.readOnlyLabel}>{item.description}</Text>
+                    <Text style={styles.readOnlyValue}>
+                      {item.total_cost != null ? formatCadCents(item.total_cost) : '-'}
+                    </Text>
+                  </View>
+                ))}
+              </GlassCard>
+            ) : null}
+
+            {approvedMilestones.length > 0 ? (
+              <GlassCard style={styles.card}>
+                <Text style={styles.sectionTitle}>Payment Milestones</Text>
+                {approvedMilestones.map((milestone) => (
+                  <View key={milestone.id} style={styles.readOnlyRow}>
+                    <View style={styles.readOnlyMilestoneBody}>
+                      <Text style={styles.readOnlyLabel}>{milestone.title}</Text>
+                      <Text style={styles.readOnlyStatus}>{milestone.status.replace(/_/g, ' ')}</Text>
+                    </View>
+                    <Text style={styles.readOnlyValue}>{formatCadCents(milestone.amount)}</Text>
+                  </View>
+                ))}
+              </GlassCard>
+            ) : null}
+
+            <GlassButton
+              label="Back to Job"
+              onPress={() => navigation.goBack()}
+              fullWidth
+              size="lg"
+              haptic
+            />
+          </ScrollView>
+        </SafeAreaView>
+      </GradientBackground>
+    );
+  }
+
   return (
     <GradientBackground glow="top-right">
       <SafeAreaView style={styles.safe}>
@@ -487,15 +647,31 @@ export default function QuoteBuilderScreen() {
 
 const styles = StyleSheet.create({
   safe: { flex: 1 },
+  center: { flex: 1, alignItems: 'center', justifyContent: 'center' },
   scroll: { flexGrow: 1, paddingHorizontal: Spacing.sm, paddingTop: Spacing.sm, paddingBottom: Spacing.xl },
   header: {
     flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: Spacing.md,
   },
+  headerSpacer: { width: 48 },
   backText: { color: Colors.text.secondary, fontSize: 15 },
   title: { ...Typography.h2 },
   card: { marginBottom: Spacing.md },
   sectionTitle: { ...Typography.h3, marginBottom: 8 },
   sectionSub: { ...Typography.caption, marginBottom: 14, lineHeight: 18 },
+  approvedTotal: { fontSize: 30, fontWeight: '800', color: Colors.accent, marginBottom: 8 },
+  readOnlyRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: 12,
+    paddingVertical: 11,
+    borderBottomWidth: 1,
+    borderBottomColor: Colors.glass.border,
+  },
+  readOnlyLabel: { flex: 1, color: Colors.text.primary, fontSize: 14, fontWeight: '600' },
+  readOnlyMilestoneBody: { flex: 1 },
+  readOnlyValue: { color: Colors.text.primary, fontSize: 14, fontWeight: '800', textAlign: 'right' },
+  readOnlyStatus: { color: Colors.text.tertiary, fontSize: 12, marginTop: 2, textTransform: 'capitalize' },
   splitBtn: {
     alignSelf: 'flex-start',
     paddingVertical: 8,

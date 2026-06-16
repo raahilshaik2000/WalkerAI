@@ -624,7 +624,12 @@ export default function JobBriefScreen() {
               ) : null}
               <View style={styles.actionGrid}>
                 {[
-                  { label: 'Quote', iconName: 'file-document-edit-outline', route: 'QuoteBuilder', meta: 'Build quote' },
+                  {
+                    label: 'Quote',
+                    iconName: 'file-document-edit-outline',
+                    route: 'QuoteBuilder',
+                    meta: job.status === 'active' ? 'View approved' : 'Build quote',
+                  },
                   { label: 'Payments', iconName: 'cash-multiple', route: 'JobMilestones', meta: 'Milestones' },
                   { label: 'Materials', iconName: 'cube-outline', route: 'JobMaterials', meta: 'Verify counts' },
                   { label: 'Messages', iconName: 'chat-outline', route: 'JobMessages', meta: 'Project thread' },

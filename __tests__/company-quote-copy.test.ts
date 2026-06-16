@@ -59,6 +59,21 @@ describe('company quote copy', () => {
     expect(screenSource).not.toContain('Wait for the homeowner to review it before submitting another.');
   });
 
+  it('shows funded quotes read-only instead of an empty rebuild form', () => {
+    const repoRoot = path.resolve(__dirname, '..');
+    const source = fs.readFileSync(
+      path.join(repoRoot, 'src/app/(company)/job/[id]/quote-builder.tsx'),
+      'utf8'
+    );
+
+    expect(source).toContain(".eq('status', 'approved')");
+    expect(source).toContain('Approved Quote');
+    expect(source).toContain('This quote is already funded. Price changes after funding should be submitted as change orders.');
+    expect(source).toContain('setApprovedLineItems');
+    expect(source).toContain('setApprovedMilestones');
+    expect(source).toContain('Back to Job');
+  });
+
   it('preserves GC negotiation history when revised quotes replace pending quotes', () => {
     const repoRoot = path.resolve(__dirname, '..');
     const migration = fs.readFileSync(
