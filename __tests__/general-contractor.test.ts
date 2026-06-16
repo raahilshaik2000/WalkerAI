@@ -1630,6 +1630,8 @@ describe('general contractor account type', () => {
     expect(gcApprovals.indexOf('if (gc.verified !== true)')).toBeLessThan(
       gcApprovals.indexOf("from('general_contractor_projects')"),
     );
+    expect(gcApprovals).toContain(".in('status', ['active', 'completed'])");
+    expect(gcApprovals).not.toContain(".neq('status', 'removed')");
     expect(gcApprovals).toContain("status === 'accepted' && !canAcceptConciergeBookings");
     expect(gcApprovals).toContain('WalkerAI verification and concierge marketplace access are required before this request can be accepted.');
     expect(gcApprovals).toContain('disabled={!canAcceptConciergeBookings || !!respondingBookingId}');

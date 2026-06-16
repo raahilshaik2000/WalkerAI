@@ -121,7 +121,7 @@ export default function GeneralContractorApprovals() {
         .from('general_contractor_projects')
         .select('project_id, project_type')
         .eq('general_contractor_id', gc.id)
-        .neq('status', 'removed');
+        .in('status', ['active', 'completed']);
       if (assignmentError) throw assignmentError;
 
       const projectIds = (assignments ?? []).map((row) => row.project_id).filter(Boolean);
