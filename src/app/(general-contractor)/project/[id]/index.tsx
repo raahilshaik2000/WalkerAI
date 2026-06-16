@@ -93,6 +93,14 @@ function projectStatusVariant(status: string): 'active' | 'completed' | 'pending
   return 'neutral';
 }
 
+function assignmentStatusVariant(status: string): 'active' | 'completed' | 'pending' | 'error' | 'neutral' {
+  if (status === 'active') return 'active';
+  if (status === 'completed') return 'completed';
+  if (status === 'invited') return 'pending';
+  if (status === 'removed') return 'error';
+  return 'neutral';
+}
+
 function formatTrade(tradeType: string) {
   return tradeType
     .split('_')
@@ -703,7 +711,7 @@ export default function GeneralContractorProjectDetail() {
                     </View>
                     <StatusBadge
                       label={formatStatusLabel(assignment.status)}
-                      variant={assignment.status === 'active' ? 'active' : 'pending'}
+                      variant={assignmentStatusVariant(assignment.status)}
                       dot
                     />
                   </View>
