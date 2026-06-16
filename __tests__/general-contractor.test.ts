@@ -1486,7 +1486,10 @@ describe('general contractor account type', () => {
     expect(gcCompletion).toContain('{completedMaterialOrders.map((order) => (');
     expect(gcCompletion).not.toContain('const paidMaterials = materialOrders.reduce');
     expect(gcCompletion).not.toContain('{materialOrders.map((order) => (');
-    expect(gcCompletion).toContain('Resolve pending approvals, payment requests, change orders, permits, material orders, trade negotiations, pending quotes, and unpaid milestones before requesting final project completion.');
+    expect(gcCompletion).toContain("const projectReadyForCloseout = project?.status === 'active';");
+    expect(gcCompletion).toContain('const budgetReadyForCloseout = (project?.ai_cost_min ?? 0) > 0 && (project?.ai_cost_max ?? 0) > 0;');
+    expect(gcCompletion).toContain('The project must be active with an approved budget before final completion can be requested.');
+    expect(gcCompletion).toContain('Resolve project readiness, pending approvals, payment requests, change orders, permits, material orders, trade negotiations, pending quotes, and unpaid milestones before requesting final project completion.');
     expect(gcCompletion).toContain('Closeout blockers');
     expect(gcCompletion).toContain('Unpaid milestones');
     expect(gcCompletion).toContain('Change orders');
@@ -1626,6 +1629,9 @@ describe('general contractor account type', () => {
     expect(gcAssistant).toContain("assignmentRow.status !== 'active'");
     expect(gcAssistant).toContain('Active GC management is required before project assistant summaries are available.');
     expect(gcAssistant).toContain('formatGcProjectType(assignment?.project_type, project?.room_type)');
+    expect(gcAssistant).toContain('const projectStatusLabel = formatStatusLabel(project?.status ?? \'unknown\');');
+    expect(gcAssistant).toContain('const managementStatusLabel = formatStatusLabel(assignment?.status ?? \'unknown\');');
+    expect(gcAssistant).toContain('${projectTypeLabel} project record is ${projectStatusLabel}. GC management is ${managementStatusLabel}.');
     expect(gcAssistant).toContain("from('project_slots')");
     expect(gcAssistant).toContain("from('permits')");
     expect(gcAssistant).toContain("from('project_approval_requests')");
@@ -1695,6 +1701,10 @@ describe('general contractor account type', () => {
       path.join(repoRoot, 'supabase/migrations/20260616031000_guard_gc_completion_closeout_readiness.sql'),
       'utf8',
     );
+    const projectReadinessMigration = fs.readFileSync(
+      path.join(repoRoot, 'supabase/migrations/20260616045002_guard_gc_completion_project_readiness.sql'),
+      'utf8',
+    );
     const gcCompletion = fs.readFileSync(
       path.join(repoRoot, 'src/app/(general-contractor)/project/[id]/completion.tsx'),
       'utf8',
@@ -1711,12 +1721,16 @@ describe('general contractor account type', () => {
     expect(gcCompletion).toContain('This does not release escrow funds.');
     expect(gcCompletion).toContain("from('gc_trade_quote_negotiations')");
     expect(gcCompletion).toContain("from('quotes')");
-    expect(gcCompletion).toContain('const closeoutBlockers = openPermits.length');
-    expect(gcCompletion).toContain('Resolve active permits, material orders, trade negotiations, pending quotes, and unpaid milestones before requesting final project completion.');
+    expect(gcCompletion).toContain('const closeoutBlockers = (projectReadyForCloseout ? 0 : 1)');
+    expect(gcCompletion).toContain('Resolve project readiness, active permits, material orders, trade negotiations, pending quotes, and unpaid milestones before requesting final project completion.');
     expect(readinessMigration).toContain('CREATE OR REPLACE FUNCTION public.guard_gc_completion_approval_ready()');
     expect(readinessMigration).toContain("NEW.metadata->>'action' = 'complete_project'");
     expect(readinessMigration).toContain('request.id <> NEW.id');
     expect(readinessMigration).toContain("request.status = 'pending'");
+    expect(projectReadinessMigration).toContain("project.status = 'active'");
+    expect(projectReadinessMigration).toContain('project.ai_cost_min > 0');
+    expect(projectReadinessMigration).toContain('project.ai_cost_max > 0');
+    expect(projectReadinessMigration).toContain('Project must be active with an approved budget before completing this GC-managed project');
     expect(readinessMigration).toContain('FROM public.gc_payment_requests payment');
     expect(readinessMigration).toContain("payment.status = 'pending'");
     expect(readinessMigration).toContain('FROM public.change_orders change_order');

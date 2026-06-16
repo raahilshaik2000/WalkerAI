@@ -233,9 +233,12 @@ export default function GeneralContractorAssistantScreen() {
     const activeMaterials = materialOrders.filter((order) => !['confirmed', 'paid', 'cancelled'].includes(order.status));
     const costImpact = pendingApprovals.reduce((sum, request) => sum + (request.cost_delta ?? 0), 0);
     const timelineImpact = pendingApprovals.reduce((sum, request) => sum + (request.timeline_delta_days ?? 0), 0);
+    const projectTypeLabel = formatGcProjectType(assignment?.project_type, project?.room_type);
+    const projectStatusLabel = formatStatusLabel(project?.status ?? 'unknown');
+    const managementStatusLabel = formatStatusLabel(assignment?.status ?? 'unknown');
 
     const summary = [
-      `${formatGcProjectType(assignment?.project_type, project?.room_type)} is currently ${formatStatusLabel(project?.status ?? 'unknown')}.`,
+      `${projectTypeLabel} project record is ${projectStatusLabel}. GC management is ${managementStatusLabel}.`,
       slots.length > 0
         ? `${slots.filter((slot) => ['filled', 'scheduled'].includes(slot.status)).length}/${slots.length} trade slots are assigned or scheduled.`
         : 'No trade slots have been generated yet.',
@@ -271,7 +274,7 @@ export default function GeneralContractorAssistantScreen() {
       pendingCount: pendingApprovals.length + pendingPayments.length,
       riskCount: risks.length,
     };
-  }, [approvals, assignment?.project_type, materialOrders, messages.length, paymentRequests, permits, project?.room_type, project?.status, slots]);
+  }, [approvals, assignment?.project_type, assignment?.status, materialOrders, messages.length, paymentRequests, permits, project?.room_type, project?.status, slots]);
 
   return (
     <GradientBackground glow="top-right">

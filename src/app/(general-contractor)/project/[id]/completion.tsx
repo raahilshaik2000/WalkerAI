@@ -272,14 +272,19 @@ export default function GeneralContractorCompletionScreen() {
   const completionRequests = approvals.filter((approval) => approval.metadata?.action === 'complete_project');
   const latestCompletionRequest = completionRequests[0];
   const pendingCompletionRequest = completionRequests.find((approval) => approval.status === 'pending');
-  const closeoutBlockers = openPermits.length
+  const projectReadyForCloseout = project?.status === 'active';
+  const budgetReadyForCloseout = (project?.ai_cost_min ?? 0) > 0 && (project?.ai_cost_max ?? 0) > 0;
+  const closeoutBlockers = (projectReadyForCloseout ? 0 : 1)
+    + (budgetReadyForCloseout ? 0 : 1)
+    + openPermits.length
     + activeMaterialOrders.length
     + pendingTradeNegotiations
     + pendingQuotes
     + unresolvedMilestones;
   const canRequestCompletion = assignment?.status === 'active'
     && gcVerified
-    && project?.status !== 'completed'
+    && projectReadyForCloseout
+    && budgetReadyForCloseout
     && !pendingCompletionRequest
     && pendingApprovals === 0
     && closeoutBlockers === 0;
@@ -297,8 +302,12 @@ export default function GeneralContractorCompletionScreen() {
       Alert.alert('Pending approvals remain', 'Resolve existing approvals, payment requests, and change orders before requesting final project completion.');
       return;
     }
+    if (!projectReadyForCloseout || !budgetReadyForCloseout) {
+      Alert.alert('Project not ready for closeout', 'The project must be active with an approved budget before final completion can be requested.');
+      return;
+    }
     if (closeoutBlockers > 0) {
-      Alert.alert('Closeout items remain', 'Resolve active permits, material orders, trade negotiations, pending quotes, and unpaid milestones before requesting final project completion.');
+      Alert.alert('Closeout items remain', 'Resolve project readiness, active permits, material orders, trade negotiations, pending quotes, and unpaid milestones before requesting final project completion.');
       return;
     }
 
@@ -394,7 +403,7 @@ export default function GeneralContractorCompletionScreen() {
                   </Text>
                 ) : project?.status !== 'completed' && !pendingCompletionRequest ? (
                   <Text style={styles.completionNote}>
-                    Resolve pending approvals, payment requests, change orders, permits, material orders, trade negotiations, pending quotes, and unpaid milestones before requesting final project completion.
+                    Resolve project readiness, pending approvals, payment requests, change orders, permits, material orders, trade negotiations, pending quotes, and unpaid milestones before requesting final project completion.
                   </Text>
                 ) : null}
               </GlassCard>
