@@ -5,6 +5,12 @@ import {
   visionMediaTypeFor,
 } from '../src/lib/project-analysis';
 
+declare const require: (moduleName: string) => any;
+declare const __dirname: string;
+
+const fs = require('fs');
+const path = require('path');
+
 describe('project analysis fallback', () => {
   it('marks unavailable photo analysis without inventing measurements', () => {
     const fallback = buildProjectAnalysisFallback('bathroom', 'Function not found');
@@ -41,5 +47,18 @@ describe('project analysis fallback', () => {
   it('falls back to jpeg for unsupported vision media types', () => {
     expect(visionMediaTypeFor('image/heif')).toBe('image/jpeg');
     expect(visionMediaTypeFor('image/jpg')).toBe('image/jpeg');
+  });
+
+  it('lets homeowners retry transient analysis failures from the error screen', () => {
+    const source = fs.readFileSync(
+      path.join(__dirname, '../src/app/(homeowner)/project/create/analyzing.tsx'),
+      'utf8',
+    );
+
+    expect(source).toContain('const [analysisRunId, setAnalysisRunId] = useState(0);');
+    expect(source).toContain('didRunAnalysis.current = false;');
+    expect(source).toContain('setAnalysisRunId((runId) => runId + 1);');
+    expect(source).toContain('Retry analysis');
+    expect(source).toContain('Back to photos');
   });
 });

@@ -4,6 +4,7 @@ import {
   Easing,
   StyleSheet,
   Text,
+  TouchableOpacity,
   View,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -108,6 +109,7 @@ export default function AnalyzingScreen() {
 
   const [currentStep, setCurrentStep] = useState(0);
   const [error, setError] = useState<string | null>(null);
+  const [analysisRunId, setAnalysisRunId] = useState(0);
 
   const pulseAnim = useRef(new Animated.Value(1)).current;
   const rotateAnim = useRef(new Animated.Value(0)).current;
@@ -283,12 +285,19 @@ export default function AnalyzingScreen() {
     };
 
     runAnalysis();
-  }, [navigation, photos, projectId, roomType, setAnalysisResult, setQuestions, user]);
+  }, [analysisRunId, navigation, photos, projectId, roomType, setAnalysisResult, setQuestions, user]);
 
   const spin = rotateAnim.interpolate({
     inputRange: [0, 1],
     outputRange: ['0deg', '360deg'],
   });
+
+  const retryAnalysis = () => {
+    didRunAnalysis.current = false;
+    setError(null);
+    setCurrentStep(0);
+    setAnalysisRunId((runId) => runId + 1);
+  };
 
   if (error) {
     return (
@@ -300,6 +309,14 @@ export default function AnalyzingScreen() {
             </View>
             <Text style={styles.errorTitle}>Analysis failed</Text>
             <Text style={styles.errorBody}>{error}</Text>
+            <View style={styles.errorActions}>
+              <TouchableOpacity style={styles.retryButton} onPress={retryAnalysis} activeOpacity={0.85}>
+                <Text style={styles.retryButtonText}>Retry analysis</Text>
+              </TouchableOpacity>
+              <TouchableOpacity style={styles.backButton} onPress={() => navigation.goBack()} activeOpacity={0.85}>
+                <Text style={styles.backButtonText}>Back to photos</Text>
+              </TouchableOpacity>
+            </View>
           </View>
         </SafeAreaView>
       </GradientBackground>
@@ -427,4 +444,23 @@ const styles = StyleSheet.create({
   },
   errorTitle: { ...Typography.h2, marginBottom: 10, textAlign: 'center' },
   errorBody: { ...Typography.bodySecondary, textAlign: 'center', lineHeight: 22 },
+  errorActions: { width: '100%', marginTop: 28, gap: 12 },
+  retryButton: {
+    minHeight: 48,
+    borderRadius: 14,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: Colors.accent,
+  },
+  retryButtonText: { color: '#FFFFFF', fontSize: 15, fontWeight: '800' },
+  backButton: {
+    minHeight: 48,
+    borderRadius: 14,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: Colors.surface.default,
+    borderWidth: 1,
+    borderColor: Colors.glass.border,
+  },
+  backButtonText: { color: Colors.text.secondary, fontSize: 15, fontWeight: '700' },
 });
