@@ -501,6 +501,10 @@ describe('general contractor account type', () => {
       path.join(repoRoot, 'supabase/migrations/20260616037000_deverify_gc_on_trust_profile_change.sql'),
       'utf8',
     );
+    const reviewMigration = fs.readFileSync(
+      path.join(repoRoot, 'supabase/migrations/20260616038000_add_gc_project_reviews.sql'),
+      'utf8',
+    );
     const businessOnboarding = fs.readFileSync(
       path.join(repoRoot, 'src/app/(general-contractor)/onboarding/business.tsx'),
       'utf8',
@@ -529,6 +533,11 @@ describe('general contractor account type', () => {
     expect(deverifyMigration).toContain('NEW.verified := FALSE');
     expect(deverifyMigration).toContain('OLD.verified IS TRUE AND v_trust_profile_changed');
     expect(deverifyMigration).toContain('GC verification and review metrics are maintained by WalkerAI backend services');
+    expect(reviewMigration).toContain("current_setting('walker.internal_gc_rating_update', true) = 'review_rating'");
+    expect(reviewMigration).toContain('NEW.rating IS DISTINCT FROM OLD.rating');
+    expect(reviewMigration).toContain('NEW.total_reviews IS DISTINCT FROM OLD.total_reviews');
+    expect(reviewMigration).toContain('UPDATE public.general_contractors');
+    expect(reviewMigration).toContain('total_reviews = v_count');
     expect(businessOnboarding).not.toContain('verified:');
     expect(businessOnboarding).not.toContain('rating:');
     expect(businessOnboarding).not.toContain('total_reviews:');

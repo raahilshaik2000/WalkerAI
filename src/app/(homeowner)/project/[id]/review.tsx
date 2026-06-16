@@ -26,7 +26,8 @@ const DIMENSIONS: Array<{ key: string; label: string; icon: string }> = [
 ];
 
 interface ReviewTarget {
-  company_id: string;
+  target_id: string;
+  target_type: 'company' | 'general_contractor';
   user_id: string;
   name: string;
   trade_type?: string | null;
@@ -36,6 +37,16 @@ function normalizeCompany(company: any): { id: string; user_id: string; name: st
   const row = Array.isArray(company) ? company[0] : company;
   if (!row?.id || !row?.user_id) return null;
   return { id: row.id, user_id: row.user_id, name: row.name ?? 'Contractor' };
+}
+
+function normalizeGeneralContractor(gc: any): { id: string; user_id: string; name: string } | null {
+  const row = Array.isArray(gc) ? gc[0] : gc;
+  if (!row?.id || !row?.user_id) return null;
+  return { id: row.id, user_id: row.user_id, name: row.business_name ?? 'General Contractor' };
+}
+
+function reviewTargetKey(target: Pick<ReviewTarget, 'target_type' | 'target_id'>) {
+  return `${target.target_type}:${target.target_id}`;
 }
 
 function isMissingRatingRpcError(error: { message?: string; details?: string } | null | undefined) {
@@ -75,12 +86,12 @@ export default function ReviewScreen() {
   const [comment, setComment] = useState('');
   const [submitting, setSubmitting] = useState(false);
   const [targets, setTargets] = useState<ReviewTarget[]>([]);
-  const [selectedCompanyId, setSelectedCompanyId] = useState<string | null>(null);
+  const [selectedTargetKey, setSelectedTargetKey] = useState<string | null>(null);
   const [loadingTargets, setLoadingTargets] = useState(true);
   const [targetError, setTargetError] = useState<string | null>(null);
   const [projectStatus, setProjectStatus] = useState<string | null>(null);
 
-  const selectedTarget = targets.find((target) => target.company_id === selectedCompanyId) ?? targets[0] ?? null;
+  const selectedTarget = targets.find((target) => reviewTargetKey(target) === selectedTargetKey) ?? targets[0] ?? null;
 
   const overallRating = Math.round(
     Object.values(ratings).reduce((s, v) => s + v, 0) / DIMENSIONS.length
@@ -95,7 +106,7 @@ export default function ReviewScreen() {
     setLoadingTargets(true);
     setTargetError(null);
     try {
-      const [quotesRes, slotsRes, legacyRes] = await Promise.all([
+      const [quotesRes, slotsRes, legacyRes, gcRes] = await Promise.all([
         supabase
           .from('quotes')
           .select('company_id, companies(id, user_id, name)')
@@ -111,12 +122,17 @@ export default function ReviewScreen() {
           .select('assigned_company_id, status, companies:assigned_company_id(id, user_id, name)')
           .eq('id', projectId)
           .maybeSingle(),
+        supabase
+          .from('general_contractor_projects')
+          .select('general_contractor_id, project_type, general_contractor:general_contractors(id, user_id, business_name)')
+          .eq('project_id', projectId)
+          .in('status', ['active', 'completed']),
       ]);
 
-      const loadError = quotesRes.error ?? slotsRes.error ?? legacyRes.error;
+      const loadError = quotesRes.error ?? slotsRes.error ?? legacyRes.error ?? gcRes.error;
       if (loadError) {
         setTargets([]);
-        setSelectedCompanyId(null);
+        setSelectedTargetKey(null);
         setProjectStatus((legacyRes.data as any)?.status ?? null);
         setTargetError(loadError.message);
         return;
@@ -129,7 +145,8 @@ export default function ReviewScreen() {
         const company = normalizeCompany((quote as any).companies);
         if (!company) continue;
         byCompany.set(company.id, {
-          company_id: company.id,
+          target_id: company.id,
+          target_type: 'company',
           user_id: company.user_id,
           name: company.name,
           trade_type: null,
@@ -139,7 +156,8 @@ export default function ReviewScreen() {
         const company = normalizeCompany((slot as any).companies);
         if (!company) continue;
         byCompany.set(company.id, {
-          company_id: company.id,
+          target_id: company.id,
+          target_type: 'company',
           user_id: company.user_id,
           name: company.name,
           trade_type: (slot as any).trade_type ?? null,
@@ -148,16 +166,34 @@ export default function ReviewScreen() {
       const legacyCompany = normalizeCompany((legacyRes.data as any)?.companies);
       if (legacyCompany) {
         byCompany.set(legacyCompany.id, {
-          company_id: legacyCompany.id,
+          target_id: legacyCompany.id,
+          target_type: 'company',
           user_id: legacyCompany.user_id,
           name: legacyCompany.name,
           trade_type: null,
         });
       }
 
-      const nextTargets = Array.from(byCompany.values());
+      const gcTargets: ReviewTarget[] = [];
+      for (const assignment of gcRes.data ?? []) {
+        const gc = normalizeGeneralContractor((assignment as any).general_contractor);
+        if (!gc) continue;
+        gcTargets.push({
+          target_id: gc.id,
+          target_type: 'general_contractor',
+          user_id: gc.user_id,
+          name: gc.name,
+          trade_type: (assignment as any).project_type ? `GC management · ${(assignment as any).project_type}` : 'GC management',
+        });
+      }
+
+      const nextTargets = [...gcTargets, ...Array.from(byCompany.values())];
       setTargets(nextTargets);
-      setSelectedCompanyId((prev) => prev && byCompany.has(prev) ? prev : nextTargets[0]?.company_id ?? null);
+      setSelectedTargetKey((prev) => (
+        prev && nextTargets.some((target) => reviewTargetKey(target) === prev)
+          ? prev
+          : nextTargets[0] ? reviewTargetKey(nextTargets[0]) : null
+      ));
     } finally {
       setLoadingTargets(false);
     }
@@ -231,11 +267,13 @@ export default function ReviewScreen() {
       // Newer schemas expose a callable refresh RPC. Older live schemas use an
       // INSERT trigger instead, so this refresh must not make a saved review
       // look like a failed submission.
-      const { error: ratingError } = await supabase.rpc('update_company_rating', {
-        p_company_id: selectedTarget.company_id,
-      });
-      if (ratingError && !isMissingRatingRpcError(ratingError)) {
-        console.warn('Review saved but company rating refresh failed:', ratingError);
+      if (selectedTarget.target_type === 'company') {
+        const { error: ratingError } = await supabase.rpc('update_company_rating', {
+          p_company_id: selectedTarget.target_id,
+        });
+        if (ratingError && !isMissingRatingRpcError(ratingError)) {
+          console.warn('Review saved but company rating refresh failed:', ratingError);
+        }
       }
 
       ReactNativeHapticFeedback.trigger('notificationSuccess');
@@ -297,17 +335,17 @@ export default function ReviewScreen() {
               <View style={styles.targetList}>
                 {targets.map((target) => (
                   <TouchableOpacity
-                    key={target.company_id}
+                    key={reviewTargetKey(target)}
                     style={[
                       styles.targetPill,
-                      selectedTarget?.company_id === target.company_id && styles.targetPillActive,
+                      selectedTarget && reviewTargetKey(selectedTarget) === reviewTargetKey(target) && styles.targetPillActive,
                     ]}
-                    onPress={() => setSelectedCompanyId(target.company_id)}
+                    onPress={() => setSelectedTargetKey(reviewTargetKey(target))}
                     activeOpacity={0.75}
                   >
                     <Text style={[
                       styles.targetName,
-                      selectedTarget?.company_id === target.company_id && styles.targetNameActive,
+                      selectedTarget && reviewTargetKey(selectedTarget) === reviewTargetKey(target) && styles.targetNameActive,
                     ]}>
                       {target.name}
                     </Text>
