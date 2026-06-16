@@ -5,7 +5,7 @@ import { useNavigation, useRoute } from '@react-navigation/native';
 import Ionicons from 'react-native-vector-icons/Ionicons';
 import { supabase } from '@/lib/supabase/client';
 import { formatSupabaseFunctionError } from '@/lib/supabase/functions';
-import { materialOrderNetPayoutCents } from '@/lib/material-orders';
+import { joinedMaterialItemName, materialOrderNetPayoutCents } from '@/lib/material-orders';
 import { getRequiredStringParam } from '@/lib/navigation-params';
 import { isStripePayoutLocallyReady } from '@/lib/payouts';
 import { useAuthStore } from '@/stores/auth.store';
@@ -217,7 +217,7 @@ export default function SupplierOrderDetail() {
         <ScrollView contentContainerStyle={styles.scroll} showsVerticalScrollIndicator={false}>
           <GlassCard style={styles.section}>
             <Text style={styles.sectionTitle}>Material Needed</Text>
-            <Text style={styles.materialName}>{order.material?.item}</Text>
+            <Text style={styles.materialName}>{joinedMaterialItemName(order.material)}</Text>
             <View style={styles.row}>
               <DetailItem label="Quantity" value={`${order.quantity_needed} ${order.unit}`} />
               <DetailItem label="Quality" value={order.quality_tier ?? 'Any'} />

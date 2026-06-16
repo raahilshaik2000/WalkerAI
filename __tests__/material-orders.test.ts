@@ -1,4 +1,5 @@
 import {
+  joinedMaterialItemName,
   materialOrderNetPayoutCents,
   materialOrderPaymentStatusLabel,
   materialOrderPlatformFeeCents,
@@ -22,6 +23,13 @@ describe('materialOrderPaymentStatusLabel', () => {
 });
 
 describe('supplier material order payout math', () => {
+  it('reads material names from object or array joins', () => {
+    expect(joinedMaterialItemName({ item: 'Porcelain floor tile' })).toBe('Porcelain floor tile');
+    expect(joinedMaterialItemName([{ item: 'Waterproof vinyl plank' }])).toBe('Waterproof vinyl plank');
+    expect(joinedMaterialItemName([{ item: '   ' }])).toBe('Material');
+    expect(joinedMaterialItemName(null)).toBe('Material');
+  });
+
   it('matches the supplier payout edge function platform fee calculation', () => {
     expect(materialOrderPlatformFeeCents(12345, 8)).toBe(988);
     expect(materialOrderNetPayoutCents(12345, 8)).toBe(11357);
@@ -51,6 +59,21 @@ describe('supplier material order payout math', () => {
     expect(activeSource).not.toContain('maximumFractionDigits: 0');
   });
 
+  it('uses joined material name normalization on supplier material order screens', () => {
+    const supplierOrderSources = [
+      '../src/app/(supplier)/orders/index.tsx',
+      '../src/app/(supplier)/orders/active.tsx',
+      '../src/app/(supplier)/orders/[id]/index.tsx',
+      '../src/app/(supplier)/earnings/index.tsx',
+    ].map((sourcePath) => fs.readFileSync(path.join(__dirname, sourcePath), 'utf8'));
+
+    supplierOrderSources.forEach((source) => {
+      expect(source).toContain("joinedMaterialItemName");
+      expect(source).not.toContain("material?.item ?? 'Material'");
+      expect(source).not.toContain("(order.material as any)?.item ?? 'Material'");
+    });
+  });
+
   it('uses explicit material relationship names on company supplier-delivery queries', () => {
     const companyMaterialsSource = fs.readFileSync(
       path.join(__dirname, '../src/app/(company)/job/[id]/materials.tsx'),
@@ -59,6 +82,19 @@ describe('supplier material order payout math', () => {
 
     expect(companyMaterialsSource).toContain('material:materials!material_orders_material_id_fkey(item)');
     expect(companyMaterialsSource).not.toContain('material:materials(item)');
+  });
+
+  it('allows suppliers to read material rows only through eligible or accepted material orders', () => {
+    const migration = fs.readFileSync(
+      path.join(__dirname, '../supabase/migrations/20260616052440_allow_supplier_material_order_material_reads.sql'),
+      'utf8',
+    );
+
+    expect(migration).toContain('CREATE POLICY "materials_supplier_order_select" ON public.materials');
+    expect(migration).toContain('mo.material_id = materials.id');
+    expect(migration).toContain("mo.status = 'open'");
+    expect(migration).toContain('public.supplier_can_fulfill_material_order(mo.id, s.id)');
+    expect(migration).toContain('mo.accepted_supplier_id IN');
   });
 
   it('guards supplier fulfillment updates by current status as well as supplier assignment', () => {

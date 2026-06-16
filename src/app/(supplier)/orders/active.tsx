@@ -18,7 +18,7 @@ import Ionicons from 'react-native-vector-icons/Ionicons';
 import { launchImageLibrary } from 'react-native-image-picker';
 import { supabase } from '@/lib/supabase/client';
 import { formatCadCents } from '@/lib/currency';
-import { materialOrderNetPayoutCents } from '@/lib/material-orders';
+import { joinedMaterialItemName, materialOrderNetPayoutCents } from '@/lib/material-orders';
 import { getUploadMetadata, uploadFile } from '@/lib/supabase/storage';
 import { useAuthStore } from '@/stores/auth.store';
 import { Colors, Radius, Spacing, Typography } from '@/constants/theme';
@@ -304,7 +304,7 @@ export default function SupplierActiveOrders() {
                 >
                   {/* Header */}
                   <View style={styles.cardHeader}>
-                    <Text style={styles.cardItem} numberOfLines={1}>{item.material?.item ?? 'Material'}</Text>
+                    <Text style={styles.cardItem} numberOfLines={1}>{joinedMaterialItemName(item.material)}</Text>
                     <View style={[styles.statusBadge, item.status === 'paid' ? styles.statusBadgePaid : styles.statusBadgeActive]}>
                       <Text style={[styles.statusText, item.status === 'paid' ? styles.statusTextPaid : styles.statusTextActive]}>
                         {STATUS_LABELS[item.status] ?? item.status}

@@ -23,3 +23,11 @@ export function materialOrderNetPayoutCents(
   if (!Number.isFinite(price) || price <= 0) return 0;
   return Math.max(0, price - materialOrderPlatformFeeCents(price, platformFeePct));
 }
+
+export function joinedMaterialItemName(
+  material: { item?: string | null } | Array<{ item?: string | null }> | null | undefined,
+): string {
+  const row = Array.isArray(material) ? material[0] : material;
+  const item = row?.item?.trim();
+  return item || 'Material';
+}

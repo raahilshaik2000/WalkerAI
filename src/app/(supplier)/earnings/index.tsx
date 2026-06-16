@@ -5,7 +5,7 @@ import { useFocusEffect, useNavigation } from '@react-navigation/native';
 import Ionicons from 'react-native-vector-icons/Ionicons';
 import { supabase } from '@/lib/supabase/client';
 import { formatSupabaseFunctionError } from '@/lib/supabase/functions';
-import { materialOrderNetPayoutCents, materialOrderPlatformFeeCents } from '@/lib/material-orders';
+import { joinedMaterialItemName, materialOrderNetPayoutCents, materialOrderPlatformFeeCents } from '@/lib/material-orders';
 import { isStripePayoutLocallyReady } from '@/lib/payouts';
 import { useAuthStore } from '@/stores/auth.store';
 import { Colors, Spacing, Typography } from '@/constants/theme';
@@ -199,7 +199,7 @@ export default function SupplierEarnings() {
             orders.map((order) => (
               <View key={order.id} style={styles.historyRow}>
                 <View style={{ flex: 1 }}>
-                  <Text style={styles.historyItem}>{(order.material as any)?.item ?? 'Material'}</Text>
+                  <Text style={styles.historyItem}>{joinedMaterialItemName(order.material)}</Text>
                   <Text style={styles.historyDate}>
                     {order.confirmed_at ? new Date(order.confirmed_at).toLocaleDateString('en-CA') : ''}
                   </Text>

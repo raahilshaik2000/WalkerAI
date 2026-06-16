@@ -304,7 +304,7 @@ export interface MaterialOrder {
   created_at: string;
   updated_at: string;
   // joined fields
-  material?: Material;
+  material?: Material | Material[] | null;
   supplier?: Supplier;
 }
 

@@ -16,7 +16,7 @@ import Ionicons from 'react-native-vector-icons/Ionicons';
 import { supabase } from '@/lib/supabase/client';
 import { formatCadCents } from '@/lib/currency';
 import { formatSupabaseFunctionError } from '@/lib/supabase/functions';
-import { materialOrderNetPayoutCents } from '@/lib/material-orders';
+import { joinedMaterialItemName, materialOrderNetPayoutCents } from '@/lib/material-orders';
 import { isStripePayoutLocallyReady } from '@/lib/payouts';
 import { useAuthStore } from '@/stores/auth.store';
 import { Colors, Radius, Spacing, Typography } from '@/constants/theme';
@@ -290,7 +290,7 @@ export default function SupplierOrderFeed() {
                   activeOpacity={0.8}
                 >
                   <View style={styles.orderHeader}>
-                    <Text style={styles.orderItem} numberOfLines={1}>{item.material?.item ?? 'Material'}</Text>
+                    <Text style={styles.orderItem} numberOfLines={1}>{joinedMaterialItemName(item.material)}</Text>
                     <View style={[styles.tierBadge, { backgroundColor: `${tierColor(item.quality_tier)}20` }]}>
                       <Text style={[styles.tierText, { color: tierColor(item.quality_tier) }]}>
                         {item.quality_tier ?? 'any'}
