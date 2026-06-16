@@ -1153,6 +1153,13 @@ describe('general contractor account type', () => {
     expect(gcCompletion).toContain(".eq('requested_by_gc_id', gc.id)");
     expect(gcCompletion).toContain("from('gc_payment_requests')");
     expect(gcCompletion).toContain(".eq('general_contractor_id', gc.id)");
+    expect(gcCompletion).toContain("from('change_orders')");
+    expect(gcCompletion).toContain('const pendingChangeOrders = changeOrders.filter');
+    expect(gcCompletion).toContain("order.status === 'proposed' && order.signed_by_company && !order.signed_by_homeowner");
+    expect(gcCompletion).toContain('+ pendingChangeOrders');
+    expect(gcCompletion).toContain('Resolve pending approvals, payment requests, and change orders before requesting final project completion.');
+    expect(gcCompletion).toContain('Change orders');
+    expect(gcCompletion).toContain('pending homeowner decision');
     expect(gcCompletion).toContain('Digital project binder');
     expect(gcCompletion).toContain('const latestCompletionRequest = completionRequests[0];');
     expect(gcCompletion).toContain("const pendingCompletionRequest = completionRequests.find((approval) => approval.status === 'pending');");
@@ -1326,6 +1333,10 @@ describe('general contractor account type', () => {
       path.join(repoRoot, 'supabase/migrations/20260615001400_apply_gc_completion_approval.sql'),
       'utf8',
     );
+    const readinessMigration = fs.readFileSync(
+      path.join(repoRoot, 'supabase/migrations/20260616005234_guard_gc_completion_readiness.sql'),
+      'utf8',
+    );
     const gcCompletion = fs.readFileSync(
       path.join(repoRoot, 'src/app/(general-contractor)/project/[id]/completion.tsx'),
       'utf8',
@@ -1340,6 +1351,17 @@ describe('general contractor account type', () => {
     expect(gcCompletion).toContain('formatGcProjectType(assignment?.project_type, project.room_type)');
     expect(gcCompletion).toContain("metadata: { action: 'complete_project' }");
     expect(gcCompletion).toContain('This does not release escrow funds.');
+    expect(readinessMigration).toContain('CREATE OR REPLACE FUNCTION public.guard_gc_completion_approval_ready()');
+    expect(readinessMigration).toContain("NEW.metadata->>'action' = 'complete_project'");
+    expect(readinessMigration).toContain('request.id <> NEW.id');
+    expect(readinessMigration).toContain("request.status = 'pending'");
+    expect(readinessMigration).toContain('FROM public.gc_payment_requests payment');
+    expect(readinessMigration).toContain("payment.status = 'pending'");
+    expect(readinessMigration).toContain('FROM public.change_orders change_order');
+    expect(readinessMigration).toContain("change_order.status = 'proposed'");
+    expect(readinessMigration).toContain('change_order.signed_by_company IS TRUE');
+    expect(readinessMigration).toContain('change_order.signed_by_homeowner IS NOT TRUE');
+    expect(readinessMigration).toContain('guard_gc_completion_approval_ready_trigger');
   });
 
   it('notifies homeowners and GCs about GC workflow actions', () => {

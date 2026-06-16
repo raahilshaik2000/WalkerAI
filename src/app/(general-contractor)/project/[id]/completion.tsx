@@ -63,6 +63,13 @@ interface PaymentRequestRecord {
   amount_cents: number;
 }
 
+interface ChangeOrderRecord {
+  id: string;
+  status: string;
+  signed_by_homeowner: boolean;
+  signed_by_company: boolean;
+}
+
 interface AssignmentRecord {
   id: string;
   status: string;
@@ -89,6 +96,7 @@ export default function GeneralContractorCompletionScreen() {
   const [materialOrders, setMaterialOrders] = useState<MaterialOrderRecord[]>([]);
   const [approvals, setApprovals] = useState<ApprovalRecord[]>([]);
   const [paymentRequests, setPaymentRequests] = useState<PaymentRequestRecord[]>([]);
+  const [changeOrders, setChangeOrders] = useState<ChangeOrderRecord[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [submittingCompletion, setSubmittingCompletion] = useState(false);
@@ -111,7 +119,7 @@ export default function GeneralContractorCompletionScreen() {
       if (!gc?.id) throw new Error('GC profile not found.');
       setGcVerified(gc.verified === true);
 
-      const [projectResult, permitResult, warrantyResult, materialResult, approvalResult, paymentResult] = await Promise.all([
+      const [projectResult, permitResult, warrantyResult, materialResult, approvalResult, paymentResult, changeOrderResult] = await Promise.all([
         supabase
           .from('projects')
           .select('id, status, address, room_type, ai_cost_min, ai_cost_max')
@@ -144,6 +152,11 @@ export default function GeneralContractorCompletionScreen() {
           .eq('project_id', projectId)
           .eq('general_contractor_id', gc.id)
           .order('created_at', { ascending: false }),
+        supabase
+          .from('change_orders')
+          .select('id, status, signed_by_homeowner, signed_by_company')
+          .eq('project_id', projectId)
+          .order('created_at', { ascending: false }),
       ]);
 
       const loadError = projectResult.error
@@ -151,7 +164,8 @@ export default function GeneralContractorCompletionScreen() {
         ?? warrantyResult.error
         ?? materialResult.error
         ?? approvalResult.error
-        ?? paymentResult.error;
+        ?? paymentResult.error
+        ?? changeOrderResult.error;
       if (loadError) throw loadError;
 
       setProject(projectResult.data as ProjectSummary | null);
@@ -160,6 +174,7 @@ export default function GeneralContractorCompletionScreen() {
       setMaterialOrders((materialResult.data ?? []) as MaterialOrderRecord[]);
       setApprovals((approvalResult.data ?? []) as ApprovalRecord[]);
       setPaymentRequests((paymentResult.data ?? []) as PaymentRequestRecord[]);
+      setChangeOrders((changeOrderResult.data ?? []) as ChangeOrderRecord[]);
 
       const { data: assignmentRow, error: assignmentError } = await supabase
         .from('general_contractor_projects')
@@ -178,6 +193,7 @@ export default function GeneralContractorCompletionScreen() {
       setMaterialOrders([]);
       setApprovals([]);
       setPaymentRequests([]);
+      setChangeOrders([]);
       setGcVerified(false);
     } finally {
       setLoading(false);
@@ -198,8 +214,12 @@ export default function GeneralContractorCompletionScreen() {
 
   const passedPermits = permits.filter((permit) => permit.status === 'passed').length;
   const completedMaterials = materialOrders.filter((order) => ['confirmed', 'paid'].includes(order.status)).length;
+  const pendingChangeOrders = changeOrders.filter((order) => (
+    order.status === 'proposed' && order.signed_by_company && !order.signed_by_homeowner
+  )).length;
   const pendingApprovals = approvals.filter((approval) => approval.status === 'pending').length
-    + paymentRequests.filter((request) => request.status === 'pending').length;
+    + paymentRequests.filter((request) => request.status === 'pending').length
+    + pendingChangeOrders;
   const paidMaterials = materialOrders.reduce((sum, order) => sum + (order.final_price ?? 0), 0);
   const completionRequests = approvals.filter((approval) => approval.metadata?.action === 'complete_project');
   const latestCompletionRequest = completionRequests[0];
@@ -220,7 +240,7 @@ export default function GeneralContractorCompletionScreen() {
       return;
     }
     if (pendingApprovals > 0) {
-      Alert.alert('Pending approvals remain', 'Resolve existing approval and payment requests before requesting final project completion.');
+      Alert.alert('Pending approvals remain', 'Resolve existing approvals, payment requests, and change orders before requesting final project completion.');
       return;
     }
 
@@ -315,7 +335,7 @@ export default function GeneralContractorCompletionScreen() {
                   </Text>
                 ) : project?.status !== 'completed' && !pendingCompletionRequest ? (
                   <Text style={styles.completionNote}>
-                    Resolve pending approvals before requesting final project completion.
+                    Resolve pending approvals, payment requests, and change orders before requesting final project completion.
                   </Text>
                 ) : null}
               </GlassCard>
@@ -324,6 +344,7 @@ export default function GeneralContractorCompletionScreen() {
                 <Text style={styles.sectionTitle}>Financial closeout</Text>
                 <InfoRow label="AI estimate" value={project?.ai_cost_min && project?.ai_cost_max ? `${formatCadCents(project.ai_cost_min)} - ${formatCadCents(project.ai_cost_max)}` : 'TBD'} />
                 <InfoRow label="Material receipts" value={formatCadCents(paidMaterials)} />
+                <InfoRow label="Change orders" value={`${pendingChangeOrders} pending homeowner decision`} />
                 <InfoRow label="GC payment requests" value={`${paymentRequests.filter((request) => request.status === 'approved').length}/${paymentRequests.length} approved`} />
               </GlassCard>
 
