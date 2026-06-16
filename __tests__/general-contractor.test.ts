@@ -1457,6 +1457,10 @@ describe('general contractor account type', () => {
       path.join(repoRoot, 'src/app/(homeowner)/messages.tsx'),
       'utf8',
     );
+    const notificationMigration = fs.readFileSync(
+      path.join(repoRoot, 'supabase/migrations/20260616193000_notify_project_message_participants.sql'),
+      'utf8',
+    );
 
     expect(migration).toContain('messages_project_participants');
     expect(migration).toContain('general_contractor_projects gcp');
@@ -1479,6 +1483,17 @@ describe('general contractor account type', () => {
     expect(homeownerMessages).toContain("general_contractor:general_contractors(business_name)");
     expect(homeownerMessages).toContain("Messages with your contractors, GC, and project participants");
     expect(homeownerMessages).not.toContain(".not('assigned_company_id', 'is', null)");
+    expect(notificationMigration).toContain('CREATE OR REPLACE FUNCTION public.notify_project_message_participants()');
+    expect(notificationMigration).toContain('AFTER INSERT ON public.messages');
+    expect(notificationMigration).toContain("participant.user_id <> NEW.sender_id");
+    expect(notificationMigration).toContain("'new_message'");
+    expect(notificationMigration).toContain("'message_id', NEW.id");
+    expect(notificationMigration).toContain("'preview', COALESCE(v_preview, 'You have a new message')");
+    expect(notificationMigration).toContain('FROM public.project_slots ps');
+    expect(notificationMigration).toContain("ps.status IN ('filled', 'scheduled')");
+    expect(notificationMigration).toContain('FROM public.quotes q');
+    expect(notificationMigration).toContain('FROM public.general_contractor_projects gcp');
+    expect(notificationMigration).toContain("gcp.status IN ('invited', 'active', 'completed')");
   });
 
   it('adds a GC completion binder assembled from real project records', () => {
