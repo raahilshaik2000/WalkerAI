@@ -247,7 +247,8 @@ Deno.serve(async (req) => {
 
     if (milestone.stripe_transfer_id) {
       const isFinalProjectMilestone = await allApprovedProjectMilestonesReleased(adminClient, project.id);
-      if (isFinalProjectMilestone && project.status !== 'completed') {
+      const gcCompletionApprovalRequired = isFinalProjectMilestone && await hasActiveGcManagement(adminClient, project.id);
+      if (isFinalProjectMilestone && project.status !== 'completed' && !gcCompletionApprovalRequired) {
         await completeProjectAndNotify(
           adminClient,
           project.id,
@@ -265,6 +266,7 @@ Deno.serve(async (req) => {
           is_final_milestone: isFinalQuoteMilestone,
           is_final_quote_milestone: isFinalQuoteMilestone,
           is_final_project_milestone: isFinalProjectMilestone,
+          gc_completion_approval_required: gcCompletionApprovalRequired,
         }),
         { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       );
@@ -385,10 +387,12 @@ Deno.serve(async (req) => {
     }
 
     const isFinalProjectMilestone = await allApprovedProjectMilestonesReleased(adminClient, project.id);
+    const gcCompletionApprovalRequired = isFinalProjectMilestone && await hasActiveGcManagement(adminClient, project.id);
 
     // If this was the final outstanding milestone across all approved trade
-    // quotes, trigger project completion + review flow.
-    if (isFinalProjectMilestone) {
+    // quotes, trigger project completion + review flow. GC-managed projects
+    // still require the dedicated homeowner completion approval.
+    if (isFinalProjectMilestone && !gcCompletionApprovalRequired) {
       await completeProjectAndNotify(
         adminClient,
         project.id,
@@ -413,6 +417,7 @@ Deno.serve(async (req) => {
         is_final_milestone: isFinalQuoteMilestone,
         is_final_quote_milestone: isFinalQuoteMilestone,
         is_final_project_milestone: isFinalProjectMilestone,
+        gc_completion_approval_required: gcCompletionApprovalRequired,
       }),
       { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
     );
@@ -504,6 +509,24 @@ async function completeProjectAndNotify(
   if (completionNotificationError) {
     console.warn('Project completed but review notifications failed:', completionNotificationError.message);
   }
+}
+
+async function hasActiveGcManagement(
+  adminClient: ReturnType<typeof createClient>,
+  projectId: string,
+): Promise<boolean> {
+  const { data, error } = await adminClient
+    .from('general_contractor_projects')
+    .select('id')
+    .eq('project_id', projectId)
+    .eq('status', 'active')
+    .limit(1);
+
+  if (error) {
+    throw new Error(`Failed to check GC project management status: ${error.message}`);
+  }
+
+  return (data ?? []).length > 0;
 }
 
 async function allFilledSlotsHaveApprovedQuotes(

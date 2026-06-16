@@ -601,6 +601,23 @@ describe('release-milestone source guards', () => {
       /const hasProgressEvidence = await hasMilestoneProgressEvidence[\s\S]*?Progress photo evidence is required before milestone payment can be released[\s\S]*?const transfer = await stripe\.transfers\.create/
     );
   });
+
+  it('defers active GC-managed project completion to homeowner approval', () => {
+    const source = fs.readFileSync(
+      path.join(__dirname, '../supabase/functions/release-milestone/index.ts'),
+      'utf8',
+    );
+
+    expect(source).toContain('async function hasActiveGcManagement');
+    expect(source).toContain(".from('general_contractor_projects')");
+    expect(source).toContain(".eq('status', 'active')");
+    expect(source).toContain('const gcCompletionApprovalRequired = isFinalProjectMilestone && await hasActiveGcManagement(adminClient, project.id);');
+    expect(source).toContain("if (isFinalProjectMilestone && project.status !== 'completed' && !gcCompletionApprovalRequired)");
+    expect(source).toContain('if (isFinalProjectMilestone && !gcCompletionApprovalRequired)');
+    expect(source).toContain('gc_completion_approval_required: gcCompletionApprovalRequired');
+    expect(source).toContain('GC-managed projects');
+    expect(source).toContain('dedicated homeowner completion approval');
+  });
 });
 
 describe('claim-material-order source guards', () => {
