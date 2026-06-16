@@ -776,7 +776,7 @@ export default function GeneralContractorProjectDetail() {
                     activeOpacity={0.85}
                   >
                     <View style={styles.controlIcon}>
-                      <Icon name="file-document-check-outline" size={20} color={Colors.accent} />
+                      <Icon name="file-check-outline" size={20} color={Colors.accent} />
                     </View>
                     <View style={styles.controlBody}>
                       <Text style={styles.controlTitle}>Permits & inspections</Text>
@@ -791,7 +791,7 @@ export default function GeneralContractorProjectDetail() {
                     activeOpacity={0.85}
                   >
                     <View style={styles.controlIcon}>
-                      <Icon name="cash-clock" size={20} color={Colors.accent} />
+                      <Icon name="cash" size={20} color={Colors.accent} />
                     </View>
                     <View style={styles.controlBody}>
                       <Text style={styles.controlTitle}>Payment requests</Text>
@@ -821,7 +821,7 @@ export default function GeneralContractorProjectDetail() {
                     activeOpacity={0.85}
                   >
                     <View style={styles.controlIcon}>
-                      <Icon name="account-hard-hat-outline" size={20} color={Colors.accent} />
+                      <Icon name="account-hard-hat" size={20} color={Colors.accent} />
                     </View>
                     <View style={styles.controlBody}>
                       <Text style={styles.controlTitle}>Trade management</Text>
@@ -1112,7 +1112,7 @@ export default function GeneralContractorProjectDetail() {
                   <View key={slot.id} style={styles.row}>
                     <View style={styles.rowIcon}>
                       <Icon
-                        name={slot.fulfillment_type === 'external' ? 'account-hard-hat-outline' : getCompanyName(slot) ? 'check-circle-outline' : 'circle-outline'}
+                        name={slot.fulfillment_type === 'external' ? 'account-hard-hat' : getCompanyName(slot) ? 'check-circle-outline' : 'circle-outline'}
                         size={18}
                         color={slot.fulfillment_type === 'external' ? Colors.warning : getCompanyName(slot) ? Colors.success : Colors.text.tertiary}
                       />

@@ -1291,6 +1291,20 @@ describe('general contractor account type', () => {
     expect(homeownerConcierge).toContain('disabled={!canApproveGcPaymentRequests}');
   });
 
+  it('uses supported icons for GC project controls', () => {
+    const gcProjectDetail = fs.readFileSync(
+      path.join(repoRoot, 'src/app/(general-contractor)/project/[id]/index.tsx'),
+      'utf8',
+    );
+
+    expect(gcProjectDetail).not.toContain('file-document-check-outline');
+    expect(gcProjectDetail).not.toContain('cash-clock');
+    expect(gcProjectDetail).not.toContain('account-hard-hat-outline');
+    expect(gcProjectDetail).toContain('file-check-outline');
+    expect(gcProjectDetail).toContain('cash');
+    expect(gcProjectDetail).toContain('account-hard-hat');
+  });
+
   it('lets GCs recommend material substitutions without bypassing homeowner approval', () => {
     const migration = fs.readFileSync(
       path.join(repoRoot, 'supabase/migrations/20260615000900_add_gc_material_recommendations.sql'),
