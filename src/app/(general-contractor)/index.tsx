@@ -283,7 +283,7 @@ export default function GeneralContractorDashboard() {
             <TradeEmptyState
               icon="briefcase-search-outline"
               title="No managed projects yet"
-              body="When a homeowner invites you or a project is assigned for concierge management, it will appear here."
+              body="When you create a homeowner draft, a homeowner invites you, or a project is assigned for concierge management, it will appear here."
             />
           ) : (
             <TradeSection title="Managed projects">

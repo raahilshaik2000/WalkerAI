@@ -622,6 +622,7 @@ describe('general contractor account type', () => {
     expect(dashboard).toContain("const dashboardStatus = assignment.status === 'invited'");
     expect(dashboard).toContain('label={formatStatusLabel(dashboardStatus)}');
     expect(dashboard).toContain('variant={projectStatusVariant(dashboardStatus)}');
+    expect(dashboard).toContain('When you create a homeowner draft, a homeowner invites you, or a project is assigned for concierge management, it will appear here.');
     expect(createProject).toContain("supabase.rpc('create_gc_managed_project'");
     expect(createProject).toContain('GC_PROJECT_TYPES.map');
     expect(enums).toContain("'flooring'");
