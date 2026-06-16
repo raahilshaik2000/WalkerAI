@@ -44,6 +44,7 @@ interface CurrentAssignment {
 
 interface ApprovalRequest {
   id: string;
+  requested_by_gc_id: string;
   request_type: string;
   title: string;
   description: string | null;
@@ -251,7 +252,7 @@ export default function ProjectConciergeScreen() {
         fetchDiscoverableGeneralContractors(projectId),
         supabase
           .from('project_approval_requests')
-          .select('id, request_type, title, description, cost_delta, timeline_delta_days, status, response_note, metadata')
+          .select('id, requested_by_gc_id, request_type, title, description, cost_delta, timeline_delta_days, status, response_note, metadata')
           .eq('project_id', projectId)
           .order('created_at', { ascending: false }),
         supabase
@@ -311,8 +312,13 @@ export default function ProjectConciergeScreen() {
   const assignedGc = getAssignedGc(currentAssignment);
   const assignedGcConciergeEligible = assignedGc?.verified === true && assignedGc.concierge_enabled === true;
   const assignedGcCanRequestConcierge = assignedGcConciergeEligible;
-  const canApproveGcPaymentRequests = currentAssignment?.status === 'active' && assignedGc?.verified === true;
-  const canApproveGcProjectRecommendations = currentAssignment?.status === 'active' && assignedGc?.verified === true;
+  const activeVerifiedGcId = currentAssignment?.status === 'active' && assignedGc?.verified === true ? assignedGc.id : null;
+  const canApproveGcPaymentRequest = (request: GcPaymentRequest) => (
+    request.general_contractor_id === activeVerifiedGcId
+  );
+  const canApproveGcProjectRecommendation = (request: ApprovalRequest) => (
+    request.requested_by_gc_id === activeVerifiedGcId
+  );
   const canConfirmGcManagement = currentAssignment?.status === 'invited'
     && currentAssignment.initiated_by_gc === true
     && assignedGc?.verified === true;
@@ -323,7 +329,7 @@ export default function ProjectConciergeScreen() {
       Alert.alert('Not allowed', 'Only the homeowner can respond to approval requests.');
       return;
     }
-    if (status === 'approved' && !canApproveGcProjectRecommendations) {
+    if (status === 'approved' && !canApproveGcProjectRecommendation(request)) {
       Alert.alert('Approval request locked', 'Active verified GC management is required before this recommendation can apply project changes.');
       return;
     }
@@ -412,7 +418,7 @@ export default function ProjectConciergeScreen() {
       Alert.alert('Not allowed', 'Only the homeowner can respond to payment requests.');
       return;
     }
-    if (status === 'approved' && !canApproveGcPaymentRequests) {
+    if (status === 'approved' && !canApproveGcPaymentRequest(request)) {
       Alert.alert('Payment request locked', 'Active verified GC management is required before a payment request can be approved.');
       return;
     }
@@ -937,6 +943,7 @@ export default function ProjectConciergeScreen() {
                 ) : paymentRequests.map((request) => {
                   const pending = request.status === 'pending';
                   const responding = respondingId === request.id;
+                  const paymentLocked = pending && !canApproveGcPaymentRequest(request);
                   return (
                     <View key={request.id} style={styles.approvalItem}>
                       <View style={styles.approvalHeader}>
@@ -958,7 +965,7 @@ export default function ProjectConciergeScreen() {
                       {request.description ? <Text style={styles.approvalDescription}>{request.description}</Text> : null}
                       {pending ? (
                         <>
-                          {!canApproveGcPaymentRequests ? (
+                          {paymentLocked ? (
                             <Text style={styles.emptySubText}>
                               Active verified GC management is required before this payment request can be approved.
                             </Text>
@@ -968,7 +975,7 @@ export default function ProjectConciergeScreen() {
                               label="Approve"
                               onPress={() => handlePaymentResponse(request, 'approved')}
                               loading={responding}
-                              disabled={!canApproveGcPaymentRequests}
+                              disabled={paymentLocked}
                               size="sm"
                               style={styles.approvalButton}
                             />
@@ -998,7 +1005,7 @@ export default function ProjectConciergeScreen() {
                 ) : approvalRequests.map((request) => {
                   const pending = request.status === 'pending';
                   const responding = respondingId === request.id;
-                  const approvalLocked = pending && !canApproveGcProjectRecommendations;
+                  const approvalLocked = pending && !canApproveGcProjectRecommendation(request);
                   return (
                     <View key={request.id} style={styles.approvalItem}>
                       <View style={styles.approvalHeader}>
