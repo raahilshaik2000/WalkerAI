@@ -102,6 +102,10 @@ describe('general contractor account type', () => {
       path.join(repoRoot, 'supabase/migrations/20260616010242_scope_company_docs_by_account_type.sql'),
       'utf8',
     );
+    const privateHelperMigration = fs.readFileSync(
+      path.join(repoRoot, 'supabase/migrations/20260616010729_move_company_docs_helper_private.sql'),
+      'utf8',
+    );
     const companyLicense = fs.readFileSync(
       path.join(repoRoot, 'src/app/(company)/onboarding/license.tsx'),
       'utf8',
@@ -131,6 +135,13 @@ describe('general contractor account type', () => {
     expect(migration).toContain("gcp.status = 'active'");
     expect(migration).toContain('public.can_access_company_doc_path(name)');
     expect(migration).toContain('GRANT EXECUTE ON FUNCTION public.can_access_company_doc_path(TEXT) TO authenticated');
+    expect(privateHelperMigration).toContain('CREATE SCHEMA IF NOT EXISTS private');
+    expect(privateHelperMigration).toContain('CREATE OR REPLACE FUNCTION private.can_access_company_doc_path');
+    expect(privateHelperMigration).toContain('SECURITY DEFINER');
+    expect(privateHelperMigration).toContain('private.can_access_company_doc_path(name)');
+    expect(privateHelperMigration).toContain('GRANT USAGE ON SCHEMA private TO authenticated');
+    expect(privateHelperMigration).toContain('GRANT EXECUTE ON FUNCTION private.can_access_company_doc_path(TEXT) TO authenticated');
+    expect(privateHelperMigration).toContain('DROP FUNCTION IF EXISTS public.can_access_company_doc_path(TEXT)');
     expect(companyLicense).toContain('const path = `${user.id}/license-${Date.now()}.${upload.extension}`');
     expect(supplierLicense).toContain('supplier-licenses/${user.id}/license');
     expect(gcLicense).toContain('general-contractors/${user.id}/license-');
