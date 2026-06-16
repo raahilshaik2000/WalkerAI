@@ -50,7 +50,12 @@ export function TradeMetricStrip({
     <View style={[styles.metricStrip, style]}>
       {items.map((item, index) => (
         <View key={item.label} style={[styles.metricItem, index > 0 && styles.metricDivider]}>
-          <Text style={[styles.metricValue, { color: toneColor[item.tone ?? 'default'] }]}>
+          <Text
+            style={[styles.metricValue, { color: toneColor[item.tone ?? 'default'] }]}
+            numberOfLines={1}
+            adjustsFontSizeToFit
+            minimumFontScale={0.7}
+          >
             {item.value}
           </Text>
           <Text style={styles.metricLabel}>{item.label}</Text>
@@ -157,6 +162,7 @@ const styles = StyleSheet.create({
   },
   metricItem: {
     flex: 1,
+    minWidth: 0,
     paddingVertical: 14,
     paddingHorizontal: 12,
   },
