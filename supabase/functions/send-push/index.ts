@@ -294,8 +294,8 @@ function buildNotificationContent(
       };
     case 'quote_approved':
       return {
-        title: 'Quote Approved — Project Active',
-        body: 'The homeowner approved your quote. The project is now active.',
+        title: 'Quote Funded',
+        body: 'The homeowner funded your quote. Funds are held in escrow until milestones are approved.',
         priority: 'high',
       };
     case 'milestone_needs_approval':

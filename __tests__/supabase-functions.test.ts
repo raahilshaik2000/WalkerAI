@@ -435,6 +435,10 @@ describe('send-push source guards', () => {
     expect(source).toContain("title: 'Quote Revision Requested'");
     expect(source).toContain("case 'gc_trade_negotiation_responded':");
     expect(source).toContain("title: 'Trade Responded'");
+    expect(source).toContain("case 'quote_approved':");
+    expect(source).toContain("title: 'Quote Funded'");
+    expect(source).toContain('Funds are held in escrow until milestones are approved.');
+    expect(source).not.toContain(`Quote Approved ${String.fromCharCode(0x2014)} Project Active`);
     expect(source).toMatch(
       /case 'order_delivered':[\s\S]*?case 'gc_approval_requested':[\s\S]*?case 'gc_trade_negotiation_responded':[\s\S]*?return 'milestone_updates';/
     );

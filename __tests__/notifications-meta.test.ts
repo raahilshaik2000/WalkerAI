@@ -16,6 +16,8 @@ describe('notification display metadata', () => {
     expect(notificationDisplayMeta('warranty_expiring').timelineLabel).toBe('Warranty expiring soon');
     expect(notificationDisplayMeta('dispute_raised').timelineLabel).toBe('Dispute opened on a milestone');
     expect(notificationDisplayMeta('order_shipped').title).toBe('Order shipped');
+    expect(notificationDisplayMeta('quote_approved').title).toBe('Quote funded');
+    expect(notificationDisplayMeta('quote_approved').timelineLabel).toBe('Quote funded in escrow');
     expect(notificationDisplayMeta('gc_approval_requested').title).toBe('GC approval needed');
     expect(notificationDisplayMeta('gc_management_invited').title).toBe('GC management approval needed');
     expect(notificationDisplayMeta('gc_management_invite_received').title).toBe('GC invite received');

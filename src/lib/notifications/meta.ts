@@ -44,10 +44,10 @@ const META: Record<string, NotificationDisplayMeta> = {
   },
   quote_approved: {
     emoji: '✅',
-    title: 'Quote approved',
+    title: 'Quote funded',
     timelineIcon: 'checkmark-circle-outline',
     color: '#34D399',
-    timelineLabel: 'Quote approved - project is active',
+    timelineLabel: 'Quote funded in escrow',
   },
   milestone_needs_approval: {
     emoji: '✅',
