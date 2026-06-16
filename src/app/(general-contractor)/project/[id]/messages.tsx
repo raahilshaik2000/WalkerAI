@@ -38,6 +38,7 @@ export default function GeneralContractorMessagesScreen() {
   const [messages, setMessages] = useState<Message[]>([]);
   const [body, setBody] = useState('');
   const [sending, setSending] = useState(false);
+  const [currentUserId, setCurrentUserId] = useState<string | null>(user?.id ?? null);
   const [canSendMessages, setCanSendMessages] = useState(false);
   const [composeLockMessage, setComposeLockMessage] = useState('Checking message access...');
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
@@ -57,12 +58,14 @@ export default function GeneralContractorMessagesScreen() {
       const currentUser = user ?? (await supabase.auth.getUser()).data.user;
       if (!currentUser?.id) {
         if (!cancelled) {
+          setCurrentUserId(null);
           setErrorMessage('You need to be signed in to view project messages.');
           setCanSendMessages(false);
           setComposeLockMessage('Sign in to send project messages.');
         }
         return;
       }
+      setCurrentUserId(currentUser.id);
 
       const [messageResult, gcResult] = await Promise.all([
         supabase
@@ -212,7 +215,7 @@ export default function GeneralContractorMessagesScreen() {
               </View>
             }
             renderItem={({ item }) => {
-              const isMe = item.sender_id === user?.id;
+              const isMe = item.sender_id === currentUserId;
               return (
                 <View style={isMe ? styles.bubbleWrapMe : styles.bubbleWrapThem}>
                   <View style={[styles.bubble, isMe ? styles.bubbleMe : styles.bubbleThem]}>

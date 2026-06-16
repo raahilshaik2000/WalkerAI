@@ -1259,6 +1259,9 @@ describe('general contractor account type', () => {
     expect(gcProjectDetail).toContain("navigation.navigate('GeneralContractorMessages'");
     expect(gcMessages).toContain("from('messages').insert");
     expect(gcMessages).toContain("channel(`gc-messages:${projectId}`)");
+    expect(gcMessages).toContain('const [currentUserId, setCurrentUserId] = useState<string | null>(user?.id ?? null)');
+    expect(gcMessages).toContain('setCurrentUserId(currentUser.id)');
+    expect(gcMessages).toContain('const isMe = item.sender_id === currentUserId');
     expect(gcMessages).toContain(".select('id, verified')");
     expect(gcMessages).toContain('WalkerAI verification is required before GC project messages can be sent.');
     expect(gcMessages).toContain("placeholder={canSendMessages ? 'Type a message...' : 'Messages locked'}");
