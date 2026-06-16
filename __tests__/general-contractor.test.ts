@@ -575,6 +575,10 @@ describe('general contractor account type', () => {
       path.join(repoRoot, 'supabase/migrations/20260615231628_restrict_gc_approval_status_transitions.sql'),
       'utf8',
     );
+    const removedRequestSurfaceMigration = fs.readFileSync(
+      path.join(repoRoot, 'supabase/migrations/20260616033000_hide_removed_gc_request_surfaces.sql'),
+      'utf8',
+    );
 
     expect(migration).toContain('CREATE OR REPLACE FUNCTION public.guard_gc_approval_request_updates()');
     expect(migration).toContain("IF NEW.status IN ('approved', 'rejected') THEN");
@@ -585,6 +589,10 @@ describe('general contractor account type', () => {
     expect(migration).toContain('Approval request status cannot be reset to pending');
     expect(migration).toContain('Approval request responses must include a response timestamp');
     expect(migration).toContain('guard_gc_approval_request_updates_trigger');
+    expect(removedRequestSurfaceMigration).toContain('DROP POLICY IF EXISTS "approval_requests_select_participants"');
+    expect(removedRequestSurfaceMigration).toContain('DROP POLICY IF EXISTS "approval_requests_gc_cancel"');
+    expect(removedRequestSurfaceMigration).toMatch(/project_approval_requests[\s\S]*gcp\.status IN \('active', 'completed'\)/);
+    expect(removedRequestSurfaceMigration).toMatch(/project_approval_requests[\s\S]*gcp\.status = 'active'/);
   });
 
   it('keeps GC payment and trade negotiation request terms immutable after submission', () => {
@@ -614,6 +622,10 @@ describe('general contractor account type', () => {
       path.join(repoRoot, 'supabase/migrations/20260615234901_restrict_gc_payment_trade_status_transitions.sql'),
       'utf8',
     );
+    const removedRequestSurfaceMigration = fs.readFileSync(
+      path.join(repoRoot, 'supabase/migrations/20260616033000_hide_removed_gc_request_surfaces.sql'),
+      'utf8',
+    );
     const paymentApprovalMigration = fs.readFileSync(
       path.join(repoRoot, 'supabase/migrations/20260616000856_require_verified_gc_payment_approval.sql'),
       'utf8',
@@ -637,6 +649,10 @@ describe('general contractor account type', () => {
     expect(paymentApprovalMigration).toContain("gcp.status = 'active'");
     expect(paymentApprovalMigration).toContain('gc.verified IS TRUE');
     expect(paymentApprovalMigration).toContain('Active verified GC management is required before approving a GC payment request');
+    expect(removedRequestSurfaceMigration).toContain('DROP POLICY IF EXISTS "gc_payment_requests_select_participants"');
+    expect(removedRequestSurfaceMigration).toContain('DROP POLICY IF EXISTS "gc_payment_requests_gc_cancel"');
+    expect(removedRequestSurfaceMigration).toMatch(/gc_payment_requests[\s\S]*gcp\.status IN \('active', 'completed'\)/);
+    expect(removedRequestSurfaceMigration).toMatch(/gc_payment_requests[\s\S]*gcp\.status = 'active'/);
 
     expect(migration).toContain('CREATE OR REPLACE FUNCTION public.guard_gc_trade_negotiation_updates()');
     expect(migration).toContain("IF NEW.status IN ('accepted', 'rejected', 'revision_requested') THEN");
@@ -648,6 +664,11 @@ describe('general contractor account type', () => {
     expect(tradeAcceptanceMigration).toContain('CREATE OR REPLACE FUNCTION public.guard_gc_trade_negotiation_updates()');
     expect(tradeAcceptanceMigration).toContain("NEW.status = 'accepted'");
     expect(tradeAcceptanceMigration).toContain('JOIN public.general_contractors gc ON gc.id = gcp.general_contractor_id');
+    expect(removedRequestSurfaceMigration).toContain('DROP POLICY IF EXISTS "gc_trade_negotiations_select_participants"');
+    expect(removedRequestSurfaceMigration).toContain('DROP POLICY IF EXISTS "gc_trade_negotiations_gc_cancel"');
+    expect(removedRequestSurfaceMigration).toMatch(/gc_trade_quote_negotiations[\s\S]*gcp\.status IN \('active', 'completed'\)/);
+    expect(removedRequestSurfaceMigration).toMatch(/gc_trade_quote_negotiations[\s\S]*gcp\.status = 'active'/);
+    expect(removedRequestSurfaceMigration).toContain('FROM public.companies c');
     expect(tradeAcceptanceMigration).toContain("gcp.status = 'active'");
     expect(tradeAcceptanceMigration).toContain('gc.verified IS TRUE');
     expect(tradeAcceptanceMigration).toContain('Active verified GC management is required before accepting a GC trade negotiation');
