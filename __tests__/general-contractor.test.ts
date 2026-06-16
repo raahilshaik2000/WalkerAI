@@ -1409,13 +1409,18 @@ describe('general contractor account type', () => {
       'utf8',
     );
 
-    expect(homeownerConcierge).toContain('const assignedGcConciergeEligible = assignedGc?.verified === true && assignedGc.concierge_enabled === true');
+    expect(homeownerConcierge).toContain('function getBookingGc(row: ConciergeBookingWithGc)');
+    expect(homeownerConcierge).toContain('function isBookingGcConciergeEligible(row: ConciergeBookingWithGc)');
+    expect(homeownerConcierge).toContain('general_contractor:general_contractors ( id, business_name, concierge_enabled, verified )');
+    expect(homeownerConcierge).toContain('bookingRequests.length > 0 ? renderConciergeBookingsSection() : null');
     expect(homeownerConcierge).toContain("Alert.alert('Payment locked'");
     expect(homeownerConcierge).toContain("Alert.alert('Payout locked'");
     expect(homeownerConcierge).toContain('WalkerAI verification and concierge marketplace access are required before this concierge booking can be paid.');
     expect(homeownerConcierge).toContain('WalkerAI verification and concierge marketplace access are required before this concierge payout can be released.');
-    expect(homeownerConcierge).toContain('disabled={!assignedGcConciergeEligible || !!payingBookingId}');
-    expect(homeownerConcierge).toContain('disabled={!assignedGcConciergeEligible || !!releasingBookingId}');
+    expect(homeownerConcierge).toContain('disabled={!bookingGcEligible || !!payingBookingId}');
+    expect(homeownerConcierge).toContain('disabled={!bookingGcEligible || !!releasingBookingId}');
+    expect(homeownerConcierge).toContain('GC: {bookingGc.business_name}');
+    expect(homeownerConcierge).toContain('if (!isBookingGcConciergeEligible(booking))');
     expect(paymentFunction).toContain('gc.verified !== true || gc.concierge_enabled !== true');
     expect(paymentFunction).toContain('Concierge booking is no longer available for payment');
     expect(payoutFunction).toContain('gc.verified !== true || gc.concierge_enabled !== true');

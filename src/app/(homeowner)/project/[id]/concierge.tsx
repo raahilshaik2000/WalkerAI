@@ -26,6 +26,10 @@ import { Colors, Spacing, Typography } from '@/constants/theme';
 import { GlassButton, GlassCard, GradientBackground, StatusBadge } from '@/components/ui';
 
 type AssignedGeneralContractor = Pick<GeneralContractor, 'id' | 'business_name' | 'city' | 'province' | 'rating' | 'total_reviews' | 'concierge_enabled' | 'verified'>;
+type BookingGeneralContractor = Pick<GeneralContractor, 'id' | 'business_name' | 'concierge_enabled' | 'verified'>;
+type ConciergeBookingWithGc = GcConciergeBooking & {
+  general_contractor?: BookingGeneralContractor | BookingGeneralContractor[] | null;
+};
 
 interface CurrentAssignment {
   id: string;
@@ -65,6 +69,17 @@ function getAssignedGc(row: CurrentAssignment | null) {
   return Array.isArray(row.general_contractor)
     ? row.general_contractor[0] ?? null
     : row.general_contractor ?? null;
+}
+
+function getBookingGc(row: ConciergeBookingWithGc) {
+  return Array.isArray(row.general_contractor)
+    ? row.general_contractor[0] ?? null
+    : row.general_contractor ?? null;
+}
+
+function isBookingGcConciergeEligible(row: ConciergeBookingWithGc) {
+  const gc = getBookingGc(row);
+  return gc?.verified === true && gc.concierge_enabled === true;
 }
 
 function isMissingGcDiscoveryRpcError(error: { message?: string; details?: string } | null | undefined) {
@@ -185,7 +200,7 @@ export default function ProjectConciergeScreen() {
   const [generalContractors, setGeneralContractors] = useState<DiscoverableGeneralContractor[]>([]);
   const [approvalRequests, setApprovalRequests] = useState<ApprovalRequest[]>([]);
   const [paymentRequests, setPaymentRequests] = useState<GcPaymentRequest[]>([]);
-  const [bookingRequests, setBookingRequests] = useState<GcConciergeBooking[]>([]);
+  const [bookingRequests, setBookingRequests] = useState<ConciergeBookingWithGc[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [invitingId, setInvitingId] = useState<string | null>(null);
@@ -243,7 +258,13 @@ export default function ProjectConciergeScreen() {
           .order('created_at', { ascending: false }),
         supabase
           .from('gc_concierge_bookings')
-          .select('id, project_id, general_contractor_id, homeowner_id, service_kind, title, duration_minutes, price_cents, contractor_payout_cents, walker_fee_cents, status, payment_status, stripe_payment_intent_id, stripe_transfer_id, paid_at, payout_released_at, response_note, created_at, responded_at')
+          .select(`
+            id, project_id, general_contractor_id, homeowner_id, service_kind, title, duration_minutes,
+            price_cents, contractor_payout_cents, walker_fee_cents, status, payment_status,
+            stripe_payment_intent_id, stripe_transfer_id, paid_at, payout_released_at,
+            response_note, created_at, responded_at,
+            general_contractor:general_contractors ( id, business_name, concierge_enabled, verified )
+          `)
           .eq('project_id', projectId)
           .order('created_at', { ascending: false }),
       ]);
@@ -259,7 +280,7 @@ export default function ProjectConciergeScreen() {
       setGeneralContractors(gcList);
       setApprovalRequests((approvalResult.data ?? []) as ApprovalRequest[]);
       setPaymentRequests((paymentResult.data ?? []) as GcPaymentRequest[]);
-      setBookingRequests((bookingResult.data ?? []) as GcConciergeBooking[]);
+      setBookingRequests((bookingResult.data ?? []) as ConciergeBookingWithGc[]);
     } catch (err) {
       setErrorMessage(err instanceof Error ? err.message : 'Could not load concierge options.');
       setCurrentAssignment(null);
@@ -326,7 +347,7 @@ export default function ProjectConciergeScreen() {
     );
   };
 
-  const handleReleaseBookingPayout = async (booking: GcConciergeBooking) => {
+  const handleReleaseBookingPayout = async (booking: ConciergeBookingWithGc) => {
     const currentUser = user ?? (await supabase.auth.getUser()).data.user;
     if (!currentUser?.id || projectHomeownerId !== currentUser.id) {
       Alert.alert('Not allowed', 'Only the homeowner can release concierge payouts.');
@@ -344,7 +365,7 @@ export default function ProjectConciergeScreen() {
       Alert.alert('Payment required', 'Pay the concierge booking before releasing the GC payout.');
       return;
     }
-    if (!assignedGcConciergeEligible) {
+    if (!isBookingGcConciergeEligible(booking)) {
       Alert.alert('Payout locked', 'WalkerAI verification and concierge marketplace access are required before this GC can receive concierge payouts.');
       return;
     }
@@ -503,7 +524,7 @@ export default function ProjectConciergeScreen() {
     );
   };
 
-  const handlePayBooking = async (booking: GcConciergeBooking) => {
+  const handlePayBooking = async (booking: ConciergeBookingWithGc) => {
     const currentUser = user ?? (await supabase.auth.getUser()).data.user;
     if (!currentUser?.id || projectHomeownerId !== currentUser.id) {
       Alert.alert('Not allowed', 'Only the homeowner can pay concierge bookings.');
@@ -517,7 +538,7 @@ export default function ProjectConciergeScreen() {
       Alert.alert('Already paid', 'This concierge booking has already been paid.');
       return;
     }
-    if (!assignedGcConciergeEligible) {
+    if (!isBookingGcConciergeEligible(booking)) {
       Alert.alert('Payment locked', 'WalkerAI verification and concierge marketplace access are required before this concierge booking can be paid.');
       return;
     }
@@ -631,6 +652,90 @@ export default function ProjectConciergeScreen() {
       ],
     );
   };
+
+  const renderConciergeBookingCard = (booking: ConciergeBookingWithGc) => {
+    const bookingGc = getBookingGc(booking);
+    const bookingGcEligible = isBookingGcConciergeEligible(booking);
+
+    return (
+      <View key={booking.id} style={styles.approvalItem}>
+        <View style={styles.approvalHeader}>
+          <View style={styles.approvalIcon}>
+            <Icon
+              name={booking.status === 'accepted' ? 'calendar-check-outline' : booking.status === 'rejected' ? 'calendar-remove-outline' : 'calendar-clock-outline'}
+              size={18}
+              color={booking.status === 'accepted' ? Colors.success : booking.status === 'rejected' ? Colors.error : Colors.warning}
+            />
+          </View>
+          <View style={styles.approvalBody}>
+            <Text style={styles.approvalTitle}>{booking.title}</Text>
+            <Text style={styles.approvalMeta}>
+              {formatCadCents(booking.price_cents)} · GC {formatCadCents(booking.contractor_payout_cents)} · WalkerAI {formatCadCents(booking.walker_fee_cents)}
+            </Text>
+            {bookingGc?.business_name ? (
+              <Text style={styles.approvalMeta}>GC: {bookingGc.business_name}</Text>
+            ) : null}
+            <Text style={styles.approvalMeta}>
+              Payment: {formatStatusLabel(booking.payment_status ?? 'unpaid')}
+            </Text>
+          </View>
+          <StatusBadge label={formatStatusLabel(booking.status)} variant={['accepted', 'completed'].includes(booking.status) ? 'completed' : booking.status === 'rejected' ? 'error' : 'pending'} size="sm" />
+        </View>
+        {booking.status === 'accepted' && booking.payment_status !== 'paid' ? (
+          <>
+            {!bookingGcEligible ? (
+              <Text style={styles.emptySubText}>
+                WalkerAI verification and concierge marketplace access are required before this concierge booking can be paid.
+              </Text>
+            ) : null}
+            <GlassButton
+              label={booking.payment_status === 'payment_pending' ? 'Continue Payment' : 'Pay Booking'}
+              onPress={() => handlePayBooking(booking)}
+              loading={payingBookingId === booking.id}
+              disabled={!bookingGcEligible || !!payingBookingId}
+              fullWidth
+              size="sm"
+              style={styles.inviteButton}
+            />
+          </>
+        ) : booking.payment_status === 'paid' && booking.status === 'accepted' ? (
+          <>
+            <Text style={styles.paidText}>Paid{booking.paid_at ? ` · ${new Date(booking.paid_at).toLocaleDateString('en-CA')}` : ''}</Text>
+            {!bookingGcEligible ? (
+              <Text style={styles.emptySubText}>
+                WalkerAI verification and concierge marketplace access are required before this concierge payout can be released.
+              </Text>
+            ) : null}
+            <GlassButton
+              label="Confirm Complete & Release Payout"
+              onPress={() => handleReleaseBookingPayout(booking)}
+              loading={releasingBookingId === booking.id}
+              disabled={!bookingGcEligible || !!releasingBookingId}
+              fullWidth
+              size="sm"
+              style={styles.inviteButton}
+            />
+          </>
+        ) : booking.status === 'completed' && booking.stripe_transfer_id ? (
+          <Text style={styles.paidText}>
+            Payout released{booking.payout_released_at ? ` · ${new Date(booking.payout_released_at).toLocaleDateString('en-CA')}` : ''}
+          </Text>
+        ) : null}
+      </View>
+    );
+  };
+
+  const renderConciergeBookingsSection = () => (
+    <GlassCard style={styles.card}>
+      <Text style={styles.sectionTitle}>Concierge service requests</Text>
+      <Text style={styles.bodyText}>
+        Virtual consults and site visits use fixed marketplace pricing. Contractor payout is 80%; WalkerAI keeps 20%.
+      </Text>
+      {bookingRequests.length === 0 ? (
+        <Text style={styles.emptySubText}>No concierge consultation requests yet.</Text>
+      ) : bookingRequests.map(renderConciergeBookingCard)}
+    </GlassCard>
+  );
 
   return (
     <GradientBackground glow="top-right">
@@ -757,7 +862,7 @@ export default function ProjectConciergeScreen() {
                     </View>
                     {booking.status === 'accepted' && booking.payment_status !== 'paid' ? (
                       <>
-                        {!assignedGcConciergeEligible ? (
+                        {!isBookingGcConciergeEligible(booking) ? (
                           <Text style={styles.emptySubText}>
                             WalkerAI verification and concierge marketplace access are required before this concierge booking can be paid.
                           </Text>
@@ -766,7 +871,7 @@ export default function ProjectConciergeScreen() {
                           label={booking.payment_status === 'payment_pending' ? 'Continue Payment' : 'Pay Booking'}
                           onPress={() => handlePayBooking(booking)}
                           loading={payingBookingId === booking.id}
-                          disabled={!assignedGcConciergeEligible || !!payingBookingId}
+                          disabled={!isBookingGcConciergeEligible(booking) || !!payingBookingId}
                           fullWidth
                           size="sm"
                           style={styles.inviteButton}
@@ -775,7 +880,7 @@ export default function ProjectConciergeScreen() {
                     ) : booking.payment_status === 'paid' && booking.status === 'accepted' ? (
                       <>
                         <Text style={styles.paidText}>Paid{booking.paid_at ? ` · ${new Date(booking.paid_at).toLocaleDateString('en-CA')}` : ''}</Text>
-                        {!assignedGcConciergeEligible ? (
+                        {!isBookingGcConciergeEligible(booking) ? (
                           <Text style={styles.emptySubText}>
                             WalkerAI verification and concierge marketplace access are required before this concierge payout can be released.
                           </Text>
@@ -784,7 +889,7 @@ export default function ProjectConciergeScreen() {
                           label="Confirm Complete & Release Payout"
                           onPress={() => handleReleaseBookingPayout(booking)}
                           loading={releasingBookingId === booking.id}
-                          disabled={!assignedGcConciergeEligible || !!releasingBookingId}
+                          disabled={!isBookingGcConciergeEligible(booking) || !!releasingBookingId}
                           fullWidth
                           size="sm"
                           style={styles.inviteButton}
@@ -937,15 +1042,18 @@ export default function ProjectConciergeScreen() {
                 })}
               </GlassCard>
             </>
-          ) : generalContractors.length === 0 ? (
-            <GlassCard style={styles.card}>
-              <Text style={styles.sectionTitle}>No verified GCs yet</Text>
-              <Text style={styles.bodyText}>
-                Verified GC accounts will appear here once they complete review.
-              </Text>
-            </GlassCard>
           ) : (
-            generalContractors.map((gc) => (
+            <>
+              {bookingRequests.length > 0 ? renderConciergeBookingsSection() : null}
+              {generalContractors.length === 0 ? (
+                <GlassCard style={styles.card}>
+                  <Text style={styles.sectionTitle}>No verified GCs yet</Text>
+                  <Text style={styles.bodyText}>
+                    Verified GC accounts will appear here once they complete review.
+                  </Text>
+                </GlassCard>
+              ) : (
+                generalContractors.map((gc) => (
               <GlassCard key={gc.id} style={styles.card}>
                 <View style={styles.gcHeader}>
                   <View style={styles.avatar}>
@@ -990,7 +1098,9 @@ export default function ProjectConciergeScreen() {
                   style={styles.inviteButton}
                 />
               </GlassCard>
-            ))
+                ))
+              )}
+            </>
           )}
         </ScrollView>
       </SafeAreaView>
