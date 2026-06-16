@@ -295,6 +295,10 @@ export default function GeneralContractorTradesScreen() {
       Alert.alert('No open slots', 'Every WalkerAI trade slot is already assigned, externally managed, or scheduled.');
       return;
     }
+    if (!projectBudgetReady) {
+      Alert.alert('Budget required', 'Generate or approve the project budget before WalkerAI can dispatch open trade slots.');
+      return;
+    }
 
     setDispatchingTrades(true);
     try {
@@ -590,15 +594,21 @@ export default function GeneralContractorTradesScreen() {
                   <Text style={styles.bodyText}>
                     Dispatch open WalkerAI slots to matching verified companies. Homeowner approval is still required for scope, payment, and later substitutions.
                   </Text>
-                  <GlassButton
-                    label={`Dispatch ${dispatchableSlotCount} Open Slot${dispatchableSlotCount === 1 ? '' : 's'}`}
-                    onPress={handleDispatchTrades}
-                    loading={dispatchingTrades}
-                    disabled={dispatchingTrades}
-                    fullWidth
-                    size="sm"
-                    style={styles.actionButton}
-                  />
+                  {projectBudgetReady ? (
+                    <GlassButton
+                      label={`Dispatch ${dispatchableSlotCount} Open Slot${dispatchableSlotCount === 1 ? '' : 's'}`}
+                      onPress={handleDispatchTrades}
+                      loading={dispatchingTrades}
+                      disabled={dispatchingTrades}
+                      fullWidth
+                      size="sm"
+                      style={styles.actionButton}
+                    />
+                  ) : (
+                    <Text style={styles.emptyHint}>
+                      Generate or approve the project budget before WalkerAI can dispatch open trade slots.
+                    </Text>
+                  )}
                 </GlassCard>
               ) : null}
 

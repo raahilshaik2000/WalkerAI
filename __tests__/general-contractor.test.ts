@@ -1571,6 +1571,9 @@ describe('general contractor account type', () => {
     expect(gcTrades).toContain("supabase.functions.invoke<DispatchResult>('dispatch-slots'");
     expect(gcTrades).toContain('WalkerAI trade marketplace');
     expect(gcTrades).toContain('Dispatch ${dispatchableSlotCount} Open Slot');
+    expect(gcTrades).toContain("Alert.alert('Budget required', 'Generate or approve the project budget before WalkerAI can dispatch open trade slots.');");
+    expect(gcTrades).toContain('projectBudgetReady ? (');
+    expect(gcTrades).toContain('Generate or approve the project budget before WalkerAI can dispatch open trade slots.');
     expect(gcTrades).toContain('The homeowner must confirm GC management before you can dispatch WalkerAI trades.');
     expect(gcTrades).toContain("request_type: 'trade_substitution'");
     expect(gcTrades).toContain('No trade assignment changes until the homeowner approves');
