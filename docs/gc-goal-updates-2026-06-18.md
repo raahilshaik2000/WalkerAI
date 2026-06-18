@@ -467,6 +467,7 @@ Runtime fixes made from this pass:
 - Homeowner and company milestone/payment workflows now use app-safe copy for milestone load, dispute, update, upload, and release failures; shared Supabase error formatting also hides database policy/schema/internal wording behind polished fallback copy.
 - Homeowner quote funding now uses app-safe copy for project, quote, and quote-line-item load failures before Stripe payment starts, while keeping the existing PaymentSheet and escrow funding flow intact.
 - Homeowner message list, homeowner project chat, and company job chat now use app-safe copy for message participant, message load, and message-send failures, matching the already-safe GC project chat behavior.
+- Company/trade earnings and profile screens now use app-safe copy for company profile, accepted-project, paid-milestone, and earnings load failures while keeping commission-derived payout math hidden from the app UI.
 
 Runtime findings still not treated as complete:
 
@@ -506,6 +507,13 @@ Latest validation after homeowner quote funding error-copy hardening:
 Latest validation after project message error-copy hardening:
 
 - `npm test -- --runInBand __tests__/messages.test.ts __tests__/dashboard-data.test.ts __tests__/general-contractor.test.ts`
+- `npx tsc --noEmit`
+- `npm test -- --runInBand`
+- `git diff --check`
+
+Latest validation after company earnings/profile error-copy hardening:
+
+- `npm test -- --runInBand __tests__/company-profile-services.test.ts __tests__/company-payouts.test.ts __tests__/general-contractor.test.ts`
 - `npx tsc --noEmit`
 - `npm test -- --runInBand`
 - `git diff --check`

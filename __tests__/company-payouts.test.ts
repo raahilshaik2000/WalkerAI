@@ -60,4 +60,17 @@ describe('company payout math', () => {
       expect(source).not.toContain('Net earned');
     });
   });
+
+  it('uses app-safe copy for company earnings load failures', () => {
+    const earningsSource = fs.readFileSync(
+      path.join(__dirname, '../src/app/(company)/earnings.tsx'),
+      'utf8',
+    );
+
+    expect(earningsSource).toContain("import { formatAppSafeErrorMessage } from '@/lib/supabase/functions';");
+    expect(earningsSource).toContain("setErrorMessage(formatAppSafeErrorMessage(companyError, 'Could not load earnings.'))");
+    expect(earningsSource).toContain("setErrorMessage(formatAppSafeErrorMessage(error, 'Could not load earnings.'))");
+    expect(earningsSource).not.toContain('setErrorMessage(companyError.message)');
+    expect(earningsSource).not.toContain('setErrorMessage(error.message)');
+  });
 });

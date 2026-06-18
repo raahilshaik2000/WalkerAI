@@ -14,7 +14,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { useFocusEffect, useNavigation } from '@react-navigation/native';
 import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
 import { supabase } from '@/lib/supabase/client';
-import { formatSupabaseFunctionError } from '@/lib/supabase/functions';
+import { formatAppSafeErrorMessage, formatSupabaseFunctionError } from '@/lib/supabase/functions';
 import { isStripePayoutLocallyReady } from '@/lib/payouts';
 import { useAuthStore } from '@/stores/auth.store';
 import { Colors, Spacing, Typography } from '@/constants/theme';
@@ -155,7 +155,7 @@ export default function CompanyProfileScreen() {
     } catch (companyError) {
       setCompany(null);
       setEarnings({ total_paid: 0, active_count: 0, completed_count: 0 });
-      setErrorMessage(companyError instanceof Error ? companyError.message : 'Could not load company profile.');
+      setErrorMessage(formatAppSafeErrorMessage(companyError, 'Could not load company profile.'));
       setLoading(false);
       setRefreshing(false);
       return;
@@ -173,7 +173,7 @@ export default function CompanyProfileScreen() {
         .eq('assigned_company_id', co.id)
         .in('status', ['accepted', 'quoting', 'scheduling', 'active', 'completed']);
       if (legacyProjectsError) {
-        setErrorMessage(legacyProjectsError.message);
+        setErrorMessage(formatAppSafeErrorMessage(legacyProjectsError, 'Could not load company projects.'));
         setLoading(false);
         setRefreshing(false);
         return;
@@ -190,7 +190,7 @@ export default function CompanyProfileScreen() {
         .eq('assigned_company_id', co.id)
         .in('status', ['filled', 'scheduled']);
       if (slotProjectsError) {
-        setErrorMessage(slotProjectsError.message);
+        setErrorMessage(formatAppSafeErrorMessage(slotProjectsError, 'Could not load company projects.'));
         setLoading(false);
         setRefreshing(false);
         return;
@@ -212,7 +212,7 @@ export default function CompanyProfileScreen() {
         .eq('status', 'paid')
         .eq('quotes.company_id', co.id);
       if (milestonesError) {
-        setErrorMessage(milestonesError.message);
+        setErrorMessage(formatAppSafeErrorMessage(milestonesError, 'Could not load company earnings.'));
         setLoading(false);
         setRefreshing(false);
         return;

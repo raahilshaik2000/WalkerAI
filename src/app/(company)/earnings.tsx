@@ -11,6 +11,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { useNavigation } from '@react-navigation/native';
 import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
 import { supabase } from '@/lib/supabase/client';
+import { formatAppSafeErrorMessage } from '@/lib/supabase/functions';
 import { useAuthStore } from '@/stores/auth.store';
 import { formatCad } from '@/lib/formatters';
 import { Colors, Spacing, Typography } from '@/constants/theme';
@@ -56,7 +57,7 @@ export default function EarningsScreen() {
     if (companyError) {
       setMilestones([]);
       setHasCompanyProfile(false);
-      setErrorMessage(companyError.message);
+      setErrorMessage(formatAppSafeErrorMessage(companyError, 'Could not load earnings.'));
       setLoading(false);
       setRefreshing(false);
       return;
@@ -82,7 +83,7 @@ export default function EarningsScreen() {
       .order('completed_at', { ascending: false });
     if (error) {
       setMilestones([]);
-      setErrorMessage(error.message);
+      setErrorMessage(formatAppSafeErrorMessage(error, 'Could not load earnings.'));
       setLoading(false);
       setRefreshing(false);
       return;
