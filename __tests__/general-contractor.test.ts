@@ -279,6 +279,10 @@ describe('general contractor account type', () => {
       path.join(repoRoot, 'supabase/migrations/20260618023501_require_complete_gc_profile_for_homeowner_invites.sql'),
       'utf8',
     );
+    const completeSelectPolicyMigration = fs.readFileSync(
+      path.join(repoRoot, 'supabase/migrations/20260618023752_restrict_gc_marketplace_select_to_complete_profiles.sql'),
+      'utf8',
+    );
 
     expect(projectDetail).toContain("label: 'Concierge'");
     expect(projectDetail).toContain("screen: 'Concierge'");
@@ -298,6 +302,8 @@ describe('general contractor account type', () => {
     expect(discoveryExecuteMigration).toContain('GRANT EXECUTE ON FUNCTION public.general_contractors_for_project(UUID) TO authenticated');
     expect(conciergeScreen).toContain("supabase.rpc('general_contractors_for_project'");
     expect(conciergeScreen).toContain('fetchDiscoverableGeneralContractors(projectId)');
+    expect(conciergeScreen).toContain('function hasCompleteGcMarketplaceProfile');
+    expect(conciergeScreen).toContain('.filter(hasCompleteGcMarketplaceProfile)');
     expect(conciergeScreen).toContain('formatGcDistance(gc)');
     expect(conciergeScreen).toContain("supabase.rpc('invite_gc_to_project'");
     expect(conciergeScreen).toContain('p_project_id: projectId');
@@ -328,6 +334,14 @@ describe('general contractor account type', () => {
     expect(completeInviteMigration).toContain('Only verified General Contractors with complete business, license, and insurance setup can be invited');
     expect(completeInviteMigration).toContain('GRANT EXECUTE ON FUNCTION public.general_contractors_for_project(UUID) TO authenticated');
     expect(completeInviteMigration).toContain('GRANT EXECUTE ON FUNCTION public.invite_gc_to_project(UUID, UUID) TO authenticated');
+    expect(completeSelectPolicyMigration).toContain('DROP POLICY IF EXISTS "general_contractors_select_own_or_verified"');
+    expect(completeSelectPolicyMigration).toContain("u.role = 'general_contractor'");
+    expect(completeSelectPolicyMigration).toContain('AND verified = TRUE');
+    expect(completeSelectPolicyMigration).toContain('AND trim(COALESCE(license_number');
+    expect(completeSelectPolicyMigration).toContain('AND trim(COALESCE(license_doc_url');
+    expect(completeSelectPolicyMigration).toContain('AND trim(COALESCE(insurance_doc_url');
+    expect(completeSelectPolicyMigration).toContain('REVOKE SELECT ON public.general_contractors FROM anon');
+    expect(completeSelectPolicyMigration).toContain('GRANT SELECT ON public.general_contractors TO authenticated');
   });
 
   it('lets invited GCs activate their project management assignment', () => {

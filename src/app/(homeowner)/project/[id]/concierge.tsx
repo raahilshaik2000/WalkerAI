@@ -90,6 +90,18 @@ function isMissingGcDiscoveryRpcError(error: { message?: string; details?: strin
     || text.includes('schema cache');
 }
 
+function hasCompleteGcMarketplaceProfile(gc: DiscoverableGeneralContractor) {
+  return gc.verified === true
+    && !!gc.business_name?.trim()
+    && !!gc.city?.trim()
+    && !!gc.province?.trim()
+    && typeof gc.lat === 'number'
+    && typeof gc.lng === 'number'
+    && !!gc.license_number?.trim()
+    && !!gc.license_doc_url?.trim()
+    && !!gc.insurance_doc_url?.trim();
+}
+
 async function fetchDiscoverableGeneralContractors(projectId: string): Promise<DiscoverableGeneralContractor[]> {
   const { data, error } = await supabase.rpc('general_contractors_for_project', {
     p_project_id: projectId,
@@ -107,7 +119,7 @@ async function fetchDiscoverableGeneralContractors(projectId: string): Promise<D
     .order('rating', { ascending: false, nullsFirst: false })
     .order('created_at', { ascending: false });
   if (fallback.error) throw fallback.error;
-  return (fallback.data ?? []) as DiscoverableGeneralContractor[];
+  return ((fallback.data ?? []) as DiscoverableGeneralContractor[]).filter(hasCompleteGcMarketplaceProfile);
 }
 
 function formatGcDistance(gc: DiscoverableGeneralContractor): string | null {
