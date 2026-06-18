@@ -454,6 +454,7 @@ Runtime fixes made from this pass:
 - GC accept/reject responses for concierge service bookings now support optional response notes, and those notes are visible in the homeowner concierge request history.
 - GC-created project setup now uses stable existing-homeowner-account guidance and formats the missing-homeowner RPC error into actionable app copy instead of exposing backend wording.
 - GC trade dispatch no-match responses now pass backend-provided messages through the app-safe formatter before showing them in the GC trade screen.
+- Homeowner project dispatch restart messages now use app-safe formatting in both project detail variants, so contractor-search recovery does not expose raw function wording.
 
 Runtime findings still not treated as complete:
 

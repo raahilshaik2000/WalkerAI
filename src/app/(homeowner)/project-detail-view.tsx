@@ -20,6 +20,7 @@ import LinearGradient from 'react-native-linear-gradient';
 import { AnimatedPressable, GlassButton, GlassCard, GradientBackground } from '@/components/ui';
 import { Colors, Radius } from '@/constants/theme';
 import { supabase } from '@/lib/supabase/client';
+import { formatAppSafeErrorMessage } from '@/lib/supabase/functions';
 import { restartProjectDispatch } from '@/lib/project-dispatch';
 import { buildProjectShareMessage } from '@/lib/project-share';
 import { formatGcProjectType } from '@/lib/gc-project-type';
@@ -253,13 +254,13 @@ export default function ProjectDetailViewScreen() {
     try {
       const data = await restartProjectDispatch(project.id, 4, { regenerateSlotsFirst: true });
       if (!data?.success) {
-        throw new Error(data?.message ?? 'No verified contractors matched this project yet.');
+        throw new Error(formatAppSafeErrorMessage(data?.message, 'No verified contractors matched this project yet.'));
       }
 
       setProject((current) => current ? { ...current, status: 'dispatching' } : current);
       Alert.alert('Search restarted', 'We are notifying matching contractors in the wider service area now.');
     } catch (err) {
-      Alert.alert('Could not restart search', err instanceof Error ? err.message : 'Please try again.');
+      Alert.alert('Could not restart search', formatAppSafeErrorMessage(err, 'Please try again.'));
     } finally {
       setRedispatching(false);
     }

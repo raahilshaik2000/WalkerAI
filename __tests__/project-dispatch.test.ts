@@ -101,5 +101,13 @@ describe('project dispatch helper', () => {
 
     expect(canonicalDetailSource).toContain("restartProjectDispatch(project.id, 4, { regenerateSlotsFirst: true })");
     expect(legacyDetailSource).toContain("restartProjectDispatch(project.id, 4, { regenerateSlotsFirst: true })");
+    expect(canonicalDetailSource).toContain("formatAppSafeErrorMessage(data?.message, 'No verified contractors matched this project yet.')");
+    expect(canonicalDetailSource).toContain("Alert.alert('Could not restart search', formatAppSafeErrorMessage(err, 'Please try again.'))");
+    expect(canonicalDetailSource).not.toContain("data?.message ?? 'No verified contractors matched this project yet.'");
+    expect(canonicalDetailSource).not.toContain("Alert.alert('Could not restart search', err instanceof Error ? err.message : 'Please try again.')");
+    expect(legacyDetailSource).toContain("formatAppSafeErrorMessage(data?.message, 'No verified contractors matched this project yet.')");
+    expect(legacyDetailSource).toContain("Alert.alert('Could not restart search', formatAppSafeErrorMessage(err, 'Please try again.'))");
+    expect(legacyDetailSource).not.toContain("data?.message ?? 'No verified contractors matched this project yet.'");
+    expect(legacyDetailSource).not.toContain("Alert.alert('Could not restart search', err instanceof Error ? err.message : 'Please try again.')");
   });
 });
