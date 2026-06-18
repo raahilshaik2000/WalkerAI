@@ -283,7 +283,7 @@ export default function ProjectConciergeScreen() {
           .from('gc_concierge_bookings')
           .select(`
             id, project_id, general_contractor_id, homeowner_id, service_kind, title, duration_minutes,
-            price_cents, contractor_payout_cents, walker_fee_cents, status, payment_status,
+            price_cents, status, payment_status,
             stripe_payment_intent_id, stripe_transfer_id, paid_at, payout_released_at,
             response_note, created_at, responded_at,
             general_contractor:general_contractors (

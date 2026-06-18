@@ -42,6 +42,8 @@ describe('financial disclosure copy', () => {
       'Invalid concierge rate',
       'Your payout {formatCadCents(booking.contractor_payout_cents)}',
       'WalkerAI {formatCadCents(booking.walker_fee_cents)}',
+      'contractor_payout_cents',
+      'walker_fee_cents',
     ];
 
     const violations = appSources.flatMap((filePath: string) => {
