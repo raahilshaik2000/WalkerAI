@@ -52,6 +52,8 @@ describe('financial disclosure copy', () => {
       'WalkerAI {formatCadCents(booking.walker_fee_cents)}',
       'contractor_payout_cents',
       'walker_fee_cents',
+      'commission_rate',
+      'companyEstimatedNetPayoutCents',
     ];
 
     const violations = appSources.flatMap((filePath: string) => {

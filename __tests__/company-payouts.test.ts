@@ -23,17 +23,18 @@ describe('company payout math', () => {
     expect(companyEstimatedNetPayoutCents(10000, -0.2)).toBe(9000);
   });
 
-  it('keeps company milestone payment display on net payout math', () => {
+  it('keeps company milestone payment display free of commission-derived payout math', () => {
     const source = fs.readFileSync(
       path.join(__dirname, '../src/app/(company)/job/[id]/milestones.tsx'),
       'utf8',
     );
 
-    expect(source).toContain("import { companyEstimatedNetPayoutCents } from '@/lib/company-payouts'");
-    expect(source).toContain('commission_rate');
-    expect(source).toContain('const netPayout = (milestone: Milestone) => companyEstimatedNetPayoutCents');
+    expect(source).not.toContain("import { companyEstimatedNetPayoutCents } from '@/lib/company-payouts'");
+    expect(source).not.toContain('commission_rate');
+    expect(source).not.toContain('const netPayout = (milestone: Milestone) => companyEstimatedNetPayoutCents');
     expect(source).toContain("label: 'Released'");
-    expect(source).toContain('Payments Received');
+    expect(source).toContain('Payments Released');
+    expect(source).not.toContain('Payments Received');
     expect(source).not.toContain("label: 'Net paid'");
     expect(source).not.toContain("label: 'Net total'");
     expect(source).not.toContain('Net Payments Received');
@@ -41,15 +42,22 @@ describe('company payout math', () => {
     expect(source).not.toContain(' gross');
   });
 
-  it('does not disclose company commission breakdowns in app earnings UI', () => {
-    const source = fs.readFileSync(
+  it('does not disclose company commission-derived payout math in app earnings or profile UI', () => {
+    const earningsSource = fs.readFileSync(
       path.join(__dirname, '../src/app/(company)/earnings.tsx'),
       'utf8',
     );
+    const profileSource = fs.readFileSync(
+      path.join(__dirname, '../src/app/(company)/profile.tsx'),
+      'utf8',
+    );
 
-    expect(source).toContain('companyEstimatedNetPayoutCents');
-    expect(source).not.toContain('Commission');
-    expect(source).not.toContain('Gross billed');
-    expect(source).not.toContain('Net earned');
+    [earningsSource, profileSource].forEach((source) => {
+      expect(source).not.toContain('companyEstimatedNetPayoutCents');
+      expect(source).not.toContain('commission_rate');
+      expect(source).not.toContain('Commission');
+      expect(source).not.toContain('Gross billed');
+      expect(source).not.toContain('Net earned');
+    });
   });
 });

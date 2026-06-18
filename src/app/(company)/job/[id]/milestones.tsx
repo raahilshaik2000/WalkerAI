@@ -15,7 +15,6 @@ import { launchImageLibrary } from 'react-native-image-picker';
 import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
 import Ionicons from 'react-native-vector-icons/Ionicons';
 import { supabase } from '@/lib/supabase/client';
-import { companyEstimatedNetPayoutCents } from '@/lib/company-payouts';
 import { formatCadCents } from '@/lib/currency';
 import { getUploadMetadata, uploadFile } from '@/lib/supabase/storage';
 import { useAuthStore } from '@/stores/auth.store';
@@ -29,7 +28,6 @@ interface Milestone {
   id: string;
   title: string;
   amount: number;
-  commission_rate: number | null;
   status: string;
   due_date: string | null;
   completed_at: string | null;
@@ -40,7 +38,6 @@ interface QuoteSummary {
   id: string;
   status: string | null;
   submitted_at: string | null;
-  commission_rate?: number | null;
   slot_id?: string | null;
 }
 
@@ -148,7 +145,7 @@ export default function CompanyMilestonesScreen() {
 
     let quoteResult: any = await supabase
       .from('quotes')
-      .select('id, status, submitted_at, commission_rate, slot_id')
+      .select('id, status, submitted_at, slot_id')
       .eq('project_id', projectId)
       .eq('company_id', company.id)
       .order('submitted_at', { ascending: false });
@@ -156,7 +153,7 @@ export default function CompanyMilestonesScreen() {
     if (isMissingColumnError(quoteResult.error)) {
       quoteResult = await supabase
         .from('quotes')
-        .select('id, status, submitted_at, commission_rate')
+        .select('id, status, submitted_at')
         .eq('project_id', projectId)
         .eq('company_id', company.id)
         .order('submitted_at', { ascending: false });
@@ -193,10 +190,7 @@ export default function CompanyMilestonesScreen() {
       return;
     }
 
-    setMilestones(((data ?? []) as Omit<Milestone, 'commission_rate'>[]).map((milestone) => ({
-      ...milestone,
-      commission_rate: quoteData.commission_rate ?? null,
-    })));
+    setMilestones((data ?? []) as Milestone[]);
     setLoading(false);
   }, [projectId, slotId, user?.id]);
 
@@ -355,10 +349,9 @@ export default function CompanyMilestonesScreen() {
     }
   };
 
-  const netPayout = (milestone: Milestone) => companyEstimatedNetPayoutCents(milestone.amount, milestone.commission_rate);
-  const netPaid = milestones.filter((m) => isReleasedMilestone(m.status)).reduce((s, m) => s + netPayout(m), 0);
-  const netTotal = milestones.reduce((s, m) => s + netPayout(m), 0);
-  const progressPct = netTotal > 0 ? netPaid / netTotal : 0;
+  const releasedValue = milestones.filter((m) => isReleasedMilestone(m.status)).reduce((s, m) => s + m.amount, 0);
+  const milestoneValue = milestones.reduce((s, m) => s + m.amount, 0);
+  const progressPct = milestoneValue > 0 ? releasedValue / milestoneValue : 0;
 
   return (
     <GradientBackground glow="top-right">
@@ -375,17 +368,17 @@ export default function CompanyMilestonesScreen() {
           <TradeMetricStrip
             items={[
               { label: 'Milestones', value: milestones.length, tone: 'muted' },
-              { label: 'Payment total', value: netTotal ? formatCad(netTotal) : '$0.00', tone: netTotal ? 'success' : 'muted' },
-              { label: 'Released', value: formatCad(netPaid), tone: netPaid ? 'success' : 'muted' },
+              { label: 'Payment total', value: milestoneValue ? formatCad(milestoneValue) : '$0.00', tone: milestoneValue ? 'success' : 'muted' },
+              { label: 'Released', value: formatCad(releasedValue), tone: releasedValue ? 'success' : 'muted' },
             ]}
           />
 
           {/* Escrow progress */}
-          {netTotal > 0 && (
+          {milestoneValue > 0 && (
             <TradePanel style={styles.card}>
-              <Text style={styles.sectionLabel}>Payments Received</Text>
+              <Text style={styles.sectionLabel}>Payments Released</Text>
               <Text style={styles.escrowAmount}>
-                {formatCad(netPaid)} <Text style={styles.escrowTotal}>of {formatCad(netTotal)}</Text>
+                {formatCad(releasedValue)} <Text style={styles.escrowTotal}>of {formatCad(milestoneValue)}</Text>
               </Text>
               <View style={styles.progressTrack}>
                 <View style={[styles.progressFill, { width: `${progressPct * 100}%` }]} />
@@ -414,7 +407,7 @@ export default function CompanyMilestonesScreen() {
                     )}
                   </View>
                   <View style={styles.milestoneRight}>
-                    <Text style={styles.milestoneAmount}>{formatCad(netPayout(m))}</Text>
+                    <Text style={styles.milestoneAmount}>{formatCad(m.amount)}</Text>
                     <StatusBadge label={formatStatusLabel(m.status)} variant={statusVariant(m.status)} size="sm" />
                   </View>
                 </View>

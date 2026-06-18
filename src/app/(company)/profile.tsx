@@ -15,7 +15,6 @@ import { useFocusEffect, useNavigation } from '@react-navigation/native';
 import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
 import { supabase } from '@/lib/supabase/client';
 import { formatSupabaseFunctionError } from '@/lib/supabase/functions';
-import { companyEstimatedNetPayoutCents } from '@/lib/company-payouts';
 import { isStripePayoutLocallyReady } from '@/lib/payouts';
 import { useAuthStore } from '@/stores/auth.store';
 import { Colors, Spacing, Typography } from '@/constants/theme';
@@ -202,7 +201,7 @@ export default function CompanyProfileScreen() {
       // Sum paid milestones
       const { data: milestones, error: milestonesError } = await supabase
         .from('milestones')
-        .select('amount, quotes!inner(company_id, commission_rate)')
+        .select('amount, quotes!inner(company_id)')
         .eq('status', 'paid')
         .eq('quotes.company_id', co.id);
       if (milestonesError) {
@@ -212,11 +211,8 @@ export default function CompanyProfileScreen() {
         return;
       }
 
-      const netPaid = milestones?.reduce(
-        (s: number, m: any) => s + companyEstimatedNetPayoutCents(m.amount, m.quotes?.commission_rate ?? null),
-        0
-      ) ?? 0;
-      setEarnings({ total_paid: netPaid, active_count: active, completed_count: completed });
+      const paidMilestoneValue = milestones?.reduce((s: number, m: any) => s + Number(m.amount ?? 0), 0) ?? 0;
+      setEarnings({ total_paid: paidMilestoneValue, active_count: active, completed_count: completed });
     } else {
       setEarnings({ total_paid: 0, active_count: 0, completed_count: 0 });
     }
@@ -368,7 +364,7 @@ export default function CompanyProfileScreen() {
             items={[
               { label: 'Active', value: earnings.active_count, tone: earnings.active_count ? 'success' : 'muted' },
               { label: 'Completed', value: earnings.completed_count, tone: earnings.completed_count ? 'success' : 'muted' },
-              { label: 'Received', value: formatCad(earnings.total_paid), tone: earnings.total_paid ? 'success' : 'muted' },
+              { label: 'Paid value', value: formatCad(earnings.total_paid), tone: earnings.total_paid ? 'success' : 'muted' },
             ]}
           />
 

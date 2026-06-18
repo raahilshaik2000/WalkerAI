@@ -12,7 +12,6 @@ import { useNavigation } from '@react-navigation/native';
 import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
 import { supabase } from '@/lib/supabase/client';
 import { useAuthStore } from '@/stores/auth.store';
-import { companyEstimatedNetPayoutCents } from '@/lib/company-payouts';
 import { formatCad } from '@/lib/formatters';
 import { Colors, Spacing, Typography } from '@/constants/theme';
 import { CardSkeleton, GlassCard, GradientBackground, ListItemSkeleton, StatusBadge } from '@/components/ui';
@@ -22,7 +21,6 @@ interface PaidMilestone {
   id: string;
   title: string;
   amount: number;
-  commission_rate: number | null;
   completed_at: string | null;
   stripe_transfer_id: string | null;
   project: { address: string; city: string };
@@ -77,7 +75,7 @@ export default function EarningsScreen() {
       .from('milestones')
       .select(`
         id, title, amount, completed_at, stripe_transfer_id,
-        quotes!inner(company_id, commission_rate, project:projects(address, city))
+        quotes!inner(company_id, project:projects(address, city))
       `)
       .eq('status', 'paid')
       .eq('quotes.company_id', co.id)
@@ -94,7 +92,6 @@ export default function EarningsScreen() {
       id: m.id,
       title: m.title,
       amount: m.amount,
-      commission_rate: m.quotes?.commission_rate ?? null,
       completed_at: m.completed_at,
       stripe_transfer_id: m.stripe_transfer_id,
       project: m.quotes?.project ?? { address: 'Unknown', city: '' },
@@ -107,7 +104,7 @@ export default function EarningsScreen() {
 
   useEffect(() => { fetchData(); }, [fetchData]);
 
-  const netEarned = milestones.reduce((s, m) => s + companyEstimatedNetPayoutCents(m.amount, m.commission_rate), 0);
+  const paidMilestoneValue = milestones.reduce((s, m) => s + m.amount, 0);
 
   return (
     <GradientBackground glow="top-right">
@@ -120,17 +117,17 @@ export default function EarningsScreen() {
           <TradeScreenHeader title="Earnings" subtitle="Paid milestones and payout totals" />
           <TradeMetricStrip
             items={[
-              { label: 'Received', value: formatCad(netEarned), tone: netEarned ? 'success' : 'muted' },
+              { label: 'Paid value', value: formatCad(paidMilestoneValue), tone: paidMilestoneValue ? 'success' : 'muted' },
               { label: 'Paid items', value: milestones.length, tone: milestones.length ? 'success' : 'muted' },
-              { label: 'Status', value: netEarned ? 'Paid' : 'Pending', tone: netEarned ? 'success' : 'muted' },
+              { label: 'Status', value: paidMilestoneValue ? 'Paid' : 'Pending', tone: paidMilestoneValue ? 'success' : 'muted' },
             ]}
           />
 
           {/* Summary */}
           <GlassCard style={styles.summaryCard}>
-            <Text style={styles.summaryLabel}>Total Received</Text>
-            <Text style={styles.summaryAmount}>{formatCad(netEarned)}</Text>
-            <Text style={styles.summaryNote}>Estimated payout received</Text>
+            <Text style={styles.summaryLabel}>Paid Milestone Value</Text>
+            <Text style={styles.summaryAmount}>{formatCad(paidMilestoneValue)}</Text>
+            <Text style={styles.summaryNote}>Milestones marked paid in WalkerAI</Text>
           </GlassCard>
 
           {/* Transaction list */}
@@ -178,7 +175,7 @@ export default function EarningsScreen() {
                     )}
                   </View>
                   <View style={styles.txAmountCol}>
-                    <Text style={styles.txNet}>{formatCad(companyEstimatedNetPayoutCents(m.amount, m.commission_rate))}</Text>
+                    <Text style={styles.txNet}>{formatCad(m.amount)}</Text>
                     <StatusBadge label="paid" variant="paid" size="sm" />
                   </View>
                 </View>
