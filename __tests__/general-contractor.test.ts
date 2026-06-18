@@ -46,8 +46,11 @@ describe('general contractor account type', () => {
     expect(nextGeneralContractorOnboardingRoute({ ...completeGcSetup, business_name: '' })).toBe('GeneralContractorBusinessOnboarding');
     expect(nextGeneralContractorOnboardingRoute({ ...completeGcSetup, lat: null })).toBe('GeneralContractorBusinessOnboarding');
     expect(nextGeneralContractorOnboardingRoute({ ...completeGcSetup, license_number: null, license_doc_url: null, insurance_doc_url: null })).toBe('GeneralContractorLicenseOnboarding');
+    expect(nextGeneralContractorOnboardingRoute({ ...completeGcSetup, license_number: '   ' })).toBe('GeneralContractorLicenseOnboarding');
+    expect(nextGeneralContractorOnboardingRoute({ ...completeGcSetup, license_doc_url: '   ' })).toBe('GeneralContractorLicenseOnboarding');
     expect(nextGeneralContractorOnboardingRoute({ ...completeGcSetup, license_doc_url: null, insurance_doc_url: null })).toBe('GeneralContractorLicenseOnboarding');
     expect(nextGeneralContractorOnboardingRoute({ ...completeGcSetup, insurance_doc_url: null })).toBe('GeneralContractorInsuranceOnboarding');
+    expect(nextGeneralContractorOnboardingRoute({ ...completeGcSetup, insurance_doc_url: '   ' })).toBe('GeneralContractorInsuranceOnboarding');
     expect(isGeneralContractorSetupComplete(completeGcSetup)).toBe(true);
     expect(businessOnboarding).toContain("from('general_contractors')");
     expect(businessOnboarding).toContain('business_name, address, city, province, postal_code, service_radius_km');

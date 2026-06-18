@@ -42,8 +42,8 @@ export function nextGeneralContractorOnboardingRoute(
   if (!hasText(gc.business_name) || !hasText(gc.city) || !hasText(gc.province) || gc.lat == null || gc.lng == null) {
     return 'GeneralContractorBusinessOnboarding';
   }
-  if (!gc.license_number || !gc.license_doc_url) return 'GeneralContractorLicenseOnboarding';
-  if (!gc.insurance_doc_url) return 'GeneralContractorInsuranceOnboarding';
+  if (!hasText(gc.license_number) || !hasText(gc.license_doc_url)) return 'GeneralContractorLicenseOnboarding';
+  if (!hasText(gc.insurance_doc_url)) return 'GeneralContractorInsuranceOnboarding';
   return null;
 }
 
