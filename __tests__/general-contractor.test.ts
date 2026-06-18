@@ -2035,7 +2035,9 @@ describe('general contractor account type', () => {
     expect(companyJob).toContain('GC quote negotiation');
     expect(companyJob).toContain("status === 'accepted' && !gcVerified");
     expect(companyJob).toContain('Active verified GC management is required before a counteroffer can be accepted.');
-    expect(companyJob).toContain('disabled={!gcVerified || !!respondingNegotiationId}');
+    expect(companyJob).toContain('quotes(status, stripe_payment_intent_id)');
+    expect(companyJob).toContain('function canAcceptNegotiationCounteroffer');
+    expect(companyJob).toContain('disabled={!gcVerified || !quoteEditable || !!respondingNegotiationId}');
     expect(companyJob).toContain('Counteroffer accepted');
     expect(companyJob).toContain('Build Updated Quote');
     expect(companyJob).toContain('accepted_counteroffer_cents');

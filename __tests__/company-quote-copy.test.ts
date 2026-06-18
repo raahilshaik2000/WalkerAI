@@ -236,4 +236,26 @@ describe('company quote copy', () => {
     expect(source).toContain('defaultMilestoneSplitCents(counterofferCents, base.length)');
     expect(source).toContain('GC negotiation: ${value.trim()}');
   });
+
+  it('locks GC counteroffer acceptance after quote approval or payment start', () => {
+    const repoRoot = path.resolve(__dirname, '..');
+    const jobDetail = fs.readFileSync(
+      path.join(repoRoot, 'src/app/(company)/job/[id]/index.tsx'),
+      'utf8'
+    );
+    const migration = fs.readFileSync(
+      path.join(repoRoot, 'supabase/migrations/20260618020734_require_editable_quote_for_gc_counteroffer_acceptance.sql'),
+      'utf8'
+    );
+
+    expect(jobDetail).toContain('quotes(status, stripe_payment_intent_id)');
+    expect(jobDetail).toContain('function canAcceptNegotiationCounteroffer');
+    expect(jobDetail).toContain("quote?.status === 'pending' && !quote.stripe_payment_intent_id");
+    expect(jobDetail).toContain('This quote is already approved or payment has started. Use change orders for pricing changes after funding begins.');
+    expect(jobDetail).toContain('disabled={!gcVerified || !quoteEditable || !!respondingNegotiationId}');
+    expect(migration).toContain("NEW.status = 'accepted'");
+    expect(migration).toContain("q.status = 'pending'");
+    expect(migration).toContain('q.stripe_payment_intent_id IS NULL');
+    expect(migration).toContain('GC trade counteroffers can only be accepted while the linked quote is still pending and unfunded');
+  });
 });
