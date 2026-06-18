@@ -155,8 +155,10 @@ describe('general contractor account type', () => {
 
     expect(companyBusinessOnboarding).not.toContain("value: 'general_contractor'");
     expect(companyBusinessOnboarding).toContain("useState<TradeType[]>(['plumber'])");
-    expect(companyProfile).toContain("general_contractor: 'Legacy general contractor'");
-    expect(companyProfile).toContain("company.trade_types?.length ? company.trade_types : ['plumber']");
+    expect(companyProfile).not.toContain("general_contractor: 'Legacy general contractor'");
+    expect(companyProfile).toContain("filter((trade) => trade !== 'general_contractor')");
+    expect(companyProfile).not.toContain("company.trade_types?.length ? company.trade_types : ['plumber']");
+    expect(companyProfile).toContain('Services not selected');
     expect(gcRoleMigration).toContain('Existing company rows may still list "general_contractor" as a legacy trade.');
     expect(gcRoleMigration).toContain('New GC users use this separate concierge/GC role and profile table.');
   });

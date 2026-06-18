@@ -50,7 +50,6 @@ interface EarningsSummary {
 }
 
 const TRADE_LABELS: Record<string, string> = {
-  general_contractor: 'Legacy general contractor',
   plumber: 'Plumber',
   electrician: 'Electrician',
   tile_installer: 'Tile Installer',
@@ -60,6 +59,14 @@ const TRADE_LABELS: Record<string, string> = {
   drywall: 'Drywall',
   demolition: 'Demolition',
 };
+
+function companyServiceLabels(tradeTypes?: string[] | null) {
+  const visibleTrades = (tradeTypes ?? []).filter((trade) => trade !== 'general_contractor');
+  if (!visibleTrades.length) return 'Services not selected';
+  return visibleTrades
+    .map((trade) => TRADE_LABELS[trade] ?? trade.replace(/_/g, ' '))
+    .join(', ');
+}
 
 function nextCompanyOnboardingRoute(company: Pick<Company, 'license_number' | 'insurance_doc_url'> | null): string | null {
   if (!company) return 'BusinessOnboarding';
@@ -390,11 +397,7 @@ export default function CompanyProfileScreen() {
               </View>
               <View style={styles.infoRow}>
                 <Text style={styles.infoKey}>Services</Text>
-                <Text style={styles.infoVal}>
-                  {(company.trade_types?.length ? company.trade_types : ['plumber'])
-                    .map((trade) => TRADE_LABELS[trade] ?? trade.replace(/_/g, ' '))
-                    .join(', ')}
-                </Text>
+                <Text style={styles.infoVal}>{companyServiceLabels(company.trade_types)}</Text>
               </View>
               {company.license_number && (
                 <View style={styles.infoRow}>
