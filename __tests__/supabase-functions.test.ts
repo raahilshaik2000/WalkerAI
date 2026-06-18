@@ -36,6 +36,21 @@ describe('Supabase function error formatting', () => {
     );
   });
 
+  it('falls back to polished copy for database-internal errors', async () => {
+    expect(formatAppSafeErrorMessage(
+      new Error('new row violates row-level security policy for table "project_photos"'),
+      'Upload failed. Please try again.',
+    )).toBe('Upload failed. Please try again.');
+    expect(formatAppSafeErrorMessage(
+      { message: 'column general_contractor_projects.markup_percent does not exist' },
+      'Could not load project management context.',
+    )).toBe('Could not load project management context.');
+    await expect(formatSupabaseFunctionError({
+      message: 'Edge Function returned a non-2xx status code',
+      context: new Response(JSON.stringify({ error: 'duplicate key value violates unique constraint "notifications_pkey"' })),
+    }, 'Request failed. Please try again.')).resolves.toBe('Request failed. Please try again.');
+  });
+
   it('normalizes legacy GC financial term errors before app display', async () => {
     await expect(formatSupabaseFunctionError({
       message: 'Edge Function returned a non-2xx status code',

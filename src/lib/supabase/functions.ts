@@ -9,6 +9,20 @@ function isTransientInfrastructureMessage(message: string) {
     || lower.includes('timeout');
 }
 
+function isDatabaseInternalMessage(message: string) {
+  const lower = message.toLowerCase();
+  return lower.includes('row-level security')
+    || lower.includes('violates row-level security policy')
+    || lower.includes('permission denied')
+    || lower.includes('schema cache')
+    || lower.includes('foreign key constraint')
+    || lower.includes('not-null constraint')
+    || lower.includes('duplicate key value violates unique constraint')
+    || /column .* does not exist/i.test(message)
+    || /could not find the .* column of/i.test(message)
+    || /relation .* does not exist/i.test(message);
+}
+
 export function appSafeFunctionMessage(message: string, fallback = 'Please try again.') {
   const trimmed = message.trim();
   if (trimmed === 'Markup must be between 0 and 50 percent') {
@@ -27,6 +41,9 @@ export function appSafeFunctionMessage(message: string, fallback = 'Please try a
     return 'Enter the email for an existing WalkerAI homeowner account before creating a managed project.';
   }
   if (isTransientInfrastructureMessage(trimmed)) {
+    return fallback;
+  }
+  if (isDatabaseInternalMessage(trimmed)) {
     return fallback;
   }
   return trimmed;

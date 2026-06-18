@@ -15,7 +15,7 @@ import { useRoute } from '@react-navigation/native';
 import ReactNativeHapticFeedback from 'react-native-haptic-feedback';
 import { supabase } from '@/lib/supabase/client';
 import { formatCadCents } from '@/lib/currency';
-import { formatSupabaseFunctionError } from '@/lib/supabase/functions';
+import { formatAppSafeErrorMessage, formatSupabaseFunctionError } from '@/lib/supabase/functions';
 import { useAuthStore } from '@/stores/auth.store';
 import { Colors, Spacing, Typography } from '@/constants/theme';
 import { getRequiredStringParam } from '@/lib/navigation-params';
@@ -179,7 +179,7 @@ export default function MilestonesScreen() {
         ? 'No approved quote yet. Milestones will appear after you approve contractor quotes.'
         : null);
     } catch (err) {
-      Alert.alert('Error', err instanceof Error ? err.message : 'Failed to load milestones.');
+      Alert.alert('Could not load milestones', formatAppSafeErrorMessage(err, 'Please try again.'));
       setLoading(false);
       return;
     }
@@ -223,7 +223,7 @@ export default function MilestonesScreen() {
               ReactNativeHapticFeedback.trigger('notificationSuccess');
               await fetchMilestones();
             } catch (err) {
-              Alert.alert('Error', await formatSupabaseFunctionError(err, 'Failed to release payment.'));
+              Alert.alert('Release failed', await formatSupabaseFunctionError(err, 'Please try again.'));
             } finally {
               setReleasing(null);
             }
@@ -268,7 +268,7 @@ export default function MilestonesScreen() {
       setDisputeReason('');
       await fetchMilestones();
     } catch (err) {
-      Alert.alert('Error', err instanceof Error ? err.message : 'Failed to open dispute.');
+      Alert.alert('Could not open dispute', formatAppSafeErrorMessage(err, 'Please try again.'));
     } finally {
       setOpeningDispute(false);
     }

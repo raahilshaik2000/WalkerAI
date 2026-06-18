@@ -35,4 +35,23 @@ describe('company milestone proof uploads', () => {
     expect(source).toContain('Upload at least one progress photo for this milestone before marking it complete.');
     expect(source).toContain('body: `[milestone:${milestone.id}] Progress photo uploaded for "${milestone.title}": ${publicUrl}`,');
   });
+
+  it('uses app-safe copy for company milestone load, update, and upload failures', () => {
+    const source = fs.readFileSync(
+      path.join(__dirname, '../src/app/(company)/job/[id]/milestones.tsx'),
+      'utf8',
+    );
+
+    expect(source).toContain("import { formatAppSafeErrorMessage } from '@/lib/supabase/functions';");
+    expect(source).toContain("Alert.alert('Could not load milestones', formatAppSafeErrorMessage(companyError, 'Please try again.'))");
+    expect(source).toContain("Alert.alert('Could not load milestones', formatAppSafeErrorMessage(quoteResult.error, 'Please try again.'))");
+    expect(source).toContain("Alert.alert('Could not load milestones', formatAppSafeErrorMessage(error, 'Please try again.'))");
+    expect(source).toContain("Alert.alert('Could not update milestone', formatAppSafeErrorMessage(err, 'Please try again.'))");
+    expect(source).toContain("Alert.alert('Upload failed', formatAppSafeErrorMessage(err, 'Please try again.'))");
+    expect(source).not.toContain("Alert.alert('Error', companyError.message)");
+    expect(source).not.toContain("Alert.alert('Error', quoteResult.error.message)");
+    expect(source).not.toContain("Alert.alert('Error', error.message)");
+    expect(source).not.toContain("Alert.alert('Error', err instanceof Error ? err.message : 'Failed to update milestone.')");
+    expect(source).not.toContain("Alert.alert('Upload failed', err instanceof Error ? err.message : 'Please try again.')");
+  });
 });

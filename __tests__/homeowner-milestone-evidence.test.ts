@@ -47,4 +47,19 @@ describe('homeowner milestone evidence visibility', () => {
     expect(source).toContain('<Text style={styles.milestoneTitle} numberOfLines={2}>');
     expect(source).toContain('<Text style={styles.companyName} numberOfLines={1}>');
   });
+
+  it('uses app-safe copy for homeowner milestone load and dispute failures', () => {
+    const source = fs.readFileSync(
+      path.join(__dirname, '../src/app/(homeowner)/project/[id]/milestones.tsx'),
+      'utf8',
+    );
+
+    expect(source).toContain("import { formatAppSafeErrorMessage, formatSupabaseFunctionError } from '@/lib/supabase/functions';");
+    expect(source).toContain("Alert.alert('Could not load milestones', formatAppSafeErrorMessage(err, 'Please try again.'))");
+    expect(source).toContain("Alert.alert('Release failed', await formatSupabaseFunctionError(err, 'Please try again.'))");
+    expect(source).toContain("Alert.alert('Could not open dispute', formatAppSafeErrorMessage(err, 'Please try again.'))");
+    expect(source).not.toContain("Alert.alert('Error', err instanceof Error ? err.message : 'Failed to load milestones.')");
+    expect(source).not.toContain("Alert.alert('Error', await formatSupabaseFunctionError(err, 'Failed to release payment.'))");
+    expect(source).not.toContain("Alert.alert('Error', err instanceof Error ? err.message : 'Failed to open dispute.')");
+  });
 });

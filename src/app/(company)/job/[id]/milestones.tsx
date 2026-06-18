@@ -16,6 +16,7 @@ import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
 import Ionicons from 'react-native-vector-icons/Ionicons';
 import { supabase } from '@/lib/supabase/client';
 import { formatCadCents } from '@/lib/currency';
+import { formatAppSafeErrorMessage } from '@/lib/supabase/functions';
 import { getUploadMetadata, uploadFile } from '@/lib/supabase/storage';
 import { useAuthStore } from '@/stores/auth.store';
 import { Colors, Spacing, Typography } from '@/constants/theme';
@@ -132,7 +133,7 @@ export default function CompanyMilestonesScreen() {
       .maybeSingle();
 
     if (companyError) {
-      Alert.alert('Error', companyError.message);
+      Alert.alert('Could not load milestones', formatAppSafeErrorMessage(companyError, 'Please try again.'));
       setLoading(false);
       return;
     }
@@ -160,7 +161,7 @@ export default function CompanyMilestonesScreen() {
     }
 
     if (quoteResult.error) {
-      Alert.alert('Error', quoteResult.error.message);
+      Alert.alert('Could not load milestones', formatAppSafeErrorMessage(quoteResult.error, 'Please try again.'));
       setLoading(false);
       return;
     }
@@ -185,7 +186,7 @@ export default function CompanyMilestonesScreen() {
       .order('sort_order');
 
     if (error) {
-      Alert.alert('Error', error.message);
+      Alert.alert('Could not load milestones', formatAppSafeErrorMessage(error, 'Please try again.'));
       setLoading(false);
       return;
     }
@@ -278,7 +279,7 @@ export default function CompanyMilestonesScreen() {
               prev.map((m) => m.id === milestone.id ? { ...m, ...updates } as Milestone : m)
             );
           } catch (err) {
-            Alert.alert('Error', err instanceof Error ? err.message : 'Failed to update milestone.');
+            Alert.alert('Could not update milestone', formatAppSafeErrorMessage(err, 'Please try again.'));
           } finally {
             setUpdating(null);
           }
@@ -331,7 +332,10 @@ export default function CompanyMilestonesScreen() {
         });
 
         if (messageError) {
-          throw new Error(`Photo uploaded, but WalkerAI could not save the progress record (${error.message}) or send it in messages (${messageError.message}).`);
+          throw new Error(formatAppSafeErrorMessage(
+            messageError,
+            'Photo uploaded, but WalkerAI could not save the progress record or send it in messages. Please try again.',
+          ));
         }
 
         ReactNativeHapticFeedback.trigger('notificationSuccess');
@@ -345,7 +349,7 @@ export default function CompanyMilestonesScreen() {
       ReactNativeHapticFeedback.trigger('notificationSuccess');
       Alert.alert('Photo uploaded', 'Progress photo saved successfully.');
     } catch (err) {
-      Alert.alert('Upload failed', err instanceof Error ? err.message : 'Please try again.');
+      Alert.alert('Upload failed', formatAppSafeErrorMessage(err, 'Please try again.'));
     }
   };
 

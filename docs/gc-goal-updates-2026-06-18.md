@@ -464,6 +464,7 @@ Runtime fixes made from this pass:
 - Homeowner material receipt and supplier-payment release now use app-safe copy for material order load failures and payout release failures, while keeping delivery-proof gating intact.
 - Homeowner schedule confirmation now uses app-safe copy for schedule load and confirmation failures, while preserving quote/payment-aware project activation behavior.
 - Homeowner permit/inspection records now use app-safe copy for permit load and upload failures while preserving signed document previews.
+- Homeowner and company milestone/payment workflows now use app-safe copy for milestone load, dispute, update, upload, and release failures; shared Supabase error formatting also hides database policy/schema/internal wording behind polished fallback copy.
 
 Runtime findings still not treated as complete:
 
@@ -485,3 +486,10 @@ The goal is not fully complete yet. Remaining work includes:
 3. Confirm any deployed Supabase function/migration drift beyond the updated `generate-material-orders` function and applied migrations before relying on the whole production backend as fully current.
 4. Decide product details for GC-created projects when the homeowner does not yet have an account. Current app behavior intentionally requires an existing homeowner account and now explains that requirement with polished copy.
 5. Re-test TestFlight/archive after these changes if the app is being shipped.
+
+Latest validation after milestone/payment error-copy hardening:
+
+- `npm test -- --runInBand __tests__/homeowner-milestone-evidence.test.ts __tests__/company-milestone-upload.test.ts __tests__/supabase-functions.test.ts`
+- `npx tsc --noEmit`
+- `npm test -- --runInBand`
+- `git diff --check`
