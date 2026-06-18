@@ -105,6 +105,37 @@ describe('supplier material order payout math', () => {
     });
   });
 
+  it('keeps supplier material order feed and fulfillment errors app-safe', () => {
+    const feedSource = fs.readFileSync(
+      path.join(__dirname, '../src/app/(supplier)/orders/index.tsx'),
+      'utf8',
+    );
+    const activeSource = fs.readFileSync(
+      path.join(__dirname, '../src/app/(supplier)/orders/active.tsx'),
+      'utf8',
+    );
+
+    expect(feedSource).toContain("import { formatAppSafeErrorMessage, formatSupabaseFunctionError } from '@/lib/supabase/functions'");
+    expect(feedSource).toContain("setErrorMessage(formatAppSafeErrorMessage(supplierError, 'Could not load supplier profile.'))");
+    expect(feedSource).toContain("setErrorMessage(formatAppSafeErrorMessage(error, 'Could not load open material orders.'))");
+    expect(feedSource).toContain("setErrorMessage(formatAppSafeErrorMessage(eligibilityError, 'Could not verify supplier eligibility for open orders.'))");
+    expect(feedSource).not.toContain('setErrorMessage(supplierError.message)');
+    expect(feedSource).not.toContain('setErrorMessage(error.message)');
+    expect(feedSource).not.toContain('eligibilityError instanceof Error');
+
+    expect(activeSource).toContain("import { formatAppSafeErrorMessage } from '@/lib/supabase/functions'");
+    expect(activeSource).toContain("setErrorMessage(formatAppSafeErrorMessage(supplierError, 'Could not load supplier profile.'))");
+    expect(activeSource).toContain("setErrorMessage(formatAppSafeErrorMessage(error, 'Could not load active supplier orders.'))");
+    expect(activeSource).toContain("Alert.alert('Could not update order', formatAppSafeErrorMessage(err, 'Please try again.'))");
+    expect(activeSource).toContain("Alert.alert('Could not mark order shipped', formatAppSafeErrorMessage(err, 'Please try again.'))");
+    expect(activeSource).toContain("Alert.alert('Could not mark order delivered', formatAppSafeErrorMessage(err, 'Please try again.'))");
+    expect(activeSource).not.toContain('setErrorMessage(supplierError.message)');
+    expect(activeSource).not.toContain('setErrorMessage(error.message)');
+    expect(activeSource).not.toContain("Alert.alert('Error', err instanceof Error ? err.message : 'Failed to update order.')");
+    expect(activeSource).not.toContain("Alert.alert('Error', err instanceof Error ? err.message : 'Failed to mark order shipped.')");
+    expect(activeSource).not.toContain("Alert.alert('Error', err instanceof Error ? err.message : 'Failed to mark order delivered.')");
+  });
+
   it('uses explicit material relationship names on company supplier-delivery queries', () => {
     const companyMaterialsSource = fs.readFileSync(
       path.join(__dirname, '../src/app/(company)/job/[id]/materials.tsx'),

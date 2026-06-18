@@ -18,6 +18,7 @@ import Ionicons from 'react-native-vector-icons/Ionicons';
 import { launchImageLibrary } from 'react-native-image-picker';
 import { supabase } from '@/lib/supabase/client';
 import { formatCadCents } from '@/lib/currency';
+import { formatAppSafeErrorMessage } from '@/lib/supabase/functions';
 import { joinedMaterialItemName } from '@/lib/material-orders';
 import { getUploadMetadata, uploadFile } from '@/lib/supabase/storage';
 import { useAuthStore } from '@/stores/auth.store';
@@ -93,7 +94,7 @@ export default function SupplierActiveOrders() {
       setOrders([]);
       setHasSupplierProfile(false);
       setSupplierId(null);
-      setErrorMessage(supplierError.message);
+      setErrorMessage(formatAppSafeErrorMessage(supplierError, 'Could not load supplier profile.'));
       setLoading(false);
       return;
     }
@@ -118,7 +119,7 @@ export default function SupplierActiveOrders() {
 
     if (error) {
       setOrders([]);
-      setErrorMessage(error.message);
+      setErrorMessage(formatAppSafeErrorMessage(error, 'Could not load active supplier orders.'));
       setLoading(false);
       return;
     }
@@ -161,7 +162,7 @@ export default function SupplierActiveOrders() {
       if (!data) throw new Error('This order is no longer available.');
       await fetchData();
     } catch (err) {
-      Alert.alert('Error', err instanceof Error ? err.message : 'Failed to update order.');
+      Alert.alert('Could not update order', formatAppSafeErrorMessage(err, 'Please try again.'));
     } finally {
       setUpdating(null);
     }
@@ -189,7 +190,7 @@ export default function SupplierActiveOrders() {
       if (!data) throw new Error('This order is no longer available.');
       await fetchData();
     } catch (err) {
-      Alert.alert('Error', err instanceof Error ? err.message : 'Failed to mark order shipped.');
+      Alert.alert('Could not mark order shipped', formatAppSafeErrorMessage(err, 'Please try again.'));
     } finally {
       setUpdating(null);
     }
@@ -229,7 +230,7 @@ export default function SupplierActiveOrders() {
       if (!data) throw new Error('This order is no longer available.');
       await fetchData();
     } catch (err) {
-      Alert.alert('Error', err instanceof Error ? err.message : 'Failed to mark order delivered.');
+      Alert.alert('Could not mark order delivered', formatAppSafeErrorMessage(err, 'Please try again.'));
     } finally {
       setUpdating(null);
     }

@@ -15,7 +15,7 @@ import { useFocusEffect, useNavigation } from '@react-navigation/native';
 import Ionicons from 'react-native-vector-icons/Ionicons';
 import { supabase } from '@/lib/supabase/client';
 import { formatCadCents } from '@/lib/currency';
-import { formatSupabaseFunctionError } from '@/lib/supabase/functions';
+import { formatAppSafeErrorMessage, formatSupabaseFunctionError } from '@/lib/supabase/functions';
 import { joinedMaterialItemName } from '@/lib/material-orders';
 import { isStripePayoutLocallyReady } from '@/lib/payouts';
 import { useAuthStore } from '@/stores/auth.store';
@@ -101,7 +101,7 @@ export default function SupplierOrderFeed() {
     if (supplierError) {
       setSupplier(null);
       setOrders([]);
-      setErrorMessage(supplierError.message);
+      setErrorMessage(formatAppSafeErrorMessage(supplierError, 'Could not load supplier profile.'));
       setLoading(false);
       return;
     }
@@ -127,7 +127,7 @@ export default function SupplierOrderFeed() {
 
     if (error) {
       setOrders([]);
-      setErrorMessage(error.message);
+      setErrorMessage(formatAppSafeErrorMessage(error, 'Could not load open material orders.'));
       setLoading(false);
       return;
     }
@@ -137,11 +137,7 @@ export default function SupplierOrderFeed() {
       setOrders(claimableOrders);
     } catch (eligibilityError) {
       setOrders([]);
-      setErrorMessage(
-        eligibilityError instanceof Error
-          ? eligibilityError.message
-          : 'Could not verify supplier eligibility for open orders.'
-      );
+      setErrorMessage(formatAppSafeErrorMessage(eligibilityError, 'Could not verify supplier eligibility for open orders.'));
     }
     setLoading(false);
   }, [user]);
