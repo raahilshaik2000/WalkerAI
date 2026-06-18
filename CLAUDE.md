@@ -87,8 +87,9 @@ for re-running if credentials need rotation.
 | Role | Email | Password Notes |
 |---|---|---|
 | Homeowner | `qa-homeowner@walkerai.app` | Saved to `/tmp/walkerai-qa-credentials.txt` (ephemeral) |
-| Company | `qa-company@walkerai.app` | Pre-seeded as general_contractor in Toronto, 50km radius, Stripe Connect placeholder |
+| Company | `qa-company@walkerai.app` | Trade company account in Toronto, 50km radius, Stripe Connect placeholder |
 | Supplier | `qa-supplier@walkerai.app` | 4 categories in Toronto, 100km radius, Stripe Connect placeholder |
+| General Contractor | `qa-gc@walkerai.app` | Separate GC account type with its own profile and project-management workspace |
 
 If `/tmp/walkerai-qa-credentials.txt` is gone, re-deploy `seed-qa` and
 re-invoke with new passwords. The function is idempotent (upserts on

@@ -214,7 +214,9 @@ New edge functions need these in Supabase dashboard → Settings → Edge Functi
 ### 5. Seed `trade_types` on Existing Companies
 Existing company rows have `trade_types = {}` (empty array). The `dispatch-slots` function filters by `trade_types`. Either:
 - Add a trade type selection step to company onboarding
-- Or seed existing companies with `general_contractor` as default
+- Or seed existing company rows with the actual trade categories they perform, such as `plumber`, `electrician`, `tile_installer`, `cabinet_installer`, `painter`, `flooring_installer`, `drywall`, or `demolition`
+
+Do not use `general_contractor` as a company fallback. General Contractor is a separate account role and profile surface.
 
 ---
 

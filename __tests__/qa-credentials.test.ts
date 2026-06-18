@@ -41,4 +41,15 @@ describe('QA credential checker script', () => {
     expect(source).not.toContain('console.log(credentials)');
     expect(source).not.toMatch(/console\.(?:log|error)\([\s\S]*password/);
   });
+
+  it('documents the QA general contractor as its own account type', () => {
+    const claude = fs.readFileSync(path.join(repoRoot, 'CLAUDE.md'), 'utf8');
+    const progress = fs.readFileSync(path.join(repoRoot, 'DEV_PROGRESS.md'), 'utf8');
+
+    expect(claude).toContain('| General Contractor | `qa-gc@walkerai.app` |');
+    expect(claude).toContain('Separate GC account type');
+    expect(claude).not.toContain('Pre-seeded as general_contractor');
+    expect(progress).toContain('General Contractor is a separate account role and profile surface.');
+    expect(progress).not.toContain('seed existing companies with `general_contractor` as default');
+  });
 });
