@@ -1155,6 +1155,10 @@ describe('general contractor account type', () => {
       path.join(repoRoot, 'supabase/migrations/20260615232959_require_verified_gc_direct_writes.sql'),
       'utf8',
     );
+    const pathRestrictionMigration = fs.readFileSync(
+      path.join(repoRoot, 'supabase/migrations/20260618015929_restrict_gc_external_trade_document_paths.sql'),
+      'utf8',
+    );
     const gcProjectDetail = fs.readFileSync(
       path.join(repoRoot, 'src/app/(general-contractor)/project/[id]/index.tsx'),
       'utf8',
@@ -1167,6 +1171,13 @@ describe('general contractor account type', () => {
     expect(migration).toContain('Active GC management is required before adding external trade documents');
     expect(directWriteMigration).toContain('CREATE OR REPLACE FUNCTION public.add_external_trade_document');
     expect(directWriteMigration).toContain('Only verified General Contractors can add external trade documents');
+    expect(pathRestrictionMigration).toContain('CREATE OR REPLACE FUNCTION public.add_external_trade_document');
+    expect(pathRestrictionMigration).toContain("v_document_parts := string_to_array(v_document_url, '/')");
+    expect(pathRestrictionMigration).toContain("v_document_parts[1] <> 'external-trades'");
+    expect(pathRestrictionMigration).toContain("v_document_parts[2] <> (SELECT auth.uid())::TEXT");
+    expect(pathRestrictionMigration).toContain('v_document_parts[3] <> v_slot.project_id::TEXT');
+    expect(pathRestrictionMigration).toContain("v_document_parts[4] NOT LIKE v_slot.id::TEXT || '-%'");
+    expect(pathRestrictionMigration).toContain('External trade document path does not match this GC project slot');
     expect(gcProjectDetail).toContain("uploadFile('company-docs'");
     expect(gcProjectDetail).toContain('Please sign in again before uploading trade documents.');
     expect(gcProjectDetail).toContain('external-trades/${currentUser.id}/${projectId}/${slot.id}-');
