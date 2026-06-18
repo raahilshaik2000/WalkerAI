@@ -191,15 +191,7 @@ export default function JobBriefScreen() {
 
     try {
       setErrorMessage(null);
-      let approvedQuoteQuery = supabase
-        .from('quotes')
-        .select('id')
-        .eq('project_id', projectId)
-        .eq('status', 'approved')
-        .limit(1);
-      approvedQuoteQuery = slotId ? approvedQuoteQuery.eq('slot_id', slotId) : approvedQuoteQuery.is('slot_id', null);
-
-      const [projectResult, slotResult, companyData, approvedQuoteResult, gcContextResult] = await Promise.all([
+      const [projectResult, slotResult, companyData, gcContextResult] = await Promise.all([
         supabase
           .from('projects')
           .select(`
@@ -220,7 +212,6 @@ export default function JobBriefScreen() {
               .maybeSingle()
           : Promise.resolve({ data: null, error: null }),
         fetchCompanyPayoutProfile(user.id),
-        approvedQuoteQuery.maybeSingle(),
         supabase
           .from('general_contractor_projects')
           .select('project_type')
@@ -233,7 +224,6 @@ export default function JobBriefScreen() {
 
       if (projectResult.error) throw projectResult.error;
       if (slotResult.error) throw slotResult.error;
-      if (approvedQuoteResult.error) throw approvedQuoteResult.error;
       if (gcContextResult.error && !isMissingSupabaseSchemaObjectError(gcContextResult.error, 'general_contractor_projects')) {
         throw gcContextResult.error;
       }
@@ -250,10 +240,21 @@ export default function JobBriefScreen() {
       setJob(projectData as JobBrief);
       if (slotData) setSlot(slotData as Slot);
       setPayoutReady(isStripePayoutLocallyReady(companyData));
-      setHasApprovedQuote(!!approvedQuoteResult.data);
       const companyId = companyData?.id;
       const slotInfo = slotData as Slot | null;
       const projectInfo = projectData as JobBrief | null;
+
+      let approvedQuoteQuery = supabase
+        .from('quotes')
+        .select('id')
+        .eq('project_id', projectId)
+        .eq('company_id', companyId)
+        .eq('status', 'approved')
+        .limit(1);
+      approvedQuoteQuery = slotId ? approvedQuoteQuery.eq('slot_id', slotId) : approvedQuoteQuery.is('slot_id', null);
+      const approvedQuoteResult = await approvedQuoteQuery.maybeSingle();
+      if (approvedQuoteResult.error) throw approvedQuoteResult.error;
+      setHasApprovedQuote(!!approvedQuoteResult.data);
 
       let pendingQuoteQuery = supabase
         .from('quotes')

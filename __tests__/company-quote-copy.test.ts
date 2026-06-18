@@ -86,6 +86,7 @@ describe('company quote copy', () => {
     );
 
     expect(source).toContain('stripe_payment_intent_id: string | null;');
+    expect(source).toContain(".eq('company_id', companyId)");
     expect(source).toContain("const paymentStarted = approvedQuote.status === 'pending' && !!approvedQuote.stripe_payment_intent_id;");
     expect(source).toContain("paymentStarted ? 'Payment Started' : 'Approved Quote'");
     expect(source).toContain("paymentStarted ? 'Quote payment in progress' : 'Funded quote'");
@@ -102,6 +103,7 @@ describe('company quote copy', () => {
 
     expect(source).toContain('const [hasApprovedQuote, setHasApprovedQuote] = useState(false);');
     expect(source).toContain(".from('quotes')");
+    expect(source).toContain(".eq('company_id', companyId)");
     expect(source).toContain(".eq('status', 'approved')");
     expect(source).toContain('setHasApprovedQuote(!!approvedQuoteResult.data);');
     expect(source).toContain("meta: hasApprovedQuote ? 'View approved' : hasEditablePendingQuote ? 'Edit pending' : 'Build quote'");

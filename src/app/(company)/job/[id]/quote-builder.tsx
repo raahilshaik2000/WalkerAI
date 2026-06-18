@@ -211,10 +211,34 @@ export default function QuoteBuilderScreen() {
 
       setLoadingApprovedQuote(true);
       setEditingPendingQuote(null);
+      let companyId: string | null = null;
+      if (user?.id) {
+        const companyResult = await supabase
+          .from('companies')
+          .select('id')
+          .eq('user_id', user.id)
+          .order('created_at', { ascending: false })
+          .limit(1)
+          .maybeSingle();
+
+        if (!cancelled && !companyResult.error && companyResult.data) {
+          companyId = (companyResult.data as CompanyProfileRef).id;
+        }
+      }
+
+      if (!companyId) {
+        setApprovedQuote(null);
+        setApprovedLineItems([]);
+        setApprovedMilestones([]);
+        setLoadingApprovedQuote(false);
+        return;
+      }
+
       let query = supabase
         .from('quotes')
         .select('id, total_amount, status, submitted_at, stripe_payment_intent_id')
         .eq('project_id', projectId)
+        .eq('company_id', companyId)
         .or('status.eq.approved,stripe_payment_intent_id.not.is.null')
         .order('submitted_at', { ascending: false })
         .limit(1);
@@ -227,52 +251,42 @@ export default function QuoteBuilderScreen() {
         setApprovedQuote(null);
         setApprovedLineItems([]);
         setApprovedMilestones([]);
-        if (!acceptedCounterofferCents && user?.id) {
-          const companyResult = await supabase
-            .from('companies')
-            .select('id')
-            .eq('user_id', user.id)
-            .order('created_at', { ascending: false })
-            .limit(1)
-            .maybeSingle();
+        if (!acceptedCounterofferCents) {
+          let pendingQuoteQuery = supabase
+            .from('quotes')
+            .select('id, total_amount, status, submitted_at, stripe_payment_intent_id')
+            .eq('project_id', projectId)
+            .eq('company_id', companyId)
+            .eq('status', 'pending')
+            .is('stripe_payment_intent_id', null)
+            .order('submitted_at', { ascending: false })
+            .limit(1);
 
-          if (!cancelled && !companyResult.error && companyResult.data) {
-            let pendingQuoteQuery = supabase
-              .from('quotes')
-              .select('id, total_amount, status, submitted_at, stripe_payment_intent_id')
-              .eq('project_id', projectId)
-              .eq('company_id', (companyResult.data as CompanyProfileRef).id)
-              .eq('status', 'pending')
-              .is('stripe_payment_intent_id', null)
-              .order('submitted_at', { ascending: false })
-              .limit(1);
+          pendingQuoteQuery = slotId ? pendingQuoteQuery.eq('slot_id', slotId) : pendingQuoteQuery.is('slot_id', null);
 
-            pendingQuoteQuery = slotId ? pendingQuoteQuery.eq('slot_id', slotId) : pendingQuoteQuery.is('slot_id', null);
+          const pendingQuoteResult = await pendingQuoteQuery.maybeSingle();
+          if (!cancelled && !pendingQuoteResult.error && pendingQuoteResult.data) {
+            const quote = pendingQuoteResult.data as ExistingQuote;
+            const [itemsResult, milestonesResult] = await Promise.all([
+              supabase
+                .from('quote_line_items')
+                .select('id, description, total_cost, sort_order')
+                .eq('quote_id', quote.id)
+                .order('sort_order', { ascending: true }),
+              supabase
+                .from('milestones')
+                .select('id, title, amount, due_date, status, sort_order')
+                .eq('quote_id', quote.id)
+                .order('sort_order', { ascending: true }),
+            ]);
 
-            const pendingQuoteResult = await pendingQuoteQuery.maybeSingle();
-            if (!cancelled && !pendingQuoteResult.error && pendingQuoteResult.data) {
-              const quote = pendingQuoteResult.data as ExistingQuote;
-              const [itemsResult, milestonesResult] = await Promise.all([
-                supabase
-                  .from('quote_line_items')
-                  .select('id, description, total_cost, sort_order')
-                  .eq('quote_id', quote.id)
-                  .order('sort_order', { ascending: true }),
-                supabase
-                  .from('milestones')
-                  .select('id, title, amount, due_date, status, sort_order')
-                  .eq('quote_id', quote.id)
-                  .order('sort_order', { ascending: true }),
-              ]);
-
-              if (!cancelled) {
-                const existingLineItems = (itemsResult.data as ExistingLineItem[] | null) ?? [];
-                const existingMilestones = (milestonesResult.data as ExistingMilestone[] | null) ?? [];
-                setLineItems(editableLineItemsFromQuote(existingLineItems));
-                setMilestones(editableMilestonesFromQuote(existingMilestones));
-                setNotes(editableNotesFromQuote(existingLineItems));
-                setEditingPendingQuote(quote);
-              }
+            if (!cancelled) {
+              const existingLineItems = (itemsResult.data as ExistingLineItem[] | null) ?? [];
+              const existingMilestones = (milestonesResult.data as ExistingMilestone[] | null) ?? [];
+              setLineItems(editableLineItemsFromQuote(existingLineItems));
+              setMilestones(editableMilestonesFromQuote(existingMilestones));
+              setNotes(editableNotesFromQuote(existingLineItems));
+              setEditingPendingQuote(quote);
             }
           }
         }
