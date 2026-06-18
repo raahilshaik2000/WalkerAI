@@ -342,7 +342,7 @@ export default function GeneralContractorCreateProject() {
                 />
               </View>
               <Text style={styles.note}>
-                These terms are visible to the homeowner. GC management must be confirmed by the homeowner before active recommendations can be sent.
+                GC management must be confirmed by the homeowner before active recommendations can be sent.
               </Text>
             </GlassCard>
 

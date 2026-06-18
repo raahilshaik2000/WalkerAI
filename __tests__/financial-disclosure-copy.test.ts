@@ -40,6 +40,7 @@ describe('financial disclosure copy', () => {
       'Concierge rate',
       'Invalid management rate',
       'Invalid concierge rate',
+      'These terms are visible to the homeowner',
       'Your payout {formatCadCents(booking.contractor_payout_cents)}',
       'WalkerAI {formatCadCents(booking.walker_fee_cents)}',
       'contractor_payout_cents',
