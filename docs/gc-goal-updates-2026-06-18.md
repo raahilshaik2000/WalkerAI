@@ -468,6 +468,7 @@ Runtime fixes made from this pass:
 - Homeowner quote funding now uses app-safe copy for project, quote, and quote-line-item load failures before Stripe payment starts, while keeping the existing PaymentSheet and escrow funding flow intact.
 - Homeowner message list, homeowner project chat, and company job chat now use app-safe copy for message participant, message load, and message-send failures, matching the already-safe GC project chat behavior.
 - Company/trade earnings and profile screens now use app-safe copy for company profile, accepted-project, paid-milestone, and earnings load failures while keeping commission-derived payout math hidden from the app UI.
+- Homeowner and company/trade change-order screens now use app-safe copy for change-order load, submit, sign, approve, and reject failures while preserving the explicit disclaimer that signed cost changes do not automatically alter funded escrow or milestone payments.
 
 Runtime findings still not treated as complete:
 
@@ -514,6 +515,13 @@ Latest validation after project message error-copy hardening:
 Latest validation after company earnings/profile error-copy hardening:
 
 - `npm test -- --runInBand __tests__/company-profile-services.test.ts __tests__/company-payouts.test.ts __tests__/general-contractor.test.ts`
+- `npx tsc --noEmit`
+- `npm test -- --runInBand`
+- `git diff --check`
+
+Latest validation after change-order error-copy hardening:
+
+- `npm test -- --runInBand __tests__/change-orders.test.ts __tests__/project-activation.test.ts __tests__/general-contractor.test.ts`
 - `npx tsc --noEmit`
 - `npm test -- --runInBand`
 - `git diff --check`

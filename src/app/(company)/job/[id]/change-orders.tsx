@@ -14,6 +14,7 @@ import ReactNativeHapticFeedback from 'react-native-haptic-feedback';
 import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
 import Ionicons from 'react-native-vector-icons/Ionicons';
 import { supabase } from '@/lib/supabase/client';
+import { formatAppSafeErrorMessage } from '@/lib/supabase/functions';
 import { useAuthStore } from '@/stores/auth.store';
 import { Colors, Radius, Spacing, Typography } from '@/constants/theme';
 import { formatSignedCadCents, parseSignedCadToCents } from '@/lib/currency';
@@ -78,7 +79,7 @@ export default function CompanyChangeOrdersScreen() {
       .maybeSingle();
 
     if (companyResult.error) {
-      setErrorMessage(`Could not load company profile: ${companyResult.error.message}`);
+      setErrorMessage(formatAppSafeErrorMessage(companyResult.error, 'Could not load company profile.'));
       setLoading(false);
       return;
     }
@@ -108,7 +109,7 @@ export default function CompanyChangeOrdersScreen() {
           .order('created_at', { ascending: false });
 
         if (legacyResult.error) {
-          setErrorMessage(`Could not load change orders: ${legacyResult.error.message}`);
+          setErrorMessage(formatAppSafeErrorMessage(legacyResult.error, 'Could not load change orders.'));
           setLoading(false);
           return;
         }
@@ -119,7 +120,7 @@ export default function CompanyChangeOrdersScreen() {
         return;
       }
 
-      setErrorMessage(`Could not load change orders: ${error.message}`);
+      setErrorMessage(formatAppSafeErrorMessage(error, 'Could not load change orders.'));
       setLoading(false);
       return;
     }
@@ -197,7 +198,7 @@ export default function CompanyChangeOrdersScreen() {
     }
 
     if (insertError) {
-      Alert.alert('Error', insertError.message);
+      Alert.alert('Could not submit change order', formatAppSafeErrorMessage(insertError, 'Please try again.'));
     } else {
       ReactNativeHapticFeedback.trigger('notificationSuccess');
       setDescription('');
@@ -231,9 +232,9 @@ export default function CompanyChangeOrdersScreen() {
               .select('id')
               .maybeSingle();
             if (error) {
-              Alert.alert('Error', error.message);
+              Alert.alert('Could not sign change order', formatAppSafeErrorMessage(error, 'Please try again.'));
             } else if (!data) {
-              Alert.alert('Error', 'This change order is no longer available.');
+              Alert.alert('Change order unavailable', 'This change order is no longer available.');
             } else {
               ReactNativeHapticFeedback.trigger('notificationSuccess');
               fetchChangeOrders();

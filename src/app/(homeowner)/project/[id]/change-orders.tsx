@@ -12,6 +12,7 @@ import { useNavigation } from '@react-navigation/native'
 import { useRoute } from '@react-navigation/native';
 import ReactNativeHapticFeedback from 'react-native-haptic-feedback';
 import { supabase } from '@/lib/supabase/client';
+import { formatAppSafeErrorMessage } from '@/lib/supabase/functions';
 import { Colors, Radius, Spacing, Typography } from '@/constants/theme';
 import { formatSignedCadCents } from '@/lib/currency';
 import { getRequiredStringParam } from '@/lib/navigation-params';
@@ -46,7 +47,7 @@ export default function HomeownerChangeOrdersScreen() {
       .eq('project_id', projectId)
       .order('created_at', { ascending: false });
     if (error) {
-      setErrorMessage(`Could not load change orders: ${error.message}`);
+      setErrorMessage(formatAppSafeErrorMessage(error, 'Could not load change orders.'));
       setLoading(false);
       return;
     }
@@ -90,9 +91,9 @@ export default function HomeownerChangeOrdersScreen() {
             }).eq('id', co.id).select('id').maybeSingle();
 
             if (error) {
-              Alert.alert('Error', error.message);
+              Alert.alert('Could not approve change order', formatAppSafeErrorMessage(error, 'Please try again.'));
             } else if (!data) {
-              Alert.alert('Error', 'This change order is no longer available.');
+              Alert.alert('Change order unavailable', 'This change order is no longer available.');
             } else {
               ReactNativeHapticFeedback.trigger('notificationSuccess');
               fetchChangeOrders();
@@ -121,9 +122,9 @@ export default function HomeownerChangeOrdersScreen() {
               .select('id')
               .maybeSingle();
             if (error) {
-              Alert.alert('Error', error.message);
+              Alert.alert('Could not reject change order', formatAppSafeErrorMessage(error, 'Please try again.'));
             } else if (!data) {
-              Alert.alert('Error', 'This change order is no longer available.');
+              Alert.alert('Change order unavailable', 'This change order is no longer available.');
             } else {
               ReactNativeHapticFeedback.trigger('notificationWarning');
               fetchChangeOrders();
