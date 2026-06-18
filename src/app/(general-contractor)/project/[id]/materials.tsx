@@ -466,6 +466,13 @@ export default function GeneralContractorMaterialsScreen() {
                     Complete verified GC setup is required before material recommendations can be sent.
                   </Text>
                 </GlassCard>
+              ) : assignment?.status === 'completed' ? (
+                <GlassCard style={styles.card}>
+                  <Text style={styles.sectionTitle}>Material history</Text>
+                  <Text style={styles.bodyText}>
+                    Project completed. Material orders, supplier details, and substitution requests are available read-only.
+                  </Text>
+                </GlassCard>
               ) : assignment?.status === 'active' ? null : (
                 <GlassCard style={styles.card}>
                   <Text style={styles.sectionTitle}>Homeowner confirmation required</Text>

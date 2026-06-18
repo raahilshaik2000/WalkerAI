@@ -282,6 +282,13 @@ export default function GeneralContractorDiscoveryScreen() {
                     Complete verified GC setup is required before discoveries or scope changes can be submitted.
                   </Text>
                 </GlassCard>
+              ) : assignment?.status === 'completed' ? (
+                <GlassCard style={styles.card}>
+                  <Text style={styles.sectionTitle}>Discovery history</Text>
+                  <Text style={styles.bodyText}>
+                    Project completed. Discoveries, scope changes, and homeowner decisions are available read-only.
+                  </Text>
+                </GlassCard>
               ) : (
                 <GlassCard style={styles.card}>
                   <Text style={styles.sectionTitle}>Homeowner confirmation required</Text>

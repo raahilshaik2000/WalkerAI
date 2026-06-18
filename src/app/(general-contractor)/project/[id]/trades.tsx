@@ -594,6 +594,8 @@ export default function GeneralContractorTradesScreen() {
                     ? 'Generate or approve the project budget before WalkerAI can create priced trade slots.'
                     : assignment?.status === 'active'
                     ? 'Complete verified GC setup is required before a GC can generate the trade plan.'
+                    : assignment?.status === 'completed'
+                    ? 'Project completed. No trade plan was generated for this managed project.'
                     : 'Homeowner confirmation is required before a GC can generate the trade plan.'}
                 </Text>
               )}
@@ -603,6 +605,10 @@ export default function GeneralContractorTradesScreen() {
               {assignment?.status === 'active' && !gcReady ? (
                 <GlassCard style={styles.card}>
                   <Text style={styles.bodyText}>Complete verified GC setup is required before trade recommendations can be sent.</Text>
+                </GlassCard>
+              ) : assignment?.status === 'completed' ? (
+                <GlassCard style={styles.card}>
+                  <Text style={styles.bodyText}>Project completed. Trade assignments, external trade records, quotes, and negotiations are available read-only.</Text>
                 </GlassCard>
               ) : assignment?.status !== 'active' ? (
                 <GlassCard style={styles.card}>

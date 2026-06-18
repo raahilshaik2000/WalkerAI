@@ -145,6 +145,7 @@ export default function GeneralContractorScheduleScreen() {
   };
 
   const selectSlot = (slot: Slot) => {
+    if (assignment?.status === 'completed') return;
     if (!canScheduleSlot(slot)) {
       Alert.alert('Trade not ready', 'Assign a WalkerAI trade or mark this scope externally managed before recommending schedule dates.');
       return;
@@ -259,6 +260,12 @@ export default function GeneralContractorScheduleScreen() {
                     Complete verified GC setup is required before schedule recommendations can be sent.
                   </Text>
                 </GlassCard>
+              ) : assignment?.status === 'completed' ? (
+                <GlassCard style={styles.card}>
+                  <Text style={styles.bodyText}>
+                    Project completed. Final trade dates and schedule recommendations are available read-only.
+                  </Text>
+                </GlassCard>
               ) : assignment?.status !== 'active' ? (
                 <GlassCard style={styles.card}>
                   <Text style={styles.bodyText}>
@@ -272,7 +279,12 @@ export default function GeneralContractorScheduleScreen() {
                 const schedulable = canScheduleSlot(slot);
                 const participant = slotParticipantName(slot);
                 return (
-                  <TouchableOpacity key={slot.id} onPress={() => selectSlot(slot)} activeOpacity={schedulable ? 0.85 : 1}>
+                  <TouchableOpacity
+                    key={slot.id}
+                    onPress={() => selectSlot(slot)}
+                    disabled={assignment?.status === 'completed'}
+                    activeOpacity={schedulable && assignment?.status !== 'completed' ? 0.85 : 1}
+                  >
                     <GlassCard style={[styles.card, selected && styles.cardSelected]}>
                       <View style={styles.slotHeader}>
                         <View style={styles.slotIcon}>

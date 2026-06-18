@@ -2093,6 +2093,38 @@ describe('general contractor account type', () => {
     expect(gcCompletion).toContain('&& !pendingCompletionRequest');
   });
 
+  it('keeps completed GC project sub-screens read-only instead of locked as unconfirmed', () => {
+    const gcSchedule = fs.readFileSync(
+      path.join(repoRoot, 'src/app/(general-contractor)/project/[id]/schedule.tsx'),
+      'utf8',
+    );
+    const gcMaterials = fs.readFileSync(
+      path.join(repoRoot, 'src/app/(general-contractor)/project/[id]/materials.tsx'),
+      'utf8',
+    );
+    const gcPayments = fs.readFileSync(
+      path.join(repoRoot, 'src/app/(general-contractor)/project/[id]/payments.tsx'),
+      'utf8',
+    );
+    const gcTrades = fs.readFileSync(
+      path.join(repoRoot, 'src/app/(general-contractor)/project/[id]/trades.tsx'),
+      'utf8',
+    );
+    const gcDiscovery = fs.readFileSync(
+      path.join(repoRoot, 'src/app/(general-contractor)/project/[id]/discovery.tsx'),
+      'utf8',
+    );
+
+    expect(gcSchedule).toContain("if (assignment?.status === 'completed') return;");
+    expect(gcSchedule).toContain("disabled={assignment?.status === 'completed'}");
+    expect(gcSchedule).toContain('Project completed. Final trade dates and schedule recommendations are available read-only.');
+    expect(gcMaterials).toContain('Project completed. Material orders, supplier details, and substitution requests are available read-only.');
+    expect(gcPayments).toContain('Project completed. Deposit, progress, and final draw requests are available read-only; escrow releases remain in the milestone record.');
+    expect(gcTrades).toContain('Project completed. No trade plan was generated for this managed project.');
+    expect(gcTrades).toContain('Project completed. Trade assignments, external trade records, quotes, and negotiations are available read-only.');
+    expect(gcDiscovery).toContain('Project completed. Discoveries, scope changes, and homeowner decisions are available read-only.');
+  });
+
   it('gives GCs trade management visibility without bypassing homeowner approval', () => {
     const migration = fs.readFileSync(
       path.join(repoRoot, 'supabase/migrations/20260615001200_allow_gc_trade_quote_read.sql'),

@@ -321,6 +321,13 @@ export default function GeneralContractorPaymentsScreen() {
                     Complete verified GC setup is required before payment requests can be sent.
                   </Text>
                 </GlassCard>
+              ) : assignment?.status === 'completed' ? (
+                <GlassCard style={styles.card}>
+                  <Text style={styles.sectionTitle}>Payment history</Text>
+                  <Text style={styles.bodyText}>
+                    Project completed. Deposit, progress, and final draw requests are available read-only; escrow releases remain in the milestone record.
+                  </Text>
+                </GlassCard>
               ) : (
                 <GlassCard style={styles.card}>
                   <Text style={styles.sectionTitle}>Homeowner confirmation required</Text>
