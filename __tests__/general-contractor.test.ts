@@ -275,6 +275,10 @@ describe('general contractor account type', () => {
       path.join(repoRoot, 'supabase/migrations/20260616020800_copy_project_context_to_gc_invites.sql'),
       'utf8',
     );
+    const completeInviteMigration = fs.readFileSync(
+      path.join(repoRoot, 'supabase/migrations/20260618023501_require_complete_gc_profile_for_homeowner_invites.sql'),
+      'utf8',
+    );
 
     expect(projectDetail).toContain("label: 'Concierge'");
     expect(projectDetail).toContain("screen: 'Concierge'");
@@ -314,6 +318,16 @@ describe('general contractor account type', () => {
     expect(inviteContextMigration).toContain('COALESCE(NULLIF(trim(COALESCE(v_homeowner.full_name, \'\')), \'\'), v_homeowner.email)');
     expect(inviteContextMigration).toContain('homeowner_contact_email');
     expect(inviteContextMigration).toContain('homeowner_contact_phone');
+    expect(completeInviteMigration).toContain('CREATE OR REPLACE FUNCTION public.general_contractors_for_project');
+    expect(completeInviteMigration).toContain('JOIN public.users u ON u.id = gc.user_id');
+    expect(completeInviteMigration).toContain("u.role = 'general_contractor'");
+    expect(completeInviteMigration).toContain('trim(COALESCE(gc.license_number');
+    expect(completeInviteMigration).toContain('trim(COALESCE(gc.license_doc_url');
+    expect(completeInviteMigration).toContain('trim(COALESCE(gc.insurance_doc_url');
+    expect(completeInviteMigration).toContain('CREATE OR REPLACE FUNCTION public.invite_gc_to_project');
+    expect(completeInviteMigration).toContain('Only verified General Contractors with complete business, license, and insurance setup can be invited');
+    expect(completeInviteMigration).toContain('GRANT EXECUTE ON FUNCTION public.general_contractors_for_project(UUID) TO authenticated');
+    expect(completeInviteMigration).toContain('GRANT EXECUTE ON FUNCTION public.invite_gc_to_project(UUID, UUID) TO authenticated');
   });
 
   it('lets invited GCs activate their project management assignment', () => {
