@@ -1633,6 +1633,10 @@ describe('general contractor account type', () => {
     expect(gcSchedule).toContain("request_type: 'schedule_change'");
     expect(gcSchedule).toContain('Send Schedule for Approval');
     expect(homeownerConcierge).toContain("supabase.rpc('respond_to_project_approval_request'");
+    expect(homeownerConcierge).toContain('const [approvalResponseNotes, setApprovalResponseNotes] = useState<Record<string, string>>({});');
+    expect(homeownerConcierge).toContain('p_response_note: responseNote || null');
+    expect(homeownerConcierge).toContain('Optional response note');
+    expect(homeownerConcierge).toContain('Homeowner note: {request.response_note}');
     expect(scheduleGuardMigration).toContain('CREATE OR REPLACE FUNCTION public.guard_gc_schedule_approval_ready()');
     expect(scheduleGuardMigration).toContain("NEW.request_type = 'schedule_change'");
     expect(scheduleGuardMigration).toContain("slot.status IN ('filled', 'scheduled')");
@@ -2326,6 +2330,7 @@ describe('general contractor account type', () => {
     );
 
     expect(gcApprovals).toContain("from('project_approval_requests')");
+    expect(gcApprovals).toContain('status, response_note,');
     expect(gcApprovals).toContain("eq('requested_by_gc_id', gc.id)");
     expect(gcApprovals).toContain("select('project_id, project_type')");
     expect(gcApprovals).toContain('const projectIds = (assignments ?? []).map');
@@ -2339,6 +2344,7 @@ describe('general contractor account type', () => {
     expect(gcApprovals).toContain('Homeowner approval requests');
     expect(gcApprovals).toContain("navigation.navigate('GeneralContractorProjectDetail'");
     expect(gcApprovals).toContain("request.cost_delta != null ? ` · ${formatSignedCadCents(request.cost_delta)}` : ''");
+    expect(gcApprovals).toContain('Homeowner note: {request.response_note}');
     expect(gcApprovals).toContain('Documented cost change: {formatSignedCadCents(approval.cost_delta)}');
     expect(gcApprovals).not.toContain('formatCad(Math.abs(approval.cost_delta))');
   });
@@ -2366,6 +2372,7 @@ describe('general contractor account type', () => {
     expect(gcProjectDetail).toContain("Alert.alert('Active complete GC management required', 'Only an active verified GC with complete setup can cancel a pending homeowner approval request.')");
     expect(gcProjectDetail).toContain('Active complete verified GC management is required before this pending recommendation can be cancelled.');
     expect(gcProjectDetail).toContain('disabled={!assignmentIsActive || !!cancellingApprovalId}');
+    expect(gcProjectDetail).toContain('Homeowner note: {request.response_note}');
     expect(gcProjectDetail).toContain("order.cost_delta != null ? ` · ${formatSignedCadCents(order.cost_delta)}` : ''");
     expect(gcProjectDetail).not.toContain('formatCad(Math.abs(order.cost_delta))');
   });

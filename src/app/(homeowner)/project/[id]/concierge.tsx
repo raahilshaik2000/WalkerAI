@@ -23,7 +23,7 @@ import { formatCadCents, formatSignedCadCents } from '@/lib/currency';
 import { formatGcProjectType } from '@/lib/gc-project-type';
 import { getRequiredStringParam } from '@/lib/navigation-params';
 import { Colors, Spacing, Typography } from '@/constants/theme';
-import { GlassButton, GlassCard, GradientBackground, StatusBadge } from '@/components/ui';
+import { GlassButton, GlassCard, GlassInput, GradientBackground, StatusBadge } from '@/components/ui';
 
 type GcTrustProfile = Pick<GeneralContractor, 'verified' | 'business_name' | 'city' | 'province' | 'lat' | 'lng' | 'license_number' | 'license_doc_url' | 'insurance_doc_url'>;
 type AssignedGeneralContractor = Pick<GeneralContractor, 'id' | 'business_name' | 'city' | 'province' | 'lat' | 'lng' | 'rating' | 'total_reviews' | 'concierge_enabled' | 'verified' | 'license_number' | 'license_doc_url' | 'insurance_doc_url'>;
@@ -221,6 +221,7 @@ export default function ProjectConciergeScreen() {
   const [approvalRequests, setApprovalRequests] = useState<ApprovalRequest[]>([]);
   const [paymentRequests, setPaymentRequests] = useState<GcPaymentRequest[]>([]);
   const [bookingRequests, setBookingRequests] = useState<ConciergeBookingWithGc[]>([]);
+  const [approvalResponseNotes, setApprovalResponseNotes] = useState<Record<string, string>>({});
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [invitingId, setInvitingId] = useState<string | null>(null);
@@ -366,14 +367,20 @@ export default function ProjectConciergeScreen() {
           style: status === 'rejected' ? 'destructive' : 'default',
           onPress: async () => {
             setRespondingId(request.id);
+            const responseNote = approvalResponseNotes[request.id]?.trim() ?? '';
             const { error } = await supabase.rpc('respond_to_project_approval_request', {
               p_request_id: request.id,
               p_status: status,
-              p_response_note: null,
+              p_response_note: responseNote || null,
             });
             if (error) {
               Alert.alert('Could not respond', formatAppSafeErrorMessage(error, 'Please try again.'));
             } else {
+              setApprovalResponseNotes((current) => {
+                const next = { ...current };
+                delete next[request.id];
+                return next;
+              });
               await fetchData();
             }
             setRespondingId(null);
@@ -987,25 +994,36 @@ export default function ProjectConciergeScreen() {
                           Active complete verified GC management is required before this recommendation can apply project changes.
                         </Text>
                       ) : null}
+                      {!pending && request.response_note ? (
+                        <Text style={styles.approvalResponseNote}>Homeowner note: {request.response_note}</Text>
+                      ) : null}
                       {pending ? (
-                        <View style={styles.approvalActions}>
-                          <GlassButton
-                            label="Approve"
-                            onPress={() => handleApprovalResponse(request, 'approved')}
-                            loading={responding}
-                            disabled={approvalLocked}
-                            size="sm"
-                            style={styles.approvalButton}
+                        <>
+                          <GlassInput
+                            label="Optional response note"
+                            value={approvalResponseNotes[request.id] ?? ''}
+                            onChangeText={(text) => setApprovalResponseNotes((current) => ({ ...current, [request.id]: text }))}
+                            containerStyle={styles.approvalNoteInput}
                           />
-                          <GlassButton
-                            label="Reject"
-                            onPress={() => handleApprovalResponse(request, 'rejected')}
-                            loading={responding}
-                            variant="destructive"
-                            size="sm"
-                            style={styles.approvalButton}
-                          />
-                        </View>
+                          <View style={styles.approvalActions}>
+                            <GlassButton
+                              label="Approve"
+                              onPress={() => handleApprovalResponse(request, 'approved')}
+                              loading={responding}
+                              disabled={approvalLocked}
+                              size="sm"
+                              style={styles.approvalButton}
+                            />
+                            <GlassButton
+                              label="Reject"
+                              onPress={() => handleApprovalResponse(request, 'rejected')}
+                              loading={responding}
+                              variant="destructive"
+                              size="sm"
+                              style={styles.approvalButton}
+                            />
+                          </View>
+                        </>
                       ) : null}
                     </View>
                   );
@@ -1151,6 +1169,8 @@ const styles = StyleSheet.create({
   paidText: { ...Typography.caption, color: Colors.success, marginTop: Spacing.sm, fontWeight: '800' },
   approvalDescription: { ...Typography.bodySecondary, lineHeight: 21, marginTop: 8 },
   approvalDetail: { ...Typography.caption, color: Colors.text.primary, marginTop: 6, fontWeight: '800' },
+  approvalNoteInput: { marginTop: 12 },
+  approvalResponseNote: { ...Typography.caption, color: Colors.text.primary, marginTop: 8, lineHeight: 18 },
   approvalActions: { flexDirection: 'row', gap: 8, marginTop: 12 },
   approvalButton: { flex: 1 },
 });

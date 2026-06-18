@@ -157,6 +157,12 @@ Approval-backed GC actions include:
 - discovery changes
 - completion approval deferral
 
+Latest approval transparency update:
+
+- Homeowners can add an optional response note when approving or rejecting GC project recommendations.
+- GC project detail and GC approvals inbox surfaces now display homeowner response notes for finalized recommendation requests.
+- This keeps approval decisions auditable inside WalkerAI instead of reducing them to only approved/rejected status.
+
 Important files:
 
 - `src/app/(homeowner)/project/[id]/concierge.tsx`
@@ -442,6 +448,7 @@ Runtime fixes made from this pass:
 
 - Supplier earnings summary cards now keep currency values on one line instead of wrapping amounts like `$3,150.00`.
 - Supplier profile metrics now render in a two-column grid so rating, reviews, on-time percentage, and average days are readable on mobile.
+- Homeowner approval/rejection of GC project recommendations now supports optional response notes, and those notes are visible in GC project detail and approvals inbox views.
 
 Runtime findings still not treated as complete:
 

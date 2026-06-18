@@ -53,6 +53,7 @@ interface RecommendationApprovalRow {
   cost_delta: number | null;
   timeline_delta_days: number | null;
   status: string;
+  response_note: string | null;
   project_type?: string | null;
   project?: ProjectJoin;
 }
@@ -169,7 +170,7 @@ export default function GeneralContractorApprovals() {
         supabase
           .from('project_approval_requests')
           .select(`
-            id, project_id, request_type, title, cost_delta, timeline_delta_days, status,
+            id, project_id, request_type, title, cost_delta, timeline_delta_days, status, response_note,
             project:projects ( room_type, city, address )
           `)
           .eq('requested_by_gc_id', gc.id)
@@ -391,6 +392,9 @@ export default function GeneralContractorApprovals() {
                             {request.cost_delta != null ? ` · ${formatSignedCadCents(request.cost_delta)}` : ''}
                             {request.timeline_delta_days != null ? ` · ${request.timeline_delta_days > 0 ? '+' : ''}${request.timeline_delta_days} days` : ''}
                           </Text>
+                          {request.response_note ? (
+                            <Text style={styles.responseNote}>Homeowner note: {request.response_note}</Text>
+                          ) : null}
                         </View>
                       </TouchableOpacity>
                     );
@@ -502,6 +506,7 @@ const styles = StyleSheet.create({
   projectMeta: { ...Typography.caption, marginTop: 2 },
   description: { ...Typography.body, marginBottom: 8 },
   costText: { ...Typography.caption, color: Colors.text.secondary },
+  responseNote: { ...Typography.caption, color: Colors.text.primary, marginTop: 6, lineHeight: 18 },
   waitingText: { ...Typography.caption, color: Colors.warning, marginTop: 8, fontWeight: '700' },
   lockedText: { ...Typography.caption, color: Colors.warning, marginTop: 2, marginBottom: 8, lineHeight: 18 },
   bodyText: { ...Typography.bodySecondary },

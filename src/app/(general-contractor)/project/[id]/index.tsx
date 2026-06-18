@@ -1267,6 +1267,9 @@ export default function GeneralContractorProjectDetail() {
                         {request.cost_delta != null ? ` · ${formatSignedCadCents(request.cost_delta)}` : ''}
                         {request.timeline_delta_days != null ? ` · ${request.timeline_delta_days > 0 ? '+' : ''}${request.timeline_delta_days} days` : ''}
                       </Text>
+                      {request.response_note ? (
+                        <Text style={styles.responseNote}>Homeowner note: {request.response_note}</Text>
+                      ) : null}
                     </View>
                   </View>
                 ))}
@@ -1576,6 +1579,7 @@ const styles = StyleSheet.create({
   rowBody: { flex: 1 },
   rowTitle: { ...Typography.body, fontWeight: '700' },
   rowSub: { ...Typography.caption, marginTop: 3 },
+  responseNote: { ...Typography.caption, color: Colors.text.primary, marginTop: 6, lineHeight: 18 },
   cancelRequestButton: { marginTop: 9, alignSelf: 'flex-start' },
   externalWarning: { ...Typography.caption, color: Colors.warning, marginTop: 5, lineHeight: 17 },
   externalDocumentRow: { marginTop: 8 },
