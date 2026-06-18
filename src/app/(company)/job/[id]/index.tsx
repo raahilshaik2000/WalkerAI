@@ -14,7 +14,7 @@ import ReactNativeHapticFeedback from 'react-native-haptic-feedback';
 import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
 import Ionicons from 'react-native-vector-icons/Ionicons';
 import { supabase } from '@/lib/supabase/client';
-import { formatSupabaseFunctionError } from '@/lib/supabase/functions';
+import { formatAppSafeErrorMessage, formatSupabaseFunctionError } from '@/lib/supabase/functions';
 import { isStripePayoutLocallyReady } from '@/lib/payouts';
 import { getRequiredStringParam } from '@/lib/navigation-params';
 import { useAuthStore } from '@/stores/auth.store';
@@ -431,7 +431,7 @@ export default function JobBriefScreen() {
             p_response_note: null,
           });
           if (error) {
-            Alert.alert('Could not respond', error.message);
+            Alert.alert('Could not respond', formatAppSafeErrorMessage(error, 'Please try again.'));
           } else {
             await fetchJob();
             if (status === 'accepted') {

@@ -2410,6 +2410,7 @@ describe('general contractor account type', () => {
     expect(gcTrades).toContain('disabled={!canManageTradeRequests || !!cancellingNegotiationId}');
     expect(gcTrades).toContain('Counteroffer / revision request');
     expect(companyJob).toContain("from('gc_trade_quote_negotiations')");
+    expect(companyJob).toContain("import { formatAppSafeErrorMessage, formatSupabaseFunctionError } from '@/lib/supabase/functions'");
     expect(companyJob).toContain("import type { GcTradeQuoteNegotiation } from '@/types/database.types'");
     expect(companyJob).toContain('interface TradeNegotiation extends GcTradeQuoteNegotiation');
     expect(companyJob).toContain('general_contractors(business_name, verified)');
@@ -2425,6 +2426,8 @@ describe('general contractor account type', () => {
     expect(companyJob).toContain('accepted_counteroffer_cents');
     expect(companyJob).toContain('gc_negotiation_note');
     expect(companyJob).toContain("navigation.navigate('QuoteBuilder', quoteParams)");
+    expect(companyJob).toContain("Alert.alert('Could not respond', formatAppSafeErrorMessage(error, 'Please try again.'))");
+    expect(companyJob).not.toContain("Alert.alert('Could not respond', error.message)");
     expect(databaseTypes).toContain('export interface GcTradeQuoteNegotiation');
     expect(databaseTypes).toContain("export type GcTradeQuoteNegotiationStatus = 'pending' | 'accepted' | 'rejected' | 'revision_requested' | 'cancelled'");
     expect(databaseTypes).toContain('cancelled_at: string | null');
