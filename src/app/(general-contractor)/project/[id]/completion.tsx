@@ -291,8 +291,9 @@ export default function GeneralContractorCompletionScreen() {
   const latestCompletionRequest = completionRequests[0];
   const pendingCompletionRequest = completionRequests.find((approval) => approval.status === 'pending');
   const projectReadyForCloseout = project?.status === 'active';
+  const projectIsCompleted = project?.status === 'completed' || assignment?.status === 'completed';
   const budgetReadyForCloseout = (project?.ai_cost_min ?? 0) > 0 && (project?.ai_cost_max ?? 0) > 0;
-  const closeoutBlockers = (projectReadyForCloseout ? 0 : 1)
+  const activeCloseoutBlockers = (projectReadyForCloseout ? 0 : 1)
     + (budgetReadyForCloseout ? 0 : 1)
     + unresolvedTradeSlots.length
     + unscheduledTradeSlots.length
@@ -301,6 +302,7 @@ export default function GeneralContractorCompletionScreen() {
     + pendingTradeNegotiations
     + pendingQuotes
     + unresolvedMilestones;
+  const closeoutBlockers = projectIsCompleted ? 0 : activeCloseoutBlockers;
   const canRequestCompletion = assignment?.status === 'active'
     && gcVerified
     && projectReadyForCloseout

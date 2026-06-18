@@ -1595,6 +1595,10 @@ describe('general contractor account type', () => {
     expect(gcCompletion).not.toContain('const paidMaterials = materialOrders.reduce');
     expect(gcCompletion).not.toContain('{materialOrders.map((order) => (');
     expect(gcCompletion).toContain("const projectReadyForCloseout = project?.status === 'active';");
+    expect(gcCompletion).toContain("const projectIsCompleted = project?.status === 'completed' || assignment?.status === 'completed';");
+    expect(gcCompletion).toContain('const activeCloseoutBlockers = (projectReadyForCloseout ? 0 : 1)');
+    expect(gcCompletion).toContain('const closeoutBlockers = projectIsCompleted ? 0 : activeCloseoutBlockers;');
+    expect(gcCompletion.match(/setProject\(projectResult\.data as ProjectSummary \| null\);/g)?.length).toBe(1);
     expect(gcCompletion).toContain('const budgetReadyForCloseout = (project?.ai_cost_min ?? 0) > 0 && (project?.ai_cost_max ?? 0) > 0;');
     expect(gcCompletion).toContain('The project must be active with an approved budget before final completion can be requested.');
     expect(gcCompletion).toContain('Resolve project readiness, pending approvals, payment requests, change orders, open trade slots, unscheduled trades, permits, material orders, trade negotiations, pending quotes, and unpaid milestones before requesting final project completion.');
@@ -1852,7 +1856,8 @@ describe('general contractor account type', () => {
     expect(gcCompletion).toContain('This does not release escrow funds.');
     expect(gcCompletion).toContain("from('gc_trade_quote_negotiations')");
     expect(gcCompletion).toContain("from('quotes')");
-    expect(gcCompletion).toContain('const closeoutBlockers = (projectReadyForCloseout ? 0 : 1)');
+    expect(gcCompletion).toContain('const activeCloseoutBlockers = (projectReadyForCloseout ? 0 : 1)');
+    expect(gcCompletion).toContain('const closeoutBlockers = projectIsCompleted ? 0 : activeCloseoutBlockers;');
     expect(gcCompletion).toContain('Resolve project readiness, open trade slots, unscheduled trades, active permits, material orders, trade negotiations, pending quotes, and unpaid milestones before requesting final project completion.');
     expect(readinessMigration).toContain('CREATE OR REPLACE FUNCTION public.guard_gc_completion_approval_ready()');
     expect(readinessMigration).toContain("NEW.metadata->>'action' = 'complete_project'");
