@@ -1957,9 +1957,14 @@ describe('general contractor account type', () => {
     expect(homeownerConcierge).toContain("supabase.rpc('request_gc_concierge_booking'");
     expect(homeownerConcierge).toContain('Virtual consults and site visits use fixed marketplace pricing.');
     expect(homeownerConcierge).not.toContain('Contractor payout is 80%; WalkerAI keeps 20%.');
+    expect(homeownerConcierge).not.toContain('WalkerAI records the 80/20 payout split.');
+    expect(homeownerConcierge).not.toContain('GC {formatCadCents(booking.contractor_payout_cents)}');
+    expect(homeownerConcierge).not.toContain('WalkerAI {formatCadCents(booking.walker_fee_cents)}');
     expect(gcApprovals).toContain("from('gc_concierge_bookings')");
     expect(gcApprovals).toContain("supabase.rpc('respond_to_gc_concierge_booking'");
     expect(gcApprovals).toContain("setBookingRequests((bookingResult.data ?? []) as GcConciergeBooking[])");
+    expect(gcApprovals).not.toContain('Your payout {formatCadCents(booking.contractor_payout_cents)}');
+    expect(gcApprovals).not.toContain('WalkerAI {formatCadCents(booking.walker_fee_cents)}');
     expect(gcApprovals.indexOf("from('gc_concierge_bookings')")).toBeLessThan(
       gcApprovals.indexOf('if (projectIds.length === 0)'),
     );

@@ -316,9 +316,7 @@ export default function GeneralContractorApprovals() {
                           </View>
                           <View style={styles.cardBody}>
                             <Text style={styles.projectTitle}>{booking.title}</Text>
-                            <Text style={styles.projectMeta}>
-                              {formatCadCents(booking.price_cents)} · Your payout {formatCadCents(booking.contractor_payout_cents)} · WalkerAI {formatCadCents(booking.walker_fee_cents)}
-                            </Text>
+                            <Text style={styles.projectMeta}>{formatCadCents(booking.price_cents)}</Text>
                             <Text style={styles.projectMeta}>Payment: {formatStatusLabel(booking.payment_status ?? 'unpaid')}</Text>
                             {booking.stripe_transfer_id ? (
                               <Text style={styles.projectMeta}>

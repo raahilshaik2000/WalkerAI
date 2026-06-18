@@ -408,7 +408,7 @@ export default function ProjectConciergeScreen() {
 
     Alert.alert(
       'Release concierge payout?',
-      `Confirm ${booking.title} is complete and release ${formatCadCents(booking.contractor_payout_cents)} to the GC.`,
+      `Confirm ${booking.title} is complete and release the approved concierge payment.`,
       [
         { text: 'Cancel', style: 'cancel' },
         {
@@ -573,7 +573,7 @@ export default function ProjectConciergeScreen() {
 
     Alert.alert(
       'Pay concierge booking?',
-      `Pay ${formatCadCents(booking.price_cents)} for ${booking.title}? WalkerAI records the 80/20 payout split.`,
+      `Pay ${formatCadCents(booking.price_cents)} for ${booking.title}?`,
       [
         { text: 'Cancel', style: 'cancel' },
         {
@@ -698,7 +698,7 @@ export default function ProjectConciergeScreen() {
           <View style={styles.approvalBody}>
             <Text style={styles.approvalTitle}>{booking.title}</Text>
             <Text style={styles.approvalMeta}>
-              {formatCadCents(booking.price_cents)} · GC {formatCadCents(booking.contractor_payout_cents)} · WalkerAI {formatCadCents(booking.walker_fee_cents)}
+              {formatCadCents(booking.price_cents)}
             </Text>
             {bookingGc?.business_name ? (
               <Text style={styles.approvalMeta}>GC: {bookingGc.business_name}</Text>

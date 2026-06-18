@@ -141,7 +141,7 @@ export default function GeneralContractorProfile() {
           showsVerticalScrollIndicator={false}
           refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={Colors.accent} />}
         >
-          <TradeScreenHeader title="GC Profile" subtitle="Concierge status, margins, and account controls" />
+          <TradeScreenHeader title="GC Profile" subtitle="Concierge status and account controls" />
 
           {errorMessage ? (
             <GlassCard style={styles.card}>
