@@ -31,6 +31,19 @@ interface UnitPrice {
   unit: string;
 }
 
+type JoinedGcProfile = {
+  id?: string;
+  verified: boolean | null;
+  business_name: string | null;
+  city: string | null;
+  province: string | null;
+  lat: number | null;
+  lng: number | null;
+  license_number: string | null;
+  license_doc_url: string | null;
+  insurance_doc_url: string | null;
+};
+
 const MATERIAL_PRICE_RULES: Array<[RegExp, UnitPrice]> = [
   [/custom cabinet|custom cab/i, { unit: 'LF', low: 260, avg: 380, high: 600 }],
   [/semi[- ]custom/i, { unit: 'LF', low: 180, avg: 280, high: 420 }],
@@ -143,6 +156,67 @@ async function companyParticipatesInProject(supabase: any, project: any, company
   return !!data;
 }
 
+function getJoinedGcProfile(row: { general_contractors?: JoinedGcProfile | JoinedGcProfile[] | null }) {
+  return Array.isArray(row.general_contractors)
+    ? row.general_contractors[0] ?? null
+    : row.general_contractors ?? null;
+}
+
+function hasCompleteGcWorkflowProfile(gc: JoinedGcProfile | null | undefined) {
+  return gc?.verified === true
+    && !!gc.business_name?.trim()
+    && !!gc.city?.trim()
+    && !!gc.province?.trim()
+    && typeof gc.lat === 'number'
+    && typeof gc.lng === 'number'
+    && !!gc.license_number?.trim()
+    && !!gc.license_doc_url?.trim()
+    && !!gc.insurance_doc_url?.trim();
+}
+
+async function userGeneralContractorId(supabase: any, userId: string): Promise<string | null> {
+  const { data: appUser, error: appUserError } = await supabase
+    .from('users')
+    .select('role')
+    .eq('id', userId)
+    .maybeSingle();
+  if (appUserError) throw appUserError;
+  if (appUser?.role === 'general_contractor') {
+    const { data, error } = await supabase
+      .from('general_contractors')
+      .select('id, verified, business_name, city, province, lat, lng, license_number, license_doc_url, insurance_doc_url')
+      .eq('user_id', userId)
+      .order('created_at', { ascending: false })
+      .limit(1)
+      .maybeSingle();
+    if (error) throw error;
+    return hasCompleteGcWorkflowProfile(data as JoinedGcProfile | null) ? data.id : null;
+  }
+
+  return null;
+}
+
+async function generalContractorManagesProject(supabase: any, projectId: string, generalContractorId: string): Promise<boolean> {
+  const { data, error } = await supabase
+    .from('general_contractor_projects')
+    .select(`
+      id,
+      general_contractors!inner (
+        verified, business_name, city, province, lat, lng,
+        license_number, license_doc_url, insurance_doc_url
+      )
+    `)
+    .eq('project_id', projectId)
+    .eq('general_contractor_id', generalContractorId)
+    .eq('status', 'active')
+    .eq('general_contractors.verified', true)
+    .limit(1)
+    .maybeSingle();
+  if (error) throw error;
+  const gc = data ? getJoinedGcProfile(data as { general_contractors?: JoinedGcProfile | JoinedGcProfile[] | null }) : null;
+  return hasCompleteGcWorkflowProfile(gc);
+}
+
 Deno.serve(async (req) => {
   if (req.method === 'OPTIONS') {
     return new Response('ok', { headers: corsHeaders });
@@ -196,7 +270,13 @@ Deno.serve(async (req) => {
       const isAssignedContractor = companyId
         ? await companyParticipatesInProject(supabase, project, companyId)
         : false;
-      if (!isAssignedContractor) {
+      const generalContractorId = !isAssignedContractor && requesterId
+        ? await userGeneralContractorId(supabase, requesterId)
+        : null;
+      const isActiveGcManager = generalContractorId
+        ? await generalContractorManagesProject(supabase, project.id, generalContractorId)
+        : false;
+      if (!isAssignedContractor && !isActiveGcManager) {
         return new Response(JSON.stringify({ error: 'Forbidden' }), {
           status: 403,
           headers: { ...corsHeaders, 'Content-Type': 'application/json' },

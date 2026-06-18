@@ -83,6 +83,22 @@ describe('generate-material-orders source guards', () => {
     expect(source).toContain("isAssignedContractor");
     expect(source).toContain("project.status !== 'active'");
   });
+
+  it('allows active verified GC managers to repair material order generation for managed projects', () => {
+    const source = fs.readFileSync(
+      path.join(__dirname, '../supabase/functions/generate-material-orders/index.ts'),
+      'utf8',
+    );
+
+    expect(source).toContain('async function userGeneralContractorId');
+    expect(source).toContain('async function generalContractorManagesProject');
+    expect(source).toContain(".from('general_contractor_projects')");
+    expect(source).toContain('general_contractors!inner');
+    expect(source).toContain(".eq('status', 'active')");
+    expect(source).toContain(".eq('general_contractors.verified', true)");
+    expect(source).toContain("appUser?.role === 'general_contractor'");
+    expect(source).toContain('isActiveGcManager');
+  });
 });
 
 describe('QA account seed source guards', () => {
