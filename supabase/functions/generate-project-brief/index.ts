@@ -24,6 +24,37 @@ function isMissingColumnError(error: { message?: string } | null | undefined) {
   return !!error?.message && /column .* does not exist/i.test(error.message);
 }
 
+type JoinedGcProfile = {
+  user_id: string | null;
+  verified: boolean | null;
+  business_name: string | null;
+  city: string | null;
+  province: string | null;
+  lat: number | null;
+  lng: number | null;
+  license_number: string | null;
+  license_doc_url: string | null;
+  insurance_doc_url: string | null;
+};
+
+function getJoinedGcProfile(row: { general_contractors?: JoinedGcProfile | JoinedGcProfile[] | null }) {
+  return Array.isArray(row.general_contractors)
+    ? row.general_contractors[0] ?? null
+    : row.general_contractors ?? null;
+}
+
+function hasCompleteGcWorkflowProfile(gc: JoinedGcProfile | null | undefined) {
+  return gc?.verified === true
+    && !!gc.business_name?.trim()
+    && !!gc.city?.trim()
+    && !!gc.province?.trim()
+    && typeof gc.lat === 'number'
+    && typeof gc.lng === 'number'
+    && !!gc.license_number?.trim()
+    && !!gc.license_doc_url?.trim()
+    && !!gc.insurance_doc_url?.trim();
+}
+
 async function isActiveGeneralContractorForProject(
   supabase: ReturnType<typeof createClient>,
   projectId: string,
@@ -31,7 +62,13 @@ async function isActiveGeneralContractorForProject(
 ) {
   const { data, error } = await supabase
     .from('general_contractor_projects')
-    .select('id, general_contractors!inner(user_id, verified)')
+    .select(`
+      id,
+      general_contractors!inner (
+        user_id, verified, business_name, city, province, lat, lng,
+        license_number, license_doc_url, insurance_doc_url
+      )
+    `)
     .eq('project_id', projectId)
     .eq('status', 'active')
     .eq('general_contractors.user_id', userId)
@@ -40,7 +77,16 @@ async function isActiveGeneralContractorForProject(
     .maybeSingle();
 
   if (error) throw error;
-  return !!data;
+  const gc = data ? getJoinedGcProfile(data as { general_contractors?: JoinedGcProfile | JoinedGcProfile[] | null }) : null;
+  if (!hasCompleteGcWorkflowProfile(gc)) return false;
+
+  const { data: appUser, error: appUserError } = await supabase
+    .from('users')
+    .select('role')
+    .eq('id', userId)
+    .maybeSingle();
+  if (appUserError) throw appUserError;
+  return appUser?.role === 'general_contractor';
 }
 
 const PROJECT_TYPES = ['kitchen', 'bathroom', 'flooring', 'painting', 'basement', 'addition', 'other'] as const;

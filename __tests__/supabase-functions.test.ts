@@ -205,6 +205,10 @@ describe('generate-project-brief source guards', () => {
     expect(source).toContain(".eq('status', 'active')");
     expect(source).toContain(".eq('general_contractors.user_id', userId)");
     expect(source).toContain(".eq('general_contractors.verified', true)");
+    expect(source).toContain('hasCompleteGcWorkflowProfile');
+    expect(source).toContain('license_number, license_doc_url, insurance_doc_url');
+    expect(source).toContain(".from('users')");
+    expect(source).toContain("appUser?.role === 'general_contractor'");
     expect(source).toContain('const requesterIsHomeowner = project.homeowner_id === user.id;');
     expect(source).toContain('if (!requesterIsHomeowner && !requesterIsActiveGc)');
     expect(source).toContain("JSON.stringify({ error: 'Forbidden' })");
@@ -262,6 +266,10 @@ describe('generate-trade-slots source guards', () => {
     expect(source).toContain(".eq('status', 'active')");
     expect(source).toContain(".eq('general_contractors.user_id', userId)");
     expect(source).toContain(".eq('general_contractors.verified', true)");
+    expect(source).toContain('hasCompleteGcWorkflowProfile');
+    expect(source).toContain('license_number, license_doc_url, insurance_doc_url');
+    expect(source).toContain(".from('users')");
+    expect(source).toContain("appUser?.role === 'general_contractor'");
     expect(source).toContain('const requesterIsHomeowner = project.homeowner_id === requesterId;');
     expect(source).toContain('if (!requesterIsHomeowner && !requesterIsActiveGc)');
   });
@@ -337,6 +345,10 @@ describe('dispatch-slots source guards', () => {
     expect(source).toContain(".eq('status', 'active')");
     expect(source).toContain(".eq('general_contractors.user_id', userId)");
     expect(source).toContain(".eq('general_contractors.verified', true)");
+    expect(source).toContain('hasCompleteGcWorkflowProfile');
+    expect(source).toContain('license_number, license_doc_url, insurance_doc_url');
+    expect(source).toContain(".from('users')");
+    expect(source).toContain("appUser?.role === 'general_contractor'");
     expect(source).toContain('const requesterIsHomeowner = project.homeowner_id === requesterId;');
     expect(source).toContain('if (!requesterIsHomeowner && !requesterIsActiveGc)');
   });
