@@ -455,6 +455,7 @@ Runtime fixes made from this pass:
 - GC-created project setup now uses stable existing-homeowner-account guidance and formats the missing-homeowner RPC error into actionable app copy instead of exposing backend wording.
 - GC trade dispatch no-match responses now pass backend-provided messages through the app-safe formatter before showing them in the GC trade screen.
 - Homeowner project dispatch restart messages now use app-safe formatting in both project detail variants, so contractor-search recovery does not expose raw function wording.
+- The homeowner dashboard project carousel now formats both project-load and optional GC-context failures through app-safe copy before displaying them.
 
 Runtime findings still not treated as complete:
 

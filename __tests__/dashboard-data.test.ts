@@ -102,6 +102,17 @@ describe('homeowner optional GC context', () => {
     expect(messages).toContain('const gcContextUnavailable = isMissingSupabaseSchemaObjectError(gcResult.error, \'general_contractor_projects\');');
     expect(messages).toContain('gcContextUnavailable ? [] : (gcResult.data ?? [])');
   });
+
+  it('keeps project carousel load failures app-safe while reading optional GC context', () => {
+    const repoRoot = path.resolve(__dirname, '..');
+    const carousel = fs.readFileSync(path.join(repoRoot, 'src/components/dashboard/ProjectsCarousel.tsx'), 'utf8');
+
+    expect(carousel).toContain("import { formatAppSafeErrorMessage } from '@/lib/supabase/functions';");
+    expect(carousel).toContain("setErrorMessage(formatAppSafeErrorMessage(error, 'Could not load projects.'))");
+    expect(carousel).toContain("setErrorMessage(formatAppSafeErrorMessage(gcContextError, 'Could not load project management context.'))");
+    expect(carousel).not.toContain('setErrorMessage(error.message)');
+    expect(carousel).not.toContain('setErrorMessage(gcContextError.message)');
+  });
 });
 
 describe('homeowner nullable project categories', () => {

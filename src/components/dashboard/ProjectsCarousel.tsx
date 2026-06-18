@@ -14,6 +14,7 @@ import LinearGradient from 'react-native-linear-gradient';
 import { useNavigation } from '@react-navigation/native';
 import { supabase } from '@/lib/supabase/client';
 import { isMissingSupabaseSchemaObjectError } from '@/lib/supabase/errors';
+import { formatAppSafeErrorMessage } from '@/lib/supabase/functions';
 import { formatGcProjectType } from '@/lib/gc-project-type';
 import { useAuthStore } from '@/stores/auth.store';
 import { AnimatedPressable, GlassButton } from '@/components/ui';
@@ -110,7 +111,7 @@ export function ProjectsCarousel({ refreshKey = 0, onRefreshDone }: { refreshKey
 
       if (error) {
         setProjects([]);
-        setErrorMessage(error.message);
+        setErrorMessage(formatAppSafeErrorMessage(error, 'Could not load projects.'));
         return;
       }
       let projectList = ((data as Project[]) ?? []).map((project) => ({
@@ -128,7 +129,7 @@ export function ProjectsCarousel({ refreshKey = 0, onRefreshDone }: { refreshKey
         if (gcContextError) {
           if (!isMissingSupabaseSchemaObjectError(gcContextError, 'general_contractor_projects')) {
             setProjects([]);
-            setErrorMessage(gcContextError.message);
+            setErrorMessage(formatAppSafeErrorMessage(gcContextError, 'Could not load project management context.'));
             return;
           }
           setProjects(projectList);
