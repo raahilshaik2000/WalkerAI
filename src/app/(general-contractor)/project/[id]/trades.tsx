@@ -42,6 +42,7 @@ interface Quote {
   total_amount: number;
   status: string;
   submitted_at: string | null;
+  stripe_payment_intent_id: string | null;
   company?: { name: string | null } | Array<{ name: string | null }> | null;
 }
 
@@ -73,6 +74,10 @@ function getCompany(slot: Slot) {
 
 function getQuoteCompany(quote: Quote) {
   return Array.isArray(quote.company) ? quote.company[0]?.name ?? null : quote.company?.name ?? null;
+}
+
+function canNegotiateQuote(quote: Quote) {
+  return quote.status === 'pending' && !quote.stripe_payment_intent_id;
 }
 
 function estimateLabel(slot: Slot) {
@@ -200,7 +205,7 @@ export default function GeneralContractorTradesScreen() {
           .order('created_at', { ascending: true }),
         supabase
           .from('quotes')
-          .select('id, slot_id, company_id, total_amount, status, submitted_at, company:companies!company_id(name)')
+          .select('id, slot_id, company_id, total_amount, status, submitted_at, stripe_payment_intent_id, company:companies!company_id(name)')
           .eq('project_id', projectId)
           .order('submitted_at', { ascending: false }),
         supabase
@@ -435,8 +440,8 @@ export default function GeneralContractorTradesScreen() {
       Alert.alert('Quote required', 'Choose the trade quote you want to negotiate.');
       return;
     }
-    if (quote.status !== 'pending') {
-      Alert.alert('Quote already finalized', 'Only pending quotes can be negotiated.');
+    if (!canNegotiateQuote(quote)) {
+      Alert.alert('Quote negotiation locked', 'Only pending quotes without started payment can be negotiated. Use change orders after payment begins.');
       return;
     }
     if (!quote.company_id) {
@@ -685,12 +690,17 @@ export default function GeneralContractorTradesScreen() {
                                     <TouchableOpacity
                                       style={styles.negotiateButton}
                                       onPress={() => selectQuoteForNegotiation(quote)}
-                                      disabled={quote.status !== 'pending' || !canManageTradeRequests}
+                                      disabled={!canNegotiateQuote(quote) || !canManageTradeRequests}
                                     >
                                       <Text style={styles.negotiateText}>Negotiate</Text>
                                     </TouchableOpacity>
                                   </View>
                                 </View>
+                                {quote.status === 'pending' && quote.stripe_payment_intent_id ? (
+                                  <Text style={styles.warning}>
+                                    Payment has started for this quote. Pricing changes must use change orders.
+                                  </Text>
+                                ) : null}
                                 {quoteNegotiations.map((negotiation) => (
                                   <View key={negotiation.id} style={styles.negotiationRow}>
                                     <Text style={styles.negotiationMeta}>
@@ -742,12 +752,17 @@ export default function GeneralContractorTradesScreen() {
                             <TouchableOpacity
                               style={styles.negotiateButton}
                               onPress={() => selectQuoteForNegotiation(quote)}
-                              disabled={quote.status !== 'pending' || !canManageTradeRequests}
+                              disabled={!canNegotiateQuote(quote) || !canManageTradeRequests}
                             >
                               <Text style={styles.negotiateText}>Negotiate</Text>
                             </TouchableOpacity>
                           </View>
                         </View>
+                        {quote.status === 'pending' && quote.stripe_payment_intent_id ? (
+                          <Text style={styles.warning}>
+                            Payment has started for this quote. Pricing changes must use change orders.
+                          </Text>
+                        ) : null}
                         {quoteNegotiations.map((negotiation) => (
                           <View key={negotiation.id} style={styles.negotiationRow}>
                             <Text style={styles.negotiationMeta}>

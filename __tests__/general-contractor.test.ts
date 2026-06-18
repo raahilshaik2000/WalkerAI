@@ -1730,7 +1730,7 @@ describe('general contractor account type', () => {
     expect(gcTrades).toContain('projectBudgetReady ? (');
     expect(gcTrades).toContain('Generate or approve the project budget before WalkerAI can dispatch open trade slots.');
     expect(gcTrades).toContain('The homeowner must confirm GC management before you can dispatch WalkerAI trades.');
-    expect(gcTrades).toContain("disabled={quote.status !== 'pending' || !canManageTradeRequests}");
+    expect(gcTrades).toContain('disabled={!canNegotiateQuote(quote) || !canManageTradeRequests}');
     expect(gcTrades).toContain("negotiation.status === 'pending' && canManageTradeRequests");
     expect(gcTrades).toContain('disabled={!canManageTradeRequests || !!cancellingNegotiationId}');
     expect(gcTrades).toContain("request_type: 'trade_substitution'");
@@ -2024,6 +2024,10 @@ describe('general contractor account type', () => {
       path.join(repoRoot, 'supabase/migrations/20260615001600_add_gc_trade_negotiations.sql'),
       'utf8',
     );
+    const paymentStartedLockMigration = fs.readFileSync(
+      path.join(repoRoot, 'supabase/migrations/20260618022010_lock_gc_negotiation_payment_started_quotes.sql'),
+      'utf8',
+    );
     const gcTrades = fs.readFileSync(
       path.join(repoRoot, 'src/app/(general-contractor)/project/[id]/trades.tsx'),
       'utf8',
@@ -2047,6 +2051,11 @@ describe('general contractor account type', () => {
     expect(gcTrades).toContain("import type { GcTradeQuoteNegotiation } from '@/types/database.types'");
     expect(gcTrades).not.toContain('interface TradeNegotiation');
     expect(gcTrades).toContain('useState<GcTradeQuoteNegotiation[]>([])');
+    expect(gcTrades).toContain('stripe_payment_intent_id: string | null;');
+    expect(gcTrades).toContain('function canNegotiateQuote');
+    expect(gcTrades).toContain("quote.status === 'pending' && !quote.stripe_payment_intent_id");
+    expect(gcTrades).toContain('Payment has started for this quote. Pricing changes must use change orders.');
+    expect(gcTrades).toContain('Only pending quotes without started payment can be negotiated. Use change orders after payment begins.');
     expect(gcTrades).toContain('handleCancelNegotiation');
     expect(gcTrades).toContain("status: 'cancelled'");
     expect(gcTrades).toContain('cancelled_at: new Date().toISOString()');
@@ -2075,6 +2084,9 @@ describe('general contractor account type', () => {
     expect(databaseTypes).toContain('export interface GcTradeQuoteNegotiation');
     expect(databaseTypes).toContain("export type GcTradeQuoteNegotiationStatus = 'pending' | 'accepted' | 'rejected' | 'revision_requested' | 'cancelled'");
     expect(databaseTypes).toContain('cancelled_at: string | null');
+    expect(paymentStartedLockMigration).toContain('DROP POLICY IF EXISTS "gc_trade_negotiations_gc_insert"');
+    expect(paymentStartedLockMigration).toContain("q.status = 'pending'");
+    expect(paymentStartedLockMigration).toContain('q.stripe_payment_intent_id IS NULL');
   });
 
   it('collects accepted GC concierge booking payments through Stripe PaymentSheet', () => {
