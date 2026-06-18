@@ -36,6 +36,30 @@ describe('general contractor account type', () => {
     });
   });
 
+  it('keeps every direct GC navigation target registered in the GC navigator', () => {
+    const navigator = fs.readFileSync(
+      path.join(repoRoot, 'src/navigation/GeneralContractorNavigator.tsx'),
+      'utf8',
+    );
+    const gcSourceDir = path.join(repoRoot, 'src/app/(general-contractor)');
+    const readGcSources = (dir: string): string[] => fs.readdirSync(dir, { withFileTypes: true }).flatMap((entry: any) => {
+      const fullPath = path.join(dir, entry.name);
+      if (entry.isDirectory()) return readGcSources(fullPath);
+      return entry.name.endsWith('.tsx') ? [fs.readFileSync(fullPath, 'utf8')] : [];
+    });
+
+    const registeredRoutes = new Set<string>();
+    for (const match of navigator.matchAll(/<(?:Stack|Tab)\.Screen\s+name="([^"]+)"/g)) {
+      registeredRoutes.add(match[1]);
+    }
+    const directTargets = readGcSources(gcSourceDir).flatMap((source) => (
+      Array.from(source.matchAll(/navigation\.(?:navigate|replace)\('([^']+)'/g), (match) => match[1])
+    ));
+
+    expect(directTargets.length).toBeGreaterThan(0);
+    expect(directTargets.filter((route) => !registeredRoutes.has(route))).toEqual([]);
+  });
+
   it('keeps GC onboarding separate from company onboarding', () => {
     const businessOnboarding = fs.readFileSync(
       path.join(repoRoot, 'src/app/(general-contractor)/onboarding/business.tsx'),
