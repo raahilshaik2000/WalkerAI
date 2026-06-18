@@ -55,8 +55,13 @@ interface ExistingMilestone {
   id: string;
   title: string;
   amount: number;
+  due_date: string | null;
   status: string;
   sort_order: number | null;
+}
+
+interface CompanyProfileRef {
+  id: string;
 }
 
 function formatTotal(items: LineItem[]): number {
@@ -146,6 +151,37 @@ function defaultNotes(value: unknown): string {
     : '';
 }
 
+function editableLineItemsFromQuote(items: ExistingLineItem[]): LineItem[] {
+  const pricedItems = [...items]
+    .filter((item) => (item.total_cost ?? 0) > 0 && !item.description.startsWith('Contractor notes:'))
+    .sort((a, b) => (a.sort_order ?? 0) - (b.sort_order ?? 0));
+
+  if (pricedItems.length === 0) return defaultLineItems(null);
+
+  return pricedItems.map((item, index) => ({
+    id: item.id || `existing-line-${index}`,
+    description: item.description,
+    amount: formatCentsInput(item.total_cost ?? 0),
+  }));
+}
+
+function editableMilestonesFromQuote(items: ExistingMilestone[]): MilestoneInput[] {
+  const sortedItems = [...items].sort((a, b) => (a.sort_order ?? 0) - (b.sort_order ?? 0));
+  if (sortedItems.length === 0) return defaultMilestones(null);
+
+  return sortedItems.map((item, index) => ({
+    id: item.id || `existing-milestone-${index}`,
+    title: item.title,
+    amount: formatCentsInput(item.amount),
+    due_date: item.due_date ?? '',
+  }));
+}
+
+function editableNotesFromQuote(items: ExistingLineItem[]): string {
+  const noteItem = items.find((item) => item.description.startsWith('Contractor notes:'));
+  return noteItem?.description.replace(/^Contractor notes:\s*/, '').trim() ?? '';
+}
+
 export default function QuoteBuilderScreen() {
   const route = useRoute<any>();
   const projectId = getRequiredStringParam(route.params, 'id');
@@ -160,6 +196,7 @@ export default function QuoteBuilderScreen() {
   const [submitting, setSubmitting] = useState(false);
   const [loadingApprovedQuote, setLoadingApprovedQuote] = useState(true);
   const [approvedQuote, setApprovedQuote] = useState<ExistingQuote | null>(null);
+  const [editingPendingQuote, setEditingPendingQuote] = useState<ExistingQuote | null>(null);
   const [approvedLineItems, setApprovedLineItems] = useState<ExistingLineItem[]>([]);
   const [approvedMilestones, setApprovedMilestones] = useState<ExistingMilestone[]>([]);
 
@@ -173,6 +210,7 @@ export default function QuoteBuilderScreen() {
       }
 
       setLoadingApprovedQuote(true);
+      setEditingPendingQuote(null);
       let query = supabase
         .from('quotes')
         .select('id, total_amount, status, submitted_at, stripe_payment_intent_id')
@@ -189,6 +227,55 @@ export default function QuoteBuilderScreen() {
         setApprovedQuote(null);
         setApprovedLineItems([]);
         setApprovedMilestones([]);
+        if (!acceptedCounterofferCents && user?.id) {
+          const companyResult = await supabase
+            .from('companies')
+            .select('id')
+            .eq('user_id', user.id)
+            .order('created_at', { ascending: false })
+            .limit(1)
+            .maybeSingle();
+
+          if (!cancelled && !companyResult.error && companyResult.data) {
+            let pendingQuoteQuery = supabase
+              .from('quotes')
+              .select('id, total_amount, status, submitted_at, stripe_payment_intent_id')
+              .eq('project_id', projectId)
+              .eq('company_id', (companyResult.data as CompanyProfileRef).id)
+              .eq('status', 'pending')
+              .is('stripe_payment_intent_id', null)
+              .order('submitted_at', { ascending: false })
+              .limit(1);
+
+            pendingQuoteQuery = slotId ? pendingQuoteQuery.eq('slot_id', slotId) : pendingQuoteQuery.is('slot_id', null);
+
+            const pendingQuoteResult = await pendingQuoteQuery.maybeSingle();
+            if (!cancelled && !pendingQuoteResult.error && pendingQuoteResult.data) {
+              const quote = pendingQuoteResult.data as ExistingQuote;
+              const [itemsResult, milestonesResult] = await Promise.all([
+                supabase
+                  .from('quote_line_items')
+                  .select('id, description, total_cost, sort_order')
+                  .eq('quote_id', quote.id)
+                  .order('sort_order', { ascending: true }),
+                supabase
+                  .from('milestones')
+                  .select('id, title, amount, due_date, status, sort_order')
+                  .eq('quote_id', quote.id)
+                  .order('sort_order', { ascending: true }),
+              ]);
+
+              if (!cancelled) {
+                const existingLineItems = (itemsResult.data as ExistingLineItem[] | null) ?? [];
+                const existingMilestones = (milestonesResult.data as ExistingMilestone[] | null) ?? [];
+                setLineItems(editableLineItemsFromQuote(existingLineItems));
+                setMilestones(editableMilestonesFromQuote(existingMilestones));
+                setNotes(editableNotesFromQuote(existingLineItems));
+                setEditingPendingQuote(quote);
+              }
+            }
+          }
+        }
         setLoadingApprovedQuote(false);
         return;
       }
@@ -204,7 +291,7 @@ export default function QuoteBuilderScreen() {
           .order('sort_order', { ascending: true }),
         supabase
           .from('milestones')
-          .select('id, title, amount, status, sort_order')
+          .select('id, title, amount, due_date, status, sort_order')
           .eq('quote_id', quote.id)
           .order('sort_order', { ascending: true }),
       ]);
@@ -220,7 +307,7 @@ export default function QuoteBuilderScreen() {
     return () => {
       cancelled = true;
     };
-  }, [projectId, slotId]);
+  }, [acceptedCounterofferCents, projectId, slotId, user?.id]);
 
   const addLineItem = () => {
     setLineItems((prev) => [...prev, { id: Date.now().toString(), description: '', amount: '' }]);
@@ -497,9 +584,18 @@ export default function QuoteBuilderScreen() {
               <TouchableOpacity onPress={() => navigation.goBack()}>
                 <Ionicons name="arrow-back" size={22} color={Colors.text.secondary} />
               </TouchableOpacity>
-              <Text style={styles.title}>Build Quote</Text>
+              <Text style={styles.title}>{editingPendingQuote ? 'Edit Quote' : 'Build Quote'}</Text>
               <View style={{ width: 48 }} />
             </View>
+
+            {editingPendingQuote ? (
+              <GlassCard style={styles.card}>
+                <Text style={styles.sectionTitle}>Pending quote loaded</Text>
+                <Text style={styles.sectionSub}>
+                  This unfunded quote is still editable. Submitting replaces it with this updated pricing package.
+                </Text>
+              </GlassCard>
+            ) : null}
 
             {/* Line Items */}
             <GlassCard style={styles.card}>

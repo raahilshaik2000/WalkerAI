@@ -104,8 +104,35 @@ describe('company quote copy', () => {
     expect(source).toContain(".from('quotes')");
     expect(source).toContain(".eq('status', 'approved')");
     expect(source).toContain('setHasApprovedQuote(!!approvedQuoteResult.data);');
-    expect(source).toContain("meta: hasApprovedQuote ? 'View approved' : 'Build quote'");
+    expect(source).toContain("meta: hasApprovedQuote ? 'View approved' : hasEditablePendingQuote ? 'Edit pending' : 'Build quote'");
     expect(source).not.toContain("meta: job.status === 'active' ? 'View approved' : 'Build quote'");
+  });
+
+  it('reopens unfunded pending quotes as editable pricing instead of a blank builder', () => {
+    const repoRoot = path.resolve(__dirname, '..');
+    const quoteBuilder = fs.readFileSync(
+      path.join(repoRoot, 'src/app/(company)/job/[id]/quote-builder.tsx'),
+      'utf8'
+    );
+    const jobDetail = fs.readFileSync(
+      path.join(repoRoot, 'src/app/(company)/job/[id]/index.tsx'),
+      'utf8'
+    );
+
+    expect(quoteBuilder).toContain('const [editingPendingQuote, setEditingPendingQuote] = useState<ExistingQuote | null>(null);');
+    expect(quoteBuilder).toContain("function editableLineItemsFromQuote");
+    expect(quoteBuilder).toContain("function editableMilestonesFromQuote");
+    expect(quoteBuilder).toContain("function editableNotesFromQuote");
+    expect(quoteBuilder).toContain(".eq('status', 'pending')");
+    expect(quoteBuilder).toContain(".is('stripe_payment_intent_id', null)");
+    expect(quoteBuilder).toContain('setLineItems(editableLineItemsFromQuote(existingLineItems));');
+    expect(quoteBuilder).toContain('setMilestones(editableMilestonesFromQuote(existingMilestones));');
+    expect(quoteBuilder).toContain('setNotes(editableNotesFromQuote(existingLineItems));');
+    expect(quoteBuilder).toContain("editingPendingQuote ? 'Edit Quote' : 'Build Quote'");
+    expect(quoteBuilder).toContain('This unfunded quote is still editable. Submitting replaces it with this updated pricing package.');
+    expect(jobDetail).toContain('const [hasEditablePendingQuote, setHasEditablePendingQuote] = useState(false);');
+    expect(jobDetail).toContain('setHasEditablePendingQuote(!!pendingQuoteResult.data);');
+    expect(jobDetail).toContain("hasEditablePendingQuote ? 'Edit pending' : 'Build quote'");
   });
 
   it('does not show duplicate legacy active jobs when a slot assignment exists for the same project', () => {

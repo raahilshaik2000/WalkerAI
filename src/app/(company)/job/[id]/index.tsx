@@ -142,6 +142,7 @@ export default function JobBriefScreen() {
   const [respondingNegotiationId, setRespondingNegotiationId] = useState<string | null>(null);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [hasApprovedQuote, setHasApprovedQuote] = useState(false);
+  const [hasEditablePendingQuote, setHasEditablePendingQuote] = useState(false);
   const finishSelections = readPersistedSurfaceSelections(job?.questionnaire_answers);
 
   const fetchJob = useCallback(async () => {
@@ -218,6 +219,19 @@ export default function JobBriefScreen() {
       const slotInfo = slotData as Slot | null;
       const projectInfo = projectData as JobBrief | null;
 
+      let pendingQuoteQuery = supabase
+        .from('quotes')
+        .select('id')
+        .eq('project_id', projectId)
+        .eq('company_id', companyId)
+        .eq('status', 'pending')
+        .is('stripe_payment_intent_id', null)
+        .limit(1);
+      pendingQuoteQuery = slotId ? pendingQuoteQuery.eq('slot_id', slotId) : pendingQuoteQuery.is('slot_id', null);
+      const pendingQuoteResult = await pendingQuoteQuery.maybeSingle();
+      if (pendingQuoteResult.error) throw pendingQuoteResult.error;
+      setHasEditablePendingQuote(!!pendingQuoteResult.data);
+
       if (slotInfo) {
         const slotClaimed = slotInfo.status === 'filled' || slotInfo.status === 'scheduled';
         setAlreadyAccepted(slotClaimed && slotInfo.assigned_company_id === companyId);
@@ -265,6 +279,7 @@ export default function JobBriefScreen() {
       setAlreadyAccepted(false);
       setUnavailable(false);
       setHasApprovedQuote(false);
+      setHasEditablePendingQuote(false);
       setTradeNegotiations([]);
       setLoading(false);
     }
@@ -654,7 +669,7 @@ export default function JobBriefScreen() {
                     label: 'Quote',
                     iconName: 'file-document-edit-outline',
                     route: 'QuoteBuilder',
-                    meta: hasApprovedQuote ? 'View approved' : 'Build quote',
+                    meta: hasApprovedQuote ? 'View approved' : hasEditablePendingQuote ? 'Edit pending' : 'Build quote',
                   },
                   { label: 'Payments', iconName: 'cash-multiple', route: 'JobMilestones', meta: 'Milestones' },
                   { label: 'Materials', iconName: 'cube-outline', route: 'JobMaterials', meta: 'Verify counts' },
