@@ -242,42 +242,58 @@ export default function GeneralContractorAssistantScreen() {
     const projectTypeLabel = formatGcProjectType(assignment?.project_type, project?.room_type);
     const projectStatusLabel = formatStatusLabel(project?.status ?? 'unknown');
     const managementStatusLabel = formatStatusLabel(assignment?.status ?? 'unknown');
+    const completedHistory = assignment?.status === 'completed' || project?.status === 'completed';
 
     const summary = [
       `${projectTypeLabel} project record is ${projectStatusLabel}. GC management is ${managementStatusLabel}.`,
+      ...(completedHistory ? ['This completed project summary is read-only historical context.'] : []),
       slots.length > 0
         ? `${slots.filter((slot) => ['filled', 'scheduled'].includes(slot.status)).length}/${slots.length} trade slots are assigned or scheduled.`
         : 'No trade slots have been generated yet.',
-      pendingApprovals.length + pendingPayments.length > 0
+      completedHistory
+        ? 'Completed project records remain available without creating new homeowner action items.'
+        : pendingApprovals.length + pendingPayments.length > 0
         ? `${pendingApprovals.length + pendingPayments.length} homeowner decision${pendingApprovals.length + pendingPayments.length === 1 ? '' : 's'} are waiting.`
         : 'No homeowner approvals are currently waiting.',
       messages.length > 0 ? `${messages.length} recent project messages are available for context.` : 'No project messages have been recorded yet.',
     ];
 
-    const risks = [
-      ...openPermits.map((permit) => `${formatStatusLabel(permit.permit_type)} permit is ${formatStatusLabel(permit.status)}.`),
-      ...unscheduledSlots.map((slot) => `${formatTrade(slot.trade_type)} is assigned but has no start date.`),
-      ...overdueSlots.map((slot) => `${formatTrade(slot.trade_type)} has a scheduled end date in the past.`),
-      ...lateMaterialOrders.map((order) => `A material order is past its delivery deadline and still ${formatStatusLabel(order.status)}.`),
-      ...externalSlots.map((slot) => `${formatTrade(slot.trade_type)} is externally managed, so WalkerAI verification and escrow protection do not apply.`),
-    ];
+    const risks = completedHistory
+      ? []
+      : [
+        ...openPermits.map((permit) => `${formatStatusLabel(permit.permit_type)} permit is ${formatStatusLabel(permit.status)}.`),
+        ...unscheduledSlots.map((slot) => `${formatTrade(slot.trade_type)} is assigned but has no start date.`),
+        ...overdueSlots.map((slot) => `${formatTrade(slot.trade_type)} has a scheduled end date in the past.`),
+        ...lateMaterialOrders.map((order) => `A material order is past its delivery deadline and still ${formatStatusLabel(order.status)}.`),
+        ...externalSlots.map((slot) => `${formatTrade(slot.trade_type)} is externally managed, so WalkerAI verification and escrow protection do not apply.`),
+      ];
 
-    const tasks = [
-      ...pendingApprovals.map((request) => {
-        const cost = request.cost_delta != null ? ` (${formatSignedCadCents(request.cost_delta)})` : '';
-        return `Homeowner decision needed: ${request.title}${cost}.`;
-      }),
-      ...pendingPayments.map((request) => `Payment request pending: ${request.title} for ${formatCadCents(request.amount_cents)}.`),
-      ...activeMaterials.map((order) => `Track material order currently ${formatStatusLabel(order.status)}.`),
-      ...(costImpact !== 0 ? [`Pending approval cost impact totals ${formatSignedCadCents(costImpact)}.`] : []),
-      ...(timelineImpact !== 0 ? [`Pending approval timeline impact totals ${timelineImpact > 0 ? '+' : ''}${timelineImpact} days.`] : []),
-    ];
+    const tasks = completedHistory
+      ? []
+      : [
+        ...pendingApprovals.map((request) => {
+          const cost = request.cost_delta != null ? ` (${formatSignedCadCents(request.cost_delta)})` : '';
+          return `Homeowner decision needed: ${request.title}${cost}.`;
+        }),
+        ...pendingPayments.map((request) => `Payment request pending: ${request.title} for ${formatCadCents(request.amount_cents)}.`),
+        ...activeMaterials.map((order) => `Track material order currently ${formatStatusLabel(order.status)}.`),
+        ...(costImpact !== 0 ? [`Pending approval cost impact totals ${formatSignedCadCents(costImpact)}.`] : []),
+        ...(timelineImpact !== 0 ? [`Pending approval timeline impact totals ${timelineImpact > 0 ? '+' : ''}${timelineImpact} days.`] : []),
+      ];
 
     return {
       summary,
-      risks: risks.length ? risks : ['No schedule, permit, material, or external-trade risk flags from current project data.'],
-      tasks: tasks.length ? tasks : ['No outstanding assistant tasks from current project data.'],
-      pendingCount: pendingApprovals.length + pendingPayments.length,
+      risks: completedHistory
+        ? ['Completed project history has no active risk or delay alerts.']
+        : risks.length
+        ? risks
+        : ['No schedule, permit, material, or external-trade risk flags from current project data.'],
+      tasks: completedHistory
+        ? ['No outstanding assistant tasks remain after project closeout.']
+        : tasks.length
+        ? tasks
+        : ['No outstanding assistant tasks from current project data.'],
+      pendingCount: completedHistory ? 0 : pendingApprovals.length + pendingPayments.length,
       riskCount: risks.length,
     };
   }, [approvals, assignment?.project_type, assignment?.status, materialOrders, messages.length, paymentRequests, permits, project?.room_type, project?.status, slots]);

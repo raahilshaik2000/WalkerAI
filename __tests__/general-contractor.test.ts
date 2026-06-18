@@ -2303,6 +2303,22 @@ describe('general contractor account type', () => {
     expect(gcAssistant).not.toContain("!['passed', 'approved'].includes(permit.status)");
   });
 
+  it('keeps completed GC assistant summaries read-only instead of showing stale action prompts', () => {
+    const gcAssistant = fs.readFileSync(
+      path.join(repoRoot, 'src/app/(general-contractor)/project/[id]/assistant.tsx'),
+      'utf8',
+    );
+
+    expect(gcAssistant).toContain("const completedHistory = assignment?.status === 'completed' || project?.status === 'completed';");
+    expect(gcAssistant).toContain('This completed project summary is read-only historical context.');
+    expect(gcAssistant).toContain('Completed project records remain available without creating new homeowner action items.');
+    expect(gcAssistant).toContain("const risks = completedHistory");
+    expect(gcAssistant).toContain("const tasks = completedHistory");
+    expect(gcAssistant).toContain('Completed project history has no active risk or delay alerts.');
+    expect(gcAssistant).toContain('No outstanding assistant tasks remain after project closeout.');
+    expect(gcAssistant).toContain('pendingCount: completedHistory ? 0 : pendingApprovals.length + pendingPayments.length');
+  });
+
   it('shows modern GC approval requests in the GC approvals inbox', () => {
     const gcApprovals = fs.readFileSync(
       path.join(repoRoot, 'src/app/(general-contractor)/approvals.tsx'),
