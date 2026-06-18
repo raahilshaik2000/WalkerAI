@@ -142,15 +142,35 @@ export default function GeneralContractorDashboard() {
       setAssignments(normalized);
 
       const projectIds = normalized.map((assignment) => assignment.project?.id).filter((id): id is string => !!id);
+      const [
+        conciergePendingResult,
+        conciergeCompletionResult,
+      ] = await Promise.all([
+        supabase
+          .from('gc_concierge_bookings')
+          .select('id', { count: 'exact', head: true })
+          .eq('general_contractor_id', profileRecord.id)
+          .eq('status', 'pending'),
+        supabase
+          .from('gc_concierge_bookings')
+          .select('id', { count: 'exact', head: true })
+          .eq('general_contractor_id', profileRecord.id)
+          .eq('status', 'accepted')
+          .eq('payment_status', 'paid')
+          .is('payout_released_at', null),
+      ]);
+      if (conciergePendingResult.error) throw conciergePendingResult.error;
+      if (conciergeCompletionResult.error) throw conciergeCompletionResult.error;
+
+      const conciergeActionCount = (conciergePendingResult.count ?? 0) + (conciergeCompletionResult.count ?? 0);
       if (projectIds.length === 0) {
-        setPendingApprovals(0);
+        setPendingApprovals(conciergeActionCount);
         return;
       }
 
       const [
         approvalCountResult,
         paymentCountResult,
-        conciergeCompletionResult,
       ] = await Promise.all([
         supabase
           .from('project_approval_requests')
@@ -164,24 +184,15 @@ export default function GeneralContractorDashboard() {
           .eq('general_contractor_id', profileRecord.id)
           .in('project_id', projectIds)
           .eq('status', 'pending'),
-        supabase
-          .from('gc_concierge_bookings')
-          .select('id', { count: 'exact', head: true })
-          .eq('general_contractor_id', profileRecord.id)
-          .in('project_id', projectIds)
-          .eq('status', 'accepted')
-          .eq('payment_status', 'paid')
-          .is('payout_released_at', null),
       ]);
 
       if (approvalCountResult.error) throw approvalCountResult.error;
       if (paymentCountResult.error) throw paymentCountResult.error;
-      if (conciergeCompletionResult.error) throw conciergeCompletionResult.error;
 
       setPendingApprovals(
         (approvalCountResult.count ?? 0)
         + (paymentCountResult.count ?? 0)
-        + (conciergeCompletionResult.count ?? 0),
+        + conciergeActionCount,
       );
     } catch (err) {
       setErrorMessage(err instanceof Error ? err.message : 'Could not load GC dashboard.');

@@ -968,11 +968,18 @@ describe('general contractor account type', () => {
     expect(dashboard).toContain("eq('requested_by_gc_id', profileRecord.id)");
     expect(dashboard).toContain("eq('general_contractor_id', profileRecord.id)");
     expect(dashboard).toContain('const projectIds = normalized.map');
-    expect(dashboard).toContain("setPendingApprovals(0)");
+    expect(dashboard).toContain('const conciergeActionCount = (conciergePendingResult.count ?? 0) + (conciergeCompletionResult.count ?? 0);');
+    expect(dashboard).toContain('setPendingApprovals(conciergeActionCount)');
     expect(dashboard.indexOf('if (profileSetupRoute || profileRecord.verified !== true)')).toBeLessThan(
       dashboard.indexOf("from('general_contractor_projects')"),
     );
-    expect(dashboard.split(".in('project_id', projectIds)").length - 1).toBeGreaterThanOrEqual(3);
+    expect(dashboard.indexOf("from('gc_concierge_bookings')")).toBeLessThan(
+      dashboard.indexOf('if (projectIds.length === 0)'),
+    );
+    expect(dashboard).not.toMatch(/from\('gc_concierge_bookings'\)[\s\S]*?\.in\('project_id', projectIds\)[\s\S]*?if \(projectIds\.length === 0\)/);
+    expect(dashboard.split(".in('project_id', projectIds)").length - 1).toBeGreaterThanOrEqual(2);
+    expect(dashboard).toContain("eq('status', 'pending')");
+    expect(dashboard).toContain("eq('status', 'accepted')");
     expect(dashboard).toContain("eq('payment_status', 'paid')");
     expect(dashboard).toContain("is('payout_released_at', null)");
     expect(dashboard).not.toContain("from('change_orders')");
