@@ -453,6 +453,7 @@ Runtime fixes made from this pass:
 - Trade responses to GC counteroffers/revision requests now support optional response notes, and accepted counteroffers keep those notes visible while the trade builds the updated homeowner-facing quote package.
 - GC accept/reject responses for concierge service bookings now support optional response notes, and those notes are visible in the homeowner concierge request history.
 - GC-created project setup now uses stable existing-homeowner-account guidance and formats the missing-homeowner RPC error into actionable app copy instead of exposing backend wording.
+- GC trade dispatch no-match responses now pass backend-provided messages through the app-safe formatter before showing them in the GC trade screen.
 
 Runtime findings still not treated as complete:
 

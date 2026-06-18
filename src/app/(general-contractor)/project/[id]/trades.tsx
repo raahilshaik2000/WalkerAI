@@ -321,7 +321,7 @@ export default function GeneralContractorTradesScreen() {
       });
       if (error) throw new Error(await formatSupabaseFunctionError(error));
       if (data?.success === false || !data?.dispatched) {
-        Alert.alert('No trades dispatched', data?.message ?? 'No verified companies matched these open slots yet.');
+        Alert.alert('No trades dispatched', formatAppSafeErrorMessage(data?.message, 'No verified companies matched these open slots yet.'));
       } else {
         Alert.alert('Trades notified', `${data.dispatched} trade invitation${data.dispatched === 1 ? '' : 's'} sent through WalkerAI.`);
       }

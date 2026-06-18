@@ -2175,6 +2175,8 @@ describe('general contractor account type', () => {
     expect(gcTrades).toContain('Generate or approve the project budget before WalkerAI can create priced trade slots.');
     expect(gcTrades).toContain('The homeowner must confirm GC management before you can generate trade slots.');
     expect(gcTrades).toContain("supabase.functions.invoke<DispatchResult>('dispatch-slots'");
+    expect(gcTrades).toContain("formatAppSafeErrorMessage(data?.message, 'No verified companies matched these open slots yet.')");
+    expect(gcTrades).not.toContain("data?.message ?? 'No verified companies matched these open slots yet.'");
     expect(gcTrades).toContain('WalkerAI trade marketplace');
     expect(gcTrades).toContain('Dispatch ${dispatchableSlotCount} Open Slot');
     expect(gcTrades).toContain("Alert.alert('Budget required', 'Generate or approve the project budget before WalkerAI can dispatch open trade slots.');");
