@@ -1282,6 +1282,10 @@ describe('general contractor account type', () => {
       path.join(repoRoot, 'supabase/migrations/20260618032327_require_complete_gc_profile_for_direct_project_tools.sql'),
       'utf8',
     );
+    const forceUnverifiedMigration = fs.readFileSync(
+      path.join(repoRoot, 'supabase/migrations/20260618041712_force_external_trade_unverified_on_mark.sql'),
+      'utf8',
+    );
     const gcProjectDetail = fs.readFileSync(
       path.join(repoRoot, 'src/app/(general-contractor)/project/[id]/index.tsx'),
       'utf8',
@@ -1306,6 +1310,12 @@ describe('general contractor account type', () => {
     expect(completeDirectToolsMigration).toContain("u.role = 'general_contractor'");
     expect(completeDirectToolsMigration).toContain("NULLIF(TRIM(v_gc.license_doc_url), '') IS NULL");
     expect(completeDirectToolsMigration).toContain("NULLIF(TRIM(v_gc.insurance_doc_url), '') IS NULL");
+    expect(forceUnverifiedMigration).toContain('CREATE OR REPLACE FUNCTION public.mark_project_slot_externally_managed');
+    expect(forceUnverifiedMigration).toContain("COALESCE(p_verification_status, 'unverified') <> 'unverified'");
+    expect(forceUnverifiedMigration).toContain('External trades must start unverified');
+    expect(forceUnverifiedMigration).toContain("external_trade_verification_status = 'unverified'");
+    expect(forceUnverifiedMigration).not.toContain("p_verification_status NOT IN ('unverified', 'documents_uploaded', 'walker_verified')");
+    expect(forceUnverifiedMigration).not.toContain('external_trade_verification_status = p_verification_status');
     expect(externalActivationMigration).toContain('Active GC management is required before marking external trades');
     expect(externalActivationMigration).toContain("v_project.status IN ('draft', 'brief_ready', 'dispatching')");
     expect(externalActivationMigration).toContain('v_project.ai_cost_min > 0');
