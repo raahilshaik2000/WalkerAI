@@ -21,6 +21,7 @@ describe('financial disclosure copy', () => {
     const appSources = [
       ...collectSourceFiles(path.join(repoRoot, 'src/app')),
       ...collectSourceFiles(path.join(repoRoot, 'src/components')),
+      ...collectSourceFiles(path.join(repoRoot, 'src/lib/notifications')),
     ];
 
     const blockedCopy = [
