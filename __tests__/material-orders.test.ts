@@ -41,7 +41,7 @@ describe('supplier material order payout math', () => {
     expect(materialOrderNetPayoutCents(1000, 150)).toBe(0);
   });
 
-  it('keeps supplier order payout screens on exact cent formatting', () => {
+  it('keeps supplier order value screens on exact cent formatting', () => {
     const feedSource = fs.readFileSync(
       path.join(__dirname, '../src/app/(supplier)/orders/index.tsx'),
       'utf8',
@@ -52,14 +52,18 @@ describe('supplier material order payout math', () => {
     );
 
     expect(feedSource).toContain("import { formatCadCents } from '@/lib/currency'");
-    expect(feedSource).toContain('return `${formatCadCents(payout)} payout`;');
+    expect(feedSource).toContain('return `${formatCadCents(price)} order value`;');
     expect(feedSource).not.toContain('maximumFractionDigits: 0');
     expect(activeSource).toContain("import { formatCadCents } from '@/lib/currency'");
     expect(activeSource).toContain('return formatCadCents(cents);');
     expect(activeSource).not.toContain('maximumFractionDigits: 0');
   });
 
-  it('does not disclose supplier platform fee breakdowns in app payout UI', () => {
+  it('does not disclose supplier platform fee or net payout math in app UI', () => {
+    const feedSource = fs.readFileSync(
+      path.join(__dirname, '../src/app/(supplier)/orders/index.tsx'),
+      'utf8',
+    );
     const earningsSource = fs.readFileSync(
       path.join(__dirname, '../src/app/(supplier)/earnings/index.tsx'),
       'utf8',
@@ -73,12 +77,16 @@ describe('supplier material order payout math', () => {
       'utf8',
     );
 
-    [earningsSource, activeSource, detailSource].forEach((source) => {
+    [feedSource, earningsSource, activeSource, detailSource].forEach((source) => {
+      expect(source).not.toContain('materialOrderNetPayoutCents');
+      expect(source).not.toContain('platform_fee_pct');
       expect(source).not.toContain('Platform fees deducted');
       expect(source).not.toContain(' gross');
       expect(source).not.toContain('net payout');
       expect(source).not.toContain('Net Earned');
       expect(source).not.toContain('Pending Net');
+      expect(source).not.toContain('Supplier Payout');
+      expect(source).not.toContain('Estimated Supplier Payout');
     });
   });
 

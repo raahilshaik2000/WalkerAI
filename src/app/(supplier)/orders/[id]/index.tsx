@@ -5,7 +5,7 @@ import { useNavigation, useRoute } from '@react-navigation/native';
 import Ionicons from 'react-native-vector-icons/Ionicons';
 import { supabase } from '@/lib/supabase/client';
 import { formatSupabaseFunctionError } from '@/lib/supabase/functions';
-import { joinedMaterialItemName, materialOrderNetPayoutCents } from '@/lib/material-orders';
+import { joinedMaterialItemName } from '@/lib/material-orders';
 import { getRequiredStringParam } from '@/lib/navigation-params';
 import { isStripePayoutLocallyReady } from '@/lib/payouts';
 import { useAuthStore } from '@/stores/auth.store';
@@ -200,9 +200,7 @@ export default function SupplierOrderDetail() {
   }
 
   const orderPrice = order.final_price ?? order.offered_price;
-  const supplierPayout = orderPrice == null
-    ? null
-    : materialOrderNetPayoutCents(orderPrice, order.platform_fee_pct);
+  const orderValue = orderPrice == null ? null : orderPrice;
 
   return (
     <GradientBackground>
@@ -234,10 +232,10 @@ export default function SupplierOrderDetail() {
           <GlassCard style={styles.section}>
             <Text style={styles.sectionTitle}>Fulfillment</Text>
             <DetailItem label="Status" value={order.status.replace(/_/g, ' ')} />
-            {supplierPayout != null && (
+            {orderValue != null && (
               <DetailItem
-                label={order.status === 'paid' ? 'Supplier Payout' : 'Estimated Supplier Payout'}
-                value={formatCad(supplierPayout)}
+                label="Order Value"
+                value={formatCad(orderValue)}
               />
             )}
             {order.tracking_number && <DetailItem label="Tracking" value={order.tracking_number} />}
@@ -248,7 +246,7 @@ export default function SupplierOrderDetail() {
             <GlassCard style={styles.paidBanner}>
               <Ionicons name="checkmark-circle" size={20} color="#34D399" />
               <Text style={styles.paidText}>
-                Payout initiated{supplierPayout != null ? ` for ${formatCad(supplierPayout)}` : ''} — funds arriving within 2–3 business days
+                Payment initiated{orderValue != null ? ` for ${formatCad(orderValue)}` : ''} — funds arriving within 2–3 business days
               </Text>
             </GlassCard>
           )}

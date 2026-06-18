@@ -16,7 +16,7 @@ import Ionicons from 'react-native-vector-icons/Ionicons';
 import { supabase } from '@/lib/supabase/client';
 import { formatCadCents } from '@/lib/currency';
 import { formatSupabaseFunctionError } from '@/lib/supabase/functions';
-import { joinedMaterialItemName, materialOrderNetPayoutCents } from '@/lib/material-orders';
+import { joinedMaterialItemName } from '@/lib/material-orders';
 import { isStripePayoutLocallyReady } from '@/lib/payouts';
 import { useAuthStore } from '@/stores/auth.store';
 import { Colors, Radius, Spacing, Typography } from '@/constants/theme';
@@ -35,11 +35,10 @@ function nextSupplierOnboardingRoute(supplier: Supplier | null): string | null {
   return null;
 }
 
-function formatEstimatedPayout(order: MaterialOrder): string | null {
+function formatOrderValue(order: MaterialOrder): string | null {
   const price = order.final_price ?? order.offered_price;
   if (price == null) return null;
-  const payout = materialOrderNetPayoutCents(price, order.platform_fee_pct);
-  return `${formatCadCents(payout)} payout`;
+  return `${formatCadCents(price)} order value`;
 }
 
 async function filterClaimableOrders(supplier: Supplier, orders: MaterialOrder[]): Promise<MaterialOrder[]> {
@@ -282,7 +281,7 @@ export default function SupplierOrderFeed() {
             contentContainerStyle={styles.list}
             refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={Colors.accent} />}
             renderItem={({ item }) => {
-              const estimatedPayout = formatEstimatedPayout(item);
+              const orderValue = formatOrderValue(item);
               return (
                 <TouchableOpacity
                   style={styles.orderCard}
@@ -307,8 +306,8 @@ export default function SupplierOrderFeed() {
                       <Ionicons name="time-outline" size={13} color={Colors.text.tertiary} />
                       <Text style={styles.deadlineText}>{deadlineLabel(item.delivery_deadline)}</Text>
                     </View>
-                    {estimatedPayout ? (
-                      <Text style={styles.fixedPrice}>{estimatedPayout}</Text>
+                    {orderValue ? (
+                      <Text style={styles.fixedPrice}>{orderValue}</Text>
                     ) : null}
                     <TouchableOpacity
                       style={[styles.claimBtn, claiming === item.id && styles.claimBtnDisabled]}

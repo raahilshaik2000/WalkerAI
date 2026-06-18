@@ -5,7 +5,7 @@ import { useFocusEffect, useNavigation } from '@react-navigation/native';
 import Ionicons from 'react-native-vector-icons/Ionicons';
 import { supabase } from '@/lib/supabase/client';
 import { formatSupabaseFunctionError } from '@/lib/supabase/functions';
-import { joinedMaterialItemName, materialOrderNetPayoutCents } from '@/lib/material-orders';
+import { joinedMaterialItemName } from '@/lib/material-orders';
 import { isStripePayoutLocallyReady } from '@/lib/payouts';
 import { useAuthStore } from '@/stores/auth.store';
 import { Colors, Spacing, Typography } from '@/constants/theme';
@@ -91,10 +91,11 @@ export default function SupplierEarnings() {
     loadEarnings();
   };
 
+  const orderAmountCents = (order: MaterialOrder) => order.final_price ?? order.offered_price ?? 0;
   const paidOrders = orders.filter((o) => o.status === 'paid');
   const confirmedOrders = orders.filter((o) => o.status === 'confirmed');
-  const netPaid = paidOrders.reduce((sum, o) => sum + materialOrderNetPayoutCents(o.final_price, o.platform_fee_pct), 0);
-  const pendingNet = confirmedOrders.reduce((sum, o) => sum + materialOrderNetPayoutCents(o.final_price, o.platform_fee_pct), 0);
+  const paidTotal = paidOrders.reduce((sum, o) => sum + orderAmountCents(o), 0);
+  const processingTotal = confirmedOrders.reduce((sum, o) => sum + orderAmountCents(o), 0);
   const payoutReady = isStripePayoutLocallyReady(supplier);
 
   const fmt = (cents: number) => `$${(cents / 100).toLocaleString('en-CA', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
@@ -146,22 +147,22 @@ export default function SupplierEarnings() {
           {supplier && <View style={styles.statsRow}>
             <GlassCard style={[styles.statCard, { borderColor: 'rgba(52,211,153,0.3)' }]}>
               <Text style={styles.statLabel}>Paid to Date</Text>
-              <Text style={[styles.statValue, { color: '#34D399' }]}>{fmt(netPaid)}</Text>
+              <Text style={[styles.statValue, { color: '#34D399' }]}>{fmt(paidTotal)}</Text>
             </GlassCard>
             <GlassCard style={[styles.statCard, { borderColor: 'rgba(255,107,0,0.3)' }]}>
               <Text style={styles.statLabel}>Processing</Text>
-              <Text style={[styles.statValue, { color: Colors.accent }]}>{fmt(pendingNet)}</Text>
+              <Text style={[styles.statValue, { color: Colors.accent }]}>{fmt(processingTotal)}</Text>
             </GlassCard>
           </View>}
 
           {supplier && <GlassCard style={styles.payoutCard}>
             <View style={styles.payoutRow}>
               <Text style={styles.payoutLabel}>Paid to date</Text>
-              <Text style={[styles.payoutValue, { color: '#34D399' }]}>{fmt(netPaid)}</Text>
+              <Text style={[styles.payoutValue, { color: '#34D399' }]}>{fmt(paidTotal)}</Text>
             </View>
             <View style={styles.payoutRow}>
               <Text style={styles.payoutLabel}>Processing</Text>
-              <Text style={styles.payoutValue}>{fmt(pendingNet)}</Text>
+              <Text style={styles.payoutValue}>{fmt(processingTotal)}</Text>
             </View>
             <View style={styles.payoutRow}>
               <Text style={styles.payoutLabel}>Completed orders</Text>
@@ -203,7 +204,7 @@ export default function SupplierEarnings() {
                   </Text>
                 </View>
                 <View style={{ alignItems: 'flex-end' }}>
-                  <Text style={styles.historyAmount}>{fmt(materialOrderNetPayoutCents(order.final_price, order.platform_fee_pct))}</Text>
+                  <Text style={styles.historyAmount}>{fmt(orderAmountCents(order))}</Text>
                   <View style={[styles.historyBadge, { backgroundColor: order.status === 'paid' ? 'rgba(52,211,153,0.15)' : 'rgba(255,107,0,0.15)' }]}>
                     <Text style={[styles.historyBadgeText, { color: order.status === 'paid' ? '#34D399' : Colors.accent }]}>
                       {order.status === 'paid' ? 'Paid' : 'Pending'}

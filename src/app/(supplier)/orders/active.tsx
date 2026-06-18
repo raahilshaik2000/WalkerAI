@@ -18,7 +18,7 @@ import Ionicons from 'react-native-vector-icons/Ionicons';
 import { launchImageLibrary } from 'react-native-image-picker';
 import { supabase } from '@/lib/supabase/client';
 import { formatCadCents } from '@/lib/currency';
-import { joinedMaterialItemName, materialOrderNetPayoutCents } from '@/lib/material-orders';
+import { joinedMaterialItemName } from '@/lib/material-orders';
 import { getUploadMetadata, uploadFile } from '@/lib/supabase/storage';
 import { useAuthStore } from '@/stores/auth.store';
 import { Colors, Radius, Spacing, Typography } from '@/constants/theme';
@@ -42,10 +42,10 @@ function formatCad(cents: number | null | undefined): string | null {
   return formatCadCents(cents);
 }
 
-function formatSupplierPayout(order: MaterialOrder): string | null {
+function formatOrderValue(order: MaterialOrder): string | null {
   const price = order.final_price ?? order.offered_price;
   if (price == null) return null;
-  return formatCad(materialOrderNetPayoutCents(price, order.platform_fee_pct));
+  return formatCad(price);
 }
 
 function deadlineLabel(deadline: string | null): string | null {
@@ -293,7 +293,7 @@ export default function SupplierActiveOrders() {
             renderItem={({ item }) => {
               const currentStep = stepIndex(item.status);
               const isExpanded = expanded === item.id;
-              const supplierPayout = formatSupplierPayout(item);
+              const orderValue = formatOrderValue(item);
               const deadline = deadlineLabel(item.delivery_deadline);
               return (
                 <TouchableOpacity
@@ -313,10 +313,10 @@ export default function SupplierActiveOrders() {
                   <Text style={styles.cardQty}>{item.quantity_needed} {item.unit}</Text>
 
                   <View style={styles.metaRow}>
-                    {supplierPayout ? (
+                    {orderValue ? (
                       <View style={styles.metaChip}>
                         <Ionicons name="cash-outline" size={13} color={Colors.success} />
-                        <Text style={styles.metaChipText}>{supplierPayout} payout</Text>
+                        <Text style={styles.metaChipText}>{orderValue} order value</Text>
                       </View>
                     ) : null}
                     {deadline ? (
@@ -354,10 +354,10 @@ export default function SupplierActiveOrders() {
                           <Text style={styles.detailValue}>{item.delivery_address}</Text>
                         </View>
                       ) : null}
-                      {supplierPayout ? (
+                      {orderValue ? (
                         <View style={styles.detailBlock}>
-                          <Text style={styles.detailLabel}>Supplier Payout</Text>
-                          <Text style={styles.detailValue}>{supplierPayout}</Text>
+                          <Text style={styles.detailLabel}>Order Value</Text>
+                          <Text style={styles.detailValue}>{orderValue}</Text>
                         </View>
                       ) : null}
                       {item.notes ? (
@@ -423,7 +423,7 @@ export default function SupplierActiveOrders() {
                       ) : item.status === 'confirmed' ? (
                         <Text style={styles.waitingText}>Payment processing...</Text>
                       ) : item.status === 'paid' ? (
-                        <Text style={styles.paidText}>✓ Paid — {supplierPayout ?? 'payout sent'}</Text>
+                        <Text style={styles.paidText}>✓ Paid{orderValue ? ` — ${orderValue}` : ''}</Text>
                       ) : null}
                     </View>
                   )}

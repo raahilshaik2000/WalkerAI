@@ -54,6 +54,10 @@ describe('financial disclosure copy', () => {
       'walker_fee_cents',
       'commission_rate',
       'companyEstimatedNetPayoutCents',
+      'materialOrderNetPayoutCents',
+      'platform_fee_pct',
+      'Estimated Supplier Payout',
+      'Supplier Payout',
     ];
 
     const violations = appSources.flatMap((filePath: string) => {
