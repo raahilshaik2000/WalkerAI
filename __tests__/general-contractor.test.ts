@@ -639,6 +639,10 @@ describe('general contractor account type', () => {
       path.join(repoRoot, 'supabase/migrations/20260615004000_guard_account_role_boundaries.sql'),
       'utf8',
     );
+    const profileBoundaryMigration = fs.readFileSync(
+      path.join(repoRoot, 'supabase/migrations/20260618030500_guard_company_supplier_profile_roles.sql'),
+      'utf8',
+    );
     const auth = fs.readFileSync(
       path.join(repoRoot, 'src/lib/supabase/auth.ts'),
       'utf8',
@@ -658,6 +662,17 @@ describe('general contractor account type', () => {
     expect(migration).toContain("u.role = 'general_contractor'");
     expect(migration).toContain('General Contractor profiles can only belong to general_contractor users');
     expect(migration).toContain('guard_gc_profile_user_role_trigger');
+    expect(profileBoundaryMigration).toContain('CREATE OR REPLACE FUNCTION public.guard_company_profile_user_role()');
+    expect(profileBoundaryMigration).toContain("u.role = 'company'");
+    expect(profileBoundaryMigration).toContain('Company profiles can only belong to company users');
+    expect(profileBoundaryMigration).toContain('guard_company_profile_user_role_trigger');
+    expect(profileBoundaryMigration).toContain('BEFORE INSERT OR UPDATE ON public.companies');
+    expect(profileBoundaryMigration).toContain('CREATE OR REPLACE FUNCTION public.guard_supplier_profile_user_role()');
+    expect(profileBoundaryMigration).toContain("u.role = 'supplier'");
+    expect(profileBoundaryMigration).toContain('Supplier profiles can only belong to supplier users');
+    expect(profileBoundaryMigration).toContain('guard_supplier_profile_user_role_trigger');
+    expect(profileBoundaryMigration).toContain('BEFORE INSERT OR UPDATE ON public.suppliers');
+    expect(profileBoundaryMigration).toContain("(SELECT auth.role()) = 'service_role'");
     expect(auth).toContain("options: {\n      data: { role },\n    },");
     expect(editProfile).not.toContain('role:');
   });
