@@ -359,7 +359,8 @@ describe('general contractor account type', () => {
     expect(gcProjectDetail).toContain('p_assignment_id: assignment.id');
     expect(gcProjectDetail).not.toContain("update({ status: 'active' })");
     expect(gcProjectDetail).toContain('GC management terms');
-    expect(gcProjectDetail).toContain("const assignmentIsActive = assignment?.status === 'active' && gcVerified");
+    expect(gcProjectDetail).toContain('const gcCanManage = gcVerified && gcProfileComplete');
+    expect(gcProjectDetail).toContain("const assignmentIsActive = assignment?.status === 'active' && gcCanManage");
     expect(gcProjectDetail).toContain('Controls unlock after homeowner confirmation');
     expect(gcProjectDetail).toContain('Schedule, permit, payment, material, trade, discovery, assistant, and completion tools become available once GC management is active.');
     expect(gcProjectDetail).toContain('Coordinate with the homeowner while management approval is pending');
@@ -372,9 +373,13 @@ describe('general contractor account type', () => {
     expect(activationMigration).toContain("SET status = 'active'");
   });
 
-  it('re-checks GC verification before management assignments activate', () => {
+  it('re-checks complete GC verification before management assignments activate', () => {
     const migration = fs.readFileSync(
       path.join(repoRoot, 'supabase/migrations/20260615004100_require_verified_gc_assignment_activation.sql'),
+      'utf8',
+    );
+    const completeActivationMigration = fs.readFileSync(
+      path.join(repoRoot, 'supabase/migrations/20260618032000_require_complete_gc_profile_for_assignment_activation.sql'),
       'utf8',
     );
     const gcProjectDetail = fs.readFileSync(
@@ -396,12 +401,30 @@ describe('general contractor account type', () => {
     expect(migration).toContain("SET status = 'active'");
     expect(migration).toContain('GRANT EXECUTE ON FUNCTION public.accept_gc_management_invite(UUID) TO authenticated');
     expect(migration).toContain('GRANT EXECUTE ON FUNCTION public.confirm_gc_management_assignment(UUID) TO authenticated');
-    expect(gcProjectDetail).toContain(".select('id, verified')");
+    expect(completeActivationMigration).toContain('CREATE OR REPLACE FUNCTION public.accept_gc_management_invite');
+    expect(completeActivationMigration).toContain('CREATE OR REPLACE FUNCTION public.confirm_gc_management_assignment');
+    expect(completeActivationMigration).toContain("u.role = 'general_contractor'");
+    expect(completeActivationMigration).toContain('gc.verified IS TRUE');
+    expect(completeActivationMigration).toContain("NULLIF(TRIM(gc.business_name), '') IS NOT NULL");
+    expect(completeActivationMigration).toContain("NULLIF(TRIM(gc.city), '') IS NOT NULL");
+    expect(completeActivationMigration).toContain("NULLIF(TRIM(gc.province), '') IS NOT NULL");
+    expect(completeActivationMigration).toContain('gc.lat IS NOT NULL');
+    expect(completeActivationMigration).toContain('gc.lng IS NOT NULL');
+    expect(completeActivationMigration).toContain("NULLIF(TRIM(gc.license_number), '') IS NOT NULL");
+    expect(completeActivationMigration).toContain("NULLIF(TRIM(gc.license_doc_url), '') IS NOT NULL");
+    expect(completeActivationMigration).toContain("NULLIF(TRIM(gc.insurance_doc_url), '') IS NOT NULL");
+    expect(completeActivationMigration).toContain('Only verified General Contractors with complete business, license, and insurance setup can activate management assignments');
+    expect(completeActivationMigration).toContain('GRANT EXECUTE ON FUNCTION public.accept_gc_management_invite(UUID) TO authenticated');
+    expect(completeActivationMigration).toContain('GRANT EXECUTE ON FUNCTION public.confirm_gc_management_assignment(UUID) TO authenticated');
+    expect(gcProjectDetail).toContain(".select('id, verified, business_name, city, province, lat, lng, license_number, license_doc_url, insurance_doc_url')");
     expect(gcProjectDetail).toContain('setGcVerified(gc.verified === true)');
+    expect(gcProjectDetail).toContain('setGcProfileComplete(nextGeneralContractorOnboardingRoute(gc) === null)');
     expect(gcProjectDetail).toContain("if (!gcVerified) {\n      Alert.alert(\n        'Verification required'");
+    expect(gcProjectDetail).toContain("if (!gcProfileComplete) {\n      Alert.alert(\n        'Complete GC setup'");
     expect(gcProjectDetail).toContain('WalkerAI verification is required before you can accept this management invite.');
-    expect(gcProjectDetail).toContain('WalkerAI verification is required before project controls are available.');
-    expect(gcProjectDetail).toContain("assignment.status === 'invited' && !assignment.initiated_by_gc && gcVerified");
+    expect(gcProjectDetail).toContain('Complete your GC business profile, license, and insurance setup before you can accept this management invite.');
+    expect(gcProjectDetail).toContain('Complete verified GC setup is required before project controls are available.');
+    expect(gcProjectDetail).toContain("assignment.status === 'invited' && !assignment.initiated_by_gc && gcCanManage");
     expect(homeownerConcierge).toContain("assignedGc?.verified === true");
     expect(homeownerConcierge).toContain('canConfirmGcManagement');
     expect(homeownerConcierge).toContain('WalkerAI verification is required before this GC management request can be confirmed.');
@@ -462,7 +485,8 @@ describe('general contractor account type', () => {
     expect(assistant).toContain('gc.verified !== true');
     expect(assistant).toContain('WalkerAI verification is required before project assistant summaries are available.');
     expect(projectDetail).toContain("if (gc.verified !== true) throw new Error('WalkerAI must verify your GC profile before approval requests can be sent.')");
-    expect(projectDetail).toContain("const assignmentIsActive = assignment?.status === 'active' && gcVerified");
+    expect(projectDetail).toContain("if (nextGeneralContractorOnboardingRoute(gc)) throw new Error('Complete your GC business, license, and insurance setup before sending approval requests.')");
+    expect(projectDetail).toContain("const assignmentIsActive = assignment?.status === 'active' && gcCanManage");
     expect(projectDetail).toContain('{assignmentIsActive ? (');
   });
 
@@ -1998,8 +2022,8 @@ describe('general contractor account type', () => {
     expect(gcProjectDetail).toContain(".eq('requested_by_gc_id', assignment.general_contractor_id)");
     expect(gcProjectDetail).toContain(".eq('status', 'pending')");
     expect(gcProjectDetail).toContain('No project budget, schedule, trade, material, or completion change will be applied.');
-    expect(gcProjectDetail).toContain("Alert.alert('Active verified GC management required', 'Only an active verified GC can cancel a pending homeowner approval request.')");
-    expect(gcProjectDetail).toContain('Active verified GC management is required before this pending recommendation can be cancelled.');
+    expect(gcProjectDetail).toContain("Alert.alert('Active complete GC management required', 'Only an active verified GC with complete setup can cancel a pending homeowner approval request.')");
+    expect(gcProjectDetail).toContain('Active complete verified GC management is required before this pending recommendation can be cancelled.');
     expect(gcProjectDetail).toContain('disabled={!assignmentIsActive || !!cancellingApprovalId}');
     expect(gcProjectDetail).toContain("order.cost_delta != null ? ` · ${formatSignedCadCents(order.cost_delta)}` : ''");
     expect(gcProjectDetail).not.toContain('formatCad(Math.abs(order.cost_delta))');

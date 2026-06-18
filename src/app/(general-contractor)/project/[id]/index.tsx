@@ -19,6 +19,7 @@ import { calculateGcMarkup } from '@/lib/gc-markup';
 import { formatGcProjectType } from '@/lib/gc-project-type';
 import { getRequiredStringParam } from '@/lib/navigation-params';
 import { formatTradeLabel } from '@/lib/trade-labels';
+import { nextGeneralContractorOnboardingRoute } from '@/lib/general-contractor';
 import { getUploadMetadata, uploadFile } from '@/lib/supabase/storage';
 import { Colors, Spacing, Typography } from '@/constants/theme';
 import { GradientBackground, GlassButton, GlassCard, GlassInput, StatusBadge } from '@/components/ui';
@@ -158,6 +159,7 @@ export default function GeneralContractorProjectDetail() {
   const [savingExternalTrade, setSavingExternalTrade] = useState(false);
   const [uploadingExternalDocSlotId, setUploadingExternalDocSlotId] = useState<string | null>(null);
   const [gcVerified, setGcVerified] = useState(false);
+  const [gcProfileComplete, setGcProfileComplete] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
   const fetchData = useCallback(async () => {
@@ -169,12 +171,13 @@ export default function GeneralContractorProjectDetail() {
       }
       const { data: gc, error: gcError } = await supabase
         .from('general_contractors')
-        .select('id, verified')
+        .select('id, verified, business_name, city, province, lat, lng, license_number, license_doc_url, insurance_doc_url')
         .eq('user_id', currentUser.id)
         .maybeSingle();
       if (gcError) throw gcError;
       if (!gc?.id) throw new Error('GC profile not found.');
       setGcVerified(gc.verified === true);
+      setGcProfileComplete(nextGeneralContractorOnboardingRoute(gc) === null);
 
       const [projectResult, slotResult, changeOrderResult, approvalResult] = await Promise.all([
         supabase
@@ -238,6 +241,7 @@ export default function GeneralContractorProjectDetail() {
       setChangeOrders([]);
       setApprovalRequests([]);
       setGcVerified(false);
+      setGcProfileComplete(false);
     } finally {
       setLoading(false);
       setRefreshing(false);
@@ -255,6 +259,8 @@ export default function GeneralContractorProjectDetail() {
     fetchData();
   };
 
+  const gcCanManage = gcVerified && gcProfileComplete;
+
   const pendingChangeOrders = changeOrders.filter((order) => (
     order.status === 'proposed' && order.signed_by_company && !order.signed_by_homeowner
   ));
@@ -271,6 +277,13 @@ export default function GeneralContractorProjectDetail() {
       Alert.alert(
         'Verification required',
         'WalkerAI must verify your GC profile before you can activate project management.',
+      );
+      return;
+    }
+    if (!gcProfileComplete) {
+      Alert.alert(
+        'Complete GC setup',
+        'Finish your GC business profile, license, and insurance setup before activating project management.',
       );
       return;
     }
@@ -303,8 +316,8 @@ export default function GeneralContractorProjectDetail() {
       Alert.alert('Active GC assignment required', 'Accept the management invite before sending approval requests.');
       return;
     }
-    if (!gcVerified) {
-      Alert.alert('Verification required', 'WalkerAI must verify your GC profile before approval requests can be sent.');
+    if (!gcCanManage) {
+      Alert.alert('Complete verified GC setup required', 'WalkerAI must verify your GC profile and your business, license, and insurance setup must be complete before approval requests can be sent.');
       return;
     }
     if (!approvalTitle.trim()) {
@@ -343,12 +356,13 @@ export default function GeneralContractorProjectDetail() {
     try {
       const { data: gc, error: gcError } = await supabase
         .from('general_contractors')
-        .select('id, verified')
+        .select('id, verified, business_name, city, province, lat, lng, license_number, license_doc_url, insurance_doc_url')
         .eq('user_id', currentUser.id)
         .maybeSingle();
       if (gcError) throw gcError;
       if (!gc?.id) throw new Error('GC profile not found.');
       if (gc.verified !== true) throw new Error('WalkerAI must verify your GC profile before approval requests can be sent.');
+      if (nextGeneralContractorOnboardingRoute(gc)) throw new Error('Complete your GC business, license, and insurance setup before sending approval requests.');
       if (!project?.id) throw new Error('Project not loaded.');
 
       const { data: projectRow, error: projectError } = await supabase
@@ -388,8 +402,8 @@ export default function GeneralContractorProjectDetail() {
       Alert.alert('Request already finalized', 'Only pending homeowner approval requests can be cancelled.');
       return;
     }
-    if (!assignment || assignment.status !== 'active' || !gcVerified) {
-      Alert.alert('Active verified GC management required', 'Only an active verified GC can cancel a pending homeowner approval request.');
+    if (!assignment || assignment.status !== 'active' || !gcCanManage) {
+      Alert.alert('Active complete GC management required', 'Only an active verified GC with complete setup can cancel a pending homeowner approval request.');
       return;
     }
     if (!assignment?.general_contractor_id) {
@@ -442,8 +456,8 @@ export default function GeneralContractorProjectDetail() {
       Alert.alert('Active GC assignment required', 'The homeowner must confirm GC management before external trades can be managed.');
       return;
     }
-    if (!gcVerified) {
-      Alert.alert('Verification required', 'WalkerAI must verify your GC profile before external trades can be managed.');
+    if (!gcCanManage) {
+      Alert.alert('Complete verified GC setup required', 'WalkerAI must verify your GC profile and your business, license, and insurance setup must be complete before external trades can be managed.');
       return;
     }
     if (!externalTradeName.trim()) {
@@ -482,8 +496,8 @@ export default function GeneralContractorProjectDetail() {
       Alert.alert('Active GC assignment required', 'The homeowner must confirm GC management before trade documents can be uploaded.');
       return;
     }
-    if (!gcVerified) {
-      Alert.alert('Verification required', 'WalkerAI must verify your GC profile before trade documents can be uploaded.');
+    if (!gcCanManage) {
+      Alert.alert('Complete verified GC setup required', 'WalkerAI must verify your GC profile and your business, license, and insurance setup must be complete before trade documents can be uploaded.');
       return;
     }
     if (slot.fulfillment_type !== 'external') {
@@ -525,8 +539,8 @@ export default function GeneralContractorProjectDetail() {
       Alert.alert('Active GC assignment required', 'The homeowner must confirm GC management before terms changes can be requested.');
       return;
     }
-    if (!gcVerified) {
-      Alert.alert('Verification required', 'WalkerAI must verify your GC profile before terms changes can be requested.');
+    if (!gcCanManage) {
+      Alert.alert('Complete verified GC setup required', 'WalkerAI must verify your GC profile and your business, license, and insurance setup must be complete before terms changes can be requested.');
       return;
     }
     if (pendingTermsRequest) {
@@ -591,8 +605,8 @@ export default function GeneralContractorProjectDetail() {
       Alert.alert('Active GC assignment required', 'The homeowner must confirm GC management before budget changes can be requested.');
       return;
     }
-    if (!gcVerified) {
-      Alert.alert('Verification required', 'WalkerAI must verify your GC profile before budget changes can be requested.');
+    if (!gcCanManage) {
+      Alert.alert('Complete verified GC setup required', 'WalkerAI must verify your GC profile and your business, license, and insurance setup must be complete before budget changes can be requested.');
       return;
     }
     if (pendingBudgetRequest) {
@@ -649,7 +663,7 @@ export default function GeneralContractorProjectDetail() {
     ? formatCad(project.ai_cost_max ?? project.ai_cost_min ?? 0)
     : 'Pending';
   const assignedTrades = slots.filter((slot) => slot.fulfillment_type === 'external' || !!getCompanyName(slot)).length;
-  const assignmentIsActive = assignment?.status === 'active' && gcVerified;
+  const assignmentIsActive = assignment?.status === 'active' && gcCanManage;
   const assignmentIsCompleted = assignment?.status === 'completed';
   const headerStatus = assignment?.status ?? project?.status ?? null;
   const markupSummary = assignment && project
@@ -736,7 +750,7 @@ export default function GeneralContractorProjectDetail() {
                     </View>
                   ) : null}
                   {assignment.scope_summary ? <Text style={styles.scopeText}>{assignment.scope_summary}</Text> : null}
-                  {assignment.status === 'invited' && !assignment.initiated_by_gc && gcVerified ? (
+                  {assignment.status === 'invited' && !assignment.initiated_by_gc && gcCanManage ? (
                     <TouchableOpacity
                       style={[styles.acceptButton, accepting && styles.acceptButtonDisabled]}
                       onPress={handleAcceptInvite}
@@ -753,9 +767,13 @@ export default function GeneralContractorProjectDetail() {
                     <Text style={styles.pendingHomeownerText}>
                       WalkerAI verification is required before you can accept this management invite.
                     </Text>
-                  ) : assignment.status === 'active' && !gcVerified ? (
+                  ) : assignment.status === 'invited' && !gcProfileComplete ? (
                     <Text style={styles.pendingHomeownerText}>
-                      WalkerAI verification is required before project controls are available.
+                      Complete your GC business profile, license, and insurance setup before you can accept this management invite.
+                    </Text>
+                  ) : assignment.status === 'active' && !gcCanManage ? (
+                    <Text style={styles.pendingHomeownerText}>
+                      Complete verified GC setup is required before project controls are available.
                     </Text>
                   ) : null}
                 </GlassCard>
@@ -1320,7 +1338,7 @@ export default function GeneralContractorProjectDetail() {
                           </Text>
                           {!assignmentIsActive ? (
                             <Text style={styles.approvalHint}>
-                              Active verified GC management is required before this pending recommendation can be cancelled.
+                              Active complete verified GC management is required before this pending recommendation can be cancelled.
                             </Text>
                           ) : null}
                           <GlassButton
