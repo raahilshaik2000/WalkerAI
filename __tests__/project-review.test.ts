@@ -59,4 +59,24 @@ describe('project review closeout screens', () => {
     expect(migration).toContain("set_config('walker.internal_gc_rating_update', 'review_rating', true)");
     expect(migration).toContain('UPDATE public.general_contractors');
   });
+
+  it('shows GC review recipients in homeowner review history', () => {
+    const source = fs.readFileSync(
+      path.join(__dirname, '../src/app/(homeowner)/my-reviews.tsx'),
+      'utf8',
+    );
+
+    expect(source).toContain("import { formatAppSafeErrorMessage } from '@/lib/supabase/functions'");
+    expect(source).toContain("const contractorsByUserId = new Map<string, { name: string; roleLabel: string }>();");
+    expect(source).toContain(".from('companies')");
+    expect(source).toContain(".from('general_contractors')");
+    expect(source).toContain(".select('user_id, business_name')");
+    expect(source).toContain("roleLabel: 'Trade contractor'");
+    expect(source).toContain("roleLabel: 'General contractor'");
+    expect(source).toContain('contractor: contractorsByUserId.get(r.reviewee_id) ?? null');
+    expect(source).toContain("formatAppSafeErrorMessage(error, 'Could not load reviews.')");
+    expect(source).toContain("formatAppSafeErrorMessage(gcError, 'Could not load review recipients.')");
+    expect(source).not.toContain('setErrorMessage(error.message)');
+    expect(source).not.toContain('setErrorMessage(companiesError.message)');
+  });
 });

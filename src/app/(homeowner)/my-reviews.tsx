@@ -6,6 +6,7 @@ import Ionicons from 'react-native-vector-icons/Ionicons';
 import { AnimatedPressable, GlassButton, GlassCard, GradientBackground } from '@/components/ui';
 import { Colors, Radius } from '@/constants/theme';
 import { supabase } from '@/lib/supabase/client';
+import { formatAppSafeErrorMessage } from '@/lib/supabase/functions';
 import { useAuthStore } from '@/stores/auth.store';
 
 interface Review {
@@ -19,7 +20,7 @@ interface Review {
   created_at: string;
   reviewee_id: string;
   project: { room_type: string | null } | null;
-  company: { name: string } | null;
+  contractor: { name: string; roleLabel: string } | null;
 }
 
 function Stars({ rating }: { rating: number }) {
@@ -73,7 +74,7 @@ export default function MyReviewsScreen() {
 
     if (error) {
       setReviews([]);
-      setErrorMessage(error.message);
+      setErrorMessage(formatAppSafeErrorMessage(error, 'Could not load reviews.'));
       setLoading(false);
       setRefreshing(false);
       return;
@@ -86,7 +87,7 @@ export default function MyReviewsScreen() {
         .filter((id): id is string => !!id)
     ));
 
-    const companiesByUserId = new Map<string, { name: string }>();
+    const contractorsByUserId = new Map<string, { name: string; roleLabel: string }>();
     if (revieweeIds.length > 0) {
       const { data: companies, error: companiesError } = await supabase
         .from('companies')
@@ -95,14 +96,41 @@ export default function MyReviewsScreen() {
 
       if (companiesError) {
         setReviews([]);
-        setErrorMessage(companiesError.message);
+        setErrorMessage(formatAppSafeErrorMessage(companiesError, 'Could not load review recipients.'));
         setLoading(false);
         setRefreshing(false);
         return;
       }
 
       for (const company of companies ?? []) {
-        if (company.user_id) companiesByUserId.set(company.user_id, { name: company.name ?? 'Contractor' });
+        if (company.user_id) {
+          contractorsByUserId.set(company.user_id, {
+            name: company.name ?? 'Contractor',
+            roleLabel: 'Trade contractor',
+          });
+        }
+      }
+
+      const { data: generalContractors, error: gcError } = await supabase
+        .from('general_contractors')
+        .select('user_id, business_name')
+        .in('user_id', revieweeIds);
+
+      if (gcError) {
+        setReviews([]);
+        setErrorMessage(formatAppSafeErrorMessage(gcError, 'Could not load review recipients.'));
+        setLoading(false);
+        setRefreshing(false);
+        return;
+      }
+
+      for (const gc of generalContractors ?? []) {
+        if (gc.user_id) {
+          contractorsByUserId.set(gc.user_id, {
+            name: gc.business_name ?? 'General Contractor',
+            roleLabel: 'General contractor',
+          });
+        }
       }
     }
 
@@ -117,7 +145,7 @@ export default function MyReviewsScreen() {
       created_at: r.created_at,
       reviewee_id: r.reviewee_id,
       project: r.project ?? null,
-      company: companiesByUserId.get(r.reviewee_id) ?? null,
+      contractor: contractorsByUserId.get(r.reviewee_id) ?? null,
     }));
     setReviews(mapped);
     setErrorMessage(null);
@@ -170,7 +198,9 @@ export default function MyReviewsScreen() {
                 <View style={styles.topRow}>
                   <View style={{ flex: 1 }}>
                     <Text style={styles.project}>{getProjectTitle(r.project?.room_type ?? null)}</Text>
-                    <Text style={styles.contractor}>{r.company?.name ?? 'Contractor'}</Text>
+                    <Text style={styles.contractor}>
+                      {r.contractor ? `${r.contractor.name} - ${r.contractor.roleLabel}` : 'Contractor'}
+                    </Text>
                   </View>
                   <View style={styles.overallBadge}>
                     <Text style={styles.overallText}>{r.rating}</Text>
