@@ -463,6 +463,7 @@ Runtime fixes made from this pass:
 - Supplier material order feed, detail, and active fulfillment screens now format supplier profile, order-load, eligibility, claim, processing, shipped, and delivered update failures through app-safe copy for GC-managed material order lifecycles.
 - Homeowner material receipt and supplier-payment release now use app-safe copy for material order load failures and payout release failures, while keeping delivery-proof gating intact.
 - Homeowner schedule confirmation now uses app-safe copy for schedule load and confirmation failures, while preserving quote/payment-aware project activation behavior.
+- Homeowner permit/inspection records now use app-safe copy for permit load and upload failures while preserving signed document previews.
 
 Runtime findings still not treated as complete:
 

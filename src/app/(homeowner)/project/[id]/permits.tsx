@@ -16,6 +16,7 @@ import { useRoute } from '@react-navigation/native';
 import { launchImageLibrary } from 'react-native-image-picker';
 import { supabase } from '@/lib/supabase/client';
 import { documentKindFromPath } from '@/lib/document-preview';
+import { formatAppSafeErrorMessage } from '@/lib/supabase/functions';
 import { getSignedUrl, getUploadMetadata, uploadFile } from '@/lib/supabase/storage';
 import { Colors, Radius, Spacing, Typography } from '@/constants/theme';
 import { getRequiredStringParam } from '@/lib/navigation-params';
@@ -60,7 +61,7 @@ export default function PermitsScreen() {
         .select('id, permit_type, status, document_url')
         .eq('project_id', projectId);
       if (error) {
-        setErrorMessage(`Could not load permits: ${error.message}`);
+        setErrorMessage(formatAppSafeErrorMessage(error, 'Could not load permits.'));
         setLoading(false);
         return;
       }
@@ -117,7 +118,7 @@ export default function PermitsScreen() {
       setPermits((prev) => prev.map((p) => p.id === permit.id ? { ...p, document_url: storagePath } : p));
       setPreviewUrls((prev) => ({ ...prev, [permit.id]: signedUrl }));
     } catch (err) {
-      Alert.alert('Upload failed', err instanceof Error ? err.message : 'Please try again.');
+      Alert.alert('Upload failed', formatAppSafeErrorMessage(err, 'Please try again.'));
     }
   };
 

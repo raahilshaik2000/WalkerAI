@@ -17,4 +17,17 @@ describe('homeowner permit documents', () => {
     expect(source).toContain('Unable to open document');
     expect(source).not.toContain('void Linking.openURL(previewUrl)');
   });
+
+  it('keeps permit load and upload errors app-safe', () => {
+    const source = fs.readFileSync(
+      path.join(__dirname, '../src/app/(homeowner)/project/[id]/permits.tsx'),
+      'utf8',
+    );
+
+    expect(source).toContain("import { formatAppSafeErrorMessage } from '@/lib/supabase/functions';");
+    expect(source).toContain("setErrorMessage(formatAppSafeErrorMessage(error, 'Could not load permits.'))");
+    expect(source).toContain("Alert.alert('Upload failed', formatAppSafeErrorMessage(err, 'Please try again.'))");
+    expect(source).not.toContain('setErrorMessage(`Could not load permits: ${error.message}`)');
+    expect(source).not.toContain("Alert.alert('Upload failed', err instanceof Error ? err.message : 'Please try again.')");
+  });
 });
