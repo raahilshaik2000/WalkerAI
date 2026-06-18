@@ -36,6 +36,10 @@ describe('financial disclosure copy', () => {
       'Walker AI keeps',
       'revenue split',
       'payout split',
+      'Management rate',
+      'Concierge rate',
+      'Invalid management rate',
+      'Invalid concierge rate',
       'Your payout {formatCadCents(booking.contractor_payout_cents)}',
       'WalkerAI {formatCadCents(booking.walker_fee_cents)}',
     ];

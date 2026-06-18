@@ -553,13 +553,13 @@ export default function GeneralContractorProjectDetail() {
 
     const markupPct = parsePercent(proposedMarkupPct);
     if (markupPct == null || markupPct < 0 || markupPct > 50) {
-      Alert.alert('Invalid management rate', 'Management rate must be between 0% and 50%.');
+      Alert.alert('Invalid management allowance', 'Management allowance must be between 0% and 50%.');
       return;
     }
 
     const conciergePct = parsePercent(proposedConciergeFeePct);
     if (conciergePct == null || conciergePct < 0 || conciergePct > 25) {
-      Alert.alert('Invalid concierge rate', 'Concierge rate must be between 0% and 25%.');
+      Alert.alert('Invalid concierge allowance', 'Concierge allowance must be between 0% and 25%.');
       return;
     }
 
@@ -1073,20 +1073,20 @@ export default function GeneralContractorProjectDetail() {
                         </Text>
                       ) : null}
                       <View style={styles.controlDivider} />
-                      <Text style={styles.sectionSubTitle}>Management terms</Text>
+                      <Text style={styles.sectionSubTitle}>Project terms</Text>
                       <Text style={styles.bodyText}>
                         Update project management settings through homeowner approval. Approved settings recalculate this project only.
                       </Text>
                       <View style={styles.formRow}>
                         <GlassInput
-                          label="Management rate"
+                          label="Management allowance"
                           value={proposedMarkupPct}
                           onChangeText={setProposedMarkupPct}
                           keyboardType="decimal-pad"
                           containerStyle={styles.formHalf}
                         />
                         <GlassInput
-                          label="Concierge rate"
+                          label="Concierge allowance"
                           value={proposedConciergeFeePct}
                           onChangeText={setProposedConciergeFeePct}
                           keyboardType="decimal-pad"
