@@ -108,6 +108,19 @@ describe('company quote copy', () => {
     expect(source).not.toContain("meta: job.status === 'active' ? 'View approved' : 'Build quote'");
   });
 
+  it('does not show duplicate legacy active jobs when a slot assignment exists for the same project', () => {
+    const repoRoot = path.resolve(__dirname, '..');
+    const source = fs.readFileSync(
+      path.join(repoRoot, 'src/app/(company)/index.tsx'),
+      'utf8'
+    );
+
+    expect(source).toContain('const slotProjectIds = new Set(slotActive.map((job) => job.id));');
+    expect(source).toContain('.filter((job) => !slotProjectIds.has(job.id))');
+    expect(source).toContain("byKey.set(`${job.id}:${job.slotId ?? 'legacy'}`, job);");
+    expect(source).toContain("navigation.navigate('JobDetail', { screen: 'JobDetailMain', params: { id: job.id, slot: job.slotId } })");
+  });
+
   it('does not promise an unsupported 48 hour quote deadline when accepting a job', () => {
     const repoRoot = path.resolve(__dirname, '..');
     const source = fs.readFileSync(

@@ -264,12 +264,6 @@ export default function CompanyJobFeed() {
         })
         .filter((job): job is ActiveJob => !!job);
 
-      const legacyActive = legacyActiveRows.map((job) => ({
-        ...job,
-        slotId: null,
-        gc_project_type: gcProjectTypes.get(job.id) ?? null,
-      }));
-
       const slotActive = slotActiveRows
         .map((slot): ActiveJob | null => {
           const project = Array.isArray(slot.project) ? slot.project[0] : slot.project;
@@ -286,6 +280,15 @@ export default function CompanyJobFeed() {
           };
         })
         .filter((job): job is ActiveJob => !!job);
+
+      const slotProjectIds = new Set(slotActive.map((job) => job.id));
+      const legacyActive = legacyActiveRows
+        .filter((job) => !slotProjectIds.has(job.id))
+        .map((job) => ({
+          ...job,
+          slotId: null,
+          gc_project_type: gcProjectTypes.get(job.id) ?? null,
+        }));
 
       const byKey = new Map<string, ActiveJob>();
       [...legacyActive, ...acceptedDispatchActive, ...slotActive].forEach((job) => {
