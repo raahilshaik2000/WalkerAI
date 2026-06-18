@@ -644,7 +644,7 @@ export default function GeneralContractorProjectDetail() {
     : project?.ai_cost_max != null || project?.ai_cost_min != null
     ? formatCad(project.ai_cost_max ?? project.ai_cost_min ?? 0)
     : 'Pending';
-  const assignedTrades = slots.filter((slot) => !!getCompanyName(slot)).length;
+  const assignedTrades = slots.filter((slot) => slot.fulfillment_type === 'external' || !!getCompanyName(slot)).length;
   const assignmentIsActive = assignment?.status === 'active' && gcVerified;
   const headerStatus = assignment?.status ?? project?.status ?? null;
   const markupSummary = assignment && project

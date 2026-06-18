@@ -1087,6 +1087,7 @@ describe('general contractor account type', () => {
     expect(externalActivationMigration).toContain('dispatch_expires_at = NULL');
     expect(migration).toContain("status = 'filled'");
     expect(gcProjectDetail).toContain("supabase.rpc('mark_project_slot_externally_managed'");
+    expect(gcProjectDetail).toContain("slot.fulfillment_type === 'external' || !!getCompanyName(slot)");
     expect(gcProjectDetail).toContain('external_trade_name, external_trade_company, external_trade_email, external_trade_phone,');
     expect(gcProjectDetail).toContain('external_trade_notes, external_trade_verification_status,');
     expect(gcProjectDetail).toContain("setExternalTradeEmail(slot.external_trade_email ?? '')");
