@@ -19,7 +19,10 @@ import { calculateGcMarkup } from '@/lib/gc-markup';
 import { formatGcProjectType } from '@/lib/gc-project-type';
 import { getRequiredStringParam } from '@/lib/navigation-params';
 import { formatTradeLabel } from '@/lib/trade-labels';
-import { nextGeneralContractorOnboardingRoute } from '@/lib/general-contractor';
+import {
+  GENERAL_CONTRACTOR_READINESS_SELECT,
+  nextGeneralContractorOnboardingRoute,
+} from '@/lib/general-contractor';
 import { getUploadMetadata, uploadFile } from '@/lib/supabase/storage';
 import { Colors, Spacing, Typography } from '@/constants/theme';
 import { GradientBackground, GlassButton, GlassCard, GlassInput, StatusBadge } from '@/components/ui';
@@ -171,7 +174,7 @@ export default function GeneralContractorProjectDetail() {
       }
       const { data: gc, error: gcError } = await supabase
         .from('general_contractors')
-        .select('id, verified, business_name, city, province, lat, lng, license_number, license_doc_url, insurance_doc_url')
+        .select(GENERAL_CONTRACTOR_READINESS_SELECT)
         .eq('user_id', currentUser.id)
         .maybeSingle();
       if (gcError) throw gcError;
@@ -356,7 +359,7 @@ export default function GeneralContractorProjectDetail() {
     try {
       const { data: gc, error: gcError } = await supabase
         .from('general_contractors')
-        .select('id, verified, business_name, city, province, lat, lng, license_number, license_doc_url, insurance_doc_url')
+        .select(GENERAL_CONTRACTOR_READINESS_SELECT)
         .eq('user_id', currentUser.id)
         .maybeSingle();
       if (gcError) throw gcError;

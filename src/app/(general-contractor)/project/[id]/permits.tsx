@@ -16,6 +16,7 @@ import { launchImageLibrary } from 'react-native-image-picker';
 import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
 import { supabase } from '@/lib/supabase/client';
 import { documentKindFromPath } from '@/lib/document-preview';
+import { GENERAL_CONTRACTOR_READINESS_SELECT, isGeneralContractorReadyForProjectControls } from '@/lib/general-contractor';
 import { getSignedUrl, getUploadMetadata, uploadFile } from '@/lib/supabase/storage';
 import { getRequiredStringParam } from '@/lib/navigation-params';
 import { Colors, Radius, Spacing, Typography } from '@/constants/theme';
@@ -65,7 +66,7 @@ export default function GeneralContractorPermitsScreen() {
   const [uploadingId, setUploadingId] = useState<string | null>(null);
   const [refreshing, setRefreshing] = useState(false);
   const [loading, setLoading] = useState(true);
-  const [gcVerified, setGcVerified] = useState(false);
+  const [gcReady, setGcReady] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
   const fetchPermits = useCallback(async () => {
@@ -76,19 +77,19 @@ export default function GeneralContractorPermitsScreen() {
         setAssignment(null);
         setPermits([]);
         setPreviewUrls({});
-        setGcVerified(false);
+        setGcReady(false);
         setErrorMessage('You need to be signed in to manage permits.');
         return;
       }
 
       const { data: gc, error: gcError } = await supabase
         .from('general_contractors')
-        .select('id, verified')
+        .select(GENERAL_CONTRACTOR_READINESS_SELECT)
         .eq('user_id', currentUser.id)
         .maybeSingle();
       if (gcError) throw gcError;
       if (!gc?.id) throw new Error('GC profile not found.');
-      setGcVerified(gc.verified === true);
+      setGcReady(isGeneralContractorReadyForProjectControls(gc));
 
       const { data: assignmentRow, error: assignmentError } = await supabase
         .from('general_contractor_projects')
@@ -132,7 +133,7 @@ export default function GeneralContractorPermitsScreen() {
       setAssignment(null);
       setPermits([]);
       setPreviewUrls({});
-      setGcVerified(false);
+      setGcReady(false);
       setErrorMessage(err instanceof Error ? err.message : 'Could not load permits.');
     } finally {
       setLoading(false);
@@ -156,8 +157,8 @@ export default function GeneralContractorPermitsScreen() {
       Alert.alert('Active GC management required', 'The homeowner must confirm GC management before permits can be managed.');
       return;
     }
-    if (!gcVerified) {
-      Alert.alert('Verification required', 'WalkerAI must verify your GC profile before permits can be managed.');
+    if (!gcReady) {
+      Alert.alert('Complete setup required', 'Complete verified GC setup is required before permits can be managed.');
       return;
     }
     if (!permitType.trim()) {
@@ -186,8 +187,8 @@ export default function GeneralContractorPermitsScreen() {
       Alert.alert('Active GC management required', 'The homeowner must confirm GC management before permit statuses can be updated.');
       return;
     }
-    if (!gcVerified) {
-      Alert.alert('Verification required', 'WalkerAI must verify your GC profile before permit statuses can be updated.');
+    if (!gcReady) {
+      Alert.alert('Complete setup required', 'Complete verified GC setup is required before permit statuses can be updated.');
       return;
     }
     const { error } = await supabase
@@ -207,8 +208,8 @@ export default function GeneralContractorPermitsScreen() {
       Alert.alert('Active GC management required', 'The homeowner must confirm GC management before permit documents can be uploaded.');
       return;
     }
-    if (!gcVerified) {
-      Alert.alert('Verification required', 'WalkerAI must verify your GC profile before permit documents can be uploaded.');
+    if (!gcReady) {
+      Alert.alert('Complete setup required', 'Complete verified GC setup is required before permit documents can be uploaded.');
       return;
     }
     const result = await launchImageLibrary({
@@ -249,7 +250,7 @@ export default function GeneralContractorPermitsScreen() {
   };
 
   const canViewPermits = assignment?.status === 'active' || assignment?.status === 'completed';
-  const canManagePermits = assignment?.status === 'active' && gcVerified;
+  const canManagePermits = assignment?.status === 'active' && gcReady;
 
   return (
     <GradientBackground glow="top-right">
@@ -293,10 +294,10 @@ export default function GeneralContractorPermitsScreen() {
             </GlassCard>
           ) : !loading && !errorMessage ? (
             <GlassCard style={styles.card}>
-              <Text style={styles.sectionTitle}>{assignment?.status === 'active' ? 'Verification required' : 'Permits locked'}</Text>
+              <Text style={styles.sectionTitle}>{assignment?.status === 'active' ? 'Complete setup required' : 'Permits locked'}</Text>
               <Text style={styles.bodyText}>
                 {assignment?.status === 'active'
-                  ? 'WalkerAI verification is required before permits, inspections, or uploaded documents can be managed.'
+                  ? 'Complete verified GC setup is required before permits, inspections, or uploaded documents can be managed.'
                   : 'The homeowner must confirm active GC management before permits, inspections, or uploaded documents can be managed.'}
               </Text>
             </GlassCard>

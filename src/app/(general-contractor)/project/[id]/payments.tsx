@@ -14,6 +14,7 @@ import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
 import { supabase } from '@/lib/supabase/client';
 import { formatCadCents, parsePositiveCadToCents } from '@/lib/currency';
 import { formatStatusLabel } from '@/lib/formatters';
+import { GENERAL_CONTRACTOR_READINESS_SELECT, isGeneralContractorReadyForProjectControls } from '@/lib/general-contractor';
 import { getRequiredStringParam } from '@/lib/navigation-params';
 import { Colors, Spacing, Typography } from '@/constants/theme';
 import { GlassButton, GlassCard, GlassInput, GradientBackground, StatusBadge } from '@/components/ui';
@@ -73,7 +74,7 @@ export default function GeneralContractorPaymentsScreen() {
   const [refreshing, setRefreshing] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [cancellingRequestId, setCancellingRequestId] = useState<string | null>(null);
-  const [gcVerified, setGcVerified] = useState(false);
+  const [gcReady, setGcReady] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
   const fetchData = useCallback(async () => {
@@ -89,12 +90,12 @@ export default function GeneralContractorPaymentsScreen() {
       setErrorMessage(null);
       const { data: gc, error: gcError } = await supabase
         .from('general_contractors')
-        .select('id, verified')
+        .select(GENERAL_CONTRACTOR_READINESS_SELECT)
         .eq('user_id', currentUser.id)
         .maybeSingle();
       if (gcError) throw gcError;
       if (!gc?.id) throw new Error('GC profile not found.');
-      setGcVerified(gc.verified === true);
+      setGcReady(isGeneralContractorReadyForProjectControls(gc));
 
       const [assignmentResult, requestResult] = await Promise.all([
         supabase
@@ -119,7 +120,7 @@ export default function GeneralContractorPaymentsScreen() {
       setErrorMessage(err instanceof Error ? err.message : 'Could not load payment requests.');
       setAssignment(null);
       setRequests([]);
-      setGcVerified(false);
+      setGcReady(false);
     } finally {
       setLoading(false);
       setRefreshing(false);
@@ -142,8 +143,8 @@ export default function GeneralContractorPaymentsScreen() {
       Alert.alert('Active GC management required', 'The homeowner must confirm GC management before payment requests can be sent.');
       return;
     }
-    if (!gcVerified) {
-      Alert.alert('Verification required', 'WalkerAI must verify your GC profile before payment requests can be sent.');
+    if (!gcReady) {
+      Alert.alert('Complete setup required', 'Complete verified GC setup is required before payment requests can be sent.');
       return;
     }
 
@@ -186,8 +187,8 @@ export default function GeneralContractorPaymentsScreen() {
       Alert.alert('Request unavailable', 'Refresh payment requests and try again.');
       return;
     }
-    if (assignment.status !== 'active' || !gcVerified) {
-      Alert.alert('Active verified GC management required', 'Only an active verified GC can cancel a pending payment request.');
+    if (assignment.status !== 'active' || !gcReady) {
+      Alert.alert('Active complete GC management required', 'Only an active verified GC with complete setup can cancel a pending payment request.');
       return;
     }
 
@@ -224,7 +225,7 @@ export default function GeneralContractorPaymentsScreen() {
     );
   };
 
-  const canManagePaymentRequests = assignment?.status === 'active' && gcVerified;
+  const canManagePaymentRequests = assignment?.status === 'active' && gcReady;
 
   return (
     <GradientBackground glow="top-right">
@@ -314,9 +315,9 @@ export default function GeneralContractorPaymentsScreen() {
                 </GlassCard>
               ) : assignment?.status === 'active' ? (
                 <GlassCard style={styles.card}>
-                  <Text style={styles.sectionTitle}>Verification required</Text>
+                  <Text style={styles.sectionTitle}>Complete setup required</Text>
                   <Text style={styles.bodyText}>
-                    WalkerAI verification is required before payment requests can be sent.
+                    Complete verified GC setup is required before payment requests can be sent.
                   </Text>
                 </GlassCard>
               ) : (

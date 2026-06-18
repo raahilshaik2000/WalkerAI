@@ -416,7 +416,7 @@ describe('general contractor account type', () => {
     expect(completeActivationMigration).toContain('Only verified General Contractors with complete business, license, and insurance setup can activate management assignments');
     expect(completeActivationMigration).toContain('GRANT EXECUTE ON FUNCTION public.accept_gc_management_invite(UUID) TO authenticated');
     expect(completeActivationMigration).toContain('GRANT EXECUTE ON FUNCTION public.confirm_gc_management_assignment(UUID) TO authenticated');
-    expect(gcProjectDetail).toContain(".select('id, verified, business_name, city, province, lat, lng, license_number, license_doc_url, insurance_doc_url')");
+    expect(gcProjectDetail).toContain(".select(GENERAL_CONTRACTOR_READINESS_SELECT)");
     expect(gcProjectDetail).toContain('setGcVerified(gc.verified === true)');
     expect(gcProjectDetail).toContain('setGcProfileComplete(nextGeneralContractorOnboardingRoute(gc) === null)');
     expect(gcProjectDetail).toContain("if (!gcVerified) {\n      Alert.alert(\n        'Verification required'");
@@ -467,9 +467,9 @@ describe('general contractor account type', () => {
 
     for (const screenPath of screenPaths) {
       const source = fs.readFileSync(path.join(repoRoot, screenPath), 'utf8');
-      expect(source).toContain(".select('id, verified')");
-      expect(source).toContain('setGcVerified(gc.verified === true)');
-      expect(source).toContain('WalkerAI verification is required');
+      expect(source).toContain(".select(GENERAL_CONTRACTOR_READINESS_SELECT)");
+      expect(source).toContain('setGcReady(isGeneralContractorReadyForProjectControls(gc))');
+      expect(source).toContain('Complete verified GC setup is required');
     }
 
     const assistant = fs.readFileSync(
@@ -481,9 +481,9 @@ describe('general contractor account type', () => {
       'utf8',
     );
 
-    expect(assistant).toContain(".select('id, verified')");
-    expect(assistant).toContain('gc.verified !== true');
-    expect(assistant).toContain('WalkerAI verification is required before project assistant summaries are available.');
+    expect(assistant).toContain(".select(GENERAL_CONTRACTOR_READINESS_SELECT)");
+    expect(assistant).toContain('isGeneralContractorReadyForProjectControls(gc)');
+    expect(assistant).toContain('Complete verified GC setup is required before project assistant summaries are available.');
     expect(projectDetail).toContain("if (gc.verified !== true) throw new Error('WalkerAI must verify your GC profile before approval requests can be sent.')");
     expect(projectDetail).toContain("if (nextGeneralContractorOnboardingRoute(gc)) throw new Error('Complete your GC business, license, and insurance setup before sending approval requests.')");
     expect(projectDetail).toContain("const assignmentIsActive = assignment?.status === 'active' && gcCanManage");
@@ -1256,6 +1256,10 @@ describe('general contractor account type', () => {
       path.join(repoRoot, 'supabase/migrations/20260616053000_activate_gc_external_trade_projects.sql'),
       'utf8',
     );
+    const completeDirectToolsMigration = fs.readFileSync(
+      path.join(repoRoot, 'supabase/migrations/20260618032327_require_complete_gc_profile_for_direct_project_tools.sql'),
+      'utf8',
+    );
     const gcProjectDetail = fs.readFileSync(
       path.join(repoRoot, 'src/app/(general-contractor)/project/[id]/index.tsx'),
       'utf8',
@@ -1275,6 +1279,11 @@ describe('general contractor account type', () => {
     expect(directWriteMigration).toContain('CREATE OR REPLACE FUNCTION public.mark_project_slot_externally_managed');
     expect(directWriteMigration).toContain('Only verified General Contractors can mark external trades');
     expect(externalActivationMigration).toContain('Only verified General Contractors can mark external trades');
+    expect(completeDirectToolsMigration).toContain('CREATE OR REPLACE FUNCTION public.mark_project_slot_externally_managed');
+    expect(completeDirectToolsMigration).toContain('Only verified General Contractors with complete business, license, and insurance setup can mark external trades');
+    expect(completeDirectToolsMigration).toContain("u.role = 'general_contractor'");
+    expect(completeDirectToolsMigration).toContain("NULLIF(TRIM(v_gc.license_doc_url), '') IS NULL");
+    expect(completeDirectToolsMigration).toContain("NULLIF(TRIM(v_gc.insurance_doc_url), '') IS NULL");
     expect(externalActivationMigration).toContain('Active GC management is required before marking external trades');
     expect(externalActivationMigration).toContain("v_project.status IN ('draft', 'brief_ready', 'dispatching')");
     expect(externalActivationMigration).toContain('v_project.ai_cost_min > 0');
@@ -1313,6 +1322,10 @@ describe('general contractor account type', () => {
       path.join(repoRoot, 'supabase/migrations/20260618015929_restrict_gc_external_trade_document_paths.sql'),
       'utf8',
     );
+    const completeDirectToolsMigration = fs.readFileSync(
+      path.join(repoRoot, 'supabase/migrations/20260618032327_require_complete_gc_profile_for_direct_project_tools.sql'),
+      'utf8',
+    );
     const gcProjectDetail = fs.readFileSync(
       path.join(repoRoot, 'src/app/(general-contractor)/project/[id]/index.tsx'),
       'utf8',
@@ -1326,6 +1339,9 @@ describe('general contractor account type', () => {
     expect(directWriteMigration).toContain('CREATE OR REPLACE FUNCTION public.add_external_trade_document');
     expect(directWriteMigration).toContain('Only verified General Contractors can add external trade documents');
     expect(pathRestrictionMigration).toContain('CREATE OR REPLACE FUNCTION public.add_external_trade_document');
+    expect(completeDirectToolsMigration).toContain('CREATE OR REPLACE FUNCTION public.add_external_trade_document');
+    expect(completeDirectToolsMigration).toContain('Only verified General Contractors with complete business, license, and insurance setup can add external trade documents');
+    expect(completeDirectToolsMigration).toContain('External trade document path does not match this GC project slot');
     expect(pathRestrictionMigration).toContain("v_document_parts := string_to_array(v_document_url, '/')");
     expect(pathRestrictionMigration).toContain("v_document_parts[1] <> 'external-trades'");
     expect(pathRestrictionMigration).toContain("v_document_parts[2] <> (SELECT auth.uid())::TEXT");
@@ -1435,6 +1451,10 @@ describe('general contractor account type', () => {
       path.join(repoRoot, 'supabase/migrations/20260616034000_scope_gc_permit_reads_and_writes.sql'),
       'utf8',
     );
+    const completeDirectToolsMigration = fs.readFileSync(
+      path.join(repoRoot, 'supabase/migrations/20260618032327_require_complete_gc_profile_for_direct_project_tools.sql'),
+      'utf8',
+    );
     const navigator = fs.readFileSync(
       path.join(repoRoot, 'src/navigation/GeneralContractorNavigator.tsx'),
       'utf8',
@@ -1466,6 +1486,14 @@ describe('general contractor account type', () => {
     expect(scopedReadWriteMigration).toMatch(/permits_gc_managed_update_row[\s\S]*gcp\.status = 'active'[\s\S]*gc\.verified IS TRUE/);
     expect(scopedReadWriteMigration).toMatch(/CREATE POLICY "permits_gc_managed_select" ON storage\.objects[\s\S]*gcp\.status IN \('active', 'completed'\)/);
     expect(scopedReadWriteMigration).not.toContain("gcp.status IN ('invited', 'active', 'completed')");
+    expect(completeDirectToolsMigration).toContain('DROP POLICY IF EXISTS "permits_gc_managed_insert_row" ON public.permits');
+    expect(completeDirectToolsMigration).toContain('CREATE POLICY "permits_gc_managed_insert_row" ON public.permits');
+    expect(completeDirectToolsMigration).toContain('CREATE POLICY "permits_gc_managed_update_row" ON public.permits');
+    expect(completeDirectToolsMigration).toContain('CREATE POLICY "permits_gc_managed_insert" ON storage.objects');
+    expect(completeDirectToolsMigration).toContain('CREATE POLICY "permits_gc_managed_update" ON storage.objects');
+    expect(completeDirectToolsMigration).toContain("u.role = 'general_contractor'");
+    expect(completeDirectToolsMigration).toContain("NULLIF(TRIM(gc.license_doc_url), '') IS NOT NULL");
+    expect(completeDirectToolsMigration).toContain("NULLIF(TRIM(gc.insurance_doc_url), '') IS NOT NULL");
     expect(navigator).toContain('GeneralContractorPermits');
     expect(gcProjectDetail).toContain("navigation.navigate('GeneralContractorPermits'");
     expect(gcPermits).toContain("select('id, status')");
@@ -1519,7 +1547,7 @@ describe('general contractor account type', () => {
     expect((gcPayments.match(/\.eq\('general_contractor_id', gc\.id\)/g) ?? []).length).toBeGreaterThanOrEqual(2);
     expect(gcPayments).toContain("from('gc_payment_requests').insert");
     expect(gcPayments).toContain('handleCancelRequest');
-    expect(gcPayments).toContain("const canManagePaymentRequests = assignment?.status === 'active' && gcVerified;");
+    expect(gcPayments).toContain("const canManagePaymentRequests = assignment?.status === 'active' && gcReady;");
     expect(gcPayments).toContain("status: 'cancelled'");
     expect(gcPayments).toContain('cancelled_at: new Date().toISOString()');
     expect(gcPayments).toContain(".eq('status', 'pending')");
@@ -1668,6 +1696,10 @@ describe('general contractor account type', () => {
       path.join(repoRoot, 'supabase/migrations/20260615235914_require_verified_gc_message_writes.sql'),
       'utf8',
     );
+    const completeDirectToolsMigration = fs.readFileSync(
+      path.join(repoRoot, 'supabase/migrations/20260618032327_require_complete_gc_profile_for_direct_project_tools.sql'),
+      'utf8',
+    );
     const navigator = fs.readFileSync(
       path.join(repoRoot, 'src/navigation/GeneralContractorNavigator.tsx'),
       'utf8',
@@ -1696,6 +1728,11 @@ describe('general contractor account type', () => {
     expect(verificationMigration).toContain('messages_project_participants_insert');
     expect(verificationMigration).toContain('sender_id = (SELECT auth.uid())');
     expect(verificationMigration).toMatch(/gc\.verified IS TRUE[\s\S]*gcp\.status IN \('invited', 'active'\)/);
+    expect(completeDirectToolsMigration).toContain('DROP POLICY IF EXISTS "messages_project_participants_insert" ON public.messages');
+    expect(completeDirectToolsMigration).toContain('CREATE POLICY "messages_project_participants_insert" ON public.messages');
+    expect(completeDirectToolsMigration).toContain("u.role = 'general_contractor'");
+    expect(completeDirectToolsMigration).toContain("NULLIF(TRIM(gc.license_doc_url), '') IS NOT NULL");
+    expect(completeDirectToolsMigration).toContain("NULLIF(TRIM(gc.insurance_doc_url), '') IS NOT NULL");
     expect(navigator).toContain('GeneralContractorMessages');
     expect(gcProjectDetail).toContain("navigation.navigate('GeneralContractorMessages'");
     expect(gcMessages).toContain("from('messages').insert");
@@ -1703,8 +1740,8 @@ describe('general contractor account type', () => {
     expect(gcMessages).toContain('const [currentUserId, setCurrentUserId] = useState<string | null>(user?.id ?? null)');
     expect(gcMessages).toContain('setCurrentUserId(currentUser.id)');
     expect(gcMessages).toContain('const isMe = item.sender_id === currentUserId');
-    expect(gcMessages).toContain(".select('id, verified')");
-    expect(gcMessages).toContain('WalkerAI verification is required before GC project messages can be sent.');
+    expect(gcMessages).toContain(".select(GENERAL_CONTRACTOR_READINESS_SELECT)");
+    expect(gcMessages).toContain('Complete verified GC setup is required before GC project messages can be sent.');
     expect(gcMessages).toContain("placeholder={canSendMessages ? 'Type a message...' : 'Messages locked'}");
     expect(homeownerMessages).toContain(".from('general_contractor_projects')");
     expect(homeownerMessages).toContain("general_contractor:general_contractors(business_name)");
@@ -1843,7 +1880,7 @@ describe('general contractor account type', () => {
     expect(gcTrades).toContain('const projectBudgetReady = (projectBudget?.ai_cost_min ?? 0) > 0 && (projectBudget?.ai_cost_max ?? 0) > 0;');
     expect(gcTrades).toContain("return 'Estimate pending';");
     expect(gcTrades).toContain("from('quotes')");
-    expect(gcTrades).toContain("const canManageTradeRequests = assignment?.status === 'active' && gcVerified;");
+    expect(gcTrades).toContain("const canManageTradeRequests = assignment?.status === 'active' && gcReady;");
     expect(gcTrades).toContain("supabase.functions.invoke('generate-trade-slots'");
     expect(gcTrades).toContain('Generate Trade Plan');
     expect(gcTrades).toContain('Generate or approve the project budget before WalkerAI can create priced trade slots.');
@@ -2189,7 +2226,7 @@ describe('general contractor account type', () => {
     expect(gcTrades).toContain(".eq('general_contractor_id', assignment.general_contractor_id)");
     expect(gcTrades).toContain(".eq('status', 'pending')");
     expect(gcTrades).toContain('It does not change the homeowner-facing quote.');
-    expect(gcTrades).toContain("const canManageTradeRequests = assignment?.status === 'active' && gcVerified;");
+    expect(gcTrades).toContain("const canManageTradeRequests = assignment?.status === 'active' && gcReady;");
     expect(gcTrades).toContain('disabled={!canManageTradeRequests || !!cancellingNegotiationId}');
     expect(gcTrades).toContain('Counteroffer / revision request');
     expect(companyJob).toContain("from('gc_trade_quote_negotiations')");

@@ -14,6 +14,7 @@ import { supabase } from '@/lib/supabase/client';
 import { formatCadCents, formatSignedCadCents } from '@/lib/currency';
 import { formatStatusLabel } from '@/lib/formatters';
 import { formatGcProjectType } from '@/lib/gc-project-type';
+import { GENERAL_CONTRACTOR_READINESS_SELECT, isGeneralContractorReadyForProjectControls } from '@/lib/general-contractor';
 import { getRequiredStringParam } from '@/lib/navigation-params';
 import { formatTradeLabel } from '@/lib/trade-labels';
 import { Colors, Spacing, Typography } from '@/constants/theme';
@@ -111,13 +112,13 @@ export default function GeneralContractorAssistantScreen() {
 
       const { data: gc, error: gcError } = await supabase
         .from('general_contractors')
-        .select('id, verified')
+        .select(GENERAL_CONTRACTOR_READINESS_SELECT)
         .eq('user_id', currentUser.id)
         .maybeSingle();
       if (gcError) throw gcError;
       if (!gc?.id) throw new Error('GC profile not found.');
-      if (gc.verified !== true) {
-        throw new Error('WalkerAI verification is required before project assistant summaries are available.');
+      if (!isGeneralContractorReadyForProjectControls(gc)) {
+        throw new Error('Complete verified GC setup is required before project assistant summaries are available.');
       }
 
       const { data: assignmentRow, error: assignmentError } = await supabase

@@ -16,6 +16,7 @@ import { supabase } from '@/lib/supabase/client';
 import { formatCadCents, formatSignedCadCents } from '@/lib/currency';
 import { formatStatusLabel } from '@/lib/formatters';
 import { formatGcProjectType } from '@/lib/gc-project-type';
+import { GENERAL_CONTRACTOR_READINESS_SELECT, isGeneralContractorReadyForProjectControls } from '@/lib/general-contractor';
 import { getRequiredStringParam } from '@/lib/navigation-params';
 import { Colors, Spacing, Typography } from '@/constants/theme';
 import { GlassButton, GlassCard, GradientBackground, StatusBadge } from '@/components/ui';
@@ -119,7 +120,7 @@ export default function GeneralContractorCompletionScreen() {
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [submittingCompletion, setSubmittingCompletion] = useState(false);
-  const [gcVerified, setGcVerified] = useState(false);
+  const [gcReady, setGcReady] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
   const fetchData = useCallback(async () => {
@@ -131,12 +132,12 @@ export default function GeneralContractorCompletionScreen() {
       }
       const { data: gc, error: gcError } = await supabase
         .from('general_contractors')
-        .select('id, verified')
+        .select(GENERAL_CONTRACTOR_READINESS_SELECT)
         .eq('user_id', currentUser.id)
         .maybeSingle();
       if (gcError) throw gcError;
       if (!gc?.id) throw new Error('GC profile not found.');
-      setGcVerified(gc.verified === true);
+      setGcReady(isGeneralContractorReadyForProjectControls(gc));
 
       const { data: assignmentRow, error: assignmentError } = await supabase
         .from('general_contractor_projects')
@@ -254,7 +255,7 @@ export default function GeneralContractorCompletionScreen() {
       setApprovals([]);
       setPaymentRequests([]);
       setChangeOrders([]);
-      setGcVerified(false);
+      setGcReady(false);
     } finally {
       setLoading(false);
       setRefreshing(false);
@@ -309,7 +310,7 @@ export default function GeneralContractorCompletionScreen() {
     + unresolvedMilestones;
   const closeoutBlockers = projectIsCompleted ? 0 : activeCloseoutBlockers;
   const canRequestCompletion = assignment?.status === 'active'
-    && gcVerified
+    && gcReady
     && projectReadyForCloseout
     && budgetReadyForCloseout
     && !pendingCompletionRequest
@@ -321,8 +322,8 @@ export default function GeneralContractorCompletionScreen() {
       Alert.alert('Active GC management required', 'The homeowner must confirm active GC management before completion can be requested.');
       return;
     }
-    if (!gcVerified) {
-      Alert.alert('Verification required', 'WalkerAI must verify your GC profile before completion can be requested.');
+    if (!gcReady) {
+      Alert.alert('Complete setup required', 'Complete verified GC setup is required before completion can be requested.');
       return;
     }
     if (pendingApprovals > 0) {
@@ -424,9 +425,9 @@ export default function GeneralContractorCompletionScreen() {
                     size="sm"
                     style={styles.completionButton}
                   />
-                ) : project?.status !== 'completed' && assignment?.status === 'active' && !gcVerified ? (
+                ) : project?.status !== 'completed' && assignment?.status === 'active' && !gcReady ? (
                   <Text style={styles.completionNote}>
-                    WalkerAI verification is required before final project completion can be requested.
+                    Complete verified GC setup is required before final project completion can be requested.
                   </Text>
                 ) : project?.status !== 'completed' && !pendingCompletionRequest ? (
                   <Text style={styles.completionNote}>

@@ -13,6 +13,7 @@ import { useFocusEffect, useNavigation, useRoute } from '@react-navigation/nativ
 import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
 import { supabase } from '@/lib/supabase/client';
 import { isValidIsoDate } from '@/lib/dates';
+import { GENERAL_CONTRACTOR_READINESS_SELECT, isGeneralContractorReadyForProjectControls } from '@/lib/general-contractor';
 import { getRequiredStringParam } from '@/lib/navigation-params';
 import { formatTradeLabel } from '@/lib/trade-labels';
 import { Colors, Spacing, Typography } from '@/constants/theme';
@@ -67,7 +68,7 @@ export default function GeneralContractorScheduleScreen() {
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [submitting, setSubmitting] = useState(false);
-  const [gcVerified, setGcVerified] = useState(false);
+  const [gcReady, setGcReady] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
   const fetchData = useCallback(async () => {
@@ -83,12 +84,12 @@ export default function GeneralContractorScheduleScreen() {
       setErrorMessage(null);
       const { data: gc, error: gcError } = await supabase
         .from('general_contractors')
-        .select('id, verified')
+        .select(GENERAL_CONTRACTOR_READINESS_SELECT)
         .eq('user_id', currentUser.id)
         .maybeSingle();
       if (gcError) throw gcError;
       if (!gc?.id) throw new Error('GC profile not found.');
-      setGcVerified(gc.verified === true);
+      setGcReady(isGeneralContractorReadyForProjectControls(gc));
 
       const [assignmentResult, slotResult] = await Promise.all([
         supabase
@@ -116,7 +117,7 @@ export default function GeneralContractorScheduleScreen() {
       setErrorMessage(err instanceof Error ? err.message : 'Could not load schedule.');
       setAssignment(null);
       setSlots([]);
-      setGcVerified(false);
+      setGcReady(false);
     } finally {
       setLoading(false);
       setRefreshing(false);
@@ -150,8 +151,8 @@ export default function GeneralContractorScheduleScreen() {
       Alert.alert('Active GC management required', 'The homeowner must confirm GC management before schedule recommendations can be sent.');
       return;
     }
-    if (!gcVerified) {
-      Alert.alert('Verification required', 'WalkerAI must verify your GC profile before schedule recommendations can be sent.');
+    if (!gcReady) {
+      Alert.alert('Complete setup required', 'Complete verified GC setup is required before schedule recommendations can be sent.');
       return;
     }
     const slot = slots.find((s) => s.id === selectedSlotId);
@@ -243,10 +244,10 @@ export default function GeneralContractorScheduleScreen() {
             </GlassCard>
           ) : (
             <>
-              {assignment?.status === 'active' && !gcVerified ? (
+              {assignment?.status === 'active' && !gcReady ? (
                 <GlassCard style={styles.card}>
                   <Text style={styles.bodyText}>
-                    WalkerAI verification is required before schedule recommendations can be sent.
+                    Complete verified GC setup is required before schedule recommendations can be sent.
                   </Text>
                 </GlassCard>
               ) : assignment?.status !== 'active' ? (
@@ -289,7 +290,7 @@ export default function GeneralContractorScheduleScreen() {
                 );
               })}
 
-              {selectedSlotId && assignment?.status === 'active' && gcVerified ? (
+              {selectedSlotId && assignment?.status === 'active' && gcReady ? (
                 <GlassCard style={styles.card}>
                   <Text style={styles.sectionTitle}>Recommend schedule</Text>
                   <View style={styles.row}>

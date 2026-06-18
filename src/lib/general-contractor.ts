@@ -7,6 +7,10 @@ type GeneralContractorSetupFields = Partial<Pick<
   'business_name' | 'city' | 'province' | 'lat' | 'lng' | 'license_number' | 'license_doc_url' | 'insurance_doc_url'
 >>;
 
+type GeneralContractorReadinessFields = GeneralContractorSetupFields & Pick<Partial<GeneralContractor>, 'verified'>;
+
+export const GENERAL_CONTRACTOR_READINESS_SELECT = 'id, verified, business_name, city, province, lat, lng, license_number, license_doc_url, insurance_doc_url';
+
 function hasText(value: unknown) {
   return typeof value === 'string' && value.trim().length > 0;
 }
@@ -47,4 +51,10 @@ export function isGeneralContractorSetupComplete(
   gc: GeneralContractorSetupFields | null,
 ) {
   return nextGeneralContractorOnboardingRoute(gc) === null;
+}
+
+export function isGeneralContractorReadyForProjectControls(
+  gc: GeneralContractorReadinessFields | null,
+) {
+  return gc?.verified === true && isGeneralContractorSetupComplete(gc);
 }

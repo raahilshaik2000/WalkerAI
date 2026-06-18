@@ -15,6 +15,7 @@ import { supabase } from '@/lib/supabase/client';
 import { formatCadCents, parseNonNegativeCadToCents, parseSignedCadToCents } from '@/lib/currency';
 import { formatStatusLabel } from '@/lib/formatters';
 import { formatSupabaseFunctionError } from '@/lib/supabase/functions';
+import { GENERAL_CONTRACTOR_READINESS_SELECT, isGeneralContractorReadyForProjectControls } from '@/lib/general-contractor';
 import { getRequiredStringParam } from '@/lib/navigation-params';
 import { formatTradeLabel } from '@/lib/trade-labels';
 import { Colors, Spacing, Typography } from '@/constants/theme';
@@ -122,7 +123,7 @@ export default function GeneralContractorTradesScreen() {
   const [generatingSlots, setGeneratingSlots] = useState(false);
   const [dispatchingTrades, setDispatchingTrades] = useState(false);
   const [cancellingNegotiationId, setCancellingNegotiationId] = useState<string | null>(null);
-  const [gcVerified, setGcVerified] = useState(false);
+  const [gcReady, setGcReady] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
   const quotesBySlot = useMemo(() => {
@@ -160,7 +161,7 @@ export default function GeneralContractorTradesScreen() {
     ? (quotesBySlot.get(selectedSlot.id) ?? []).some((quote) => quote.status === 'approved')
     : false;
   const projectBudgetReady = (projectBudget?.ai_cost_min ?? 0) > 0 && (projectBudget?.ai_cost_max ?? 0) > 0;
-  const canManageTradeRequests = assignment?.status === 'active' && gcVerified;
+  const canManageTradeRequests = assignment?.status === 'active' && gcReady;
 
   const fetchData = useCallback(async () => {
     const currentUser = (await supabase.auth.getUser()).data.user;
@@ -175,12 +176,12 @@ export default function GeneralContractorTradesScreen() {
       setErrorMessage(null);
       const { data: gc, error: gcError } = await supabase
         .from('general_contractors')
-        .select('id, verified')
+        .select(GENERAL_CONTRACTOR_READINESS_SELECT)
         .eq('user_id', currentUser.id)
         .maybeSingle();
       if (gcError) throw gcError;
       if (!gc?.id) throw new Error('GC profile not found.');
-      setGcVerified(gc.verified === true);
+      setGcReady(isGeneralContractorReadyForProjectControls(gc));
 
       const [assignmentResult, projectResult, slotResult, quoteResult, negotiationResult] = await Promise.all([
         supabase
@@ -233,7 +234,7 @@ export default function GeneralContractorTradesScreen() {
       setSlots([]);
       setQuotes([]);
       setNegotiations([]);
-      setGcVerified(false);
+      setGcReady(false);
     } finally {
       setLoading(false);
       setRefreshing(false);
@@ -260,8 +261,8 @@ export default function GeneralContractorTradesScreen() {
       Alert.alert('Active GC management required', 'The homeowner must confirm GC management before you can generate trade slots.');
       return;
     }
-    if (!gcVerified) {
-      Alert.alert('Verification required', 'WalkerAI must verify your GC profile before you can generate trade slots.');
+    if (!gcReady) {
+      Alert.alert('Complete setup required', 'Complete verified GC setup is required before you can generate trade slots.');
       return;
     }
     if (!projectBudgetReady) {
@@ -293,8 +294,8 @@ export default function GeneralContractorTradesScreen() {
       Alert.alert('Active GC management required', 'The homeowner must confirm GC management before you can dispatch WalkerAI trades.');
       return;
     }
-    if (!gcVerified) {
-      Alert.alert('Verification required', 'WalkerAI must verify your GC profile before you can dispatch WalkerAI trades.');
+    if (!gcReady) {
+      Alert.alert('Complete setup required', 'Complete verified GC setup is required before you can dispatch WalkerAI trades.');
       return;
     }
     if (dispatchableSlotCount === 0) {
@@ -342,8 +343,8 @@ export default function GeneralContractorTradesScreen() {
       Alert.alert('Active GC management required', 'The homeowner must confirm GC management before trade recommendations can be sent.');
       return;
     }
-    if (!gcVerified) {
-      Alert.alert('Verification required', 'WalkerAI must verify your GC profile before trade recommendations can be sent.');
+    if (!gcReady) {
+      Alert.alert('Complete setup required', 'Complete verified GC setup is required before trade recommendations can be sent.');
       return;
     }
     const slot = slots.find((s) => s.id === selectedSlotId);
@@ -431,8 +432,8 @@ export default function GeneralContractorTradesScreen() {
       Alert.alert('Active GC management required', 'The homeowner must confirm GC management before trade negotiation requests can be sent.');
       return;
     }
-    if (!gcVerified) {
-      Alert.alert('Verification required', 'WalkerAI must verify your GC profile before trade negotiation requests can be sent.');
+    if (!gcReady) {
+      Alert.alert('Complete setup required', 'Complete verified GC setup is required before trade negotiation requests can be sent.');
       return;
     }
     const quote = quotes.find((item) => item.id === selectedQuoteId);
@@ -492,8 +493,8 @@ export default function GeneralContractorTradesScreen() {
       Alert.alert('Negotiation unavailable', 'Refresh trade management and try again.');
       return;
     }
-    if (assignment.status !== 'active' || !gcVerified) {
-      Alert.alert('Active verified GC management required', 'Only an active verified GC can cancel a pending trade negotiation request.');
+    if (assignment.status !== 'active' || !gcReady) {
+      Alert.alert('Active complete GC management required', 'Only an active verified GC with complete setup can cancel a pending trade negotiation request.');
       return;
     }
 
@@ -566,7 +567,7 @@ export default function GeneralContractorTradesScreen() {
           ) : slots.length === 0 ? (
             <GlassCard style={styles.card}>
               <Text style={styles.bodyText}>Trade slots have not been generated yet.</Text>
-              {assignment?.status === 'active' && gcVerified && projectBudgetReady ? (
+              {assignment?.status === 'active' && gcReady && projectBudgetReady ? (
                 <GlassButton
                   label="Generate Trade Plan"
                   onPress={handleGenerateSlots}
@@ -578,19 +579,19 @@ export default function GeneralContractorTradesScreen() {
                 />
               ) : (
                 <Text style={styles.emptyHint}>
-                  {assignment?.status === 'active' && gcVerified && !projectBudgetReady
+                  {assignment?.status === 'active' && gcReady && !projectBudgetReady
                     ? 'Generate or approve the project budget before WalkerAI can create priced trade slots.'
                     : assignment?.status === 'active'
-                    ? 'WalkerAI verification is required before a GC can generate the trade plan.'
+                    ? 'Complete verified GC setup is required before a GC can generate the trade plan.'
                     : 'Homeowner confirmation is required before a GC can generate the trade plan.'}
                 </Text>
               )}
             </GlassCard>
           ) : (
             <>
-              {assignment?.status === 'active' && !gcVerified ? (
+              {assignment?.status === 'active' && !gcReady ? (
                 <GlassCard style={styles.card}>
-                  <Text style={styles.bodyText}>WalkerAI verification is required before trade recommendations can be sent.</Text>
+                  <Text style={styles.bodyText}>Complete verified GC setup is required before trade recommendations can be sent.</Text>
                 </GlassCard>
               ) : assignment?.status !== 'active' ? (
                 <GlassCard style={styles.card}>
@@ -598,7 +599,7 @@ export default function GeneralContractorTradesScreen() {
                 </GlassCard>
               ) : null}
 
-              {assignment?.status === 'active' && gcVerified && dispatchableSlotCount > 0 ? (
+              {assignment?.status === 'active' && gcReady && dispatchableSlotCount > 0 ? (
                 <GlassCard style={styles.card}>
                   <Text style={styles.sectionTitle}>WalkerAI trade marketplace</Text>
                   <Text style={styles.bodyText}>
@@ -792,7 +793,7 @@ export default function GeneralContractorTradesScreen() {
                 </GlassCard>
               ) : null}
 
-              {assignment?.status === 'active' && gcVerified && selectedQuoteId ? (
+              {assignment?.status === 'active' && gcReady && selectedQuoteId ? (
                 <GlassCard style={styles.card}>
                   <Text style={styles.sectionTitle}>Counteroffer / revision request</Text>
                   <Text style={styles.bodyText}>
@@ -822,7 +823,7 @@ export default function GeneralContractorTradesScreen() {
                 </GlassCard>
               ) : null}
 
-              {assignment?.status === 'active' && gcVerified && selectedSlotId ? (
+              {assignment?.status === 'active' && gcReady && selectedSlotId ? (
                 <GlassCard style={styles.card}>
                   <Text style={styles.sectionTitle}>Recommend trade change</Text>
                   <Text style={styles.bodyText}>

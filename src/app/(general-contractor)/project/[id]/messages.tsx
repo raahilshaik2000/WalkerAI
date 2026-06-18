@@ -17,6 +17,7 @@ import { useNavigation, useRoute } from '@react-navigation/native';
 import ReactNativeHapticFeedback from 'react-native-haptic-feedback';
 import Ionicons from 'react-native-vector-icons/Ionicons';
 import { supabase } from '@/lib/supabase/client';
+import { GENERAL_CONTRACTOR_READINESS_SELECT, isGeneralContractorReadyForProjectControls } from '@/lib/general-contractor';
 import { getRequiredStringParam } from '@/lib/navigation-params';
 import { useAuthStore } from '@/stores/auth.store';
 import { Colors, Spacing, Typography } from '@/constants/theme';
@@ -75,7 +76,7 @@ export default function GeneralContractorMessagesScreen() {
           .order('sent_at', { ascending: true }),
         supabase
           .from('general_contractors')
-          .select('id, verified')
+          .select(GENERAL_CONTRACTOR_READINESS_SELECT)
           .eq('user_id', currentUser.id)
           .maybeSingle(),
       ]);
@@ -113,9 +114,9 @@ export default function GeneralContractorMessagesScreen() {
         return;
       }
 
-      if (gcResult.data.verified !== true) {
+      if (!isGeneralContractorReadyForProjectControls(gcResult.data)) {
         setCanSendMessages(false);
-        setComposeLockMessage('WalkerAI verification is required before GC project messages can be sent.');
+        setComposeLockMessage('Complete verified GC setup is required before GC project messages can be sent.');
         return;
       }
 

@@ -14,6 +14,7 @@ import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
 import { supabase } from '@/lib/supabase/client';
 import { formatSignedCadCents, parseSignedCadToCents } from '@/lib/currency';
 import { formatStatusLabel } from '@/lib/formatters';
+import { GENERAL_CONTRACTOR_READINESS_SELECT, isGeneralContractorReadyForProjectControls } from '@/lib/general-contractor';
 import { getRequiredStringParam } from '@/lib/navigation-params';
 import { Colors, Spacing, Typography } from '@/constants/theme';
 import { GlassButton, GlassCard, GlassInput, GradientBackground, StatusBadge } from '@/components/ui';
@@ -79,7 +80,7 @@ export default function GeneralContractorDiscoveryScreen() {
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [submitting, setSubmitting] = useState(false);
-  const [gcVerified, setGcVerified] = useState(false);
+  const [gcReady, setGcReady] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
   const fetchData = useCallback(async () => {
@@ -95,12 +96,12 @@ export default function GeneralContractorDiscoveryScreen() {
       setErrorMessage(null);
       const { data: gc, error: gcError } = await supabase
         .from('general_contractors')
-        .select('id, verified')
+        .select(GENERAL_CONTRACTOR_READINESS_SELECT)
         .eq('user_id', currentUser.id)
         .maybeSingle();
       if (gcError) throw gcError;
       if (!gc?.id) throw new Error('GC profile not found.');
-      setGcVerified(gc.verified === true);
+      setGcReady(isGeneralContractorReadyForProjectControls(gc));
 
       const [assignmentResult, requestResult] = await Promise.all([
         supabase
@@ -126,7 +127,7 @@ export default function GeneralContractorDiscoveryScreen() {
       setErrorMessage(err instanceof Error ? err.message : 'Could not load discoveries.');
       setAssignment(null);
       setRequests([]);
-      setGcVerified(false);
+      setGcReady(false);
     } finally {
       setLoading(false);
       setRefreshing(false);
@@ -149,8 +150,8 @@ export default function GeneralContractorDiscoveryScreen() {
       Alert.alert('Active GC management required', 'The homeowner must confirm GC management before discoveries can be submitted.');
       return;
     }
-    if (!gcVerified) {
-      Alert.alert('Verification required', 'WalkerAI must verify your GC profile before discoveries can be submitted.');
+    if (!gcReady) {
+      Alert.alert('Complete setup required', 'Complete verified GC setup is required before discoveries can be submitted.');
       return;
     }
     if (!title.trim() || !description.trim()) {
@@ -234,7 +235,7 @@ export default function GeneralContractorDiscoveryScreen() {
             </GlassCard>
           ) : (
             <>
-              {assignment?.status === 'active' && gcVerified ? (
+              {assignment?.status === 'active' && gcReady ? (
                 <GlassCard style={styles.card}>
                   <Text style={styles.sectionTitle}>New discovery</Text>
                   <View style={styles.typeGrid}>
@@ -275,9 +276,9 @@ export default function GeneralContractorDiscoveryScreen() {
                 </GlassCard>
               ) : assignment?.status === 'active' ? (
                 <GlassCard style={styles.card}>
-                  <Text style={styles.sectionTitle}>Verification required</Text>
+                  <Text style={styles.sectionTitle}>Complete setup required</Text>
                   <Text style={styles.bodyText}>
-                    WalkerAI verification is required before discoveries or scope changes can be submitted.
+                    Complete verified GC setup is required before discoveries or scope changes can be submitted.
                   </Text>
                 </GlassCard>
               ) : (
