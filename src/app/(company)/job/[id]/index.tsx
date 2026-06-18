@@ -19,7 +19,7 @@ import { isStripePayoutLocallyReady } from '@/lib/payouts';
 import { getRequiredStringParam } from '@/lib/navigation-params';
 import { useAuthStore } from '@/stores/auth.store';
 import { Colors, Radius, Spacing, Typography } from '@/constants/theme';
-import { GlassButton, GlassCard, GradientBackground, StatusBadge, CardSkeleton } from '@/components/ui';
+import { GlassButton, GlassCard, GlassInput, GradientBackground, StatusBadge, CardSkeleton } from '@/components/ui';
 import { formatStatusLabel, formatCad } from '@/lib/formatters';
 import { formatGcProjectType, gcProjectTypeIcon } from '@/lib/gc-project-type';
 import { formatTradeLabel } from '@/lib/trade-labels';
@@ -189,6 +189,7 @@ export default function JobBriefScreen() {
   const [payoutReady, setPayoutReady] = useState(false);
   const [tradeNegotiations, setTradeNegotiations] = useState<TradeNegotiation[]>([]);
   const [respondingNegotiationId, setRespondingNegotiationId] = useState<string | null>(null);
+  const [negotiationResponseNotes, setNegotiationResponseNotes] = useState<Record<string, string>>({});
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [hasApprovedQuote, setHasApprovedQuote] = useState(false);
   const [hasEditablePendingQuote, setHasEditablePendingQuote] = useState(false);
@@ -438,14 +439,20 @@ export default function JobBriefScreen() {
         style: status === 'rejected' ? 'destructive' : 'default',
         onPress: async () => {
           setRespondingNegotiationId(negotiation.id);
+          const responseNote = negotiationResponseNotes[negotiation.id]?.trim() ?? '';
           const { error } = await supabase.rpc('respond_to_gc_trade_quote_negotiation', {
             p_negotiation_id: negotiation.id,
             p_status: status,
-            p_response_note: null,
+            p_response_note: responseNote || null,
           });
           if (error) {
             Alert.alert('Could not respond', formatAppSafeErrorMessage(error, 'Please try again.'));
           } else {
+            setNegotiationResponseNotes((current) => {
+              const next = { ...current };
+              delete next[negotiation.id];
+              return next;
+            });
             await fetchJob();
             if (status === 'accepted') {
               const quoteParams = quoteBuilderParamsForNegotiation(negotiation, projectId, slotId);
@@ -682,6 +689,9 @@ export default function JobBriefScreen() {
                             <StatusBadge label={needsAcceptedQuoteUpdate ? 'Quote update needed' : 'Pending'} variant={needsAcceptedQuoteUpdate ? 'warning' : 'pending'} dot />
                           </View>
                           <Text style={styles.negotiationNote}>{negotiation.scope_note}</Text>
+                          {negotiation.company_response_note ? (
+                            <Text style={styles.negotiationResponseNote}>Your response: {negotiation.company_response_note}</Text>
+                          ) : null}
                           {needsAcceptedQuoteUpdate ? (
                             <Text style={styles.negotiationLockedText}>
                               Submit an updated quote package so the homeowner sees the accepted GC pricing and milestones.
@@ -711,6 +721,12 @@ export default function JobBriefScreen() {
                               />
                             ) : (
                               <>
+                                <GlassInput
+                                  label="Optional response note"
+                                  value={negotiationResponseNotes[negotiation.id] ?? ''}
+                                  onChangeText={(text) => setNegotiationResponseNotes((current) => ({ ...current, [negotiation.id]: text }))}
+                                  containerStyle={styles.negotiationResponseInput}
+                                />
                                 <GlassButton
                                   label="Accept"
                                   onPress={() => handleNegotiationResponse(negotiation, 'accepted')}
@@ -859,8 +875,10 @@ const styles = StyleSheet.create({
   negotiationTitle: { ...Typography.body, fontWeight: '800' },
   negotiationMeta: { ...Typography.caption, marginTop: 2 },
   negotiationNote: { ...Typography.bodySecondary, lineHeight: 21, marginTop: 10 },
+  negotiationResponseNote: { ...Typography.caption, color: Colors.text.primary, lineHeight: 18, marginTop: 8 },
+  negotiationResponseInput: { marginTop: 12 },
   negotiationLockedText: { ...Typography.caption, color: Colors.warning, lineHeight: 18, marginTop: 10 },
-  negotiationActions: { flexDirection: 'row', gap: 8, marginTop: 12 },
+  negotiationActions: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginTop: 12 },
   negotiationAction: { flex: 1 },
   negotiationActionWide: { flex: 1.8 },
   actionGrid: {

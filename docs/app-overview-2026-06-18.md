@@ -418,6 +418,13 @@ Supported trade slot types include:
 
 The legacy `general_contractor` trade type exists in old schema context, but the product model now treats GC as a separate role.
 
+GC trade negotiation:
+
+- GCs can send trade counteroffers or revision requests without directly changing homeowner-facing quote totals.
+- Companies can accept, reject, or request revision.
+- Company responses can include optional notes so the GC sees why a counteroffer was accepted, rejected, or sent back for revision.
+- Accepted counteroffers stay actionable until the company submits an updated quote package for the homeowner-facing amount and milestones.
+
 ## Material Ordering
 
 Important files:

@@ -2542,6 +2542,7 @@ describe('general contractor account type', () => {
     expect(gcTrades).toContain('Counteroffer / revision request');
     expect(companyJob).toContain("from('gc_trade_quote_negotiations')");
     expect(companyJob).toContain("import { formatAppSafeErrorMessage, formatSupabaseFunctionError } from '@/lib/supabase/functions'");
+    expect(companyJob).toContain("import { GlassButton, GlassCard, GlassInput, GradientBackground, StatusBadge, CardSkeleton } from '@/components/ui'");
     expect(companyJob).toContain("import type { GcTradeQuoteNegotiation } from '@/types/database.types'");
     expect(companyJob).toContain('interface TradeNegotiation extends GcTradeQuoteNegotiation');
     expect(companyJob).toContain("import { isGeneralContractorReadyForProjectControls } from '@/lib/general-contractor';");
@@ -2556,6 +2557,10 @@ describe('general contractor account type', () => {
     expect(companyJob).toContain('quotes(status, stripe_payment_intent_id, total_amount)');
     expect(companyJob).toContain('function canAcceptNegotiationCounteroffer');
     expect(companyJob).toContain('disabled={!gcReady || !quoteEditable || !!respondingNegotiationId}');
+    expect(companyJob).toContain('const [negotiationResponseNotes, setNegotiationResponseNotes] = useState<Record<string, string>>({});');
+    expect(companyJob).toContain('p_response_note: responseNote || null');
+    expect(companyJob).toContain('Optional response note');
+    expect(companyJob).toContain('Your response: {negotiation.company_response_note}');
     expect(companyJob).toContain('Counteroffer accepted');
     expect(companyJob).toContain('Build Updated Quote');
     expect(companyJob).toContain('accepted_counteroffer_cents');
