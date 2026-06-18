@@ -198,6 +198,11 @@ describe('notification navigation', () => {
       params: { id: 'project-1' },
     });
 
+    expect(resolveNotificationRoute('gc_payment_responded', { project_id: 'project-1' }, 'general_contractor')).toEqual({
+      name: 'GeneralContractorPayments',
+      params: { id: 'project-1' },
+    });
+
     expect(resolveNotificationRoute('project_complete', { project_id: 'project-1' }, 'general_contractor')).toEqual({
       name: 'GeneralContractorCompletion',
       params: { id: 'project-1' },

@@ -70,7 +70,6 @@ export function resolveNotificationRoute(
       || type === 'gc_concierge_booking_paid'
       || type === 'gc_concierge_payout_released'
       || type === 'gc_approval_responded'
-      || type === 'gc_payment_responded'
     ) {
       return { name: 'GeneralContractorTabs', params: { screen: 'GeneralContractorApprovals' } };
     }
@@ -98,6 +97,8 @@ export function resolveNotificationRoute(
       case 'quote_approved':
       case 'milestone_paid':
       case 'milestone_completed':
+        return { name: 'GeneralContractorPayments', params: { id: projectId } };
+      case 'gc_payment_responded':
         return { name: 'GeneralContractorPayments', params: { id: projectId } };
       case 'new_message':
         return { name: 'GeneralContractorMessages', params: { id: projectId } };
