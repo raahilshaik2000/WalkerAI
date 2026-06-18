@@ -107,7 +107,6 @@ export default function EarningsScreen() {
 
   useEffect(() => { fetchData(); }, [fetchData]);
 
-  const totalEarned = milestones.reduce((s, m) => s + m.amount, 0);
   const netEarned = milestones.reduce((s, m) => s + companyEstimatedNetPayoutCents(m.amount, m.commission_rate), 0);
 
   return (
@@ -122,8 +121,8 @@ export default function EarningsScreen() {
           <TradeMetricStrip
             items={[
               { label: 'Received', value: formatCad(netEarned), tone: netEarned ? 'success' : 'muted' },
-              { label: 'Gross', value: formatCad(totalEarned), tone: totalEarned ? 'success' : 'muted' },
               { label: 'Paid items', value: milestones.length, tone: milestones.length ? 'success' : 'muted' },
+              { label: 'Status', value: netEarned ? 'Paid' : 'Pending', tone: netEarned ? 'success' : 'muted' },
             ]}
           />
 
@@ -132,15 +131,6 @@ export default function EarningsScreen() {
             <Text style={styles.summaryLabel}>Total Received</Text>
             <Text style={styles.summaryAmount}>{formatCad(netEarned)}</Text>
             <Text style={styles.summaryNote}>Estimated payout received</Text>
-            <View style={styles.divider} />
-            <View style={styles.summaryRow}>
-              <Text style={styles.summarySubLabel}>Gross billed</Text>
-              <Text style={styles.summarySubVal}>{formatCad(totalEarned)}</Text>
-            </View>
-            <View style={styles.summaryRow}>
-              <Text style={styles.summarySubLabel}>Commission</Text>
-              <Text style={styles.summarySubVal}>-{formatCad(totalEarned - netEarned)}</Text>
-            </View>
           </GlassCard>
 
           {/* Transaction list */}

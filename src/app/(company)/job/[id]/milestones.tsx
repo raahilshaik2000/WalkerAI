@@ -358,7 +358,6 @@ export default function CompanyMilestonesScreen() {
   const netPayout = (milestone: Milestone) => companyEstimatedNetPayoutCents(milestone.amount, milestone.commission_rate);
   const netPaid = milestones.filter((m) => isReleasedMilestone(m.status)).reduce((s, m) => s + netPayout(m), 0);
   const netTotal = milestones.reduce((s, m) => s + netPayout(m), 0);
-  const grossTotal = milestones.reduce((s, m) => s + m.amount, 0);
   const progressPct = netTotal > 0 ? netPaid / netTotal : 0;
 
   return (
@@ -382,13 +381,12 @@ export default function CompanyMilestonesScreen() {
           />
 
           {/* Escrow progress */}
-          {grossTotal > 0 && (
+          {netTotal > 0 && (
             <TradePanel style={styles.card}>
               <Text style={styles.sectionLabel}>Net Payments Received</Text>
               <Text style={styles.escrowAmount}>
                 {formatCad(netPaid)} <Text style={styles.escrowTotal}>of {formatCad(netTotal)}</Text>
               </Text>
-              <Text style={styles.escrowGross}>Gross milestone total: {formatCad(grossTotal)}</Text>
               <View style={styles.progressTrack}>
                 <View style={[styles.progressFill, { width: `${progressPct * 100}%` }]} />
               </View>
@@ -417,7 +415,6 @@ export default function CompanyMilestonesScreen() {
                   </View>
                   <View style={styles.milestoneRight}>
                     <Text style={styles.milestoneAmount}>{formatCad(netPayout(m))}</Text>
-                    <Text style={styles.milestoneGross}>{formatCad(m.amount)} gross</Text>
                     <StatusBadge label={formatStatusLabel(m.status)} variant={statusVariant(m.status)} size="sm" />
                   </View>
                 </View>
@@ -503,7 +500,6 @@ const styles = StyleSheet.create({
   sectionLabel: { ...Typography.label, marginBottom: 8 },
   escrowAmount: { fontSize: 28, fontWeight: '700', color: Colors.text.primary, marginBottom: 12 },
   escrowTotal: { fontSize: 16, fontWeight: '400', color: Colors.text.secondary },
-  escrowGross: { ...Typography.caption, marginBottom: 10 },
   progressTrack: {
     height: 6, backgroundColor: Colors.glass.border, borderRadius: 3, overflow: 'hidden',
   },
@@ -523,7 +519,6 @@ const styles = StyleSheet.create({
   dueDate: { ...Typography.caption },
   milestoneRight: { alignItems: 'flex-end', gap: 6 },
   milestoneAmount: { fontSize: 16, fontWeight: '600', color: Colors.text.primary },
-  milestoneGross: { ...Typography.caption, textAlign: 'right' },
   approvedBanner: {
     marginTop: 10, paddingTop: 10,
     borderTopWidth: 1, borderTopColor: Colors.glass.border,

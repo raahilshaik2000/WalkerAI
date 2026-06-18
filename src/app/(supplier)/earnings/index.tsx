@@ -5,7 +5,7 @@ import { useFocusEffect, useNavigation } from '@react-navigation/native';
 import Ionicons from 'react-native-vector-icons/Ionicons';
 import { supabase } from '@/lib/supabase/client';
 import { formatSupabaseFunctionError } from '@/lib/supabase/functions';
-import { joinedMaterialItemName, materialOrderNetPayoutCents, materialOrderPlatformFeeCents } from '@/lib/material-orders';
+import { joinedMaterialItemName, materialOrderNetPayoutCents } from '@/lib/material-orders';
 import { isStripePayoutLocallyReady } from '@/lib/payouts';
 import { useAuthStore } from '@/stores/auth.store';
 import { Colors, Spacing, Typography } from '@/constants/theme';
@@ -93,10 +93,8 @@ export default function SupplierEarnings() {
 
   const paidOrders = orders.filter((o) => o.status === 'paid');
   const confirmedOrders = orders.filter((o) => o.status === 'confirmed');
-  const grossPaid = paidOrders.reduce((sum, o) => sum + (o.final_price ?? 0), 0);
   const netPaid = paidOrders.reduce((sum, o) => sum + materialOrderNetPayoutCents(o.final_price, o.platform_fee_pct), 0);
   const pendingNet = confirmedOrders.reduce((sum, o) => sum + materialOrderNetPayoutCents(o.final_price, o.platform_fee_pct), 0);
-  const platformFees = paidOrders.reduce((sum, o) => sum + materialOrderPlatformFeeCents(o.final_price, o.platform_fee_pct), 0);
   const payoutReady = isStripePayoutLocallyReady(supplier);
 
   const fmt = (cents: number) => `$${(cents / 100).toLocaleString('en-CA', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
@@ -156,18 +154,18 @@ export default function SupplierEarnings() {
             </GlassCard>
           </View>}
 
-          {supplier && <GlassCard style={styles.feesCard}>
-            <View style={styles.feeRow}>
-              <Text style={styles.feeLabel}>Gross paid by homeowners</Text>
-              <Text style={styles.feeValue}>{fmt(grossPaid)}</Text>
+          {supplier && <GlassCard style={styles.payoutCard}>
+            <View style={styles.payoutRow}>
+              <Text style={styles.payoutLabel}>Paid to date</Text>
+              <Text style={[styles.payoutValue, { color: '#34D399' }]}>{fmt(netPaid)}</Text>
             </View>
-            <View style={styles.feeRow}>
-              <Text style={styles.feeLabel}>Platform fees deducted</Text>
-              <Text style={styles.feeValue}>{fmt(platformFees)}</Text>
+            <View style={styles.payoutRow}>
+              <Text style={styles.payoutLabel}>Processing</Text>
+              <Text style={styles.payoutValue}>{fmt(pendingNet)}</Text>
             </View>
-            <View style={styles.feeRow}>
-              <Text style={styles.feeLabel}>Net received</Text>
-              <Text style={[styles.feeValue, { color: '#34D399' }]}>{fmt(netPaid)}</Text>
+            <View style={styles.payoutRow}>
+              <Text style={styles.payoutLabel}>Completed orders</Text>
+              <Text style={styles.payoutValue}>{paidOrders.length}</Text>
             </View>
           </GlassCard>}
 
@@ -230,10 +228,10 @@ const styles = StyleSheet.create({
   statCard: { flex: 1, padding: Spacing.md, alignItems: 'center', gap: 6 },
   statLabel: { fontSize: 12, color: Colors.text.tertiary },
   statValue: { fontSize: 22, fontWeight: '800' },
-  feesCard: { padding: Spacing.md, gap: 10 },
-  feeRow: { flexDirection: 'row', justifyContent: 'space-between' },
-  feeLabel: { fontSize: 14, color: Colors.text.secondary },
-  feeValue: { fontSize: 14, fontWeight: '600', color: Colors.text.primary },
+  payoutCard: { padding: Spacing.md, gap: 10 },
+  payoutRow: { flexDirection: 'row', justifyContent: 'space-between' },
+  payoutLabel: { fontSize: 14, color: Colors.text.secondary },
+  payoutValue: { fontSize: 14, fontWeight: '600', color: Colors.text.primary },
   stripeCard: { padding: Spacing.lg, alignItems: 'center', gap: 10 },
   stripeTitle: { ...Typography.h3 },
   stripeBody: { ...Typography.bodySecondary, textAlign: 'center' },

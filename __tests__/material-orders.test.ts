@@ -59,6 +59,27 @@ describe('supplier material order payout math', () => {
     expect(activeSource).not.toContain('maximumFractionDigits: 0');
   });
 
+  it('does not disclose supplier platform fee breakdowns in app payout UI', () => {
+    const earningsSource = fs.readFileSync(
+      path.join(__dirname, '../src/app/(supplier)/earnings/index.tsx'),
+      'utf8',
+    );
+    const activeSource = fs.readFileSync(
+      path.join(__dirname, '../src/app/(supplier)/orders/active.tsx'),
+      'utf8',
+    );
+    const detailSource = fs.readFileSync(
+      path.join(__dirname, '../src/app/(supplier)/orders/[id]/index.tsx'),
+      'utf8',
+    );
+
+    [earningsSource, activeSource, detailSource].forEach((source) => {
+      expect(source).not.toContain('Platform fees deducted');
+      expect(source).not.toContain(' gross');
+      expect(source).not.toContain('net payout');
+    });
+  });
+
   it('uses joined material name normalization on supplier material order screens', () => {
     const supplierOrderSources = [
       '../src/app/(supplier)/orders/index.tsx',

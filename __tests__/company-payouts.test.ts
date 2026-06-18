@@ -33,6 +33,18 @@ describe('company payout math', () => {
     expect(source).toContain('commission_rate');
     expect(source).toContain('const netPayout = (milestone: Milestone) => companyEstimatedNetPayoutCents');
     expect(source).toContain("label: 'Net paid'");
-    expect(source).toContain('Gross milestone total');
+    expect(source).not.toContain('Gross milestone total');
+    expect(source).not.toContain(' gross');
+  });
+
+  it('does not disclose company commission breakdowns in app earnings UI', () => {
+    const source = fs.readFileSync(
+      path.join(__dirname, '../src/app/(company)/earnings.tsx'),
+      'utf8',
+    );
+
+    expect(source).toContain('companyEstimatedNetPayoutCents');
+    expect(source).not.toContain('Commission');
+    expect(source).not.toContain('Gross billed');
   });
 });

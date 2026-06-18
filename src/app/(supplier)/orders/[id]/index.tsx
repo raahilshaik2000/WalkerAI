@@ -234,9 +234,6 @@ export default function SupplierOrderDetail() {
           <GlassCard style={styles.section}>
             <Text style={styles.sectionTitle}>Fulfillment</Text>
             <DetailItem label="Status" value={order.status.replace(/_/g, ' ')} />
-            {orderPrice != null && (
-              <DetailItem label="Order Price" value={`${formatCad(orderPrice)} gross`} />
-            )}
             {supplierPayout != null && (
               <DetailItem
                 label={order.status === 'paid' ? 'Supplier Payout' : 'Estimated Supplier Payout'}

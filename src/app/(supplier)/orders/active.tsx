@@ -293,7 +293,6 @@ export default function SupplierActiveOrders() {
             renderItem={({ item }) => {
               const currentStep = stepIndex(item.status);
               const isExpanded = expanded === item.id;
-              const fixedPrice = formatCad(item.final_price ?? item.offered_price);
               const supplierPayout = formatSupplierPayout(item);
               const deadline = deadlineLabel(item.delivery_deadline);
               return (
@@ -355,10 +354,10 @@ export default function SupplierActiveOrders() {
                           <Text style={styles.detailValue}>{item.delivery_address}</Text>
                         </View>
                       ) : null}
-                      {fixedPrice && supplierPayout ? (
+                      {supplierPayout ? (
                         <View style={styles.detailBlock}>
-                          <Text style={styles.detailLabel}>Order Price</Text>
-                          <Text style={styles.detailValue}>{fixedPrice} gross · {supplierPayout} net payout</Text>
+                          <Text style={styles.detailLabel}>Supplier Payout</Text>
+                          <Text style={styles.detailValue}>{supplierPayout}</Text>
                         </View>
                       ) : null}
                       {item.notes ? (
@@ -424,7 +423,7 @@ export default function SupplierActiveOrders() {
                       ) : item.status === 'confirmed' ? (
                         <Text style={styles.waitingText}>Payment processing...</Text>
                       ) : item.status === 'paid' ? (
-                        <Text style={styles.paidText}>✓ Paid — {supplierPayout ?? 'net payout sent'}</Text>
+                        <Text style={styles.paidText}>✓ Paid — {supplierPayout ?? 'payout sent'}</Text>
                       ) : null}
                     </View>
                   )}
