@@ -164,7 +164,7 @@ async function fetchCompanyPayoutProfile(userId: string): Promise<CompanyPayoutP
 export default function JobBriefScreen() {
   const route = useRoute<any>();
   const projectId = getRequiredStringParam(route.params, 'id');
-  const slotId: string | undefined = route.params?.slot;
+  const slotId = getRequiredStringParam(route.params, 'slot') ?? undefined;
   const navigation = useNavigation<any>();
   const { user } = useAuthStore();
   const [job, setJob] = useState<JobBrief | null>(null);

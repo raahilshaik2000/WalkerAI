@@ -239,6 +239,23 @@ describe('company quote copy', () => {
     expect(source).toContain('GC negotiation: ${value.trim()}');
   });
 
+  it('normalizes quote route slot params before loading or submitting slot pricing', () => {
+    const repoRoot = path.resolve(__dirname, '..');
+    const quoteBuilder = fs.readFileSync(
+      path.join(repoRoot, 'src/app/(company)/job/[id]/quote-builder.tsx'),
+      'utf8'
+    );
+    const jobDetail = fs.readFileSync(
+      path.join(repoRoot, 'src/app/(company)/job/[id]/index.tsx'),
+      'utf8'
+    );
+
+    expect(quoteBuilder).toContain("const slotId = getRequiredStringParam(route.params, 'slot') ?? undefined;");
+    expect(jobDetail).toContain("const slotId = getRequiredStringParam(route.params, 'slot') ?? undefined;");
+    expect(quoteBuilder).not.toContain('const slotId: string | undefined = route.params?.slot;');
+    expect(jobDetail).not.toContain('const slotId: string | undefined = route.params?.slot;');
+  });
+
   it('locks GC counteroffer acceptance after quote approval or payment start', () => {
     const repoRoot = path.resolve(__dirname, '..');
     const jobDetail = fs.readFileSync(

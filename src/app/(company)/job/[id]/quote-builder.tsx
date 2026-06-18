@@ -185,7 +185,7 @@ function editableNotesFromQuote(items: ExistingLineItem[]): string {
 export default function QuoteBuilderScreen() {
   const route = useRoute<any>();
   const projectId = getRequiredStringParam(route.params, 'id');
-  const slotId: string | undefined = route.params?.slot;
+  const slotId = getRequiredStringParam(route.params, 'slot') ?? undefined;
   const navigation = useNavigation<any>();
   const { user } = useAuthStore();
   const acceptedCounterofferCents = positiveCentsParam(route.params?.accepted_counteroffer_cents);
