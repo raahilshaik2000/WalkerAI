@@ -14,6 +14,7 @@ import { useRoute } from '@react-navigation/native';
 import ReactNativeHapticFeedback from 'react-native-haptic-feedback';
 import { supabase } from '@/lib/supabase/client';
 import { isMissingSupabaseSchemaObjectError } from '@/lib/supabase/errors';
+import { formatAppSafeErrorMessage } from '@/lib/supabase/functions';
 import { getRequiredStringParam } from '@/lib/navigation-params';
 import { formatTradeLabel } from '@/lib/trade-labels';
 import { useAuthStore } from '@/stores/auth.store';
@@ -137,7 +138,7 @@ export default function ReviewScreen() {
         setTargets([]);
         setSelectedTargetKey(null);
         setProjectStatus((legacyRes.data as any)?.status ?? null);
-        setTargetError(loadError.message);
+        setTargetError(formatAppSafeErrorMessage(loadError, 'Could not load contractor review targets.'));
         return;
       }
 
@@ -239,7 +240,7 @@ export default function ReviewScreen() {
         .eq('reviewee_id', selectedTarget.user_id)
         .maybeSingle();
       if (existingError) {
-        throw new Error(`Could not check existing reviews: ${existingError.message}`);
+        throw new Error(formatAppSafeErrorMessage(existingError, 'Could not check existing reviews.'));
       }
 
       if (existing) {
@@ -286,7 +287,7 @@ export default function ReviewScreen() {
         [{ text: 'Done', onPress: () => navigation.goBack() }]
       );
     } catch (err) {
-      Alert.alert('Error', err instanceof Error ? err.message : 'Please try again.');
+      Alert.alert('Error', formatAppSafeErrorMessage(err, 'Please try again.'));
     } finally {
       setSubmitting(false);
     }

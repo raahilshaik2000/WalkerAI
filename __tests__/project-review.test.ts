@@ -16,9 +16,15 @@ describe('project review closeout screens', () => {
     expect(source).toContain('const [targetError, setTargetError]');
     expect(source).toContain("isMissingSupabaseSchemaObjectError(gcRes.error, 'general_contractor_projects')");
     expect(source).toContain('const loadError = quotesRes.error ?? slotsRes.error ?? legacyRes.error ?? (gcContextUnavailable ? null : gcRes.error)');
-    expect(source).toContain('setTargetError(loadError.message)');
+    expect(source).toContain("import { formatAppSafeErrorMessage } from '@/lib/supabase/functions'");
+    expect(source).toContain("setTargetError(formatAppSafeErrorMessage(loadError, 'Could not load contractor review targets.'))");
     expect(source).toContain('Could not load contractors');
     expect(source).toContain("disabled={!!targetError || !selectedTarget || projectStatus !== 'completed'}");
+    expect(source).toContain("throw new Error(formatAppSafeErrorMessage(existingError, 'Could not check existing reviews.'))");
+    expect(source).toContain("Alert.alert('Error', formatAppSafeErrorMessage(err, 'Please try again.'))");
+    expect(source).not.toContain('setTargetError(loadError.message)');
+    expect(source).not.toContain('existingError.message');
+    expect(source).not.toContain("err instanceof Error ? err.message : 'Please try again.'");
   });
 
   it('lets homeowners review a GC manager after closeout without breaking company rating refresh', () => {
