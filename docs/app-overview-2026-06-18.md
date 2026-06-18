@@ -245,6 +245,13 @@ Company responsibilities:
 
 Company is not General Contractor. Any old `general_contractor` company trade value is legacy only.
 
+Latest simulator verification:
+
+- QA company logs into `Trade Desk`.
+- Assigned quoting jobs load.
+- The quote editor loads existing pending quote data, editable line items, and balanced milestone totals.
+- Quote submission was not pressed during the latest pass to avoid changing live QA data.
+
 ## Account Type: Supplier
 
 Suppliers fulfill material orders.
@@ -282,6 +289,21 @@ Supplier setup readiness includes:
 - license document
 - selected categories
 - Stripe payout readiness for claiming paid order workflows
+
+Latest simulator verification:
+
+- QA supplier logs into Open Orders and sees the correct empty state when no open material orders exist.
+- Catalog loads existing in-stock materials.
+- Earnings loads paid-to-date, processing totals, and order history.
+- Profile loads verified supplier status, license, Stripe payout readiness, service radius, and supply categories.
+- Supplier earnings and profile metric cards were adjusted so mobile currency and metric values do not wrap or truncate.
+
+Mutation-sensitive supplier actions were not pressed during the latest pass:
+
+- add item
+- stock toggles
+- order status updates
+- payout setup actions
 
 ## Account Type: General Contractor
 
@@ -603,7 +625,7 @@ WALKERAI_QA_CREDENTIALS="$HOME/Downloads/walkerai-qa-credentials.txt" node scrip
 Full suite at last green run before this document:
 
 - 49 Jest suites
-- 327 tests
+- 333 tests
 
 The suite count may change as tests are added.
 
@@ -611,9 +633,9 @@ The suite count may change as tests are added.
 
 Known items that still need careful verification or product decisions:
 
-1. Full four-account runtime walkthrough still needs to be executed again after current changes.
+1. Full four-account runtime walkthrough has started and read-only surfaces were verified, but mutation-sensitive paths still need a controlled QA scenario.
 2. GC-created projects for homeowners without existing accounts need invite/account-claiming product design.
 3. Supabase deployed function/schema drift should be checked before relying on the full production backend as current.
 4. APNs push delivery depends on Apple/Supabase APNs secrets being set correctly.
-5. TestFlight archive should be re-run after final GC/account changes.
+5. TestFlight archive should be re-run after final GC/account changes and after Apple account signing issues are resolved.
 6. LiDAR should be tested on physical iOS hardware; simulator can only cover non-LiDAR fallbacks.

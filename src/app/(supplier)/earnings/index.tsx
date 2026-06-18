@@ -147,11 +147,15 @@ export default function SupplierEarnings() {
           {supplier && <View style={styles.statsRow}>
             <GlassCard style={[styles.statCard, { borderColor: 'rgba(52,211,153,0.3)' }]}>
               <Text style={styles.statLabel}>Paid to Date</Text>
-              <Text style={[styles.statValue, { color: '#34D399' }]}>{fmt(paidTotal)}</Text>
+              <Text style={[styles.statValue, { color: '#34D399' }]} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.72}>
+                {fmt(paidTotal)}
+              </Text>
             </GlassCard>
             <GlassCard style={[styles.statCard, { borderColor: 'rgba(255,107,0,0.3)' }]}>
               <Text style={styles.statLabel}>Processing</Text>
-              <Text style={[styles.statValue, { color: Colors.accent }]}>{fmt(processingTotal)}</Text>
+              <Text style={[styles.statValue, { color: Colors.accent }]} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.72}>
+                {fmt(processingTotal)}
+              </Text>
             </GlassCard>
           </View>}
 
@@ -228,7 +232,7 @@ const styles = StyleSheet.create({
   statsRow: { flexDirection: 'row', gap: 12 },
   statCard: { flex: 1, padding: Spacing.md, alignItems: 'center', gap: 6 },
   statLabel: { fontSize: 12, color: Colors.text.tertiary },
-  statValue: { fontSize: 22, fontWeight: '800' },
+  statValue: { fontSize: 22, fontWeight: '800', textAlign: 'center', width: '100%' },
   payoutCard: { padding: Spacing.md, gap: 10 },
   payoutRow: { flexDirection: 'row', justifyContent: 'space-between' },
   payoutLabel: { fontSize: 14, color: Colors.text.secondary },

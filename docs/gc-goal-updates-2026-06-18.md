@@ -425,16 +425,41 @@ Latest validation after auth-entry hardening:
 
 Live account readiness was also checked through Supabase REST using each account's own login session.
 
+## Runtime Simulator Pass - Latest Update
+
+The app was rebuilt and installed on the iPhone 17 Pro simulator, then exercised with live Supabase QA accounts.
+
+Verified runtime paths:
+
+- GC account logs into `GC Desk` and shows active/completed managed projects.
+- GC active project detail loads the management controls for schedule, permits, payments, materials, trades, discovery/change recommendations, assistant, messages, and completion binder.
+- GC trade management loads the filled Painter slot, verified QA Trade Company credential state, pending trade quote, and negotiation panel.
+- Company/trade account logs into `Trade Desk`, opens an assigned quoting job, and loads the quote editor with line items and balanced payment milestones.
+- Homeowner account logs into the dashboard, sees the GC-created Painting project as quote-ready, opens project detail, and loads the quote/payment review screen with escrow language and milestone breakdown.
+- Supplier account logs into Open Orders, Catalog, Earnings, and Profile surfaces.
+
+Runtime fixes made from this pass:
+
+- Supplier earnings summary cards now keep currency values on one line instead of wrapping amounts like `$3,150.00`.
+- Supplier profile metrics now render in a two-column grid so rating, reviews, on-time percentage, and average days are readable on mobile.
+
+Runtime findings still not treated as complete:
+
+- Homeowner quote and supplier earnings/profile tabs can take several seconds to resolve from Supabase. They did resolve during testing, but this should be watched for perceived-loading UX.
+- Payment start, quote submission, negotiation submission, stock toggles, and sign-out were intentionally not submitted during this pass to avoid unnecessary live Supabase record changes.
+- LiDAR was intentionally skipped per request; only non-LiDAR and 2D-related surfaces were considered in scope.
+
 ## What Still Needs Work Before Calling The Full Goal Complete
 
 The goal is not fully complete yet. Remaining work includes:
 
-1. Perform a real runtime walkthrough across all four account types:
-   - homeowner
-   - company/trade
-   - supplier
-   - general contractor
-2. Verify GC project creation, homeowner approval, trade coordination, material sourcing, payments, messages, schedule, permits, and completion paths in-app.
+1. Finish destructive/non-read-only workflow verification in a controlled QA project:
+   - homeowner payment start
+   - trade quote submission
+   - trade counteroffer submission
+   - supplier order state changes
+   - homeowner approval/rejection of GC recommendations
+2. Verify GC project creation, homeowner approval, trade coordination, material sourcing, payments, messages, schedule, permits, and completion paths in-app beyond the read-only surfaces already checked.
 3. Confirm any deployed Supabase function/migration drift beyond the updated `generate-material-orders` function and applied migrations before relying on the whole production backend as fully current.
 4. Decide product details for GC-created projects when the homeowner does not yet have an account.
 5. Re-test TestFlight/archive after these changes if the app is being shipped.
