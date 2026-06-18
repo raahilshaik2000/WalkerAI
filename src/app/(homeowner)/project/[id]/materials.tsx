@@ -11,7 +11,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { useNavigation, useRoute } from '@react-navigation/native';
 import ReactNativeHapticFeedback from 'react-native-haptic-feedback';
 import { supabase } from '@/lib/supabase/client';
-import { formatSupabaseFunctionError } from '@/lib/supabase/functions';
+import { formatAppSafeErrorMessage, formatSupabaseFunctionError } from '@/lib/supabase/functions';
 import { materialOrderPaymentStatusLabel } from '@/lib/material-orders';
 import { Colors, Radius, Spacing, Typography } from '@/constants/theme';
 import { getRequiredStringParam } from '@/lib/navigation-params';
@@ -79,7 +79,7 @@ export default function MaterialsScreen() {
       .order('created_at');
     if (error) {
       setOrders([]);
-      setErrorMessage(error.message);
+      setErrorMessage(formatAppSafeErrorMessage(error, 'Could not load material orders.'));
       setLoading(false);
       return;
     }
@@ -126,7 +126,7 @@ export default function MaterialsScreen() {
               ReactNativeHapticFeedback.trigger('notificationSuccess');
               await fetchOrders();
             } catch (err) {
-              Alert.alert('Error', await formatSupabaseFunctionError(err, 'Failed to release payment.'));
+              Alert.alert('Release failed', await formatSupabaseFunctionError(err, 'Please try again.'));
             } finally {
               setConfirmingOrder(null);
             }

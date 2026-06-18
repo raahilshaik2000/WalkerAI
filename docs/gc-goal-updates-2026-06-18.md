@@ -461,6 +461,7 @@ Runtime fixes made from this pass:
 - Company job detail load failures now use app-safe copy, covering the trade acceptance and GC quote-negotiation entry point without exposing raw backend errors.
 - Company material verification now formats material, supplier-order, supplier-review, quantity-save, and supplier-review submission failures through app-safe copy for GC-managed material sourcing workflows.
 - Supplier material order feed, detail, and active fulfillment screens now format supplier profile, order-load, eligibility, claim, processing, shipped, and delivered update failures through app-safe copy for GC-managed material order lifecycles.
+- Homeowner material receipt and supplier-payment release now use app-safe copy for material order load failures and payout release failures, while keeping delivery-proof gating intact.
 
 Runtime findings still not treated as complete:
 

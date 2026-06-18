@@ -251,6 +251,11 @@ describe('supplier material order payout math', () => {
       'utf8',
     );
 
+    expect(homeownerMaterialsSource).toContain("import { formatAppSafeErrorMessage, formatSupabaseFunctionError } from '@/lib/supabase/functions'");
+    expect(homeownerMaterialsSource).toContain("setErrorMessage(formatAppSafeErrorMessage(error, 'Could not load material orders.'))");
+    expect(homeownerMaterialsSource).toContain("Alert.alert('Release failed', await formatSupabaseFunctionError(err, 'Please try again.'))");
+    expect(homeownerMaterialsSource).not.toContain('setErrorMessage(error.message)');
+    expect(homeownerMaterialsSource).not.toContain("Alert.alert('Error', await formatSupabaseFunctionError(err, 'Failed to release payment.'))");
     expect(homeownerMaterialsSource).toContain("if (!order.delivery_photo_url) {");
     expect(homeownerMaterialsSource).toContain("Alert.alert('Delivery photo missing', 'Ask the supplier to upload delivery proof before releasing payment.');");
     expect(homeownerMaterialsSource).toContain('const hasDeliveryProof = !!order.delivery_photo_url;');
