@@ -138,6 +138,20 @@ export default function GeneralContractorCompletionScreen() {
       if (!gc?.id) throw new Error('GC profile not found.');
       setGcVerified(gc.verified === true);
 
+      const { data: assignmentRow, error: assignmentError } = await supabase
+        .from('general_contractor_projects')
+        .select('id, status, homeowner_id, general_contractor_id, project_type')
+        .eq('project_id', projectId)
+        .eq('general_contractor_id', gc.id)
+        .neq('status', 'removed')
+        .maybeSingle();
+      if (assignmentError) throw assignmentError;
+      if (!assignmentRow) throw new Error('GC assignment not found for this project.');
+      if (!['active', 'completed'].includes(assignmentRow.status)) {
+        throw new Error('Active or completed GC management is required before the completion binder is available.');
+      }
+      setAssignment(assignmentRow as AssignmentRecord);
+
       const [
         projectResult,
         permitResult,
@@ -227,15 +241,6 @@ export default function GeneralContractorCompletionScreen() {
       setApprovals((approvalResult.data ?? []) as ApprovalRecord[]);
       setPaymentRequests((paymentResult.data ?? []) as PaymentRequestRecord[]);
       setChangeOrders((changeOrderResult.data ?? []) as ChangeOrder[]);
-
-      const { data: assignmentRow, error: assignmentError } = await supabase
-        .from('general_contractor_projects')
-        .select('id, status, homeowner_id, general_contractor_id, project_type')
-        .eq('project_id', projectId)
-        .eq('general_contractor_id', gc.id)
-        .maybeSingle();
-      if (assignmentError) throw assignmentError;
-      setAssignment(assignmentRow as AssignmentRecord | null);
     } catch (err) {
       setErrorMessage(err instanceof Error ? err.message : 'Could not load completion binder.');
       setProject(null);

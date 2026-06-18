@@ -1617,6 +1617,9 @@ describe('general contractor account type', () => {
     expect(gcCompletion).toContain("from('project_slots')");
     expect(gcCompletion).toContain("from('project_approval_requests')");
     expect(gcCompletion).toContain('You need to be signed in to view the completion binder.');
+    expect(gcCompletion).toContain(".neq('status', 'removed')");
+    expect(gcCompletion).toContain("if (!['active', 'completed'].includes(assignmentRow.status))");
+    expect(gcCompletion).toContain('Active or completed GC management is required before the completion binder is available.');
     expect(gcCompletion).toContain(".eq('requested_by_gc_id', gc.id)");
     expect(gcCompletion).toContain("from('gc_payment_requests')");
     expect(gcCompletion).toContain(".eq('general_contractor_id', gc.id)");
