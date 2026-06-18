@@ -2492,6 +2492,24 @@ describe('general contractor account type', () => {
     expect(payoutFunction).toContain('General contractor is no longer eligible for concierge payouts');
   });
 
+  it('requires complete current GC setup before creating new workflow requests', () => {
+    const migration = fs.readFileSync(
+      path.join(repoRoot, 'supabase/migrations/20260618122000_require_complete_gc_profile_for_request_inserts.sql'),
+      'utf8',
+    );
+
+    expect(migration).toContain('DROP POLICY IF EXISTS "approval_requests_gc_insert"');
+    expect(migration).toContain('DROP POLICY IF EXISTS "gc_payment_requests_gc_insert"');
+    expect(migration).toContain('DROP POLICY IF EXISTS "gc_trade_negotiations_gc_insert"');
+    expect((migration.match(/u\.role = 'general_contractor'/g) ?? []).length).toBe(3);
+    expect((migration.match(/gc\.verified IS TRUE/g) ?? []).length).toBe(3);
+    expect((migration.match(/NULLIF\(TRIM\(gc\.license_doc_url\), ''\) IS NOT NULL/g) ?? []).length).toBe(3);
+    expect((migration.match(/NULLIF\(TRIM\(gc\.insurance_doc_url\), ''\) IS NOT NULL/g) ?? []).length).toBe(3);
+    expect((migration.match(/gc\.lat IS NOT NULL/g) ?? []).length).toBe(3);
+    expect((migration.match(/gc\.lng IS NOT NULL/g) ?? []).length).toBe(3);
+    expect(migration).toContain('q.stripe_payment_intent_id IS NULL');
+  });
+
   it('adds GC Stripe Connect setup for concierge payouts', () => {
     const migration = fs.readFileSync(
       path.join(repoRoot, 'supabase/migrations/20260615001800_add_gc_stripe_connect_fields.sql'),
