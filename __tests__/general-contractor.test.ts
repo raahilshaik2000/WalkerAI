@@ -890,6 +890,14 @@ describe('general contractor account type', () => {
     expect(dashboard).toContain('variant={projectStatusVariant(dashboardStatus)}');
     expect(dashboard).toContain('When you create a homeowner draft, a homeowner invites you, or a project is assigned for concierge management, it will appear here.');
     expect(createProject).toContain("supabase.rpc('create_gc_managed_project'");
+    expect(createProject).toContain('nextGeneralContractorOnboardingRoute');
+    expect(createProject).toContain("supabase.auth.getUser()");
+    expect(createProject).toContain("select('business_name, city, province, lat, lng, license_number, license_doc_url, insurance_doc_url, verified, default_markup_pct, default_concierge_fee_pct')");
+    expect(createProject).toContain('setMarkupPct(formatPercentInput(gc.default_markup_pct, 15))');
+    expect(createProject).toContain('setConciergeFeePct(formatPercentInput(gc.default_concierge_fee_pct, 10))');
+    expect(createProject).toContain('if (!gc || setupRoute || gc.verified !== true)');
+    expect(createProject).toContain('disabled={!profileReady}');
+    expect(createProject).toContain('Your verified GC profile must load before creating managed projects.');
     expect(createProject).toContain('GC_PROJECT_TYPES.map');
     expect(enums).toContain("'flooring'");
     expect(enums).toContain("'painting'");

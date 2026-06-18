@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import {
   Alert,
   KeyboardAvoidingView,
@@ -16,6 +16,8 @@ import { supabase } from '@/lib/supabase/client';
 import { AddressAutocomplete, type AddressResult } from '@/components/ui/AddressAutocomplete';
 import { GlassButton, GlassCard, GlassInput, GradientBackground } from '@/components/ui';
 import { normalizeCanadianProvince } from '@/lib/canada';
+import { nextGeneralContractorOnboardingRoute } from '@/lib/general-contractor';
+import type { GeneralContractor } from '@/types/database.types';
 import { Colors, Spacing, Typography } from '@/constants/theme';
 import { GC_PROJECT_TYPES, type GeneralContractorProjectType } from '@/constants/enums';
 
@@ -30,6 +32,12 @@ function parsePercent(value: string, fallback: number): number | null {
 
 function projectTypeLabel(type: GeneralContractorProjectType) {
   return type.charAt(0).toUpperCase() + type.slice(1);
+}
+
+function formatPercentInput(value: number | null | undefined, fallback: number) {
+  const numeric = Number(value ?? fallback);
+  if (!Number.isFinite(numeric)) return String(fallback);
+  return Number.isInteger(numeric) ? String(numeric) : numeric.toFixed(2).replace(/0+$/, '').replace(/\.$/, '');
 }
 
 export default function GeneralContractorCreateProject() {
@@ -47,7 +55,71 @@ export default function GeneralContractorCreateProject() {
   const [lng, setLng] = useState<number | null>(null);
   const [markupPct, setMarkupPct] = useState('15');
   const [conciergeFeePct, setConciergeFeePct] = useState('10');
+  const [profileReady, setProfileReady] = useState(false);
+  const [profileLoading, setProfileLoading] = useState(true);
   const [loading, setLoading] = useState(false);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    async function loadGcDefaults() {
+      setProfileLoading(true);
+      setProfileReady(false);
+      try {
+        const currentUser = (await supabase.auth.getUser()).data.user;
+        if (!currentUser?.id) {
+          if (!cancelled) {
+            Alert.alert('Sign in required', 'Please sign in again before creating managed projects.', [
+              { text: 'OK', onPress: () => navigation.goBack() },
+            ]);
+          }
+          return;
+        }
+
+        const { data, error } = await supabase
+          .from('general_contractors')
+          .select('business_name, city, province, lat, lng, license_number, license_doc_url, insurance_doc_url, verified, default_markup_pct, default_concierge_fee_pct')
+          .eq('user_id', currentUser.id)
+          .maybeSingle();
+        if (error) throw error;
+
+        if (cancelled) return;
+        const gc = data as Pick<
+          GeneralContractor,
+          'business_name' | 'city' | 'province' | 'lat' | 'lng' | 'license_number' | 'license_doc_url' | 'insurance_doc_url' | 'verified' | 'default_markup_pct' | 'default_concierge_fee_pct'
+        > | null;
+        const setupRoute = nextGeneralContractorOnboardingRoute(gc);
+        if (!gc || setupRoute || gc.verified !== true) {
+          Alert.alert(
+            setupRoute ? 'Finish GC setup' : 'GC verification required',
+            setupRoute
+              ? 'Complete your GC setup before creating managed projects.'
+              : 'WalkerAI must verify your GC profile before you can create managed projects.',
+            [{ text: 'OK', onPress: () => navigation.goBack() }],
+          );
+          return;
+        }
+
+        setMarkupPct(formatPercentInput(gc.default_markup_pct, 15));
+        setConciergeFeePct(formatPercentInput(gc.default_concierge_fee_pct, 10));
+        setProfileReady(true);
+      } catch (err) {
+        if (!cancelled) {
+          Alert.alert('Could not load GC profile', err instanceof Error ? err.message : 'Please try again.', [
+            { text: 'OK', onPress: () => navigation.goBack() },
+          ]);
+        }
+      } finally {
+        if (!cancelled) setProfileLoading(false);
+      }
+    }
+
+    loadGcDefaults();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [navigation]);
 
   const clearSelectedCoordinates = () => {
     setLat(null);
@@ -64,6 +136,10 @@ export default function GeneralContractorCreateProject() {
   };
 
   const handleCreate = async () => {
+    if (!profileReady) {
+      Alert.alert('GC profile required', 'Your verified GC profile must load before creating managed projects.');
+      return;
+    }
     const normalizedEmail = homeownerEmail.trim().toLowerCase();
     if (!normalizedEmail || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(normalizedEmail)) {
       Alert.alert('Homeowner email required', 'Enter the email for an existing homeowner account.');
@@ -246,6 +322,9 @@ export default function GeneralContractorCreateProject() {
 
             <GlassCard style={styles.card}>
               <Text style={styles.sectionTitle}>Management terms</Text>
+              {profileLoading ? (
+                <Text style={styles.note}>Loading your default GC terms...</Text>
+              ) : null}
               <View style={styles.row}>
                 <GlassInput
                   label="Markup %"
@@ -270,7 +349,8 @@ export default function GeneralContractorCreateProject() {
             <GlassButton
               label="Create Draft for Homeowner"
               onPress={handleCreate}
-              loading={loading}
+              loading={loading || profileLoading}
+              disabled={!profileReady}
               fullWidth
               size="lg"
             />
