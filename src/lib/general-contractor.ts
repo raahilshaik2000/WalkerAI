@@ -2,12 +2,14 @@ import type { GeneralContractor } from '@/types/database.types';
 
 export type GeneralContractorDocumentKind = 'license' | 'insurance';
 
-type GeneralContractorSetupFields = Partial<Pick<
-  GeneralContractor,
-  'business_name' | 'city' | 'province' | 'lat' | 'lng' | 'license_number' | 'license_doc_url' | 'insurance_doc_url'
->>;
+type GeneralContractorSetupField =
+  'business_name' | 'city' | 'province' | 'lat' | 'lng' | 'license_number' | 'license_doc_url' | 'insurance_doc_url';
 
-type GeneralContractorReadinessFields = GeneralContractorSetupFields & Pick<Partial<GeneralContractor>, 'verified'>;
+type GeneralContractorSetupFields = {
+  [K in GeneralContractorSetupField]?: GeneralContractor[K] | null;
+};
+
+type GeneralContractorReadinessFields = GeneralContractorSetupFields & { verified?: boolean | null };
 
 export const GENERAL_CONTRACTOR_READINESS_SELECT = 'id, verified, business_name, city, province, lat, lng, license_number, license_doc_url, insurance_doc_url';
 

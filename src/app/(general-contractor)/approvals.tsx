@@ -17,6 +17,7 @@ import { useAuthStore } from '@/stores/auth.store';
 import { formatStatusLabel } from '@/lib/formatters';
 import { formatCadCents, formatSignedCadCents } from '@/lib/currency';
 import { formatGcProjectType } from '@/lib/gc-project-type';
+import { isGeneralContractorReadyForProjectControls } from '@/lib/general-contractor';
 import type { GcConciergeBooking, GcPaymentRequest } from '@/types/database.types';
 import { Colors, Spacing, Typography } from '@/constants/theme';
 import { GradientBackground, GlassButton, GlassCard, StatusBadge } from '@/components/ui';
@@ -84,16 +85,8 @@ function getProject(row: { project?: ProjectJoin }) {
 }
 
 function hasCompleteGcConciergeProfile(gc: GcConciergeProfile | null | undefined) {
-  return gc?.verified === true
-    && gc?.concierge_enabled === true
-    && !!gc?.business_name?.trim()
-    && !!gc?.city?.trim()
-    && !!gc?.province?.trim()
-    && typeof gc?.lat === 'number'
-    && typeof gc?.lng === 'number'
-    && !!gc?.license_number?.trim()
-    && !!gc?.license_doc_url?.trim()
-    && !!gc?.insurance_doc_url?.trim();
+  return gc?.concierge_enabled === true
+    && isGeneralContractorReadyForProjectControls(gc);
 }
 
 export default function GeneralContractorApprovals() {
@@ -134,9 +127,10 @@ export default function GeneralContractorApprovals() {
         setCanAcceptConciergeBookings(false);
         return;
       }
+      const gcReadyForProjectControls = isGeneralContractorReadyForProjectControls(gc);
       setCanAcceptConciergeBookings(hasCompleteGcConciergeProfile(gc));
 
-      if (gc.verified !== true) {
+      if (!gcReadyForProjectControls) {
         setApprovals([]);
         setRecommendationRequests([]);
         setPaymentRequests([]);

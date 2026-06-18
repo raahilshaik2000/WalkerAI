@@ -1,4 +1,5 @@
 import {
+  isGeneralContractorReadyForProjectControls,
   isGeneralContractorSetupComplete,
   isValidGeneralContractorDocumentReference,
   nextGeneralContractorOnboardingRoute,
@@ -122,6 +123,9 @@ describe('general contractor account type', () => {
     expect(nextGeneralContractorOnboardingRoute({ ...completeGcSetup, insurance_doc_url: null })).toBe('GeneralContractorInsuranceOnboarding');
     expect(nextGeneralContractorOnboardingRoute({ ...completeGcSetup, insurance_doc_url: '   ' })).toBe('GeneralContractorInsuranceOnboarding');
     expect(isGeneralContractorSetupComplete(completeGcSetup)).toBe(true);
+    expect(isGeneralContractorReadyForProjectControls({ ...completeGcSetup, verified: true })).toBe(true);
+    expect(isGeneralContractorReadyForProjectControls({ ...completeGcSetup, verified: false })).toBe(false);
+    expect(isGeneralContractorReadyForProjectControls({ ...completeGcSetup, verified: true, insurance_doc_url: ' ' })).toBe(false);
     expect(businessOnboarding).toContain("from('general_contractors')");
     expect(businessOnboarding).toContain('business_name, address, city, province, postal_code, service_radius_km');
     expect(businessOnboarding).toContain('setBusinessName(data.business_name');
@@ -2139,12 +2143,16 @@ describe('general contractor account type', () => {
     expect(migration).toContain('Only verified concierge-enabled GCs with complete business, license, and insurance setup can accept concierge bookings');
     expect(migration).toContain('Only the requested GC can respond to this booking');
     expect(migration).toContain('GRANT EXECUTE ON FUNCTION public.respond_to_gc_concierge_booking(UUID, TEXT, TEXT) TO authenticated');
+    expect(gcApprovals).toContain("import { isGeneralContractorReadyForProjectControls } from '@/lib/general-contractor';");
     expect(gcApprovals).toContain(".select('id, verified, concierge_enabled, business_name, city, province, lat, lng, license_number, license_doc_url, insurance_doc_url')");
     expect(gcApprovals).toContain('setCanAcceptConciergeBookings(hasCompleteGcConciergeProfile(gc))');
-    expect(gcApprovals).toContain('if (gc.verified !== true)');
-    expect(gcApprovals.indexOf('if (gc.verified !== true)')).toBeLessThan(
+    expect(gcApprovals).toContain('isGeneralContractorReadyForProjectControls(gc)');
+    expect(gcApprovals).toContain('const gcReadyForProjectControls = isGeneralContractorReadyForProjectControls(gc);');
+    expect(gcApprovals).toContain('if (!gcReadyForProjectControls)');
+    expect(gcApprovals.indexOf('if (!gcReadyForProjectControls)')).toBeLessThan(
       gcApprovals.indexOf("from('general_contractor_projects')"),
     );
+    expect(gcApprovals).not.toContain('if (gc.verified !== true)');
     expect(gcApprovals).toContain(".in('status', ['active', 'completed'])");
     expect(gcApprovals).not.toContain(".neq('status', 'removed')");
     expect(gcApprovals).toContain("status === 'accepted' && !canAcceptConciergeBookings");
