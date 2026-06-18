@@ -674,6 +674,20 @@ describe('release-milestone source guards', () => {
     );
   });
 
+  it('keeps milestone escrow release under homeowner authority only', () => {
+    const source = fs.readFileSync(
+      path.join(__dirname, '../supabase/functions/release-milestone/index.ts'),
+      'utf8',
+    );
+
+    expect(source).toContain('// Authorization: only the homeowner can release milestones');
+    expect(source).toContain('if (project.homeowner_id !== user.id)');
+    expect(source).toMatch(
+      /if \(project\.homeowner_id !== user\.id\) \{[\s\S]*?status: 403[\s\S]*?\}[\s\S]*?const hasProgressEvidence = await hasMilestoneProgressEvidence[\s\S]*?const transfer = await stripe\.transfers\.create/
+    );
+    expect(source).not.toMatch(/appUser\?\.role === 'general_contractor'[\s\S]*?stripe\.transfers\.create/);
+  });
+
   it('defers active GC-managed project completion to homeowner approval', () => {
     const source = fs.readFileSync(
       path.join(__dirname, '../supabase/functions/release-milestone/index.ts'),
