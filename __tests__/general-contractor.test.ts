@@ -1613,6 +1613,9 @@ describe('general contractor account type', () => {
     expect(gcProjectDetail).toContain("navigation.navigate('GeneralContractorSchedule'");
     expect(gcSchedule).toContain('function canScheduleSlot(slot: Slot)');
     expect(gcSchedule).toContain("slot.status === 'filled' || slot.status === 'scheduled'");
+    expect(gcSchedule).toContain('function slotParticipantName(slot: Slot)');
+    expect(gcSchedule).toContain('external_trade_name, external_trade_company');
+    expect(gcSchedule).toContain("slot.external_trade_name ?? slot.external_trade_company ?? 'External trade'");
     expect(gcSchedule).toContain('Assign a WalkerAI trade or mark this scope externally managed before recommending schedule dates.');
     expect(gcSchedule).toContain("request_type: 'schedule_change'");
     expect(gcSchedule).toContain('Send Schedule for Approval');

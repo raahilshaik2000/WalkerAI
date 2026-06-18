@@ -30,6 +30,7 @@ interface Slot {
   assigned_company?: { name: string | null } | Array<{ name: string | null }> | null;
   fulfillment_type?: 'walker_ai' | 'external' | null;
   external_trade_name?: string | null;
+  external_trade_company?: string | null;
 }
 
 interface Assignment {
@@ -54,6 +55,13 @@ function formatTrade(tradeType: string) {
 
 function canScheduleSlot(slot: Slot) {
   return slot.status === 'filled' || slot.status === 'scheduled';
+}
+
+function slotParticipantName(slot: Slot) {
+  if (slot.fulfillment_type === 'external') {
+    return slot.external_trade_name ?? slot.external_trade_company ?? 'External trade';
+  }
+  return getCompany(slot)?.name ?? 'Unassigned';
 }
 
 export default function GeneralContractorScheduleScreen() {
@@ -103,7 +111,7 @@ export default function GeneralContractorScheduleScreen() {
           .from('project_slots')
           .select(`
             id, trade_type, description, status, scheduled_start_date, scheduled_end_date,
-            fulfillment_type, external_trade_name,
+            fulfillment_type, external_trade_name, external_trade_company,
             assigned_company:companies!assigned_company_id(name)
           `)
           .eq('project_id', projectId)
@@ -262,9 +270,7 @@ export default function GeneralContractorScheduleScreen() {
               {slots.map((slot) => {
                 const selected = selectedSlotId === slot.id;
                 const schedulable = canScheduleSlot(slot);
-                const participant = slot.fulfillment_type === 'external'
-                  ? slot.external_trade_name ?? 'External trade'
-                  : getCompany(slot)?.name ?? 'Unassigned';
+                const participant = slotParticipantName(slot);
                 return (
                   <TouchableOpacity key={slot.id} onPress={() => selectSlot(slot)} activeOpacity={schedulable ? 0.85 : 1}>
                     <GlassCard style={[styles.card, selected && styles.cardSelected]}>
