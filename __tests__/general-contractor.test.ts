@@ -834,7 +834,10 @@ describe('general contractor account type', () => {
     expect(navigator).toContain('GeneralContractorCreateProject');
     expect(dashboard).toContain("navigation.navigate('GeneralContractorCreateProject')");
     expect(dashboard).toContain('homeowner_contact_name, homeowner_contact_email, homeowner_contact_phone');
-    expect(dashboard).toContain('projectContact');
+    expect(dashboard).toContain('styles.projectContactName');
+    expect(dashboard).toContain('styles.projectContactEmail');
+    expect(dashboard).toContain('ellipsizeMode="middle"');
+    expect(dashboard).toContain('projectContent: { flex: 1, minWidth: 0 }');
     expect(dashboard).toContain('project_type, scope_summary');
     expect(dashboard).toContain('formatGcProjectType(assignment.project_type, project?.room_type)');
     expect(dashboard).toContain('function dashboardAssignmentStatus(assignmentStatus: string, projectStatus?: string | null)');

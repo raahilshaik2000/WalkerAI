@@ -336,9 +336,14 @@ export default function GeneralContractorDashboard() {
                           <Text style={styles.projectTerms}>
                             {Number(assignment.markup_pct).toFixed(0)}% markup · {Number(assignment.concierge_fee_pct).toFixed(0)}% concierge
                           </Text>
-                          {assignment.homeowner_contact_name || assignment.homeowner_contact_email ? (
-                            <Text style={styles.projectContact}>
-                              {[assignment.homeowner_contact_name, assignment.homeowner_contact_email].filter(Boolean).join(' · ')}
+                          {assignment.homeowner_contact_name ? (
+                            <Text style={styles.projectContactName} numberOfLines={1}>
+                              {assignment.homeowner_contact_name}
+                            </Text>
+                          ) : null}
+                          {assignment.homeowner_contact_email ? (
+                            <Text style={styles.projectContactEmail} numberOfLines={1} ellipsizeMode="middle">
+                              {assignment.homeowner_contact_email}
                             </Text>
                           ) : null}
                         </View>
@@ -413,11 +418,12 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
-  projectContent: { flex: 1 },
+  projectContent: { flex: 1, minWidth: 0 },
   projectTitle: { ...Typography.h3, marginBottom: 4 },
   projectMeta: { ...Typography.caption, color: Colors.text.tertiary },
   projectTerms: { ...Typography.caption, color: Colors.text.secondary, marginTop: 2 },
-  projectContact: { ...Typography.caption, color: Colors.text.tertiary, marginTop: 2 },
+  projectContactName: { ...Typography.caption, color: Colors.text.tertiary, marginTop: 4 },
+  projectContactEmail: { ...Typography.caption, color: Colors.text.tertiary, marginTop: 1 },
   projectRight: { alignItems: 'flex-end', gap: 8 },
   scopeSummary: {
     ...Typography.caption,
