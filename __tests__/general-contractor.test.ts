@@ -1326,6 +1326,10 @@ describe('general contractor account type', () => {
       path.join(repoRoot, 'supabase/migrations/20260618032327_require_complete_gc_profile_for_direct_project_tools.sql'),
       'utf8',
     );
+    const completeStorageMigration = fs.readFileSync(
+      path.join(repoRoot, 'supabase/migrations/20260618033248_require_complete_gc_profile_for_external_trade_storage.sql'),
+      'utf8',
+    );
     const gcProjectDetail = fs.readFileSync(
       path.join(repoRoot, 'src/app/(general-contractor)/project/[id]/index.tsx'),
       'utf8',
@@ -1342,6 +1346,14 @@ describe('general contractor account type', () => {
     expect(completeDirectToolsMigration).toContain('CREATE OR REPLACE FUNCTION public.add_external_trade_document');
     expect(completeDirectToolsMigration).toContain('Only verified General Contractors with complete business, license, and insurance setup can add external trade documents');
     expect(completeDirectToolsMigration).toContain('External trade document path does not match this GC project slot');
+    expect(completeStorageMigration).toContain('CREATE OR REPLACE FUNCTION private.can_access_company_doc_path');
+    expect(completeStorageMigration).toContain("path.segment_1 = 'general-contractors'");
+    expect(completeStorageMigration).toContain("path.segment_1 = 'external-trades'");
+    expect(completeStorageMigration).toMatch(/path\.segment_1 = 'external-trades'[\s\S]*gc\.verified IS TRUE[\s\S]*NULLIF\(TRIM\(gc\.license_doc_url\), ''\) IS NOT NULL[\s\S]*NULLIF\(TRIM\(gc\.insurance_doc_url\), ''\) IS NOT NULL/);
+    expect(completeStorageMigration).toContain("gcp.status = 'active'");
+    expect(completeStorageMigration.indexOf("path.segment_1 = 'general-contractors'")).toBeLessThan(
+      completeStorageMigration.indexOf("path.segment_1 = 'external-trades'"),
+    );
     expect(pathRestrictionMigration).toContain("v_document_parts := string_to_array(v_document_url, '/')");
     expect(pathRestrictionMigration).toContain("v_document_parts[1] <> 'external-trades'");
     expect(pathRestrictionMigration).toContain("v_document_parts[2] <> (SELECT auth.uid())::TEXT");
