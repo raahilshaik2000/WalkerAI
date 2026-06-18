@@ -1,5 +1,6 @@
 import {
   isGeneralContractorSetupComplete,
+  isValidGeneralContractorDocumentReference,
   nextGeneralContractorOnboardingRoute,
 } from '../src/lib/general-contractor';
 import { resolveNotificationRoute } from '../src/lib/notifications/navigation';
@@ -124,14 +125,29 @@ describe('general contractor account type', () => {
     expect(licenseOnboarding).toContain("uploadFile('company-docs'");
     expect(licenseOnboarding).toContain('general-contractors/${user.id}/license-');
     expect(licenseOnboarding).toContain('License document required');
+    expect(licenseOnboarding).toContain('Invalid license document');
     expect(licenseOnboarding).toContain('License Document URL');
     expect(insuranceOnboarding).toContain("select('insurance_doc_url')");
     expect(insuranceOnboarding).toContain("setDocumentUrl(data.insurance_doc_url ?? '')");
     expect(insuranceOnboarding).toContain("launchImageLibrary");
     expect(insuranceOnboarding).toContain("uploadFile('company-docs'");
     expect(insuranceOnboarding).toContain('general-contractors/${user.id}/insurance-');
+    expect(insuranceOnboarding).toContain('Invalid insurance document');
     expect(licenseOnboarding).not.toContain('until native upload is wired');
     expect(insuranceOnboarding).not.toContain('until native upload is wired');
+  });
+
+  it('validates typed GC document references before setup can continue', () => {
+    const userId = '00000000-0000-4000-8000-000000000001';
+    const otherUserId = '00000000-0000-4000-8000-000000000002';
+
+    expect(isValidGeneralContractorDocumentReference(`general-contractors/${userId}/license-123.pdf`, userId, 'license')).toBe(true);
+    expect(isValidGeneralContractorDocumentReference(`general-contractors/${userId}/insurance-123.pdf`, userId, 'insurance')).toBe(true);
+    expect(isValidGeneralContractorDocumentReference('https://secure.example.com/gc/license.pdf', userId, 'license')).toBe(true);
+    expect(isValidGeneralContractorDocumentReference(`general-contractors/${otherUserId}/license-123.pdf`, userId, 'license')).toBe(false);
+    expect(isValidGeneralContractorDocumentReference(`general-contractors/${userId}/insurance-123.pdf`, userId, 'license')).toBe(false);
+    expect(isValidGeneralContractorDocumentReference('http://secure.example.com/gc/license.pdf', userId, 'license')).toBe(false);
+    expect(isValidGeneralContractorDocumentReference('not a document', userId, 'license')).toBe(false);
   });
 
   it('scopes shared document storage paths to the matching account type', () => {

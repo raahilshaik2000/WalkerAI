@@ -16,6 +16,7 @@ import { launchImageLibrary } from 'react-native-image-picker';
 import Ionicons from 'react-native-vector-icons/Ionicons';
 import { supabase } from '@/lib/supabase/client';
 import { getUploadMetadata, uploadFile, type StorageUploadAsset } from '@/lib/supabase/storage';
+import { isValidGeneralContractorDocumentReference } from '@/lib/general-contractor';
 import { useAuthStore } from '@/stores/auth.store';
 import { Colors, Radius, Spacing, Typography } from '@/constants/theme';
 import { GlassButton, GlassCard, GlassInput, GradientBackground } from '@/components/ui';
@@ -83,6 +84,10 @@ export default function GeneralContractorLicenseOnboarding() {
     }
     if (!user?.id) {
       Alert.alert('Sign in required', 'Please sign in again before continuing.');
+      return;
+    }
+    if (!selectedDocument && !isValidGeneralContractorDocumentReference(documentUrl, user.id, 'license')) {
+      Alert.alert('Invalid license document', 'Upload the license document or provide an HTTPS secure document link.');
       return;
     }
 
