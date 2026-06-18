@@ -77,6 +77,13 @@ function getQuoteCompany(quote: Quote) {
   return Array.isArray(quote.company) ? quote.company[0]?.name ?? null : quote.company?.name ?? null;
 }
 
+function slotParticipantName(slot: Slot, companyName: string | null | undefined) {
+  if (slot.fulfillment_type === 'external') {
+    return slot.external_trade_name ?? slot.external_trade_company ?? 'External trade';
+  }
+  return companyName ?? 'Unassigned';
+}
+
 function canNegotiateQuote(quote: Quote) {
   return quote.status === 'pending' && !quote.stripe_payment_intent_id;
 }
@@ -627,9 +634,7 @@ export default function GeneralContractorTradesScreen() {
                 const selected = selectedSlotId === slot.id;
                 const company = getCompany(slot);
                 const slotQuotes = quotesBySlot.get(slot.id) ?? [];
-                const participant = slot.fulfillment_type === 'external'
-                  ? slot.external_trade_name ?? 'External trade'
-                  : company?.name ?? 'Unassigned';
+                const participant = slotParticipantName(slot, company?.name);
 
                 return (
                   <TouchableOpacity key={slot.id} onPress={() => selectSlot(slot)} activeOpacity={0.85}>

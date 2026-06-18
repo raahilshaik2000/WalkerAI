@@ -1431,6 +1431,10 @@ describe('general contractor account type', () => {
       path.join(repoRoot, 'src/app/(general-contractor)/project/[id]/index.tsx'),
       'utf8',
     );
+    const gcTrades = fs.readFileSync(
+      path.join(repoRoot, 'src/app/(general-contractor)/project/[id]/trades.tsx'),
+      'utf8',
+    );
     const homeownerProject = fs.readFileSync(
       path.join(repoRoot, 'src/app/(homeowner)/project/[id]/index.tsx'),
       'utf8',
@@ -1474,6 +1478,8 @@ describe('general contractor account type', () => {
     expect(gcProjectDetail).toContain("setExternalTradeNotes(slot.external_trade_notes ?? '')");
     expect(gcProjectDetail).toContain('Mark externally managed');
     expect(gcProjectDetail).toContain('No escrow protection');
+    expect(gcTrades).toContain('function slotParticipantName(slot: Slot, companyName: string | null | undefined)');
+    expect(gcTrades).toContain("slot.external_trade_name ?? slot.external_trade_company ?? 'External trade'");
     expect(homeownerProject).toContain('Externally managed by GC');
     expect(homeownerProject).toContain('No escrow protection');
     expect(homeownerSchedule).toContain('function isSchedulableSlot(slot: Slot)');
