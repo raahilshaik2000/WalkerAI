@@ -195,6 +195,41 @@ describe('notification navigation', () => {
     });
   });
 
+  it('falls back to WalkerAI deep links when GC push payload ids are missing', () => {
+    expect(resolveNotificationRoute(
+      'order_delivered',
+      { deep_link: '/(general-contractor)/project/project-1/materials' },
+      'general_contractor',
+    )).toEqual({
+      name: 'GeneralContractorMaterials',
+      params: { id: 'project-1' },
+    });
+
+    expect(resolveNotificationRoute(
+      'gc_trade_negotiation_requested',
+      { deep_link: '/(company)/job/project-1?slot=slot-1' },
+      'company',
+    )).toEqual({
+      name: 'JobDetail',
+      params: {
+        screen: 'JobDetailMain',
+        params: { id: 'project-1', slot: 'slot-1' },
+      },
+    });
+
+    expect(resolveNotificationRoute(
+      'gc_management_invited',
+      { deep_link: '/(homeowner)/project/project-1/concierge' },
+      'homeowner',
+    )).toEqual({
+      name: 'ProjectDetail',
+      params: {
+        screen: 'Concierge',
+        params: { id: 'project-1' },
+      },
+    });
+  });
+
   it('routes GC project workflow notifications to dedicated management screens', () => {
     expect(resolveNotificationRoute('quote_submitted', { project_id: 'project-1' }, 'general_contractor')).toEqual({
       name: 'GeneralContractorTrades',

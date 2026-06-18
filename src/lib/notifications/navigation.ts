@@ -18,6 +18,25 @@ function stringValue(value: unknown): string | undefined {
   return typeof value === 'string' && value.trim().length > 0 ? value : undefined;
 }
 
+function firstDeepLinkMatch(value: unknown, pattern: RegExp): string | undefined {
+  const deepLink = stringValue(value);
+  if (!deepLink) return undefined;
+  const match = deepLink.match(pattern);
+  return match?.[1] ? decodeURIComponent(match[1]) : undefined;
+}
+
+function projectIdFromDeepLink(value: unknown): string | undefined {
+  return firstDeepLinkMatch(value, /\/(?:\(homeowner\)\/project|\(company\)\/job|\(general-contractor\)\/project)\/([^/?#]+)/);
+}
+
+function slotIdFromDeepLink(value: unknown): string | undefined {
+  return firstDeepLinkMatch(value, /[?&]slot=([^&#]+)/);
+}
+
+function orderIdFromDeepLink(value: unknown): string | undefined {
+  return firstDeepLinkMatch(value, /\/(?:orders|order)\/([^/?#]+)/);
+}
+
 function projectDetailRoute(screen: string, projectId: string, extraParams?: Record<string, unknown>): NotificationRoute {
   return {
     name: 'ProjectDetail',
@@ -43,9 +62,9 @@ export function resolveNotificationRoute(
   payload: NotificationPayload,
   role: UserRole | null | undefined,
 ): NotificationRoute | null {
-  const projectId = stringValue(payload?.project_id);
-  const slotId = stringValue(payload?.slot_id);
-  const orderId = stringValue(payload?.order_id);
+  const projectId = stringValue(payload?.project_id) ?? projectIdFromDeepLink(payload?.deep_link);
+  const slotId = stringValue(payload?.slot_id) ?? slotIdFromDeepLink(payload?.deep_link);
+  const orderId = stringValue(payload?.order_id) ?? orderIdFromDeepLink(payload?.deep_link);
 
   if (role === 'supplier') {
     switch (type) {
