@@ -646,6 +646,7 @@ export default function GeneralContractorProjectDetail() {
     : 'Pending';
   const assignedTrades = slots.filter((slot) => slot.fulfillment_type === 'external' || !!getCompanyName(slot)).length;
   const assignmentIsActive = assignment?.status === 'active' && gcVerified;
+  const assignmentIsCompleted = assignment?.status === 'completed';
   const headerStatus = assignment?.status ?? project?.status ?? null;
   const markupSummary = assignment && project
     ? calculateGcMarkup({
@@ -890,6 +891,73 @@ export default function GeneralContractorProjectDetail() {
                     <View style={styles.controlBody}>
                       <Text style={styles.controlTitle}>Completion binder</Text>
                       <Text style={styles.controlSub}>Review permits, warranties, receipts, and approvals</Text>
+                    </View>
+                    <Icon name="chevron-right" size={20} color={Colors.text.tertiary} />
+                  </TouchableOpacity>
+                </GlassCard>
+              ) : assignmentIsCompleted ? (
+                <GlassCard style={styles.card}>
+                  <Text style={styles.sectionTitle}>Project history</Text>
+                  <Text style={styles.bodyText}>
+                    Completed project records are available read-only. Review permits, assistant summaries, messages, and the closeout binder without changing scope, schedule, spending, or payments.
+                  </Text>
+                  <View style={styles.controlDivider} />
+                  <TouchableOpacity
+                    style={styles.controlRow}
+                    onPress={() => navigation.navigate('GeneralContractorPermits', { id: projectId })}
+                    activeOpacity={0.85}
+                  >
+                    <View style={styles.controlIcon}>
+                      <Icon name="file-check-outline" size={20} color={Colors.accent} />
+                    </View>
+                    <View style={styles.controlBody}>
+                      <Text style={styles.controlTitle}>Permits & inspections</Text>
+                      <Text style={styles.controlSub}>Review final permit and inspection records</Text>
+                    </View>
+                    <Icon name="chevron-right" size={20} color={Colors.text.tertiary} />
+                  </TouchableOpacity>
+                  <View style={styles.controlDivider} />
+                  <TouchableOpacity
+                    style={styles.controlRow}
+                    onPress={() => navigation.navigate('GeneralContractorAssistant', { id: projectId })}
+                    activeOpacity={0.85}
+                  >
+                    <View style={styles.controlIcon}>
+                      <Icon name="robot-outline" size={20} color={Colors.accent} />
+                    </View>
+                    <View style={styles.controlBody}>
+                      <Text style={styles.controlTitle}>Project assistant</Text>
+                      <Text style={styles.controlSub}>Summarize final records, risks, and remaining homeowner decisions</Text>
+                    </View>
+                    <Icon name="chevron-right" size={20} color={Colors.text.tertiary} />
+                  </TouchableOpacity>
+                  <View style={styles.controlDivider} />
+                  <TouchableOpacity
+                    style={styles.controlRow}
+                    onPress={() => navigation.navigate('GeneralContractorMessages', { id: projectId })}
+                    activeOpacity={0.85}
+                  >
+                    <View style={styles.controlIcon}>
+                      <Icon name="message-text-outline" size={20} color={Colors.accent} />
+                    </View>
+                    <View style={styles.controlBody}>
+                      <Text style={styles.controlTitle}>Project messages</Text>
+                      <Text style={styles.controlSub}>Review the completed project communication history</Text>
+                    </View>
+                    <Icon name="chevron-right" size={20} color={Colors.text.tertiary} />
+                  </TouchableOpacity>
+                  <View style={styles.controlDivider} />
+                  <TouchableOpacity
+                    style={styles.controlRow}
+                    onPress={() => navigation.navigate('GeneralContractorCompletion', { id: projectId })}
+                    activeOpacity={0.85}
+                  >
+                    <View style={styles.controlIcon}>
+                      <Icon name="folder-check-outline" size={20} color={Colors.accent} />
+                    </View>
+                    <View style={styles.controlBody}>
+                      <Text style={styles.controlTitle}>Completion binder</Text>
+                      <Text style={styles.controlSub}>Review warranties, receipts, approvals, and closeout records</Text>
                     </View>
                     <Icon name="chevron-right" size={20} color={Colors.text.tertiary} />
                   </TouchableOpacity>

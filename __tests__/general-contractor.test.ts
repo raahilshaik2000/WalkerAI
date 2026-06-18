@@ -1561,6 +1561,10 @@ describe('general contractor account type', () => {
     expect(completedQuoteReadMigration).toContain('Completed GC assignments still need read-only quote and milestone context');
     expect(navigator).toContain('GeneralContractorCompletion');
     expect(gcProjectDetail).toContain("navigation.navigate('GeneralContractorCompletion'");
+    expect(gcProjectDetail).toContain("assignment?.status === 'completed'");
+    expect(gcProjectDetail).toContain('Project history');
+    expect(gcProjectDetail).toContain('Completed project records are available read-only.');
+    expect(gcProjectDetail).toContain('Review permits, assistant summaries, messages, and the closeout binder without changing scope, schedule, spending, or payments.');
     expect(gcCompletion).toContain("from('permits')");
     expect(gcCompletion).toContain("from('warranties')");
     expect(gcCompletion).toContain("from('material_orders')");
@@ -1735,8 +1739,8 @@ describe('general contractor account type', () => {
     expect(gcAssistant).toContain(".from('general_contractor_projects')");
     expect(gcAssistant).toContain(".select('id, status, general_contractor_id, project_type')");
     expect(gcAssistant).toContain(".eq('general_contractor_id', gc.id)");
-    expect(gcAssistant).toContain("assignmentRow.status !== 'active'");
-    expect(gcAssistant).toContain('Active GC management is required before project assistant summaries are available.');
+    expect(gcAssistant).toContain("!['active', 'completed'].includes(assignmentRow.status)");
+    expect(gcAssistant).toContain('Active or completed GC management is required before project assistant summaries are available.');
     expect(gcAssistant).toContain('formatGcProjectType(assignment?.project_type, project?.room_type)');
     expect(gcAssistant).toContain('const projectStatusLabel = formatStatusLabel(project?.status ?? \'unknown\');');
     expect(gcAssistant).toContain('const managementStatusLabel = formatStatusLabel(assignment?.status ?? \'unknown\');');

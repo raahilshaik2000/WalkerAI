@@ -129,8 +129,8 @@ export default function GeneralContractorAssistantScreen() {
         .maybeSingle();
       if (assignmentError) throw assignmentError;
       if (!assignmentRow) throw new Error('GC assignment not found for this project.');
-      if (assignmentRow.status !== 'active') {
-        throw new Error('Active GC management is required before project assistant summaries are available.');
+      if (!['active', 'completed'].includes(assignmentRow.status)) {
+        throw new Error('Active or completed GC management is required before project assistant summaries are available.');
       }
 
       const [projectResult, slotResult, permitResult, approvalResult, paymentResult, materialResult, messageResult] = await Promise.all([
