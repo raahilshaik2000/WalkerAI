@@ -1838,7 +1838,9 @@ describe('general contractor account type', () => {
     expect(gcProjectDetail).toContain(".eq('requested_by_gc_id', assignment.general_contractor_id)");
     expect(gcProjectDetail).toContain(".eq('status', 'pending')");
     expect(gcProjectDetail).toContain('No project budget, schedule, trade, material, or completion change will be applied.');
-    expect(gcProjectDetail).toContain('disabled={!!cancellingApprovalId}');
+    expect(gcProjectDetail).toContain("Alert.alert('Active verified GC management required', 'Only an active verified GC can cancel a pending homeowner approval request.')");
+    expect(gcProjectDetail).toContain('Active verified GC management is required before this pending recommendation can be cancelled.');
+    expect(gcProjectDetail).toContain('disabled={!assignmentIsActive || !!cancellingApprovalId}');
     expect(gcProjectDetail).toContain("order.cost_delta != null ? ` · ${formatSignedCadCents(order.cost_delta)}` : ''");
     expect(gcProjectDetail).not.toContain('formatCad(Math.abs(order.cost_delta))');
   });

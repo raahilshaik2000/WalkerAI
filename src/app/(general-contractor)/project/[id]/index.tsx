@@ -388,6 +388,10 @@ export default function GeneralContractorProjectDetail() {
       Alert.alert('Request already finalized', 'Only pending homeowner approval requests can be cancelled.');
       return;
     }
+    if (!assignment || assignment.status !== 'active' || !gcVerified) {
+      Alert.alert('Active verified GC management required', 'Only an active verified GC can cancel a pending homeowner approval request.');
+      return;
+    }
     if (!assignment?.general_contractor_id) {
       Alert.alert('Request unavailable', 'Refresh the project and try again.');
       return;
@@ -1314,11 +1318,16 @@ export default function GeneralContractorProjectDetail() {
                             {request.cost_delta != null ? ` · ${formatSignedCadCents(request.cost_delta)}` : ''}
                             {request.timeline_delta_days != null ? ` · ${request.timeline_delta_days > 0 ? '+' : ''}${request.timeline_delta_days} days` : ''}
                           </Text>
+                          {!assignmentIsActive ? (
+                            <Text style={styles.approvalHint}>
+                              Active verified GC management is required before this pending recommendation can be cancelled.
+                            </Text>
+                          ) : null}
                           <GlassButton
                             label="Cancel Request"
                             onPress={() => handleCancelApprovalRequest(request)}
                             loading={cancellingApprovalId === request.id}
-                            disabled={!!cancellingApprovalId}
+                            disabled={!assignmentIsActive || !!cancellingApprovalId}
                             variant="secondary"
                             size="sm"
                             style={styles.cancelRequestButton}
