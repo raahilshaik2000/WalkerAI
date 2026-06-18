@@ -205,6 +205,7 @@ export default function GeneralContractorDashboard() {
   };
 
   const setupRoute = nextGeneralContractorOnboardingRoute(gc);
+  const canCreateManagedProject = !loading && !!gc && gc.verified === true && !setupRoute;
   if (!loading && errorMessage) {
     return (
       <GradientBackground glow="center">
@@ -279,13 +280,15 @@ export default function GeneralContractorDashboard() {
             subtitle={gc?.business_name ? `${gc.business_name} · Project command center` : 'Project command center'}
             right={(
               <View style={styles.headerActions}>
-                <TouchableOpacity
-                  style={styles.headerActionButton}
-                  onPress={() => navigation.navigate('GeneralContractorCreateProject')}
-                  activeOpacity={0.85}
-                >
-                  <Icon name="plus" size={20} color={Colors.text.primary} />
-                </TouchableOpacity>
+                {canCreateManagedProject ? (
+                  <TouchableOpacity
+                    style={styles.headerActionButton}
+                    onPress={() => navigation.navigate('GeneralContractorCreateProject')}
+                    activeOpacity={0.85}
+                  >
+                    <Icon name="plus" size={20} color={Colors.text.primary} />
+                  </TouchableOpacity>
+                ) : null}
                 <NotificationButton />
               </View>
             )}

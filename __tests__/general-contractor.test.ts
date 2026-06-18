@@ -978,6 +978,18 @@ describe('general contractor account type', () => {
     expect(dashboard).not.toContain("from('change_orders')");
   });
 
+  it('does not expose GC project creation before setup and verification are loaded', () => {
+    const dashboard = fs.readFileSync(
+      path.join(repoRoot, 'src/app/(general-contractor)/index.tsx'),
+      'utf8',
+    );
+
+    expect(dashboard).toContain('const canCreateManagedProject = !loading && !!gc && gc.verified === true && !setupRoute;');
+    expect(dashboard).toContain('{canCreateManagedProject ? (');
+    expect(dashboard).toContain("navigation.navigate('GeneralContractorCreateProject')");
+    expect(dashboard).toContain(') : null}');
+  });
+
   it('shows GC dashboard load failures before setup or verification empty states', () => {
     const dashboard = fs.readFileSync(
       path.join(repoRoot, 'src/app/(general-contractor)/index.tsx'),
