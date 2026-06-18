@@ -402,6 +402,7 @@ Material flow:
 Recent GC authorization update:
 
 - `generate-material-orders` now allows active verified GC managers to repair/generate material orders for managed projects, while preserving homeowner and assigned company access.
+- This updated function was deployed to Supabase project `wgbloslndalmocckrejw`.
 
 ## Payments and Payouts
 
@@ -591,8 +592,7 @@ Known items that still need careful verification or product decisions:
 
 1. Full four-account runtime walkthrough still needs to be executed again after current changes.
 2. GC-created projects for homeowners without existing accounts need invite/account-claiming product design.
-3. The updated `generate-material-orders` edge function should be deployed before relying on the new GC authorization in production.
-4. Supabase deployed function/schema drift should be checked before relying on production behavior.
-5. APNs push delivery depends on Apple/Supabase APNs secrets being set correctly.
-6. TestFlight archive should be re-run after final GC/account changes.
-7. LiDAR should be tested on physical iOS hardware; simulator can only cover non-LiDAR fallbacks.
+3. Supabase deployed function/schema drift should be checked before relying on the full production backend as current.
+4. APNs push delivery depends on Apple/Supabase APNs secrets being set correctly.
+5. TestFlight archive should be re-run after final GC/account changes.
+6. LiDAR should be tested on physical iOS hardware; simulator can only cover non-LiDAR fallbacks.

@@ -11,6 +11,7 @@ General Contractor should be a separate app account type, not a company trade fa
 - Branch: `main`
 - Remote: `https://github.com/raahilshaik2000/WalkerAI`
 - Latest implementation commit when this doc was finalized: `a0a0ad3 Allow GC managers to generate material orders`
+- Live backend update: `generate-material-orders` was deployed to Supabase project `wgbloslndalmocckrejw` after the implementation commit.
 - Four live QA accounts were reset/verified on Supabase and credentials were written to:
   - `/Users/raahilshaik/Downloads/walkerai-qa-credentials.txt`
 - Passwords are intentionally not included in this repo document.
@@ -277,6 +278,7 @@ Implementation details:
 - The GC must have an active `general_contractor_projects` assignment for the project.
 - The existing homeowner and assigned company paths were preserved.
 - Verified with the targeted Supabase function suite, full TypeScript check, full Jest suite, and whitespace diff check.
+- Deployed to Supabase project `wgbloslndalmocckrejw`.
 
 Related local commit:
 
@@ -330,7 +332,6 @@ The goal is not fully complete yet. Remaining work includes:
    - supplier
    - general contractor
 3. Verify GC project creation, homeowner approval, trade coordination, material sourcing, payments, messages, schedule, permits, and completion paths in-app.
-4. Deploy the updated `generate-material-orders` edge function to Supabase if production should use the new GC authorization immediately.
-5. Confirm any deployed Supabase function/migration drift before relying on production behavior.
-6. Decide product details for GC-created projects when the homeowner does not yet have an account.
-7. Re-test TestFlight/archive after these changes if the app is being shipped.
+4. Confirm any deployed Supabase function/migration drift beyond the updated `generate-material-orders` function before relying on the whole production backend as fully current.
+5. Decide product details for GC-created projects when the homeowner does not yet have an account.
+6. Re-test TestFlight/archive after these changes if the app is being shipped.
