@@ -455,6 +455,8 @@ export default function GeneralContractorApprovals() {
                             <Text style={styles.waitingText}>
                               Waiting for homeowner authorization. Escrow release still happens through milestones.
                             </Text>
+                          ) : request.response_note ? (
+                            <Text style={styles.responseNote}>Homeowner note: {request.response_note}</Text>
                           ) : null}
                         </View>
                       </TouchableOpacity>

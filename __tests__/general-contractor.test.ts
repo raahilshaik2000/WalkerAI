@@ -1764,6 +1764,7 @@ describe('general contractor account type', () => {
     expect(gcApprovals).toContain('Payment requests');
     expect(gcApprovals).toContain("navigation.navigate('GeneralContractorPayments'");
     expect(gcApprovals).toContain('Escrow release still happens through milestones');
+    expect(gcApprovals).toMatch(/Payment requests[\s\S]*\) : request\.response_note \? \([\s\S]*Homeowner note: \{request\.response_note\}/);
     expect(homeownerConcierge).toContain("from('gc_payment_requests')");
     expect(homeownerConcierge).toContain("supabase.rpc('respond_to_gc_payment_request'");
     expect(homeownerConcierge).toContain('const [paymentResponseNotes, setPaymentResponseNotes] = useState<Record<string, string>>({});');

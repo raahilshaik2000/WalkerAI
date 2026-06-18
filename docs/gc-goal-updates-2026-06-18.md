@@ -449,7 +449,7 @@ Runtime fixes made from this pass:
 - Supplier earnings summary cards now keep currency values on one line instead of wrapping amounts like `$3,150.00`.
 - Supplier profile metrics now render in a two-column grid so rating, reviews, on-time percentage, and average days are readable on mobile.
 - Homeowner approval/rejection of GC project recommendations now supports optional response notes, and those notes are visible in GC project detail and approvals inbox views.
-- Homeowner approval/rejection of GC payment authorization requests now supports optional response notes, while escrow and milestone release remain separate.
+- Homeowner approval/rejection of GC payment authorization requests now supports optional response notes, while escrow and milestone release remain separate. Those notes are visible in the homeowner concierge history, the GC payment screen, project detail, and the GC approvals inbox.
 - Trade responses to GC counteroffers/revision requests now support optional response notes, and accepted counteroffers keep those notes visible while the trade builds the updated homeowner-facing quote package.
 - GC accept/reject responses for concierge service bookings now support optional response notes, and those notes are visible in the homeowner concierge request history.
 
