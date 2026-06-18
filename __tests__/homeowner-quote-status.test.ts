@@ -7,6 +7,22 @@ const fs = require('fs');
 const path = require('path');
 
 describe('homeowner quote status copy', () => {
+  it('shows submitted quotes as ready for homeowner review on project cards', () => {
+    const carouselSource = fs.readFileSync(
+      path.join(__dirname, '../src/components/dashboard/ProjectsCarousel.tsx'),
+      'utf8',
+    );
+    const projectsSource = fs.readFileSync(
+      path.join(__dirname, '../src/app/(homeowner)/projects.tsx'),
+      'utf8',
+    );
+
+    expect(carouselSource).toContain("quoting:     { label: 'Quote ready'");
+    expect(carouselSource).toContain("if (status === 'quoting') {\n    return 'Quote ready to review';\n  }");
+    expect(projectsSource).toContain("quoting:     { label: 'Quote ready'");
+    expect(projectsSource).toContain("quoting:     'Quote ready to review'");
+  });
+
   it('does not claim the whole project is active when only one multi-trade quote is paid', () => {
     const source = fs.readFileSync(
       path.join(__dirname, '../src/app/(homeowner)/project/[id]/quote.tsx'),
