@@ -12,6 +12,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { useFocusEffect, useNavigation, useRoute } from '@react-navigation/native';
 import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
 import { supabase } from '@/lib/supabase/client';
+import { formatAppSafeErrorMessage } from '@/lib/supabase/functions';
 import { formatCadCents, parsePositiveCadToCents } from '@/lib/currency';
 import { formatStatusLabel } from '@/lib/formatters';
 import { GENERAL_CONTRACTOR_READINESS_SELECT, isGeneralContractorReadyForProjectControls } from '@/lib/general-contractor';
@@ -117,7 +118,7 @@ export default function GeneralContractorPaymentsScreen() {
       setAssignment(assignmentResult.data as Assignment | null);
       setRequests((requestResult.data ?? []) as GcPaymentRequest[]);
     } catch (err) {
-      setErrorMessage(err instanceof Error ? err.message : 'Could not load payment requests.');
+      setErrorMessage(formatAppSafeErrorMessage(err, 'Could not load payment requests.'));
       setAssignment(null);
       setRequests([]);
       setGcReady(false);
@@ -172,7 +173,7 @@ export default function GeneralContractorPaymentsScreen() {
       setDescription('');
       await fetchData();
     } catch (err) {
-      Alert.alert('Could not send payment request', err instanceof Error ? err.message : 'Please try again.');
+      Alert.alert('Could not send payment request', formatAppSafeErrorMessage(err, 'Please try again.'));
     } finally {
       setSubmitting(false);
     }
@@ -214,7 +215,7 @@ export default function GeneralContractorPaymentsScreen() {
               .eq('status', 'pending');
 
             if (error) {
-              Alert.alert('Could not cancel request', error.message);
+              Alert.alert('Could not cancel request', formatAppSafeErrorMessage(error, 'Please try again.'));
             } else {
               await fetchData();
             }

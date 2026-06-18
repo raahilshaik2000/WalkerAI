@@ -13,7 +13,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { useFocusEffect, useNavigation } from '@react-navigation/native';
 import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
 import { supabase } from '@/lib/supabase/client';
-import { formatSupabaseFunctionError } from '@/lib/supabase/functions';
+import { formatAppSafeErrorMessage, formatSupabaseFunctionError } from '@/lib/supabase/functions';
 import { isStripePayoutLocallyReady } from '@/lib/payouts';
 import { useAuthStore } from '@/stores/auth.store';
 import type { GeneralContractor } from '@/types/database.types';
@@ -65,7 +65,7 @@ export default function GeneralContractorProfile() {
         setCompletedCount(0);
       }
     } catch (err) {
-      setErrorMessage(err instanceof Error ? err.message : 'Could not load GC profile.');
+      setErrorMessage(formatAppSafeErrorMessage(err, 'Could not load GC profile.'));
       setGc(null);
       setManagedCount(0);
       setCompletedCount(0);

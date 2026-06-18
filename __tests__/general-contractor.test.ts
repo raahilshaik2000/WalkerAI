@@ -60,6 +60,28 @@ describe('general contractor account type', () => {
     expect(directTargets.filter((route) => !registeredRoutes.has(route))).toEqual([]);
   });
 
+  it('formats displayed GC backend errors through app-safe copy helpers', () => {
+    const gcSourceDir = path.join(repoRoot, 'src/app/(general-contractor)');
+    const readGcSourceFiles = (dir: string): Array<{ filePath: string; source: string }> => fs.readdirSync(dir, { withFileTypes: true }).flatMap((entry: any) => {
+      const fullPath = path.join(dir, entry.name);
+      if (entry.isDirectory()) return readGcSourceFiles(fullPath);
+      return entry.name.endsWith('.tsx') ? [{ filePath: fullPath, source: fs.readFileSync(fullPath, 'utf8') }] : [];
+    });
+
+    const unsafePatterns = [
+      /err instanceof Error \? err\.message/g,
+      /setErrorMessage\(`[^`]*\$\{[^}]*\.error\.message\}/g,
+      /Alert\.alert\([^)]*error\.message/g,
+    ];
+    const violations = readGcSourceFiles(gcSourceDir).flatMap(({ filePath, source }) => (
+      unsafePatterns.flatMap((pattern) => (
+        Array.from(source.matchAll(pattern), (match) => `${path.relative(repoRoot, filePath)}: ${match[0]}`)
+      ))
+    ));
+
+    expect(violations).toEqual([]);
+  });
+
   it('keeps GC onboarding separate from company onboarding', () => {
     const businessOnboarding = fs.readFileSync(
       path.join(repoRoot, 'src/app/(general-contractor)/onboarding/business.tsx'),

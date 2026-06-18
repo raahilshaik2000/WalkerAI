@@ -12,6 +12,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { useFocusEffect, useNavigation, useRoute } from '@react-navigation/native';
 import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
 import { supabase } from '@/lib/supabase/client';
+import { formatAppSafeErrorMessage } from '@/lib/supabase/functions';
 import { formatCadCents, parsePositiveCadToCents, parseSignedCadToCents } from '@/lib/currency';
 import { formatStatusLabel } from '@/lib/formatters';
 import { GENERAL_CONTRACTOR_READINESS_SELECT, isGeneralContractorReadyForProjectControls } from '@/lib/general-contractor';
@@ -168,7 +169,7 @@ export default function GeneralContractorMaterialsScreen() {
       setOrders((ordersResult.data ?? []) as MaterialOrder[]);
       setCatalogSuggestions((catalogResult.data ?? []) as CatalogSuggestion[]);
     } catch (err) {
-      setErrorMessage(err instanceof Error ? err.message : 'Could not load materials.');
+      setErrorMessage(formatAppSafeErrorMessage(err, 'Could not load materials.'));
       setAssignment(null);
       setMaterials([]);
       setOrders([]);
@@ -280,7 +281,7 @@ export default function GeneralContractorMaterialsScreen() {
       setLeadTimeDays('');
       setQuoteNote('');
     } catch (err) {
-      Alert.alert('Could not send recommendation', err instanceof Error ? err.message : 'Please try again.');
+      Alert.alert('Could not send recommendation', formatAppSafeErrorMessage(err, 'Please try again.'));
     } finally {
       setSubmitting(false);
     }

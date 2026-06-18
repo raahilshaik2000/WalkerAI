@@ -15,6 +15,7 @@ import { useFocusEffect, useNavigation, useRoute } from '@react-navigation/nativ
 import { launchImageLibrary } from 'react-native-image-picker';
 import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
 import { supabase } from '@/lib/supabase/client';
+import { formatAppSafeErrorMessage } from '@/lib/supabase/functions';
 import { documentKindFromPath } from '@/lib/document-preview';
 import { GENERAL_CONTRACTOR_READINESS_SELECT, isGeneralContractorReadyForProjectControls } from '@/lib/general-contractor';
 import { getSignedUrl, getUploadMetadata, uploadFile } from '@/lib/supabase/storage';
@@ -134,7 +135,7 @@ export default function GeneralContractorPermitsScreen() {
       setPermits([]);
       setPreviewUrls({});
       setGcReady(false);
-      setErrorMessage(err instanceof Error ? err.message : 'Could not load permits.');
+      setErrorMessage(formatAppSafeErrorMessage(err, 'Could not load permits.'));
     } finally {
       setLoading(false);
       setRefreshing(false);
@@ -176,7 +177,7 @@ export default function GeneralContractorPermitsScreen() {
       setPermitType('');
       await fetchPermits();
     } catch (err) {
-      Alert.alert('Could not add permit', err instanceof Error ? err.message : 'Please try again.');
+      Alert.alert('Could not add permit', formatAppSafeErrorMessage(err, 'Please try again.'));
     } finally {
       setSaving(false);
     }
@@ -197,7 +198,7 @@ export default function GeneralContractorPermitsScreen() {
       .eq('id', permit.id)
       .eq('project_id', projectId);
     if (error) {
-      Alert.alert('Could not update status', error.message);
+      Alert.alert('Could not update status', formatAppSafeErrorMessage(error, 'Please try again.'));
       return;
     }
     await fetchPermits();
@@ -235,7 +236,7 @@ export default function GeneralContractorPermitsScreen() {
 
       await fetchPermits();
     } catch (err) {
-      Alert.alert('Upload failed', err instanceof Error ? err.message : 'Please try again.');
+      Alert.alert('Upload failed', formatAppSafeErrorMessage(err, 'Please try again.'));
     } finally {
       setUploadingId(null);
     }

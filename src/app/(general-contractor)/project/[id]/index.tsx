@@ -238,7 +238,7 @@ export default function GeneralContractorProjectDetail() {
       setProposedMarkupPct(assignmentRow?.markup_pct != null ? Number(assignmentRow.markup_pct).toFixed(0) : '');
       setProposedConciergeFeePct(assignmentRow?.concierge_fee_pct != null ? Number(assignmentRow.concierge_fee_pct).toFixed(0) : '');
     } catch (err) {
-      setErrorMessage(err instanceof Error ? err.message : 'Could not load managed project.');
+      setErrorMessage(formatAppSafeErrorMessage(err, 'Could not load managed project.'));
       setProject(null);
       setAssignment(null);
       setSlots([]);
@@ -304,7 +304,7 @@ export default function GeneralContractorProjectDetail() {
               p_assignment_id: assignment.id,
             });
             if (error) {
-              Alert.alert('Could not accept invite', error.message);
+              Alert.alert('Could not accept invite', formatAppSafeErrorMessage(error, 'Please try again.'));
             } else {
               await fetchData();
             }
@@ -395,7 +395,7 @@ export default function GeneralContractorProjectDetail() {
       setApprovalTimelineDelta('');
       await fetchData();
     } catch (err) {
-      Alert.alert('Could not submit approval request', err instanceof Error ? err.message : 'Please try again.');
+      Alert.alert('Could not submit approval request', formatAppSafeErrorMessage(err, 'Please try again.'));
     } finally {
       setSubmittingApproval(false);
     }
@@ -434,7 +434,7 @@ export default function GeneralContractorProjectDetail() {
               .eq('status', 'pending');
 
             if (error) {
-              Alert.alert('Could not cancel request', error.message);
+              Alert.alert('Could not cancel request', formatAppSafeErrorMessage(error, 'Please try again.'));
             } else {
               await fetchData();
             }
@@ -489,7 +489,7 @@ export default function GeneralContractorProjectDetail() {
       setExternalTradeNotes('');
       await fetchData();
     } catch (err) {
-      Alert.alert('Could not mark external trade', err instanceof Error ? err.message : 'Please try again.');
+      Alert.alert('Could not mark external trade', formatAppSafeErrorMessage(err, 'Please try again.'));
     } finally {
       setSavingExternalTrade(false);
     }
@@ -532,7 +532,7 @@ export default function GeneralContractorProjectDetail() {
       if (error) throw error;
       await fetchData();
     } catch (err) {
-      Alert.alert('Upload failed', err instanceof Error ? err.message : 'Please try again.');
+      Alert.alert('Upload failed', formatAppSafeErrorMessage(err, 'Please try again.'));
     } finally {
       setUploadingExternalDocSlotId(null);
     }

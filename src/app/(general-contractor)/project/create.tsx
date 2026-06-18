@@ -106,7 +106,7 @@ export default function GeneralContractorCreateProject() {
         setProfileReady(true);
       } catch (err) {
         if (!cancelled) {
-          Alert.alert('Could not load GC profile', err instanceof Error ? err.message : 'Please try again.', [
+          Alert.alert('Could not load GC profile', formatAppSafeErrorMessage(err, 'Please try again.'), [
             { text: 'OK', onPress: () => navigation.goBack() },
           ]);
         }

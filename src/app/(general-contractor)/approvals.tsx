@@ -12,6 +12,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { useFocusEffect, useNavigation } from '@react-navigation/native';
 import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
 import { supabase } from '@/lib/supabase/client';
+import { formatAppSafeErrorMessage } from '@/lib/supabase/functions';
 import { useAuthStore } from '@/stores/auth.store';
 import { formatStatusLabel } from '@/lib/formatters';
 import { formatCadCents, formatSignedCadCents } from '@/lib/currency';
@@ -216,7 +217,7 @@ export default function GeneralContractorApprovals() {
         project_type: projectTypeById.get(approval.project_id) ?? null,
       })));
     } catch (err) {
-      setErrorMessage(err instanceof Error ? err.message : 'Could not load approvals.');
+      setErrorMessage(formatAppSafeErrorMessage(err, 'Could not load approvals.'));
       setApprovals([]);
       setRecommendationRequests([]);
       setPaymentRequests([]);
@@ -263,7 +264,7 @@ export default function GeneralContractorApprovals() {
               p_response_note: null,
             });
             if (error) {
-              Alert.alert('Could not respond', error.message);
+              Alert.alert('Could not respond', formatAppSafeErrorMessage(error, 'Please try again.'));
             } else {
               await fetchData();
             }

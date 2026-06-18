@@ -14,6 +14,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { useNavigation, useRoute } from '@react-navigation/native';
 import Ionicons from 'react-native-vector-icons/Ionicons';
 import { supabase } from '@/lib/supabase/client';
+import { formatAppSafeErrorMessage } from '@/lib/supabase/functions';
 import { useAuthStore } from '@/stores/auth.store';
 import { Colors, Spacing, Typography } from '@/constants/theme';
 import { AddressAutocomplete, type AddressResult } from '@/components/ui/AddressAutocomplete';
@@ -171,7 +172,7 @@ export default function GeneralContractorBusinessOnboarding() {
         navigation.navigate('GeneralContractorLicenseOnboarding');
       }
     } catch (err) {
-      Alert.alert('Error', err instanceof Error ? err.message : 'Failed to save. Please try again.');
+      Alert.alert('Error', formatAppSafeErrorMessage(err, 'Failed to save. Please try again.'));
     } finally {
       setLoading(false);
     }

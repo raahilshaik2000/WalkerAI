@@ -11,6 +11,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { useFocusEffect, useNavigation } from '@react-navigation/native';
 import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
 import { supabase } from '@/lib/supabase/client';
+import { formatAppSafeErrorMessage } from '@/lib/supabase/functions';
 import { useAuthStore } from '@/stores/auth.store';
 import type { GeneralContractor } from '@/types/database.types';
 import { formatCad, formatStatusLabel } from '@/lib/formatters';
@@ -193,7 +194,7 @@ export default function GeneralContractorDashboard() {
         + conciergeActionCount,
       );
     } catch (err) {
-      setErrorMessage(err instanceof Error ? err.message : 'Could not load GC dashboard.');
+      setErrorMessage(formatAppSafeErrorMessage(err, 'Could not load GC dashboard.'));
       setAssignments([]);
       setPendingApprovals(0);
     } finally {

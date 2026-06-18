@@ -15,6 +15,7 @@ import { useNavigation } from '@react-navigation/native';
 import { launchImageLibrary } from 'react-native-image-picker';
 import Ionicons from 'react-native-vector-icons/Ionicons';
 import { supabase } from '@/lib/supabase/client';
+import { formatAppSafeErrorMessage } from '@/lib/supabase/functions';
 import { getUploadMetadata, uploadFile, type StorageUploadAsset } from '@/lib/supabase/storage';
 import { isValidGeneralContractorDocumentReference } from '@/lib/general-contractor';
 import { useAuthStore } from '@/stores/auth.store';
@@ -107,7 +108,7 @@ export default function GeneralContractorInsuranceOnboarding() {
       if (error) throw error;
       navigation.navigate('GeneralContractorTabs', { screen: 'GeneralContractorProfile' });
     } catch (err) {
-      Alert.alert('Error', err instanceof Error ? err.message : 'Could not save insurance details.');
+      Alert.alert('Error', formatAppSafeErrorMessage(err, 'Could not save insurance details.'));
     } finally {
       setLoading(false);
     }

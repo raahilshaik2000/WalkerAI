@@ -14,7 +14,7 @@ import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
 import { supabase } from '@/lib/supabase/client';
 import { formatCadCents, parseNonNegativeCadToCents, parseSignedCadToCents } from '@/lib/currency';
 import { formatStatusLabel } from '@/lib/formatters';
-import { formatSupabaseFunctionError } from '@/lib/supabase/functions';
+import { formatAppSafeErrorMessage, formatSupabaseFunctionError } from '@/lib/supabase/functions';
 import { GENERAL_CONTRACTOR_READINESS_SELECT, isGeneralContractorReadyForProjectControls } from '@/lib/general-contractor';
 import { getRequiredStringParam } from '@/lib/navigation-params';
 import { formatTradeLabel } from '@/lib/trade-labels';
@@ -228,7 +228,7 @@ export default function GeneralContractorTradesScreen() {
       setQuotes((quoteResult.data ?? []) as Quote[]);
       setNegotiations((negotiationResult.data ?? []) as GcTradeQuoteNegotiation[]);
     } catch (err) {
-      setErrorMessage(err instanceof Error ? err.message : 'Could not load trade management.');
+      setErrorMessage(formatAppSafeErrorMessage(err, 'Could not load trade management.'));
       setAssignment(null);
       setProjectBudget(null);
       setSlots([]);
@@ -415,7 +415,7 @@ export default function GeneralContractorTradesScreen() {
       setCostDelta('');
       setRecommendationNote('');
     } catch (err) {
-      Alert.alert('Could not send recommendation', err instanceof Error ? err.message : 'Please try again.');
+      Alert.alert('Could not send recommendation', formatAppSafeErrorMessage(err, 'Please try again.'));
     } finally {
       setSubmitting(false);
     }
@@ -478,7 +478,7 @@ export default function GeneralContractorTradesScreen() {
       setCounterNote('');
       await fetchData();
     } catch (err) {
-      Alert.alert('Could not send negotiation', err instanceof Error ? err.message : 'Please try again.');
+      Alert.alert('Could not send negotiation', formatAppSafeErrorMessage(err, 'Please try again.'));
     } finally {
       setSubmitting(false);
     }
@@ -520,7 +520,7 @@ export default function GeneralContractorTradesScreen() {
               .eq('status', 'pending');
 
             if (error) {
-              Alert.alert('Could not cancel negotiation', error.message);
+              Alert.alert('Could not cancel negotiation', formatAppSafeErrorMessage(error, 'Please try again.'));
             } else {
               await fetchData();
             }

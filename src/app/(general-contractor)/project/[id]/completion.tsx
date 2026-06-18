@@ -13,6 +13,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { useFocusEffect, useNavigation, useRoute } from '@react-navigation/native';
 import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
 import { supabase } from '@/lib/supabase/client';
+import { formatAppSafeErrorMessage } from '@/lib/supabase/functions';
 import { formatCadCents, formatSignedCadCents } from '@/lib/currency';
 import { formatStatusLabel } from '@/lib/formatters';
 import { formatGcProjectType } from '@/lib/gc-project-type';
@@ -243,7 +244,7 @@ export default function GeneralContractorCompletionScreen() {
       setPaymentRequests((paymentResult.data ?? []) as PaymentRequestRecord[]);
       setChangeOrders((changeOrderResult.data ?? []) as ChangeOrder[]);
     } catch (err) {
-      setErrorMessage(err instanceof Error ? err.message : 'Could not load completion binder.');
+      setErrorMessage(formatAppSafeErrorMessage(err, 'Could not load completion binder.'));
       setProject(null);
       setAssignment(null);
       setPermits([]);
@@ -358,7 +359,7 @@ export default function GeneralContractorCompletionScreen() {
               metadata: { action: 'complete_project' },
             });
             if (error) {
-              Alert.alert('Could not request completion', error.message);
+              Alert.alert('Could not request completion', formatAppSafeErrorMessage(error, 'Please try again.'));
             } else {
               await fetchData();
             }

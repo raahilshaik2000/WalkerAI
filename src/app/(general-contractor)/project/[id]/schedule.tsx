@@ -12,6 +12,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { useFocusEffect, useNavigation, useRoute } from '@react-navigation/native';
 import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
 import { supabase } from '@/lib/supabase/client';
+import { formatAppSafeErrorMessage } from '@/lib/supabase/functions';
 import { isValidIsoDate } from '@/lib/dates';
 import { GENERAL_CONTRACTOR_READINESS_SELECT, isGeneralContractorReadyForProjectControls } from '@/lib/general-contractor';
 import { getRequiredStringParam } from '@/lib/navigation-params';
@@ -114,7 +115,7 @@ export default function GeneralContractorScheduleScreen() {
       setAssignment(assignmentResult.data as Assignment | null);
       setSlots((slotResult.data ?? []) as Slot[]);
     } catch (err) {
-      setErrorMessage(err instanceof Error ? err.message : 'Could not load schedule.');
+      setErrorMessage(formatAppSafeErrorMessage(err, 'Could not load schedule.'));
       setAssignment(null);
       setSlots([]);
       setGcReady(false);
@@ -206,7 +207,7 @@ export default function GeneralContractorScheduleScreen() {
       setEndDate('');
       setNote('');
     } catch (err) {
-      Alert.alert('Could not send recommendation', err instanceof Error ? err.message : 'Please try again.');
+      Alert.alert('Could not send recommendation', formatAppSafeErrorMessage(err, 'Please try again.'));
     } finally {
       setSubmitting(false);
     }

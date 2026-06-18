@@ -11,6 +11,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { useFocusEffect, useNavigation, useRoute } from '@react-navigation/native';
 import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
 import { supabase } from '@/lib/supabase/client';
+import { formatAppSafeErrorMessage } from '@/lib/supabase/functions';
 import { formatCadCents, formatSignedCadCents } from '@/lib/currency';
 import { formatStatusLabel } from '@/lib/formatters';
 import { formatGcProjectType } from '@/lib/gc-project-type';
@@ -192,7 +193,7 @@ export default function GeneralContractorAssistantScreen() {
       setMaterialOrders((materialResult.data ?? []) as MaterialOrderRow[]);
       setMessages((messageResult.data ?? []) as MessageRow[]);
     } catch (err) {
-      setErrorMessage(err instanceof Error ? err.message : 'Could not generate project assistant summary.');
+      setErrorMessage(formatAppSafeErrorMessage(err, 'Could not generate project assistant summary.'));
       setProject(null);
       setAssignment(null);
       setSlots([]);

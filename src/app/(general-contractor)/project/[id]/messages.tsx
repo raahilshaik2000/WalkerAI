@@ -17,6 +17,7 @@ import { useNavigation, useRoute } from '@react-navigation/native';
 import ReactNativeHapticFeedback from 'react-native-haptic-feedback';
 import Ionicons from 'react-native-vector-icons/Ionicons';
 import { supabase } from '@/lib/supabase/client';
+import { formatAppSafeErrorMessage } from '@/lib/supabase/functions';
 import { GENERAL_CONTRACTOR_READINESS_SELECT, isGeneralContractorReadyForProjectControls } from '@/lib/general-contractor';
 import { getRequiredStringParam } from '@/lib/navigation-params';
 import { useAuthStore } from '@/stores/auth.store';
@@ -84,7 +85,7 @@ export default function GeneralContractorMessagesScreen() {
       if (cancelled) return;
 
       if (messageResult.error) {
-        setErrorMessage(`Could not load messages: ${messageResult.error.message}`);
+        setErrorMessage(`Could not load messages: ${formatAppSafeErrorMessage(messageResult.error, 'Please try again.')}`);
       } else {
         setErrorMessage(null);
         setMessages((messageResult.data ?? []) as Message[]);
@@ -173,7 +174,7 @@ export default function GeneralContractorMessagesScreen() {
 
     if (error) {
       setBody(trimmed);
-      Alert.alert('Message not sent', error.message);
+      Alert.alert('Message not sent', formatAppSafeErrorMessage(error, 'Please try again.'));
     } else {
       ReactNativeHapticFeedback.trigger('impactLight');
     }

@@ -12,6 +12,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { useFocusEffect, useNavigation, useRoute } from '@react-navigation/native';
 import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
 import { supabase } from '@/lib/supabase/client';
+import { formatAppSafeErrorMessage } from '@/lib/supabase/functions';
 import { formatSignedCadCents, parseSignedCadToCents } from '@/lib/currency';
 import { formatStatusLabel } from '@/lib/formatters';
 import { GENERAL_CONTRACTOR_READINESS_SELECT, isGeneralContractorReadyForProjectControls } from '@/lib/general-contractor';
@@ -124,7 +125,7 @@ export default function GeneralContractorDiscoveryScreen() {
       setAssignment(assignmentResult.data as Assignment | null);
       setRequests((requestResult.data ?? []) as DiscoveryRequest[]);
     } catch (err) {
-      setErrorMessage(err instanceof Error ? err.message : 'Could not load discoveries.');
+      setErrorMessage(formatAppSafeErrorMessage(err, 'Could not load discoveries.'));
       setAssignment(null);
       setRequests([]);
       setGcReady(false);
@@ -193,7 +194,7 @@ export default function GeneralContractorDiscoveryScreen() {
       setTimelineDelta('');
       await fetchData();
     } catch (err) {
-      Alert.alert('Could not submit discovery', err instanceof Error ? err.message : 'Please try again.');
+      Alert.alert('Could not submit discovery', formatAppSafeErrorMessage(err, 'Please try again.'));
     } finally {
       setSubmitting(false);
     }
