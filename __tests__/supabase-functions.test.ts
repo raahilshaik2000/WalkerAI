@@ -28,6 +28,17 @@ describe('Supabase function error formatting', () => {
   it('falls back to SDK error messages', async () => {
     await expect(formatSupabaseFunctionError(new Error('Network request failed'))).resolves.toBe('Network request failed');
   });
+
+  it('normalizes legacy GC financial term errors before app display', async () => {
+    await expect(formatSupabaseFunctionError({
+      message: 'Edge Function returned a non-2xx status code',
+      context: new Response(JSON.stringify({ error: 'Markup must be between 0 and 50 percent' })),
+    })).resolves.toBe('Management allowance must be between 0% and 50%.');
+
+    await expect(formatSupabaseFunctionError(new Error('Concierge fee must be between 0 and 25 percent'))).resolves.toBe(
+      'Concierge allowance must be between 0% and 25%.',
+    );
+  });
 });
 
 describe('generate-material-orders source guards', () => {
