@@ -270,8 +270,9 @@ describe('company quote copy', () => {
     expect(jobDetail).toContain('quotes(status, stripe_payment_intent_id, total_amount)');
     expect(jobDetail).toContain('function canAcceptNegotiationCounteroffer');
     expect(jobDetail).toContain("quote?.status === 'pending' && !quote.stripe_payment_intent_id");
+    expect(jobDetail).toContain('isGeneralContractorReadyForProjectControls(getNegotiationGcProfile(negotiation))');
     expect(jobDetail).toContain('This quote is already approved or payment has started. Use change orders for pricing changes after funding begins.');
-    expect(jobDetail).toContain('disabled={!gcVerified || !quoteEditable || !!respondingNegotiationId}');
+    expect(jobDetail).toContain('disabled={!gcReady || !quoteEditable || !!respondingNegotiationId}');
     expect(migration).toContain("NEW.status = 'accepted'");
     expect(migration).toContain("q.status = 'pending'");
     expect(migration).toContain('q.stripe_payment_intent_id IS NULL');

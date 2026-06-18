@@ -24,6 +24,7 @@ import { formatStatusLabel, formatCad } from '@/lib/formatters';
 import { formatGcProjectType, gcProjectTypeIcon } from '@/lib/gc-project-type';
 import { formatTradeLabel } from '@/lib/trade-labels';
 import { readPersistedSurfaceSelections, surfaceSelectionSourceLabel } from '@/lib/room-customizer';
+import { isGeneralContractorReadyForProjectControls } from '@/lib/general-contractor';
 import { isMissingSupabaseSchemaObjectError } from '@/lib/supabase/errors';
 import {
   TradeActionTile,
@@ -122,8 +123,20 @@ interface CompanyPayoutProfile {
   stripe_transfers_active?: boolean | null;
 }
 
+type NegotiationGeneralContractor = {
+  business_name: string | null;
+  city: string | null;
+  province: string | null;
+  lat: number | null;
+  lng: number | null;
+  license_number: string | null;
+  license_doc_url: string | null;
+  insurance_doc_url: string | null;
+  verified: boolean | null;
+};
+
 interface TradeNegotiation extends GcTradeQuoteNegotiation {
-  general_contractors?: { business_name: string | null; verified: boolean | null } | Array<{ business_name: string | null; verified: boolean | null }> | null;
+  general_contractors?: NegotiationGeneralContractor | NegotiationGeneralContractor[] | null;
   quotes?: { status: string | null; stripe_payment_intent_id: string | null; total_amount: number | null } | Array<{ status: string | null; stripe_payment_intent_id: string | null; total_amount: number | null }> | null;
 }
 
@@ -298,7 +311,7 @@ export default function JobBriefScreen() {
 
       const negotiationQuery = supabase
         .from('gc_trade_quote_negotiations')
-        .select('id, project_id, slot_id, quote_id, general_contractor_id, company_id, homeowner_id, offer_amount_cents, scope_note, status, company_response_note, created_at, responded_at, cancelled_at, general_contractors(business_name, verified), quotes(status, stripe_payment_intent_id, total_amount)')
+        .select('id, project_id, slot_id, quote_id, general_contractor_id, company_id, homeowner_id, offer_amount_cents, scope_note, status, company_response_note, created_at, responded_at, cancelled_at, general_contractors(business_name, city, province, lat, lng, license_number, license_doc_url, insurance_doc_url, verified), quotes(status, stripe_payment_intent_id, total_amount)')
         .eq('project_id', projectId)
         .eq('company_id', companyId)
         .in('status', ['pending', 'accepted'])
@@ -401,9 +414,9 @@ export default function JobBriefScreen() {
     negotiation: TradeNegotiation,
     status: 'accepted' | 'rejected' | 'revision_requested',
   ) => {
-    const gcVerified = getNegotiationGcProfile(negotiation)?.verified === true;
-    if (status === 'accepted' && !gcVerified) {
-      Alert.alert('Negotiation locked', 'Active verified GC management is required before a counteroffer can be accepted.');
+    const gcReady = isGeneralContractorReadyForProjectControls(getNegotiationGcProfile(negotiation));
+    if (status === 'accepted' && !gcReady) {
+      Alert.alert('Negotiation locked', 'Active complete verified GC management is required before a counteroffer can be accepted.');
       return;
     }
     if (status === 'accepted' && !canAcceptNegotiationCounteroffer(negotiation)) {
@@ -646,7 +659,7 @@ export default function JobBriefScreen() {
                 <TradeSection title="GC quote negotiation">
                   <TradePanel style={styles.card}>
                     {tradeNegotiations.map((negotiation, index) => {
-                      const gcVerified = getNegotiationGcProfile(negotiation)?.verified === true;
+                      const gcReady = isGeneralContractorReadyForProjectControls(getNegotiationGcProfile(negotiation));
                       const quoteEditable = canAcceptNegotiationCounteroffer(negotiation);
                       const needsAcceptedQuoteUpdate = acceptedCounterofferNeedsQuoteUpdate(negotiation);
                       return (
@@ -674,12 +687,12 @@ export default function JobBriefScreen() {
                               Submit an updated quote package so the homeowner sees the accepted GC pricing and milestones.
                             </Text>
                           ) : null}
-                          {!gcVerified ? (
+                          {!gcReady ? (
                             <Text style={styles.negotiationLockedText}>
-                              Active verified GC management is required before this counteroffer can be accepted.
+                              Active complete verified GC management is required before this counteroffer can be accepted.
                             </Text>
                           ) : null}
-                          {gcVerified && !quoteEditable ? (
+                          {gcReady && !quoteEditable ? (
                             <Text style={styles.negotiationLockedText}>
                               This quote is already approved or payment has started. Use change orders for pricing changes after funding begins.
                             </Text>
@@ -702,7 +715,7 @@ export default function JobBriefScreen() {
                                   label="Accept"
                                   onPress={() => handleNegotiationResponse(negotiation, 'accepted')}
                                   loading={respondingNegotiationId === negotiation.id}
-                                  disabled={!gcVerified || !quoteEditable || !!respondingNegotiationId}
+                                  disabled={!gcReady || !quoteEditable || !!respondingNegotiationId}
                                   size="sm"
                                   style={styles.negotiationAction}
                                 />
