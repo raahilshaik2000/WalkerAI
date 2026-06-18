@@ -14,19 +14,21 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useNavigation, useRoute } from '@react-navigation/native';
+import { launchImageLibrary } from 'react-native-image-picker';
 import ReactNativeHapticFeedback from 'react-native-haptic-feedback';
 import Ionicons from 'react-native-vector-icons/Ionicons';
 import { supabase } from '@/lib/supabase/client';
 import { formatAppSafeErrorMessage } from '@/lib/supabase/functions';
 import { GENERAL_CONTRACTOR_READINESS_SELECT, isGeneralContractorReadyForProjectControls } from '@/lib/general-contractor';
 import { getRequiredStringParam } from '@/lib/navigation-params';
+import { getUploadMetadata, uploadFile } from '@/lib/supabase/storage';
 import { useAuthStore } from '@/stores/auth.store';
 import { Colors, Spacing, Typography } from '@/constants/theme';
 import { GradientBackground } from '@/components/ui';
 
 interface Message {
   id: string;
-  body: string;
+  body: string | null;
   sender_id: string;
   sent_at: string;
   attachment_url: string | null;
@@ -40,6 +42,7 @@ export default function GeneralContractorMessagesScreen() {
   const [messages, setMessages] = useState<Message[]>([]);
   const [body, setBody] = useState('');
   const [sending, setSending] = useState(false);
+  const [uploadingAttachment, setUploadingAttachment] = useState(false);
   const [currentUserId, setCurrentUserId] = useState<string | null>(user?.id ?? null);
   const [canSendMessages, setCanSendMessages] = useState(false);
   const [composeLockMessage, setComposeLockMessage] = useState('Checking message access...');
@@ -181,6 +184,50 @@ export default function GeneralContractorMessagesScreen() {
     setSending(false);
   };
 
+  const sendPhotoAttachment = async () => {
+    if (sending || uploadingAttachment) return;
+    if (!canSendMessages) {
+      Alert.alert('Messages locked', composeLockMessage || 'Project messages are currently read-only.');
+      return;
+    }
+    const currentUser = user ?? (await supabase.auth.getUser()).data.user;
+    if (!projectId || !currentUser?.id) {
+      Alert.alert('Unable to attach photo', 'Please reopen this project and try again.');
+      return;
+    }
+
+    const result = await launchImageLibrary({
+      mediaType: 'photo',
+      quality: 0.8,
+      selectionLimit: 1,
+      assetRepresentationMode: 'compatible',
+    });
+    if (result.didCancel || !result.assets?.[0]) return;
+
+    const caption = body.trim();
+    setUploadingAttachment(true);
+    try {
+      const upload = getUploadMetadata(result.assets[0]);
+      const path = `${projectId}/messages/${currentUser.id}-${Date.now()}.${upload.extension}`;
+      const { publicUrl } = await uploadFile('project-photos', path, upload.uri, upload.contentType);
+
+      const { error } = await supabase.from('messages').insert({
+        project_id: projectId,
+        sender_id: currentUser.id,
+        body: caption || null,
+        attachment_url: publicUrl,
+      });
+      if (error) throw error;
+
+      if (caption) setBody('');
+      ReactNativeHapticFeedback.trigger('impactLight');
+    } catch (err) {
+      Alert.alert('Attachment not sent', formatAppSafeErrorMessage(err, 'Please try again.'));
+    } finally {
+      setUploadingAttachment(false);
+    }
+  };
+
   const openAttachment = async (url: string) => {
     try {
       await Linking.openURL(url);
@@ -264,14 +311,22 @@ export default function GeneralContractorMessagesScreen() {
               onChangeText={setBody}
               placeholder={canSendMessages ? 'Type a message...' : 'Messages locked'}
               placeholderTextColor={Colors.text.tertiary}
-              editable={canSendMessages && !sending}
+              editable={canSendMessages && !sending && !uploadingAttachment}
               multiline
               maxLength={2000}
             />
             <TouchableOpacity
-              style={[styles.sendBtn, (!canSendMessages || !body.trim() || sending) && styles.sendBtnDisabled]}
+              style={[styles.attachBtn, (!canSendMessages || sending || uploadingAttachment) && styles.sendBtnDisabled]}
+              onPress={sendPhotoAttachment}
+              disabled={!canSendMessages || sending || uploadingAttachment}
+              activeOpacity={0.85}
+            >
+              <Ionicons name={uploadingAttachment ? 'cloud-upload-outline' : 'image-outline'} size={20} color={Colors.text.secondary} />
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={[styles.sendBtn, (!canSendMessages || !body.trim() || sending || uploadingAttachment) && styles.sendBtnDisabled]}
               onPress={sendMessage}
-              disabled={!canSendMessages || !body.trim() || sending}
+              disabled={!canSendMessages || !body.trim() || sending || uploadingAttachment}
               activeOpacity={0.85}
             >
               <Ionicons name="arrow-up" size={20} color={Colors.accentFg} />
@@ -351,11 +406,21 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: Colors.glass.border,
     borderRadius: 22,
-    paddingHorizontal: 16,
+    paddingLeft: 52,
     paddingRight: 58,
     paddingVertical: 11,
     fontSize: 15,
     maxHeight: 120,
+  },
+  attachBtn: {
+    position: 'absolute',
+    left: Spacing.sm,
+    bottom: Spacing.sm,
+    width: 42,
+    height: 42,
+    borderRadius: 21,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   sendBtn: {
     position: 'absolute',

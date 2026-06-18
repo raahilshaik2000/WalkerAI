@@ -1950,6 +1950,13 @@ describe('general contractor account type', () => {
     expect(gcProjectDetail).toContain("navigation.navigate('GeneralContractorMessages'");
     expect(gcMessages).toContain("from('messages').insert");
     expect(gcMessages).toContain("channel(`gc-messages:${projectId}`)");
+    expect(gcMessages).toContain("import { launchImageLibrary } from 'react-native-image-picker'");
+    expect(gcMessages).toContain("const [uploadingAttachment, setUploadingAttachment] = useState(false)");
+    expect(gcMessages).toContain('const sendPhotoAttachment = async () =>');
+    expect(gcMessages).toContain("const path = `${projectId}/messages/${currentUser.id}-${Date.now()}.${upload.extension}`");
+    expect(gcMessages).toContain("await uploadFile('project-photos', path, upload.uri, upload.contentType)");
+    expect(gcMessages).toContain('attachment_url: publicUrl');
+    expect(gcMessages).toContain('body: caption || null');
     expect(gcMessages).toContain('const [currentUserId, setCurrentUserId] = useState<string | null>(user?.id ?? null)');
     expect(gcMessages).toContain('setCurrentUserId(currentUser.id)');
     expect(gcMessages).toContain('const isMe = item.sender_id === currentUserId');
