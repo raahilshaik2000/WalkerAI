@@ -60,6 +60,40 @@ async function invokeSeedQa({ supabaseUrl, anonKey, credentials }) {
   return { ok: response.ok, status: response.status, body };
 }
 
+async function invokeCreateTestUser({ supabaseUrl, anonKey, account }) {
+  const response = await fetch(`${supabaseUrl}/functions/v1/create-test-user`, {
+    method: 'POST',
+    headers: {
+      apikey: anonKey,
+      authorization: `Bearer ${anonKey}`,
+      'content-type': 'application/json',
+    },
+    body: JSON.stringify({
+      email: account.email,
+      password: account.password,
+      role: account.role,
+      business_name: account.business_name,
+      full_name: account.full_name,
+    }),
+  });
+  const body = await response.text();
+  return { ok: response.ok, status: response.status, body };
+}
+
+function helperMissing(result) {
+  return result.status === 404 || /function.*not found|requested function was not found/i.test(result.body);
+}
+
+async function invokeCreateTestUserForAll({ supabaseUrl, anonKey, credentials }) {
+  const results = [];
+  for (const [role, account] of Object.entries(credentials)) {
+    const result = await invokeCreateTestUser({ supabaseUrl, anonKey, account });
+    results.push({ role, ...result });
+    if (!result.ok) return { ok: false, results };
+  }
+  return { ok: true, results };
+}
+
 function writeCredentials(credentials) {
   const lines = Object.entries(credentials).map(([role, account]) => (
     `${role}\t${account.email}\t${account.password}\n`
@@ -81,17 +115,36 @@ async function main() {
     ]),
   );
 
-  const result = await invokeSeedQa({ supabaseUrl, anonKey, credentials });
-  if (!result.ok) {
-    const helperMissing = result.status === 404 || /function.*not found|requested function was not found/i.test(result.body);
-    const hint = helperMissing
-      ? 'Deploy supabase/functions/seed-qa first, then rerun npm run qa:reset.'
-      : 'Check the seed-qa function logs and Supabase auth permissions.';
+  const seedResult = await invokeSeedQa({ supabaseUrl, anonKey, credentials });
+  let mode = 'seed-qa';
+
+  if (!seedResult.ok && helperMissing(seedResult)) {
+    mode = 'create-test-user';
+    const createResults = await invokeCreateTestUserForAll({ supabaseUrl, anonKey, credentials });
+    if (!createResults.ok) {
+      const firstFailure = createResults.results.find((result) => !result.ok);
+      const createHelperMissing = firstFailure ? helperMissing(firstFailure) : false;
+      console.error(JSON.stringify({
+        ok: false,
+        mode,
+        status: firstFailure?.status ?? null,
+        failed_role: firstFailure?.role ?? null,
+        error: createHelperMissing
+          ? 'Neither seed-qa nor create-test-user is deployed'
+          : 'create-test-user invocation failed',
+        hint: createHelperMissing
+          ? 'Deploy supabase/functions/seed-qa or supabase/functions/create-test-user, then rerun npm run qa:reset.'
+          : 'Check the create-test-user function logs and Supabase auth permissions.',
+      }, null, 2));
+      process.exit(1);
+    }
+  } else if (!seedResult.ok) {
     console.error(JSON.stringify({
       ok: false,
-      status: result.status,
-      error: helperMissing ? 'seed-qa function is not deployed' : 'seed-qa invocation failed',
-      hint,
+      mode,
+      status: seedResult.status,
+      error: 'seed-qa invocation failed',
+      hint: 'Check the seed-qa function logs and Supabase auth permissions.',
     }, null, 2));
     process.exit(1);
   }
@@ -99,6 +152,7 @@ async function main() {
   writeCredentials(credentials);
   console.log(JSON.stringify({
     ok: true,
+    mode,
     credentials_path: credentialsPath,
     accounts: Object.fromEntries(
       Object.entries(credentials).map(([role, account]) => [role, { email: account.email }]),
