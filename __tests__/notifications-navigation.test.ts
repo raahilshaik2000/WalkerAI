@@ -4,6 +4,16 @@ const fs = require('fs');
 const path = require('path');
 
 describe('notification navigation', () => {
+  it('keeps shared notification load and read failures app-safe', () => {
+    const source = fs.readFileSync(path.join(__dirname, '../src/app/notifications.tsx'), 'utf8');
+
+    expect(source).toContain("import { formatAppSafeErrorMessage } from '@/lib/supabase/functions';");
+    expect(source).toContain("setErrorMessage(formatAppSafeErrorMessage(error, 'Could not load notifications.'))");
+    expect(source).toContain("setErrorMessage(formatAppSafeErrorMessage(error, 'Could not mark notification as read.'))");
+    expect(source).toContain("setErrorMessage(formatAppSafeErrorMessage(error, 'Could not mark notifications as read.'))");
+    expect(source).not.toContain('setErrorMessage(error.message)');
+  });
+
   it('routes homeowner quote notifications to the quote screen', () => {
     expect(resolveNotificationRoute('quote_submitted', { project_id: 'project-1' }, 'homeowner')).toEqual({
       name: 'ProjectDetail',

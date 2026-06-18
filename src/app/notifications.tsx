@@ -10,6 +10,7 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useNavigation } from '@react-navigation/native';
 import { supabase } from '@/lib/supabase/client';
+import { formatAppSafeErrorMessage } from '@/lib/supabase/functions';
 import { notificationDisplayMeta } from '@/lib/notifications/meta';
 import { navigateToNotification } from '@/lib/notifications/navigation';
 import { useAuthStore } from '@/stores/auth.store';
@@ -64,7 +65,7 @@ export default function NotificationsScreen() {
 
     if (error) {
       setNotifications([]);
-      setErrorMessage(error.message);
+      setErrorMessage(formatAppSafeErrorMessage(error, 'Could not load notifications.'));
       setLoading(false);
       setRefreshing(false);
       return;
@@ -99,7 +100,7 @@ export default function NotificationsScreen() {
     if (!notification.read) {
       const { error } = await supabase.from('notifications').update({ read: true }).eq('id', notification.id);
       if (error) {
-        setErrorMessage(error.message);
+        setErrorMessage(formatAppSafeErrorMessage(error, 'Could not mark notification as read.'));
       } else {
         setNotifications((prev) => prev.map((n) => n.id === notification.id ? { ...n, read: true } : n));
       }
@@ -116,7 +117,7 @@ export default function NotificationsScreen() {
 
     const { error } = await supabase.from('notifications').update({ read: true }).eq('user_id', user.id).eq('read', false);
     if (error) {
-      setErrorMessage(error.message);
+      setErrorMessage(formatAppSafeErrorMessage(error, 'Could not mark notifications as read.'));
       return;
     }
 
