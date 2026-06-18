@@ -145,11 +145,11 @@ export default function SupplierEarnings() {
           {/* Summary cards */}
           {supplier && <View style={styles.statsRow}>
             <GlassCard style={[styles.statCard, { borderColor: 'rgba(52,211,153,0.3)' }]}>
-              <Text style={styles.statLabel}>Net Earned</Text>
+              <Text style={styles.statLabel}>Paid to Date</Text>
               <Text style={[styles.statValue, { color: '#34D399' }]}>{fmt(netPaid)}</Text>
             </GlassCard>
             <GlassCard style={[styles.statCard, { borderColor: 'rgba(255,107,0,0.3)' }]}>
-              <Text style={styles.statLabel}>Pending Net</Text>
+              <Text style={styles.statLabel}>Processing</Text>
               <Text style={[styles.statValue, { color: Colors.accent }]}>{fmt(pendingNet)}</Text>
             </GlassCard>
           </View>}

@@ -32,7 +32,11 @@ describe('company payout math', () => {
     expect(source).toContain("import { companyEstimatedNetPayoutCents } from '@/lib/company-payouts'");
     expect(source).toContain('commission_rate');
     expect(source).toContain('const netPayout = (milestone: Milestone) => companyEstimatedNetPayoutCents');
-    expect(source).toContain("label: 'Net paid'");
+    expect(source).toContain("label: 'Released'");
+    expect(source).toContain('Payments Received');
+    expect(source).not.toContain("label: 'Net paid'");
+    expect(source).not.toContain("label: 'Net total'");
+    expect(source).not.toContain('Net Payments Received');
     expect(source).not.toContain('Gross milestone total');
     expect(source).not.toContain(' gross');
   });
@@ -46,5 +50,6 @@ describe('company payout math', () => {
     expect(source).toContain('companyEstimatedNetPayoutCents');
     expect(source).not.toContain('Commission');
     expect(source).not.toContain('Gross billed');
+    expect(source).not.toContain('Net earned');
   });
 });

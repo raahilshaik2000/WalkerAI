@@ -77,6 +77,8 @@ describe('supplier material order payout math', () => {
       expect(source).not.toContain('Platform fees deducted');
       expect(source).not.toContain(' gross');
       expect(source).not.toContain('net payout');
+      expect(source).not.toContain('Net Earned');
+      expect(source).not.toContain('Pending Net');
     });
   });
 

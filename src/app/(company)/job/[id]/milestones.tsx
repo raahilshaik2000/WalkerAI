@@ -375,15 +375,15 @@ export default function CompanyMilestonesScreen() {
           <TradeMetricStrip
             items={[
               { label: 'Milestones', value: milestones.length, tone: 'muted' },
-              { label: 'Net total', value: netTotal ? formatCad(netTotal) : '$0.00', tone: netTotal ? 'success' : 'muted' },
-              { label: 'Net paid', value: formatCad(netPaid), tone: netPaid ? 'success' : 'muted' },
+              { label: 'Payment total', value: netTotal ? formatCad(netTotal) : '$0.00', tone: netTotal ? 'success' : 'muted' },
+              { label: 'Released', value: formatCad(netPaid), tone: netPaid ? 'success' : 'muted' },
             ]}
           />
 
           {/* Escrow progress */}
           {netTotal > 0 && (
             <TradePanel style={styles.card}>
-              <Text style={styles.sectionLabel}>Net Payments Received</Text>
+              <Text style={styles.sectionLabel}>Payments Received</Text>
               <Text style={styles.escrowAmount}>
                 {formatCad(netPaid)} <Text style={styles.escrowTotal}>of {formatCad(netTotal)}</Text>
               </Text>

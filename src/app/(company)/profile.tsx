@@ -368,7 +368,7 @@ export default function CompanyProfileScreen() {
             items={[
               { label: 'Active', value: earnings.active_count, tone: earnings.active_count ? 'success' : 'muted' },
               { label: 'Completed', value: earnings.completed_count, tone: earnings.completed_count ? 'success' : 'muted' },
-              { label: 'Net earned', value: formatCad(earnings.total_paid), tone: earnings.total_paid ? 'success' : 'muted' },
+              { label: 'Received', value: formatCad(earnings.total_paid), tone: earnings.total_paid ? 'success' : 'muted' },
             ]}
           />
 
