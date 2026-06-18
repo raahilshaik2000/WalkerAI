@@ -417,7 +417,7 @@ Deno.serve(async (req) => {
     if (project?.ai_cost_min && project?.ai_cost_max) {
       const avgCost = Math.round((project.ai_cost_min + project.ai_cost_max) / 2);
       const deposit    = Math.round(avgCost * 0.30);
-      const midpoint   = Math.round(avgCost * 0.30);
+      const midpoint   = Math.round(avgCost * 0.40);
       const completion = avgCost - deposit - midpoint;
 
       const { data: quote, error: quoteError } = await adminClient

@@ -116,6 +116,21 @@ describe('QA account seed source guards', () => {
   });
 });
 
+describe('accept-job source guards', () => {
+  it('uses the same 30/40/30 standard milestone split as company quote builder auto-split', () => {
+    const source = fs.readFileSync(
+      path.join(__dirname, '../supabase/functions/accept-job/index.ts'),
+      'utf8',
+    );
+
+    expect(source).toContain('const deposit    = Math.round(avgCost * 0.30);');
+    expect(source).toContain('const midpoint   = Math.round(avgCost * 0.40);');
+    expect(source).toContain('const completion = avgCost - deposit - midpoint;');
+    expect(source).not.toContain('const midpoint   = Math.round(avgCost * 0.30);');
+    expect(source).toMatch(/Project Deposit[\s\S]*Mid-Project[\s\S]*Final Completion/);
+  });
+});
+
 describe('create-connect-account source guards', () => {
   it('supports Stripe Connect onboarding for GC payout accounts', () => {
     const source = fs.readFileSync(
