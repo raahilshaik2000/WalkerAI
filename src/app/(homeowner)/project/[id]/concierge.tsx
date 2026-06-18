@@ -15,7 +15,7 @@ import ReactNativeHapticFeedback from 'react-native-haptic-feedback';
 import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
 import { supabase } from '@/lib/supabase/client';
 import { getPaymentSheetConfig } from '@/lib/payments';
-import { formatSupabaseFunctionError } from '@/lib/supabase/functions';
+import { formatAppSafeErrorMessage, formatSupabaseFunctionError } from '@/lib/supabase/functions';
 import { useAuthStore } from '@/stores/auth.store';
 import type { GcConciergeBooking, GcPaymentRequest, GeneralContractor } from '@/types/database.types';
 import { formatStatusLabel } from '@/lib/formatters';
@@ -372,7 +372,7 @@ export default function ProjectConciergeScreen() {
               p_response_note: null,
             });
             if (error) {
-              Alert.alert('Could not respond', error.message);
+              Alert.alert('Could not respond', formatAppSafeErrorMessage(error, 'Please try again.'));
             } else {
               await fetchData();
             }
@@ -463,7 +463,7 @@ export default function ProjectConciergeScreen() {
               p_response_note: null,
             });
             if (error) {
-              Alert.alert('Could not respond', error.message);
+              Alert.alert('Could not respond', formatAppSafeErrorMessage(error, 'Please try again.'));
             } else {
               await fetchData();
             }
@@ -499,7 +499,7 @@ export default function ProjectConciergeScreen() {
               p_general_contractor_id: gc.id,
             });
             if (error) {
-              Alert.alert('Could not invite GC', error.message);
+              Alert.alert('Could not invite GC', formatAppSafeErrorMessage(error, 'Please try again.'));
             } else {
               await fetchData();
             }
@@ -541,7 +541,7 @@ export default function ProjectConciergeScreen() {
               p_service_kind: serviceKind,
             });
             if (error) {
-              Alert.alert('Could not request service', error.message);
+              Alert.alert('Could not request service', formatAppSafeErrorMessage(error, 'Please try again.'));
             } else {
               await fetchData();
             }
@@ -638,7 +638,7 @@ export default function ProjectConciergeScreen() {
               p_assignment_id: currentAssignment.id,
             });
             if (error) {
-              Alert.alert('Could not confirm GC', error.message);
+              Alert.alert('Could not confirm GC', formatAppSafeErrorMessage(error, 'Please try again.'));
             } else {
               await fetchData();
             }
@@ -670,7 +670,7 @@ export default function ProjectConciergeScreen() {
               p_assignment_id: currentAssignment.id,
             });
             if (error) {
-              Alert.alert('Could not remove GC', error.message);
+              Alert.alert('Could not remove GC', formatAppSafeErrorMessage(error, 'Please try again.'));
             } else {
               await fetchData();
             }

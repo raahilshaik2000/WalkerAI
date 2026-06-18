@@ -82,6 +82,28 @@ describe('general contractor account type', () => {
     expect(violations).toEqual([]);
   });
 
+  it('formats homeowner-facing GC workflow backend errors through app-safe copy helpers', () => {
+    const homeownerProjectDetail = fs.readFileSync(
+      path.join(repoRoot, 'src/app/(homeowner)/project/[id]/index.tsx'),
+      'utf8',
+    );
+    const homeownerConcierge = fs.readFileSync(
+      path.join(repoRoot, 'src/app/(homeowner)/project/[id]/concierge.tsx'),
+      'utf8',
+    );
+
+    expect(homeownerProjectDetail).toContain("import { formatAppSafeErrorMessage } from '@/lib/supabase/functions'");
+    expect(homeownerProjectDetail).toContain("Could not load GC project context: ${formatAppSafeErrorMessage(gcContextResult.error, 'Please try again.')}");
+    expect(homeownerProjectDetail).not.toContain('Could not load GC project context: ${gcContextResult.error.message}');
+    expect(homeownerConcierge).toContain("import { formatAppSafeErrorMessage, formatSupabaseFunctionError } from '@/lib/supabase/functions'");
+    expect(homeownerConcierge).toContain("Alert.alert('Could not invite GC', formatAppSafeErrorMessage(error, 'Please try again.'))");
+    expect(homeownerConcierge).toContain("Alert.alert('Could not confirm GC', formatAppSafeErrorMessage(error, 'Please try again.'))");
+    expect(homeownerConcierge).toContain("Alert.alert('Could not remove GC', formatAppSafeErrorMessage(error, 'Please try again.'))");
+    expect(homeownerConcierge).not.toContain("Alert.alert('Could not invite GC', error.message)");
+    expect(homeownerConcierge).not.toContain("Alert.alert('Could not confirm GC', error.message)");
+    expect(homeownerConcierge).not.toContain("Alert.alert('Could not remove GC', error.message)");
+  });
+
   it('keeps GC onboarding separate from company onboarding', () => {
     const businessOnboarding = fs.readFileSync(
       path.join(repoRoot, 'src/app/(general-contractor)/onboarding/business.tsx'),

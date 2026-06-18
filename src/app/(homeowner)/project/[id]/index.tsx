@@ -15,6 +15,7 @@ import { useRoute } from '@react-navigation/native';
 import Ionicons from 'react-native-vector-icons/Ionicons';
 import { supabase } from '@/lib/supabase/client';
 import { isMissingSupabaseSchemaObjectError } from '@/lib/supabase/errors';
+import { formatAppSafeErrorMessage } from '@/lib/supabase/functions';
 import { restartProjectDispatch } from '@/lib/project-dispatch';
 import { getRequiredStringParam } from '@/lib/navigation-params';
 import { formatGcProjectType } from '@/lib/gc-project-type';
@@ -186,7 +187,7 @@ export default function ProjectDetailScreen() {
     ]);
 
     if (projectResult.error) {
-      setErrorMessage(`Could not load project: ${projectResult.error.message}`);
+      setErrorMessage(`Could not load project: ${formatAppSafeErrorMessage(projectResult.error, 'Please try again.')}`);
       setProject(null);
       setGcProjectContext(null);
       setAssignedTradeSlots([]);
@@ -194,7 +195,7 @@ export default function ProjectDetailScreen() {
       return;
     }
     if (slotsResult.error) {
-      setErrorMessage(`Could not load assigned trades: ${slotsResult.error.message}`);
+      setErrorMessage(`Could not load assigned trades: ${formatAppSafeErrorMessage(slotsResult.error, 'Please try again.')}`);
       setProject(null);
       setGcProjectContext(null);
       setAssignedTradeSlots([]);
@@ -203,7 +204,7 @@ export default function ProjectDetailScreen() {
     }
     if (gcContextResult.error) {
       if (!isMissingSupabaseSchemaObjectError(gcContextResult.error, 'general_contractor_projects')) {
-        setErrorMessage(`Could not load GC project context: ${gcContextResult.error.message}`);
+        setErrorMessage(`Could not load GC project context: ${formatAppSafeErrorMessage(gcContextResult.error, 'Please try again.')}`);
         setProject(null);
         setGcProjectContext(null);
         setAssignedTradeSlots([]);
