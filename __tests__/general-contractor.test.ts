@@ -643,6 +643,10 @@ describe('general contractor account type', () => {
       path.join(repoRoot, 'supabase/migrations/20260618030500_guard_company_supplier_profile_roles.sql'),
       'utf8',
     );
+    const deverifyMismatchedProfilesMigration = fs.readFileSync(
+      path.join(repoRoot, 'supabase/migrations/20260618031000_deverify_mismatched_account_profiles.sql'),
+      'utf8',
+    );
     const auth = fs.readFileSync(
       path.join(repoRoot, 'src/lib/supabase/auth.ts'),
       'utf8',
@@ -673,6 +677,13 @@ describe('general contractor account type', () => {
     expect(profileBoundaryMigration).toContain('guard_supplier_profile_user_role_trigger');
     expect(profileBoundaryMigration).toContain('BEFORE INSERT OR UPDATE ON public.suppliers');
     expect(profileBoundaryMigration).toContain("(SELECT auth.role()) = 'service_role'");
+    expect(deverifyMismatchedProfilesMigration).toContain('UPDATE public.companies c');
+    expect(deverifyMismatchedProfilesMigration).toContain("u.role = 'company'");
+    expect(deverifyMismatchedProfilesMigration).toContain('UPDATE public.suppliers s');
+    expect(deverifyMismatchedProfilesMigration).toContain("u.role = 'supplier'");
+    expect(deverifyMismatchedProfilesMigration).toContain('UPDATE public.general_contractors gc');
+    expect(deverifyMismatchedProfilesMigration).toContain("u.role = 'general_contractor'");
+    expect(deverifyMismatchedProfilesMigration).toContain('SET verified = FALSE');
     expect(auth).toContain("options: {\n      data: { role },\n    },");
     expect(editProfile).not.toContain('role:');
   });
