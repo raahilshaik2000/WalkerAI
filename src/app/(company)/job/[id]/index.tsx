@@ -62,6 +62,29 @@ function canAcceptNegotiationCounteroffer(negotiation: TradeNegotiation) {
   return quote?.status === 'pending' && !quote.stripe_payment_intent_id;
 }
 
+function acceptedCounterofferNeedsQuoteUpdate(negotiation: TradeNegotiation) {
+  if (negotiation.status !== 'accepted' || !negotiation.offer_amount_cents) return false;
+  const quote = getNegotiationQuote(negotiation);
+  return quote?.status === 'pending'
+    && !quote.stripe_payment_intent_id
+    && quote.total_amount !== negotiation.offer_amount_cents;
+}
+
+function quoteBuilderParamsForNegotiation(
+  negotiation: TradeNegotiation,
+  projectId: string | null,
+  currentSlotId?: string,
+) {
+  if (!projectId) return null;
+  const quoteSlotId = negotiation.slot_id ?? currentSlotId;
+  return {
+    id: projectId,
+    ...(quoteSlotId ? { slot: quoteSlotId } : {}),
+    ...(negotiation.offer_amount_cents ? { accepted_counteroffer_cents: negotiation.offer_amount_cents } : {}),
+    gc_negotiation_note: negotiation.scope_note ?? '',
+  };
+}
+
 interface Slot {
   id: string;
   trade_type: string;
@@ -101,7 +124,7 @@ interface CompanyPayoutProfile {
 
 interface TradeNegotiation extends GcTradeQuoteNegotiation {
   general_contractors?: { business_name: string | null; verified: boolean | null } | Array<{ business_name: string | null; verified: boolean | null }> | null;
-  quotes?: { status: string | null; stripe_payment_intent_id: string | null } | Array<{ status: string | null; stripe_payment_intent_id: string | null }> | null;
+  quotes?: { status: string | null; stripe_payment_intent_id: string | null; total_amount: number | null } | Array<{ status: string | null; stripe_payment_intent_id: string | null; total_amount: number | null }> | null;
 }
 
 async function fetchCompanyPayoutProfile(userId: string): Promise<CompanyPayoutProfile | null> {
@@ -274,16 +297,19 @@ export default function JobBriefScreen() {
 
       const negotiationQuery = supabase
         .from('gc_trade_quote_negotiations')
-        .select('id, project_id, slot_id, quote_id, general_contractor_id, company_id, homeowner_id, offer_amount_cents, scope_note, status, company_response_note, created_at, responded_at, cancelled_at, general_contractors(business_name, verified), quotes(status, stripe_payment_intent_id)')
+        .select('id, project_id, slot_id, quote_id, general_contractor_id, company_id, homeowner_id, offer_amount_cents, scope_note, status, company_response_note, created_at, responded_at, cancelled_at, general_contractors(business_name, verified), quotes(status, stripe_payment_intent_id, total_amount)')
         .eq('project_id', projectId)
         .eq('company_id', companyId)
-        .eq('status', 'pending')
+        .in('status', ['pending', 'accepted'])
         .order('created_at', { ascending: false });
       const negotiationResult = slotId
         ? await negotiationQuery.eq('slot_id', slotId)
         : await negotiationQuery;
       if (negotiationResult.error) throw negotiationResult.error;
-      setTradeNegotiations((negotiationResult.data ?? []) as TradeNegotiation[]);
+      const negotiations = (negotiationResult.data ?? []) as TradeNegotiation[];
+      setTradeNegotiations(
+        negotiations.filter((negotiation) => negotiation.status === 'pending' || acceptedCounterofferNeedsQuoteUpdate(negotiation)),
+      );
       setLoading(false);
     } catch (err) {
       setErrorMessage(err instanceof Error ? err.message : 'Could not load this job.');
@@ -408,13 +434,8 @@ export default function JobBriefScreen() {
           } else {
             await fetchJob();
             if (status === 'accepted') {
-              const quoteSlotId = negotiation.slot_id ?? slotId;
-              const quoteParams = {
-                id: projectId,
-                ...(quoteSlotId ? { slot: quoteSlotId } : {}),
-                ...(negotiation.offer_amount_cents ? { accepted_counteroffer_cents: negotiation.offer_amount_cents } : {}),
-                gc_negotiation_note: negotiation.scope_note,
-              };
+              const quoteParams = quoteBuilderParamsForNegotiation(negotiation, projectId, slotId);
+              if (!quoteParams) return;
               Alert.alert(
                 'Counteroffer accepted',
                 'Submit an updated quote package so the homeowner sees the agreed pricing and milestones.',
@@ -626,6 +647,7 @@ export default function JobBriefScreen() {
                     {tradeNegotiations.map((negotiation, index) => {
                       const gcVerified = getNegotiationGcProfile(negotiation)?.verified === true;
                       const quoteEditable = canAcceptNegotiationCounteroffer(negotiation);
+                      const needsAcceptedQuoteUpdate = acceptedCounterofferNeedsQuoteUpdate(negotiation);
                       return (
                         <View
                           key={negotiation.id}
@@ -638,12 +660,19 @@ export default function JobBriefScreen() {
                             <View style={styles.negotiationBody}>
                               <Text style={styles.negotiationTitle}>{getNegotiationGcName(negotiation)}</Text>
                               <Text style={styles.negotiationMeta}>
-                                {negotiation.offer_amount_cents ? `Counter: ${formatCad(negotiation.offer_amount_cents)}` : 'Scope revision requested'}
+                                {needsAcceptedQuoteUpdate
+                                  ? `Accepted counter: ${formatCad(negotiation.offer_amount_cents ?? 0)}`
+                                  : negotiation.offer_amount_cents ? `Counter: ${formatCad(negotiation.offer_amount_cents)}` : 'Scope revision requested'}
                               </Text>
                             </View>
-                            <StatusBadge label="Pending" variant="pending" dot />
+                            <StatusBadge label={needsAcceptedQuoteUpdate ? 'Quote update needed' : 'Pending'} variant={needsAcceptedQuoteUpdate ? 'warning' : 'pending'} dot />
                           </View>
                           <Text style={styles.negotiationNote}>{negotiation.scope_note}</Text>
+                          {needsAcceptedQuoteUpdate ? (
+                            <Text style={styles.negotiationLockedText}>
+                              Submit an updated quote package so the homeowner sees the accepted GC pricing and milestones.
+                            </Text>
+                          ) : null}
                           {!gcVerified ? (
                             <Text style={styles.negotiationLockedText}>
                               Active verified GC management is required before this counteroffer can be accepted.
@@ -655,30 +684,45 @@ export default function JobBriefScreen() {
                             </Text>
                           ) : null}
                           <View style={styles.negotiationActions}>
-                            <GlassButton
-                              label="Accept"
-                              onPress={() => handleNegotiationResponse(negotiation, 'accepted')}
-                              loading={respondingNegotiationId === negotiation.id}
-                              disabled={!gcVerified || !quoteEditable || !!respondingNegotiationId}
-                              size="sm"
-                              style={styles.negotiationAction}
-                            />
-                            <GlassButton
-                              label="Revise"
-                              onPress={() => handleNegotiationResponse(negotiation, 'revision_requested')}
-                              disabled={!!respondingNegotiationId}
-                              size="sm"
-                              variant="secondary"
-                              style={styles.negotiationAction}
-                            />
-                            <GlassButton
-                              label="Reject"
-                              onPress={() => handleNegotiationResponse(negotiation, 'rejected')}
-                              disabled={!!respondingNegotiationId}
-                              size="sm"
-                              variant="secondary"
-                              style={styles.negotiationAction}
-                            />
+                            {needsAcceptedQuoteUpdate ? (
+                              <GlassButton
+                                label="Build Updated Quote"
+                                onPress={() => {
+                                  const quoteParams = quoteBuilderParamsForNegotiation(negotiation, projectId, slotId);
+                                  if (quoteParams) navigation.navigate('QuoteBuilder', quoteParams);
+                                }}
+                                disabled={!!respondingNegotiationId}
+                                size="sm"
+                                style={styles.negotiationActionWide}
+                              />
+                            ) : (
+                              <>
+                                <GlassButton
+                                  label="Accept"
+                                  onPress={() => handleNegotiationResponse(negotiation, 'accepted')}
+                                  loading={respondingNegotiationId === negotiation.id}
+                                  disabled={!gcVerified || !quoteEditable || !!respondingNegotiationId}
+                                  size="sm"
+                                  style={styles.negotiationAction}
+                                />
+                                <GlassButton
+                                  label="Revise"
+                                  onPress={() => handleNegotiationResponse(negotiation, 'revision_requested')}
+                                  disabled={!!respondingNegotiationId}
+                                  size="sm"
+                                  variant="secondary"
+                                  style={styles.negotiationAction}
+                                />
+                                <GlassButton
+                                  label="Reject"
+                                  onPress={() => handleNegotiationResponse(negotiation, 'rejected')}
+                                  disabled={!!respondingNegotiationId}
+                                  size="sm"
+                                  variant="secondary"
+                                  style={styles.negotiationAction}
+                                />
+                              </>
+                            )}
                           </View>
                         </View>
                       );
@@ -804,6 +848,7 @@ const styles = StyleSheet.create({
   negotiationLockedText: { ...Typography.caption, color: Colors.warning, lineHeight: 18, marginTop: 10 },
   negotiationActions: { flexDirection: 'row', gap: 8, marginTop: 12 },
   negotiationAction: { flex: 1 },
+  negotiationActionWide: { flex: 1.8 },
   actionGrid: {
     flexDirection: 'row', flexWrap: 'wrap', gap: 10, marginBottom: Spacing.md,
   },

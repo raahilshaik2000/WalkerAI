@@ -248,7 +248,7 @@ describe('company quote copy', () => {
       'utf8'
     );
 
-    expect(jobDetail).toContain('quotes(status, stripe_payment_intent_id)');
+    expect(jobDetail).toContain('quotes(status, stripe_payment_intent_id, total_amount)');
     expect(jobDetail).toContain('function canAcceptNegotiationCounteroffer');
     expect(jobDetail).toContain("quote?.status === 'pending' && !quote.stripe_payment_intent_id");
     expect(jobDetail).toContain('This quote is already approved or payment has started. Use change orders for pricing changes after funding begins.');
@@ -257,5 +257,22 @@ describe('company quote copy', () => {
     expect(migration).toContain("q.status = 'pending'");
     expect(migration).toContain('q.stripe_payment_intent_id IS NULL');
     expect(migration).toContain('GC trade counteroffers can only be accepted while the linked quote is still pending and unfunded');
+  });
+
+  it('keeps accepted GC counteroffers actionable until the quote total is updated', () => {
+    const repoRoot = path.resolve(__dirname, '..');
+    const jobDetail = fs.readFileSync(
+      path.join(repoRoot, 'src/app/(company)/job/[id]/index.tsx'),
+      'utf8'
+    );
+
+    expect(jobDetail).toContain("function acceptedCounterofferNeedsQuoteUpdate");
+    expect(jobDetail).toContain(".in('status', ['pending', 'accepted'])");
+    expect(jobDetail).toContain('quotes(status, stripe_payment_intent_id, total_amount)');
+    expect(jobDetail).toContain("quote.total_amount !== negotiation.offer_amount_cents");
+    expect(jobDetail).toContain("negotiations.filter((negotiation) => negotiation.status === 'pending' || acceptedCounterofferNeedsQuoteUpdate(negotiation))");
+    expect(jobDetail).toContain("label={needsAcceptedQuoteUpdate ? 'Quote update needed' : 'Pending'}");
+    expect(jobDetail).toContain('Build Updated Quote');
+    expect(jobDetail).toContain('quoteBuilderParamsForNegotiation(negotiation, projectId, slotId)');
   });
 });
