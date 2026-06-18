@@ -10,8 +10,9 @@ General Contractor should be a separate app account type, not a company trade fa
 
 - Branch: `main`
 - Remote: `https://github.com/raahilshaik2000/WalkerAI`
-- Latest implementation commit when this doc was finalized: `a0a0ad3 Allow GC managers to generate material orders`
-- Live backend update: `generate-material-orders` was deployed to Supabase project `wgbloslndalmocckrejw` after the implementation commit.
+- Latest implementation commit when this doc was updated: `68278ee Clarify completed GC project screens`
+- Live backend update: `generate-material-orders` was deployed to Supabase project `wgbloslndalmocckrejw`.
+- Live backend migrations were later applied through `20260618132500_add_supplier_project_message_participants.sql` on Supabase project `wgbloslndalmocckrejw`.
 - Four live QA accounts were reset/verified on Supabase and credentials were written to:
   - `/Users/raahilshaik/Downloads/walkerai-qa-credentials.txt`
 - Passwords are intentionally not included in this repo document.
@@ -284,6 +285,57 @@ Related local commit:
 
 - `a0a0ad3 Allow GC managers to generate material orders`
 
+## Project Communication Updates
+
+The shared project message thread now reflects the stated participant model: homeowner, GC, trades, and suppliers.
+
+Completed work:
+
+- Accepted material-order suppliers can read and write the project message thread once they own an eligible order.
+- Supplier order detail includes a `Project Messages` entry point for accepted supplier-owned orders.
+- GC project messages support photo attachments with optional captions.
+- GC message attachment sending uses the same readiness and assignment lock as text messages.
+- Completed GC assignments keep the message thread read-only.
+
+Changed files:
+
+- `supabase/migrations/20260618132500_add_supplier_project_message_participants.sql`
+- `src/navigation/SupplierNavigator.tsx`
+- `src/app/(supplier)/orders/[id]/index.tsx`
+- `src/app/(general-contractor)/project/[id]/messages.tsx`
+- `__tests__/general-contractor.test.ts`
+
+Related pushed commits:
+
+- `886ed65 Let suppliers join project message threads`
+- `ea591ed Let GCs send project message photos`
+
+## Completed Project History
+
+Completed GC-managed projects now expose read-only project history more completely.
+
+Completed work:
+
+- Completed project detail links to schedule, permits, payments, materials, trades, discoveries, assistant summaries, messages, and the completion binder.
+- Completed schedule, material, payment, trade, and discovery screens now explain that records are available read-only instead of saying homeowner confirmation is still required.
+- Completed schedule rows are not selectable for new recommendations.
+- Mutation controls remain gated to active GC management.
+
+Changed files:
+
+- `src/app/(general-contractor)/project/[id]/index.tsx`
+- `src/app/(general-contractor)/project/[id]/schedule.tsx`
+- `src/app/(general-contractor)/project/[id]/materials.tsx`
+- `src/app/(general-contractor)/project/[id]/payments.tsx`
+- `src/app/(general-contractor)/project/[id]/trades.tsx`
+- `src/app/(general-contractor)/project/[id]/discovery.tsx`
+- `__tests__/general-contractor.test.ts`
+
+Related pushed commits:
+
+- `ef74952 Expose completed GC project history`
+- `68278ee Clarify completed GC project screens`
+
 ## QA Account Work Completed
 
 Four live Supabase QA accounts were reset/verified:
@@ -311,7 +363,7 @@ Security cleanup:
 
 ## Tests Run During This Goal Segment
 
-Recently run and passing before the docs request:
+Recently run and passing:
 
 - `npm test -- --runInBand --runTestsByPath __tests__/company-profile-services.test.ts __tests__/general-contractor.test.ts`
 - `npx tsc --noEmit`
@@ -319,19 +371,25 @@ Recently run and passing before the docs request:
 - `git diff --check`
 - `WALKERAI_QA_CREDENTIALS="$HOME/Downloads/walkerai-qa-credentials.txt" node scripts/check-qa-credentials.mjs`
 
+Latest validation after the completed-project screen update:
+
+- `npm test -- --runInBand __tests__/general-contractor.test.ts`
+- `npx tsc --noEmit`
+- `npm test -- --runInBand`
+- `git diff --check`
+
 Live account readiness was also checked through Supabase REST using each account's own login session.
 
 ## What Still Needs Work Before Calling The Full Goal Complete
 
 The goal is not fully complete yet. Remaining work includes:
 
-1. Push the latest local commits cleanly to GitHub `main`.
-2. Perform a real runtime walkthrough across all four account types:
+1. Perform a real runtime walkthrough across all four account types:
    - homeowner
    - company/trade
    - supplier
    - general contractor
-3. Verify GC project creation, homeowner approval, trade coordination, material sourcing, payments, messages, schedule, permits, and completion paths in-app.
-4. Confirm any deployed Supabase function/migration drift beyond the updated `generate-material-orders` function before relying on the whole production backend as fully current.
-5. Decide product details for GC-created projects when the homeowner does not yet have an account.
-6. Re-test TestFlight/archive after these changes if the app is being shipped.
+2. Verify GC project creation, homeowner approval, trade coordination, material sourcing, payments, messages, schedule, permits, and completion paths in-app.
+3. Confirm any deployed Supabase function/migration drift beyond the updated `generate-material-orders` function and applied migrations before relying on the whole production backend as fully current.
+4. Decide product details for GC-created projects when the homeowner does not yet have an account.
+5. Re-test TestFlight/archive after these changes if the app is being shipped.

@@ -312,10 +312,12 @@ GC responsibilities:
 - coordinate trades
 - recommend scope/material/schedule changes
 - manage permits and inspections
-- communicate with homeowner/trades/suppliers
+- communicate with homeowner/trades/suppliers through the shared project message thread
+- send project message photo attachments with optional captions while management is active
 - request homeowner approval for major decisions
 - request GC payment/deposit/progress/final payment approval
 - coordinate project closeout and completion binder
+- review completed project records read-only after closeout
 
 GC cannot:
 
@@ -323,6 +325,7 @@ GC cannot:
 - approve homeowner spending alone
 - activate change orders without homeowner approval
 - silently replace trades/materials without homeowner approval
+- change schedule, payments, materials, trades, or discovery records after the GC assignment is completed
 
 ## Concierge / GC Management Model
 
@@ -344,6 +347,18 @@ Important screens:
 
 - homeowner side: `src/app/(homeowner)/project/[id]/concierge.tsx`
 - GC side: `src/app/(general-contractor)/approvals.tsx`
+
+Completed GC-managed projects retain read-only access to:
+
+- schedule history
+- permit and inspection records
+- payment request history
+- material orders and substitutions
+- trade assignments and negotiations
+- discovery/change records
+- project messages
+- assistant summaries
+- closeout binder
 
 ## Trade Slots and Dispatch
 
