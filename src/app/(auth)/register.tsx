@@ -12,6 +12,7 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useNavigation } from '@react-navigation/native';
 import { signUp } from '@/lib/supabase/auth';
+import { formatAppSafeErrorMessage } from '@/lib/supabase/functions';
 import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
 import { Colors, Radius, Spacing, Typography } from '@/constants/theme';
 import { GlassButton, GlassInput, GradientBackground } from '@/components/ui';
@@ -52,10 +53,7 @@ export default function RegisterScreen() {
       }
       // If session exists, root _layout auth listener handles redirect automatically
     } catch (error: unknown) {
-      const msg = error instanceof Error
-        ? error.message
-        : (error as any)?.message ?? JSON.stringify(error);
-      Alert.alert('Registration failed', msg);
+      Alert.alert('Registration failed', formatAppSafeErrorMessage(error, 'Could not create your account. Please try again.'));
     } finally {
       setLoading(false);
     }

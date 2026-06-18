@@ -11,6 +11,7 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useNavigation } from '@react-navigation/native';
 import { signIn } from '@/lib/supabase/auth';
+import { formatAppSafeErrorMessage } from '@/lib/supabase/functions';
 import { Colors, Spacing, Typography } from '@/constants/theme';
 import { GlassButton, GlassInput, GradientBackground } from '@/components/ui';
 
@@ -31,10 +32,7 @@ export default function LoginScreen() {
       await signIn(normalizedEmail, password);
       // Auth store listener in RootNavigator handles redirect
     } catch (error: unknown) {
-      const msg = error instanceof Error
-        ? error.message
-        : (error as any)?.message ?? JSON.stringify(error);
-      Alert.alert('Login failed', msg);
+      Alert.alert('Login failed', formatAppSafeErrorMessage(error, 'Could not sign in. Please try again.'));
     } finally {
       setLoading(false);
     }

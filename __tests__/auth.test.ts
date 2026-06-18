@@ -108,4 +108,19 @@ describe('Supabase auth helpers', () => {
     expect(migration).not.toContain("COALESCE(NEW.raw_user_meta_data->>'role', 'homeowner')");
     expect(migration).not.toContain("'admin'");
   });
+
+  it('keeps auth screen failures app-safe for every public role entry point', () => {
+    const register = fs.readFileSync(path.join(__dirname, '../src/app/(auth)/register.tsx'), 'utf8');
+    const login = fs.readFileSync(path.join(__dirname, '../src/app/(auth)/login.tsx'), 'utf8');
+
+    expect(register).toContain("import { formatAppSafeErrorMessage } from '@/lib/supabase/functions';");
+    expect(register).toContain("Alert.alert('Registration failed', formatAppSafeErrorMessage(error, 'Could not create your account. Please try again.'))");
+    expect(register).not.toContain('JSON.stringify(error)');
+    expect(register).not.toContain('? error.message');
+
+    expect(login).toContain("import { formatAppSafeErrorMessage } from '@/lib/supabase/functions';");
+    expect(login).toContain("Alert.alert('Login failed', formatAppSafeErrorMessage(error, 'Could not sign in. Please try again.'))");
+    expect(login).not.toContain('JSON.stringify(error)');
+    expect(login).not.toContain('? error.message');
+  });
 });
