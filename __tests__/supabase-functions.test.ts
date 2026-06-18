@@ -126,6 +126,10 @@ describe('create-connect-account source guards', () => {
     expect(source).toContain("body?.role === 'general_contractor'");
     expect(source).toContain("'general_contractors'");
     expect(source).toContain("'general_contractor_id'");
+    expect(source).toContain(".from('users')");
+    expect(source).toContain(".select('role')");
+    expect(source).toContain('appUser.role !== requestedRole');
+    expect(source).toContain('Account role does not match payout setup request');
     expect(source).toContain('role: requestedRole');
     expect(source).toContain('/schema cache/i.test(message)');
   });

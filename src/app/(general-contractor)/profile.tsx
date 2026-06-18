@@ -101,6 +101,19 @@ export default function GeneralContractorProfile() {
   };
 
   const handlePayoutSetup = async () => {
+    if (!gc) {
+      Alert.alert('GC setup required', 'Create your General Contractor profile before setting up payouts.');
+      return;
+    }
+    const incompleteRoute = nextGeneralContractorOnboardingRoute(gc);
+    if (incompleteRoute) {
+      Alert.alert('Finish GC setup', 'Complete your General Contractor profile before connecting payouts.', [
+        { text: 'Cancel', style: 'cancel' },
+        { text: 'Continue Setup', onPress: () => navigation.navigate(incompleteRoute) },
+      ]);
+      return;
+    }
+
     setStartingPayoutSetup(true);
     try {
       const { data, error } = await supabase.functions.invoke('create-connect-account', {
@@ -218,14 +231,16 @@ export default function GeneralContractorProfile() {
                   style={styles.cardButton}
                 />
               ) : null}
-              <GlassButton
-                label={payoutReady ? 'Refresh Payout Setup' : 'Set Up Payouts'}
-                onPress={handlePayoutSetup}
-                loading={startingPayoutSetup}
-                fullWidth
-                size="sm"
-                style={styles.cardButton}
-              />
+              {!setupRoute ? (
+                <GlassButton
+                  label={payoutReady ? 'Refresh Payout Setup' : 'Set Up Payouts'}
+                  onPress={handlePayoutSetup}
+                  loading={startingPayoutSetup}
+                  fullWidth
+                  size="sm"
+                  style={styles.cardButton}
+                />
+              ) : null}
             </GlassCard>
           ) : null}
 

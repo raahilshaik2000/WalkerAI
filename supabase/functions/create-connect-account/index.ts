@@ -6,6 +6,14 @@ const corsHeaders = {
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 };
 
+type AccountRole = 'company' | 'supplier' | 'general_contractor';
+
+const roleLabels: Record<AccountRole, string> = {
+  company: 'Company',
+  supplier: 'Supplier',
+  general_contractor: 'General contractor',
+};
+
 function stripeReadiness(account: Stripe.Account) {
   return {
     stripe_account_id: account.id,
@@ -73,13 +81,26 @@ Deno.serve(async (req) => {
       });
     }
 
-    let requestedRole = 'company';
+    let requestedRole: AccountRole = 'company';
     try {
       const body = await req.json();
       if (body?.role === 'supplier') requestedRole = 'supplier';
       if (body?.role === 'general_contractor') requestedRole = 'general_contractor';
     } catch {
       // Existing company callers send no body.
+    }
+
+    const { data: appUser, error: appUserError } = await adminClient
+      .from('users')
+      .select('role')
+      .eq('id', user.id)
+      .maybeSingle();
+
+    if (appUserError) throw appUserError;
+    if (!appUser || appUser.role !== requestedRole) {
+      return new Response(JSON.stringify({ error: 'Account role does not match payout setup request' }), {
+        status: 403, headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      });
     }
 
     const table = requestedRole === 'supplier'
@@ -104,11 +125,7 @@ Deno.serve(async (req) => {
     if (ownerError) throw ownerError;
 
     if (!accountOwner) {
-      const label = requestedRole === 'supplier'
-        ? 'Supplier'
-        : requestedRole === 'general_contractor'
-          ? 'General contractor'
-          : 'Company';
+      const label = roleLabels[requestedRole];
       return new Response(JSON.stringify({ error: `${label} not found` }), {
         status: 404, headers: { ...corsHeaders, 'Content-Type': 'application/json' },
       });

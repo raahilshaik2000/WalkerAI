@@ -2168,6 +2168,7 @@ describe('general contractor account type', () => {
     expect(gcProfile).toContain("role: 'general_contractor'");
     expect(gcProfile).toContain('Edit Business Info');
     expect(gcProfile).toContain("navigation.navigate('GeneralContractorBusinessOnboarding', { returnToProfile: true })");
+    expect(gcProfile).toContain("Alert.alert('Finish GC setup'");
     expect(gcProfile).toContain('Set Up Payouts');
     expect(gcProfile).toContain('isStripePayoutLocallyReady(gc)');
   });
