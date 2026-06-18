@@ -408,9 +408,9 @@ describe('general contractor account type', () => {
     expect(homeownerConcierge).toContain('disabled={!canConfirmGcManagement}');
   });
 
-  it('requires current GC verification for project-control request inserts', () => {
+  it('requires complete GC profiles for project-control request inserts', () => {
     const migration = fs.readFileSync(
-      path.join(repoRoot, 'supabase/migrations/20260615232614_require_verified_gc_request_inserts.sql'),
+      path.join(repoRoot, 'supabase/migrations/20260618025242_require_complete_gc_profile_for_project_control_requests.sql'),
       'utf8',
     );
 
@@ -423,8 +423,12 @@ describe('general contractor account type', () => {
     expect(migration).toMatch(/project_approval_requests[\s\S]*gc\.verified IS TRUE/);
     expect(migration).toMatch(/gc_payment_requests[\s\S]*gc\.verified IS TRUE/);
     expect(migration).toMatch(/gc_trade_quote_negotiations[\s\S]*gc\.verified IS TRUE/);
+    expect(migration).toContain("u.role = 'general_contractor'");
+    expect(migration).toContain("NULLIF(TRIM(gc.license_doc_url), '') IS NOT NULL");
+    expect(migration).toContain("NULLIF(TRIM(gc.insurance_doc_url), '') IS NOT NULL");
     expect(migration).toContain("gcp.status = 'active'");
     expect(migration).toContain("q.status = 'pending'");
+    expect(migration).toContain('q.stripe_payment_intent_id IS NULL');
   });
 
   it('locks GC project sub-screen controls when active assignments lose verification', () => {
@@ -686,8 +690,8 @@ describe('general contractor account type', () => {
       path.join(repoRoot, 'supabase/migrations/20260616033000_hide_removed_gc_request_surfaces.sql'),
       'utf8',
     );
-    const verifiedCancellationMigration = fs.readFileSync(
-      path.join(repoRoot, 'supabase/migrations/20260617205455_require_verified_gc_request_cancellation.sql'),
+    const completeControlMigration = fs.readFileSync(
+      path.join(repoRoot, 'supabase/migrations/20260618025242_require_complete_gc_profile_for_project_control_requests.sql'),
       'utf8',
     );
 
@@ -704,8 +708,10 @@ describe('general contractor account type', () => {
     expect(removedRequestSurfaceMigration).toContain('DROP POLICY IF EXISTS "approval_requests_gc_cancel"');
     expect(removedRequestSurfaceMigration).toMatch(/project_approval_requests[\s\S]*gcp\.status IN \('active', 'completed'\)/);
     expect(removedRequestSurfaceMigration).toMatch(/project_approval_requests[\s\S]*gcp\.status = 'active'/);
-    expect(verifiedCancellationMigration).toContain('DROP POLICY IF EXISTS "approval_requests_gc_cancel"');
-    expect(verifiedCancellationMigration).toMatch(/project_approval_requests[\s\S]*gcp\.status = 'active'[\s\S]*gc\.verified IS TRUE/);
+    expect(completeControlMigration).toContain('DROP POLICY IF EXISTS "approval_requests_gc_cancel"');
+    expect(completeControlMigration).toMatch(/project_approval_requests[\s\S]*gcp\.status = 'active'[\s\S]*gc\.verified IS TRUE/);
+    expect(completeControlMigration).toContain("u.role = 'general_contractor'");
+    expect(completeControlMigration).toContain("NULLIF(TRIM(gc.insurance_doc_url), '') IS NOT NULL");
   });
 
   it('keeps GC payment and trade negotiation request terms immutable after submission', () => {
@@ -747,8 +753,8 @@ describe('general contractor account type', () => {
       path.join(repoRoot, 'supabase/migrations/20260616001136_require_verified_gc_trade_acceptance.sql'),
       'utf8',
     );
-    const verifiedCancellationMigration = fs.readFileSync(
-      path.join(repoRoot, 'supabase/migrations/20260617205455_require_verified_gc_request_cancellation.sql'),
+    const completeControlMigration = fs.readFileSync(
+      path.join(repoRoot, 'supabase/migrations/20260618025242_require_complete_gc_profile_for_project_control_requests.sql'),
       'utf8',
     );
 
@@ -770,8 +776,8 @@ describe('general contractor account type', () => {
     expect(removedRequestSurfaceMigration).toContain('DROP POLICY IF EXISTS "gc_payment_requests_gc_cancel"');
     expect(removedRequestSurfaceMigration).toMatch(/gc_payment_requests[\s\S]*gcp\.status IN \('active', 'completed'\)/);
     expect(removedRequestSurfaceMigration).toMatch(/gc_payment_requests[\s\S]*gcp\.status = 'active'/);
-    expect(verifiedCancellationMigration).toContain('DROP POLICY IF EXISTS "gc_payment_requests_gc_cancel"');
-    expect(verifiedCancellationMigration).toMatch(/gc_payment_requests[\s\S]*gcp\.status = 'active'[\s\S]*gc\.verified IS TRUE/);
+    expect(completeControlMigration).toContain('DROP POLICY IF EXISTS "gc_payment_requests_gc_cancel"');
+    expect(completeControlMigration).toMatch(/gc_payment_requests[\s\S]*gcp\.status = 'active'[\s\S]*gc\.verified IS TRUE/);
 
     expect(migration).toContain('CREATE OR REPLACE FUNCTION public.guard_gc_trade_negotiation_updates()');
     expect(migration).toContain("IF NEW.status IN ('accepted', 'rejected', 'revision_requested') THEN");
@@ -788,8 +794,10 @@ describe('general contractor account type', () => {
     expect(removedRequestSurfaceMigration).toMatch(/gc_trade_quote_negotiations[\s\S]*gcp\.status IN \('active', 'completed'\)/);
     expect(removedRequestSurfaceMigration).toMatch(/gc_trade_quote_negotiations[\s\S]*gcp\.status = 'active'/);
     expect(removedRequestSurfaceMigration).toContain('FROM public.companies c');
-    expect(verifiedCancellationMigration).toContain('DROP POLICY IF EXISTS "gc_trade_negotiations_gc_cancel"');
-    expect(verifiedCancellationMigration).toMatch(/gc_trade_quote_negotiations[\s\S]*gcp\.status = 'active'[\s\S]*gc\.verified IS TRUE/);
+    expect(completeControlMigration).toContain('DROP POLICY IF EXISTS "gc_trade_negotiations_gc_cancel"');
+    expect(completeControlMigration).toMatch(/gc_trade_quote_negotiations[\s\S]*gcp\.status = 'active'[\s\S]*gc\.verified IS TRUE/);
+    expect(completeControlMigration).toContain("u.role = 'general_contractor'");
+    expect(completeControlMigration).toContain("NULLIF(TRIM(gc.license_doc_url), '') IS NOT NULL");
     expect(tradeAcceptanceMigration).toContain("gcp.status = 'active'");
     expect(tradeAcceptanceMigration).toContain('gc.verified IS TRUE');
     expect(tradeAcceptanceMigration).toContain('Active verified GC management is required before accepting a GC trade negotiation');
