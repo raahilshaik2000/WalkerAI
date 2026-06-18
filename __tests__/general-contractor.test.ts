@@ -1321,11 +1321,13 @@ describe('general contractor account type', () => {
     expect((gcPayments.match(/\.eq\('general_contractor_id', gc\.id\)/g) ?? []).length).toBeGreaterThanOrEqual(2);
     expect(gcPayments).toContain("from('gc_payment_requests').insert");
     expect(gcPayments).toContain('handleCancelRequest');
+    expect(gcPayments).toContain("const canManagePaymentRequests = assignment?.status === 'active' && gcVerified;");
     expect(gcPayments).toContain("status: 'cancelled'");
     expect(gcPayments).toContain('cancelled_at: new Date().toISOString()');
     expect(gcPayments).toContain(".eq('status', 'pending')");
     expect(gcPayments).toContain('No escrow or milestone funds are moved.');
-    expect(gcPayments).toContain('disabled={!!cancellingRequestId}');
+    expect(gcPayments).toContain('pending && canManagePaymentRequests');
+    expect(gcPayments).toContain('disabled={!canManagePaymentRequests || !!cancellingRequestId}');
     expect(gcPayments).toContain('Funds are still released through existing escrow milestones');
     expect(gcApprovals).toContain("from('gc_payment_requests')");
     expect(gcApprovals).toContain('Payment requests');

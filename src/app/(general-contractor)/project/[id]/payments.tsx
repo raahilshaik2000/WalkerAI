@@ -186,6 +186,10 @@ export default function GeneralContractorPaymentsScreen() {
       Alert.alert('Request unavailable', 'Refresh payment requests and try again.');
       return;
     }
+    if (assignment.status !== 'active' || !gcVerified) {
+      Alert.alert('Active verified GC management required', 'Only an active verified GC can cancel a pending payment request.');
+      return;
+    }
 
     Alert.alert(
       'Cancel payment request?',
@@ -219,6 +223,8 @@ export default function GeneralContractorPaymentsScreen() {
       ],
     );
   };
+
+  const canManagePaymentRequests = assignment?.status === 'active' && gcVerified;
 
   return (
     <GradientBackground glow="top-right">
@@ -259,7 +265,7 @@ export default function GeneralContractorPaymentsScreen() {
             </GlassCard>
           ) : (
             <>
-              {assignment?.status === 'active' && gcVerified ? (
+              {canManagePaymentRequests ? (
                 <GlassCard style={styles.card}>
                   <Text style={styles.sectionTitle}>New request</Text>
                   <View style={styles.kindGrid}>
@@ -347,12 +353,12 @@ export default function GeneralContractorPaymentsScreen() {
                         </Text>
                         {request.description ? <Text style={styles.requestDescription}>{request.description}</Text> : null}
                         {request.response_note ? <Text style={styles.responseNote}>Homeowner note: {request.response_note}</Text> : null}
-                        {pending ? (
+                        {pending && canManagePaymentRequests ? (
                           <GlassButton
                             label="Cancel Request"
                             onPress={() => handleCancelRequest(request)}
                             loading={cancellingRequestId === request.id}
-                            disabled={!!cancellingRequestId}
+                            disabled={!canManagePaymentRequests || !!cancellingRequestId}
                             variant="secondary"
                             size="sm"
                             style={styles.cancelButton}
