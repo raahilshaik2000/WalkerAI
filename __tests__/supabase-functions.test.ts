@@ -649,7 +649,12 @@ describe('release-milestone source guards', () => {
 
     expect(source).toContain('async function hasActiveGcManagement');
     expect(source).toContain(".from('general_contractor_projects')");
+    expect(source).toContain('general_contractors!inner');
     expect(source).toContain(".eq('status', 'active')");
+    expect(source).toContain(".eq('general_contractors.verified', true)");
+    expect(source).toContain('function hasCompleteGcCompletionProfile');
+    expect(source).toContain(".from('users')");
+    expect(source).toContain("appUser?.role === 'general_contractor'");
     expect(source).toContain('const gcCompletionApprovalRequired = isFinalProjectMilestone && await hasActiveGcManagement(adminClient, project.id);');
     expect(source).toContain("if (isFinalProjectMilestone && project.status !== 'completed' && !gcCompletionApprovalRequired)");
     expect(source).toContain('if (isFinalProjectMilestone && !gcCompletionApprovalRequired)');

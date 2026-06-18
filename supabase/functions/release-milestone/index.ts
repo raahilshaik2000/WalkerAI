@@ -517,16 +517,104 @@ async function hasActiveGcManagement(
 ): Promise<boolean> {
   const { data, error } = await adminClient
     .from('general_contractor_projects')
-    .select('id')
+    .select(`
+      id,
+      general_contractors!inner (
+        user_id, verified, business_name, city, province, lat, lng,
+        license_number, license_doc_url, insurance_doc_url
+      )
+    `)
     .eq('project_id', projectId)
     .eq('status', 'active')
-    .limit(1);
+    .eq('general_contractors.verified', true);
 
   if (error) {
     throw new Error(`Failed to check GC project management status: ${error.message}`);
   }
 
-  return (data ?? []).length > 0;
+  const activeManagers = (data ?? []) as Array<{
+    general_contractors?: {
+      user_id: string | null;
+      verified: boolean | null;
+      business_name: string | null;
+      city: string | null;
+      province: string | null;
+      lat: number | null;
+      lng: number | null;
+      license_number: string | null;
+      license_doc_url: string | null;
+      insurance_doc_url: string | null;
+    } | Array<{
+      user_id: string | null;
+      verified: boolean | null;
+      business_name: string | null;
+      city: string | null;
+      province: string | null;
+      lat: number | null;
+      lng: number | null;
+      license_number: string | null;
+      license_doc_url: string | null;
+      insurance_doc_url: string | null;
+    }> | null;
+  }>;
+
+  for (const row of activeManagers) {
+    const gc = Array.isArray(row.general_contractors)
+      ? row.general_contractors[0] ?? null
+      : row.general_contractors ?? null;
+    if (!hasCompleteGcCompletionProfile(gc)) continue;
+
+    const { data: appUser, error: appUserError } = await adminClient
+      .from('users')
+      .select('role')
+      .eq('id', gc.user_id)
+      .maybeSingle();
+    if (appUserError) {
+      throw new Error(`Failed to check GC account role: ${appUserError.message}`);
+    }
+    if (appUser?.role === 'general_contractor') return true;
+  }
+
+  return false;
+}
+
+function hasText(value: unknown): value is string {
+  return typeof value === 'string' && value.trim().length > 0;
+}
+
+function hasCompleteGcCompletionProfile(gc: {
+  user_id: string | null;
+  verified: boolean | null;
+  business_name: string | null;
+  city: string | null;
+  province: string | null;
+  lat: number | null;
+  lng: number | null;
+  license_number: string | null;
+  license_doc_url: string | null;
+  insurance_doc_url: string | null;
+} | null | undefined): gc is {
+  user_id: string;
+  verified: true;
+  business_name: string;
+  city: string;
+  province: string;
+  lat: number;
+  lng: number;
+  license_number: string;
+  license_doc_url: string;
+  insurance_doc_url: string;
+} {
+  return hasText(gc?.user_id)
+    && gc?.verified === true
+    && hasText(gc.business_name)
+    && hasText(gc.city)
+    && hasText(gc.province)
+    && typeof gc.lat === 'number'
+    && typeof gc.lng === 'number'
+    && hasText(gc.license_number)
+    && hasText(gc.license_doc_url)
+    && hasText(gc.insurance_doc_url);
 }
 
 async function allFilledSlotsHaveApprovedQuotes(
