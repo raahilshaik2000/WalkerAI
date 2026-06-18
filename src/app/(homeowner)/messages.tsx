@@ -13,6 +13,7 @@ import { useFocusEffect, useNavigation } from '@react-navigation/native';
 import Ionicons from 'react-native-vector-icons/Ionicons';
 import { supabase } from '@/lib/supabase/client';
 import { isMissingSupabaseSchemaObjectError } from '@/lib/supabase/errors';
+import { formatAppSafeErrorMessage } from '@/lib/supabase/functions';
 import { useAuthStore } from '@/stores/auth.store';
 import { AnimatedPressable, GlassButton, GradientBackground } from '@/components/ui';
 import { Colors, Radius } from '@/constants/theme';
@@ -100,7 +101,7 @@ export default function HomeownerMessages() {
 
     if (projectsError) {
       setThreads([]);
-      setErrorMessage(projectsError.message);
+      setErrorMessage(formatAppSafeErrorMessage(projectsError, 'Could not load messages.'));
       setLoading(false);
       setRefreshing(false);
       return;
@@ -135,7 +136,10 @@ export default function HomeownerMessages() {
     const gcContextUnavailable = isMissingSupabaseSchemaObjectError(gcResult.error, 'general_contractor_projects');
     if (slotResult.error || (gcResult.error && !gcContextUnavailable)) {
       setThreads([]);
-      setErrorMessage(slotResult.error?.message ?? gcResult.error?.message ?? 'Could not load message participants.');
+      setErrorMessage(formatAppSafeErrorMessage(
+        slotResult.error ?? gcResult.error,
+        'Could not load message participants.',
+      ));
       setLoading(false);
       setRefreshing(false);
       return;
@@ -199,7 +203,7 @@ export default function HomeownerMessages() {
 
     if (messagesError) {
       setThreads([]);
-      setErrorMessage(messagesError.message);
+      setErrorMessage(formatAppSafeErrorMessage(messagesError, 'Could not load messages.'));
       setLoading(false);
       setRefreshing(false);
       return;

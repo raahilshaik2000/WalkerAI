@@ -18,6 +18,7 @@ import { useRoute } from '@react-navigation/native';
 import ReactNativeHapticFeedback from 'react-native-haptic-feedback';
 import Ionicons from 'react-native-vector-icons/Ionicons';
 import { supabase } from '@/lib/supabase/client';
+import { formatAppSafeErrorMessage } from '@/lib/supabase/functions';
 import { getRequiredStringParam } from '@/lib/navigation-params';
 import { useAuthStore } from '@/stores/auth.store';
 import { Colors, Spacing, Typography } from '@/constants/theme';
@@ -55,7 +56,7 @@ export default function MessagesScreen() {
         .eq('project_id', projectId)
         .order('sent_at', { ascending: true });
       if (error) {
-        setErrorMessage(`Could not load messages: ${error.message}`);
+        setErrorMessage(formatAppSafeErrorMessage(error, 'Could not load messages.'));
         return;
       }
       setErrorMessage(null);
@@ -98,7 +99,7 @@ export default function MessagesScreen() {
 
     if (error) {
       setBody(trimmed); // restore on error
-      Alert.alert('Message not sent', error.message);
+      Alert.alert('Message not sent', formatAppSafeErrorMessage(error, 'Please try again.'));
     } else {
       ReactNativeHapticFeedback.trigger('impactLight');
     }
