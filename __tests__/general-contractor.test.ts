@@ -434,7 +434,8 @@ describe('general contractor account type', () => {
     expect(gcProjectDetail).toContain('p_assignment_id: assignment.id');
     expect(gcProjectDetail).not.toContain("update({ status: 'active' })");
     expect(gcProjectDetail).toContain('GC management terms');
-    expect(gcProjectDetail).toContain('const gcCanManage = gcVerified && gcProfileComplete');
+    expect(gcProjectDetail).toContain('setGcReady(isGeneralContractorReadyForProjectControls(gc))');
+    expect(gcProjectDetail).toContain('const gcCanManage = gcReady;');
     expect(gcProjectDetail).toContain("const assignmentIsActive = assignment?.status === 'active' && gcCanManage");
     expect(gcProjectDetail).toContain('Controls unlock after homeowner confirmation');
     expect(gcProjectDetail).toContain('Schedule, permit, payment, material, trade, discovery, assistant, and completion tools become available once GC management is active.');
@@ -559,8 +560,12 @@ describe('general contractor account type', () => {
     expect(assistant).toContain(".select(GENERAL_CONTRACTOR_READINESS_SELECT)");
     expect(assistant).toContain('isGeneralContractorReadyForProjectControls(gc)');
     expect(assistant).toContain('Complete verified GC setup is required before project assistant summaries are available.');
+    expect(projectDetail).toContain('isGeneralContractorReadyForProjectControls');
+    expect(projectDetail).toContain('setGcReady(isGeneralContractorReadyForProjectControls(gc))');
     expect(projectDetail).toContain("if (gc.verified !== true) throw new Error('WalkerAI must verify your GC profile before approval requests can be sent.')");
     expect(projectDetail).toContain("if (nextGeneralContractorOnboardingRoute(gc)) throw new Error('Complete your GC business, license, and insurance setup before sending approval requests.')");
+    expect(projectDetail).toContain('const gcCanManage = gcReady;');
+    expect(projectDetail).not.toContain('const gcCanManage = gcVerified && gcProfileComplete;');
     expect(projectDetail).toContain("const assignmentIsActive = assignment?.status === 'active' && gcCanManage");
     expect(projectDetail).toContain('{assignmentIsActive ? (');
   });

@@ -22,6 +22,7 @@ import { getRequiredStringParam } from '@/lib/navigation-params';
 import { formatTradeLabel } from '@/lib/trade-labels';
 import {
   GENERAL_CONTRACTOR_READINESS_SELECT,
+  isGeneralContractorReadyForProjectControls,
   nextGeneralContractorOnboardingRoute,
 } from '@/lib/general-contractor';
 import { getUploadMetadata, uploadFile } from '@/lib/supabase/storage';
@@ -164,6 +165,7 @@ export default function GeneralContractorProjectDetail() {
   const [uploadingExternalDocSlotId, setUploadingExternalDocSlotId] = useState<string | null>(null);
   const [gcVerified, setGcVerified] = useState(false);
   const [gcProfileComplete, setGcProfileComplete] = useState(false);
+  const [gcReady, setGcReady] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
   const fetchData = useCallback(async () => {
@@ -182,6 +184,7 @@ export default function GeneralContractorProjectDetail() {
       if (!gc?.id) throw new Error('GC profile not found.');
       setGcVerified(gc.verified === true);
       setGcProfileComplete(nextGeneralContractorOnboardingRoute(gc) === null);
+      setGcReady(isGeneralContractorReadyForProjectControls(gc));
 
       const [projectResult, slotResult, changeOrderResult, approvalResult] = await Promise.all([
         supabase
@@ -246,6 +249,7 @@ export default function GeneralContractorProjectDetail() {
       setApprovalRequests([]);
       setGcVerified(false);
       setGcProfileComplete(false);
+      setGcReady(false);
     } finally {
       setLoading(false);
       setRefreshing(false);
@@ -263,7 +267,7 @@ export default function GeneralContractorProjectDetail() {
     fetchData();
   };
 
-  const gcCanManage = gcVerified && gcProfileComplete;
+  const gcCanManage = gcReady;
 
   const pendingChangeOrders = changeOrders.filter((order) => (
     order.status === 'proposed' && order.signed_by_company && !order.signed_by_homeowner
