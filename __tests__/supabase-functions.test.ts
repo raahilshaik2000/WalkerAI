@@ -632,6 +632,34 @@ describe('gc-concierge-payout source guards', () => {
   });
 });
 
+describe('homeowner money action source guards', () => {
+  it('requires current homeowner role before creating project quote payment intents', () => {
+    const source = fs.readFileSync(
+      path.join(__dirname, '../supabase/functions/create-payment-intent/index.ts'),
+      'utf8',
+    );
+
+    expect(source).toContain("requesterAppUser?.role !== 'homeowner'");
+    expect(source).toContain('if (project.homeowner_id !== user.id)');
+    expect(source).toMatch(
+      /requesterAppUser\?\.role !== 'homeowner'[\s\S]*?const \{ quote_id, project_id: pid \} = await req\.json\(\);[\s\S]*?if \(project\.homeowner_id !== user\.id\)[\s\S]*?const paymentIntent = await stripe\.paymentIntents\.create/
+    );
+  });
+
+  it('requires current homeowner role before releasing supplier payouts', () => {
+    const source = fs.readFileSync(
+      path.join(__dirname, '../supabase/functions/supplier-payout/index.ts'),
+      'utf8',
+    );
+
+    expect(source).toContain("requesterAppUser?.role !== 'homeowner'");
+    expect(source).toContain('if (project?.homeowner_id !== user.id)');
+    expect(source).toMatch(
+      /requesterAppUser\?\.role !== 'homeowner'[\s\S]*?const \{ order_id \} = await req\.json\(\);[\s\S]*?if \(project\?\.homeowner_id !== user\.id\)[\s\S]*?const transfer = await stripe\.transfers\.create/
+    );
+  });
+});
+
 describe('release-milestone source guards', () => {
   it('allows externally managed trade slots to close out without WalkerAI quote funding', () => {
     const source = fs.readFileSync(

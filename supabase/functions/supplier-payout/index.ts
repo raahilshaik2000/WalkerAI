@@ -92,6 +92,19 @@ Deno.serve(async (req) => {
       });
     }
 
+    const { data: requesterAppUser, error: requesterRoleError } = await adminClient
+      .from('users')
+      .select('role')
+      .eq('id', user.id)
+      .maybeSingle();
+    if (requesterRoleError) throw requesterRoleError;
+    if (requesterAppUser?.role !== 'homeowner') {
+      return new Response(JSON.stringify({ error: 'Forbidden' }), {
+        status: 403,
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      });
+    }
+
     const { order_id } = await req.json();
     if (!order_id) throw new Error('order_id required');
 
