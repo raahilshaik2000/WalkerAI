@@ -257,6 +257,14 @@ describe('notification navigation', () => {
     });
   });
 
+  it('does not route unsupported internal roles into public app stacks', () => {
+    expect(resolveNotificationRoute('job_dispatched', { project_id: 'project-1' }, 'admin')).toBeNull();
+    expect(resolveNotificationRoute('quote_submitted', { project_id: 'project-1' }, null)).toBeNull();
+
+    const companyRoute = resolveNotificationRoute('job_dispatched', { project_id: 'project-1' }, 'company');
+    expect(toRootNotificationRoute(companyRoute, 'admin')).toEqual(companyRoute);
+  });
+
   it('keeps push tap role state in sync after auth role hydration', () => {
     const rootNavigator = fs.readFileSync(
       path.join(__dirname, '../src/navigation/RootNavigator.tsx'),

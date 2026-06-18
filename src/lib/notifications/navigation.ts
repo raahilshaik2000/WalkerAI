@@ -10,7 +10,6 @@ export interface NotificationRoute {
 const ROOT_ROUTE_BY_ROLE: Partial<Record<UserRole, string>> = {
   homeowner: 'Homeowner',
   company: 'Company',
-  admin: 'Company',
   supplier: 'Supplier',
   general_contractor: 'GeneralContractor',
 };
@@ -113,7 +112,7 @@ export function resolveNotificationRoute(
     }
   }
 
-  if (role === 'company' || role === 'admin') {
+  if (role === 'company') {
     if (type === 'job_filled') return { name: 'CompanyTabs', params: { screen: 'Jobs' } };
     if (type === 'schedule_confirmed') return { name: 'CompanyTabs', params: { screen: 'Calendar' } };
     if (!projectId) return { name: 'CompanyTabs', params: { screen: 'Jobs' } };
@@ -148,6 +147,7 @@ export function resolveNotificationRoute(
     }
   }
 
+  if (role !== 'homeowner') return null;
   if (!projectId) return null;
 
   switch (type) {
