@@ -2579,6 +2579,8 @@ describe('general contractor account type', () => {
     expect(companyJob).toContain('accepted_counteroffer_cents');
     expect(companyJob).toContain('gc_negotiation_note');
     expect(companyJob).toContain("navigation.navigate('QuoteBuilder', quoteParams)");
+    expect(companyJob).toContain("setErrorMessage(formatAppSafeErrorMessage(err, 'Could not load this job.'))");
+    expect(companyJob).not.toContain("setErrorMessage(err instanceof Error ? err.message : 'Could not load this job.')");
     expect(companyJob).toContain("Alert.alert('Could not respond', formatAppSafeErrorMessage(error, 'Please try again.'))");
     expect(companyJob).not.toContain("Alert.alert('Could not respond', error.message)");
     expect(databaseTypes).toContain('export interface GcTradeQuoteNegotiation');

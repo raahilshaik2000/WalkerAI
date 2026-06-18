@@ -327,7 +327,7 @@ export default function JobBriefScreen() {
       );
       setLoading(false);
     } catch (err) {
-      setErrorMessage(err instanceof Error ? err.message : 'Could not load this job.');
+      setErrorMessage(formatAppSafeErrorMessage(err, 'Could not load this job.'));
       setJob(null);
       setSlot(null);
       setAlreadyAccepted(false);

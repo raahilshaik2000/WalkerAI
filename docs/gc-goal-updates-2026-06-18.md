@@ -458,6 +458,7 @@ Runtime fixes made from this pass:
 - The homeowner dashboard project carousel now formats both project-load and optional GC-context failures through app-safe copy before displaying them.
 - Company calendar milestones now attach optional GC project type context so GC-created projects such as flooring, painting, basement, and additions do not fall back to generic room-type icons; calendar load failures also use app-safe copy.
 - Company quote/pricing submission failures now use app-safe copy instead of surfacing raw backend or database messages when a trade submits or revises pricing during GC negotiation workflows.
+- Company job detail load failures now use app-safe copy, covering the trade acceptance and GC quote-negotiation entry point without exposing raw backend errors.
 
 Runtime findings still not treated as complete:
 
