@@ -587,6 +587,7 @@ describe('create-gc-concierge-payment-intent source guards', () => {
     );
 
     expect(source).toContain("const { booking_id } = await req.json();");
+    expect(source).toContain("requesterAppUser?.role !== 'homeowner'");
     expect(source).toContain("booking.homeowner_id !== user.id");
     expect(source).toContain("booking.status !== 'accepted'");
     expect(source).toContain('general_contractor:general_contractors');
@@ -610,6 +611,7 @@ describe('gc-concierge-payout source guards', () => {
 
     expect(source).toContain('/schema cache/i.test(message)');
     expect(source).toContain("const { booking_id } = await req.json();");
+    expect(source).toContain("requesterAppUser?.role !== 'homeowner'");
     expect(source).toContain('booking.homeowner_id !== user.id');
     expect(source).toContain("booking.status !== 'accepted'");
     expect(source).toContain("booking.payment_status !== 'paid'");
@@ -681,6 +683,7 @@ describe('release-milestone source guards', () => {
     );
 
     expect(source).toContain('// Authorization: only the homeowner can release milestones');
+    expect(source).toContain("requesterAppUser?.role !== 'homeowner'");
     expect(source).toContain('if (project.homeowner_id !== user.id)');
     expect(source).toMatch(
       /if \(project\.homeowner_id !== user\.id\) \{[\s\S]*?status: 403[\s\S]*?\}[\s\S]*?const hasProgressEvidence = await hasMilestoneProgressEvidence[\s\S]*?const transfer = await stripe\.transfers\.create/
