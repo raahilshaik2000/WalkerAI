@@ -20,7 +20,7 @@ import { formatGcProjectType } from '@/lib/gc-project-type';
 import { isGeneralContractorReadyForProjectControls } from '@/lib/general-contractor';
 import type { GcConciergeBooking, GcPaymentRequest } from '@/types/database.types';
 import { Colors, Spacing, Typography } from '@/constants/theme';
-import { GradientBackground, GlassButton, GlassCard, StatusBadge } from '@/components/ui';
+import { GradientBackground, GlassButton, GlassCard, GlassInput, StatusBadge } from '@/components/ui';
 import { TradeEmptyState, TradeScreenHeader } from '@/components/company/TradeUI';
 
 type ProjectJoin = {
@@ -101,6 +101,7 @@ export default function GeneralContractorApprovals() {
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [respondingBookingId, setRespondingBookingId] = useState<string | null>(null);
+  const [bookingResponseNotes, setBookingResponseNotes] = useState<Record<string, string>>({});
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
   const fetchData = useCallback(async () => {
@@ -241,6 +242,8 @@ export default function GeneralContractorApprovals() {
       return;
     }
 
+    const responseNote = bookingResponseNotes[booking.id]?.trim() ?? '';
+
     Alert.alert(
       status === 'accepted' ? 'Accept concierge request?' : 'Reject concierge request?',
       status === 'accepted'
@@ -256,11 +259,16 @@ export default function GeneralContractorApprovals() {
             const { error } = await supabase.rpc('respond_to_gc_concierge_booking', {
               p_booking_id: booking.id,
               p_status: status,
-              p_response_note: null,
+              p_response_note: responseNote || null,
             });
             if (error) {
               Alert.alert('Could not respond', formatAppSafeErrorMessage(error, 'Please try again.'));
             } else {
+              setBookingResponseNotes((current) => {
+                const next = { ...current };
+                delete next[booking.id];
+                return next;
+              });
               await fetchData();
             }
             setRespondingBookingId(null);
@@ -331,6 +339,12 @@ export default function GeneralContractorApprovals() {
                                 WalkerAI verification, concierge marketplace access, and complete business, license, and insurance setup are required before this request can be accepted.
                               </Text>
                             ) : null}
+                            <GlassInput
+                              label="Optional response note"
+                              value={bookingResponseNotes[booking.id] ?? ''}
+                              onChangeText={(text) => setBookingResponseNotes((current) => ({ ...current, [booking.id]: text }))}
+                              containerStyle={styles.bookingNoteInput}
+                            />
                             <View style={styles.bookingActions}>
                               <GlassButton
                                 label="Accept"
@@ -351,6 +365,8 @@ export default function GeneralContractorApprovals() {
                               />
                             </View>
                           </>
+                        ) : booking.response_note ? (
+                          <Text style={styles.responseNote}>Your note: {booking.response_note}</Text>
                         ) : null}
                       </View>
                     );
@@ -515,6 +531,7 @@ const styles = StyleSheet.create({
     borderTopWidth: 1,
     borderTopColor: Colors.glass.border,
   },
+  bookingNoteInput: { marginTop: 4, marginBottom: 8 },
   bookingActions: { flexDirection: 'row', gap: 8, marginTop: 4 },
   bookingButton: { flex: 1 },
 });

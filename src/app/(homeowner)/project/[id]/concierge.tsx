@@ -723,6 +723,9 @@ export default function ProjectConciergeScreen() {
           </View>
           <StatusBadge label={formatStatusLabel(booking.status)} variant={['accepted', 'completed'].includes(booking.status) ? 'completed' : booking.status === 'rejected' ? 'error' : 'pending'} size="sm" />
         </View>
+        {booking.response_note ? (
+          <Text style={styles.approvalResponseNote}>GC note: {booking.response_note}</Text>
+        ) : null}
         {booking.status === 'accepted' && booking.payment_status !== 'paid' ? (
           <>
             {!bookingGcEligible ? (

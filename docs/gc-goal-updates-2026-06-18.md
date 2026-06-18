@@ -451,6 +451,7 @@ Runtime fixes made from this pass:
 - Homeowner approval/rejection of GC project recommendations now supports optional response notes, and those notes are visible in GC project detail and approvals inbox views.
 - Homeowner approval/rejection of GC payment authorization requests now supports optional response notes, while escrow and milestone release remain separate.
 - Trade responses to GC counteroffers/revision requests now support optional response notes, and accepted counteroffers keep those notes visible while the trade builds the updated homeowner-facing quote package.
+- GC accept/reject responses for concierge service bookings now support optional response notes, and those notes are visible in the homeowner concierge request history.
 
 Runtime findings still not treated as complete:
 

@@ -2214,6 +2214,10 @@ describe('general contractor account type', () => {
     expect(homeownerConcierge).not.toContain('WalkerAI {formatCadCents(booking.walker_fee_cents)}');
     expect(gcApprovals).toContain("from('gc_concierge_bookings')");
     expect(gcApprovals).toContain("supabase.rpc('respond_to_gc_concierge_booking'");
+    expect(gcApprovals).toContain('p_response_note: responseNote || null');
+    expect(gcApprovals).toContain('Optional response note');
+    expect(gcApprovals).toContain('Your note: {booking.response_note}');
+    expect(homeownerConcierge).toContain('GC note: {booking.response_note}');
     expect(gcApprovals).toContain("setBookingRequests((bookingResult.data ?? []) as GcConciergeBooking[])");
     expect(gcApprovals).not.toContain('Your payout {formatCadCents(booking.contractor_payout_cents)}');
     expect(gcApprovals).not.toContain('WalkerAI {formatCadCents(booking.walker_fee_cents)}');

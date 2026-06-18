@@ -370,6 +370,8 @@ Homeowner approval remains required for major project changes.
 
 Homeowner approval decisions can include optional response notes. Those notes are stored with the approval request and displayed back to the GC in the project detail and approvals inbox so accepted/rejected recommendations keep decision context.
 
+GC responses to homeowner concierge service booking requests can also include optional response notes. Those notes are stored with the booking and displayed back to the homeowner in concierge request history.
+
 Important screens:
 
 - homeowner side: `src/app/(homeowner)/project/[id]/concierge.tsx`
