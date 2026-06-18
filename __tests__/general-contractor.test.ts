@@ -1766,6 +1766,8 @@ describe('general contractor account type', () => {
     expect(gcApprovals).toContain('Escrow release still happens through milestones');
     expect(homeownerConcierge).toContain("from('gc_payment_requests')");
     expect(homeownerConcierge).toContain("supabase.rpc('respond_to_gc_payment_request'");
+    expect(homeownerConcierge).toContain('const [paymentResponseNotes, setPaymentResponseNotes] = useState<Record<string, string>>({});');
+    expect(homeownerConcierge).toContain('p_response_note: responseNote || null');
     expect(homeownerConcierge).toContain('Approving this records your authorization. It does not bypass milestone escrow release.');
     expect(homeownerConcierge).toContain("const activeReadyGcId = currentAssignment?.status === 'active' && hasCompleteGcTrustProfile(assignedGc) ? assignedGc?.id ?? null : null;");
     expect(homeownerConcierge).toContain('const canApproveGcPaymentRequest = (request: GcPaymentRequest) => (');
@@ -1773,6 +1775,8 @@ describe('general contractor account type', () => {
     expect(homeownerConcierge).toContain("status === 'approved' && !canApproveGcPaymentRequest(request)");
     expect(homeownerConcierge).toContain('Active complete verified GC management is required before a payment request can be approved.');
     expect(homeownerConcierge).toContain('const paymentLocked = pending && !canApproveGcPaymentRequest(request);');
+    expect(homeownerConcierge).toContain('Optional response note');
+    expect(homeownerConcierge).toContain('Homeowner note: {request.response_note}');
     expect(homeownerConcierge).toContain('disabled={paymentLocked}');
   });
 

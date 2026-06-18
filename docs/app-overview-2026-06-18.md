@@ -472,6 +472,7 @@ Payment model:
 - Company milestone payouts require homeowner authority.
 - Supplier payouts require delivery proof and homeowner confirmation.
 - GC concierge payments and payouts are separate from trade quote approval.
+- GC payment authorization requests can be approved or rejected with optional homeowner response notes, but they do not release escrow or milestone funds by themselves.
 - Stripe Connect payout readiness is cached in account profile tables.
 
 App UI should not show WalkerAI internal commission, platform fee, or markup economics to user roles.

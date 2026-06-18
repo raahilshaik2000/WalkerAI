@@ -222,6 +222,7 @@ export default function ProjectConciergeScreen() {
   const [paymentRequests, setPaymentRequests] = useState<GcPaymentRequest[]>([]);
   const [bookingRequests, setBookingRequests] = useState<ConciergeBookingWithGc[]>([]);
   const [approvalResponseNotes, setApprovalResponseNotes] = useState<Record<string, string>>({});
+  const [paymentResponseNotes, setPaymentResponseNotes] = useState<Record<string, string>>({});
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [invitingId, setInvitingId] = useState<string | null>(null);
@@ -464,14 +465,20 @@ export default function ProjectConciergeScreen() {
           style: status === 'rejected' ? 'destructive' : 'default',
           onPress: async () => {
             setRespondingId(request.id);
+            const responseNote = paymentResponseNotes[request.id]?.trim() ?? '';
             const { error } = await supabase.rpc('respond_to_gc_payment_request', {
               p_request_id: request.id,
               p_status: status,
-              p_response_note: null,
+              p_response_note: responseNote || null,
             });
             if (error) {
               Alert.alert('Could not respond', formatAppSafeErrorMessage(error, 'Please try again.'));
             } else {
+              setPaymentResponseNotes((current) => {
+                const next = { ...current };
+                delete next[request.id];
+                return next;
+              });
               await fetchData();
             }
             setRespondingId(null);
@@ -922,6 +929,9 @@ export default function ProjectConciergeScreen() {
                         <StatusBadge label={formatStatusLabel(request.status)} variant={pending ? 'pending' : request.status === 'approved' ? 'completed' : 'error'} size="sm" />
                       </View>
                       {request.description ? <Text style={styles.approvalDescription}>{request.description}</Text> : null}
+                      {!pending && request.response_note ? (
+                        <Text style={styles.approvalResponseNote}>Homeowner note: {request.response_note}</Text>
+                      ) : null}
                       {pending ? (
                         <>
                           {paymentLocked ? (
@@ -929,6 +939,12 @@ export default function ProjectConciergeScreen() {
                               Active complete verified GC management is required before this payment request can be approved.
                             </Text>
                           ) : null}
+                          <GlassInput
+                            label="Optional response note"
+                            value={paymentResponseNotes[request.id] ?? ''}
+                            onChangeText={(text) => setPaymentResponseNotes((current) => ({ ...current, [request.id]: text }))}
+                            containerStyle={styles.approvalNoteInput}
+                          />
                           <View style={styles.approvalActions}>
                             <GlassButton
                               label="Approve"
