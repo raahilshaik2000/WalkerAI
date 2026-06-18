@@ -71,6 +71,16 @@ describe('notification navigation', () => {
     });
   });
 
+  it('routes homeowner dispatch miss notifications to the project detail', () => {
+    expect(resolveNotificationRoute('dispatch_no_match', { project_id: 'project-1' }, 'homeowner')).toEqual({
+      name: 'ProjectDetail',
+      params: {
+        screen: 'ProjectDetailMain',
+        params: { id: 'project-1' },
+      },
+    });
+  });
+
   it('routes company shipment notifications to job materials', () => {
     expect(resolveNotificationRoute('order_shipped', { project_id: 'project-1', order_id: 'order-1' }, 'company')).toEqual({
       name: 'JobDetail',

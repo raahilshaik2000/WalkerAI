@@ -169,6 +169,8 @@ export function resolveNotificationRoute(
     case 'all_slots_filled':
     case 'schedule_confirmed':
       return projectDetailRoute('ProjectSchedule', projectId);
+    case 'dispatch_no_match':
+      return projectDetailRoute('ProjectDetailMain', projectId);
     case 'material_order_claimed':
     case 'new_material_order':
     case 'order_shipped':
