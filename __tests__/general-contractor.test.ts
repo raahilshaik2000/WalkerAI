@@ -993,6 +993,16 @@ describe('general contractor account type', () => {
     );
   });
 
+  it('does not count unconfirmed GC invites as managed profile projects', () => {
+    const gcProfile = fs.readFileSync(
+      path.join(repoRoot, 'src/app/(general-contractor)/profile.tsx'),
+      'utf8',
+    );
+
+    expect(gcProfile).toContain("['active', 'completed'].includes(row.status)");
+    expect(gcProfile).not.toContain("row.status !== 'removed'");
+  });
+
   it('surfaces the GC markup engine on managed project detail', () => {
     const migration = fs.readFileSync(
       path.join(repoRoot, 'supabase/migrations/20260615002200_apply_gc_terms_approval.sql'),

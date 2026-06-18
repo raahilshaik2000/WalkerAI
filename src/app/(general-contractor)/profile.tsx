@@ -58,7 +58,7 @@ export default function GeneralContractorProfile() {
           .select('status')
           .eq('general_contractor_id', profile.id);
         if (assignmentError) throw assignmentError;
-        setManagedCount((assignments ?? []).filter((row) => row.status !== 'removed').length);
+        setManagedCount((assignments ?? []).filter((row) => ['active', 'completed'].includes(row.status)).length);
         setCompletedCount((assignments ?? []).filter((row) => row.status === 'completed').length);
       } else {
         setManagedCount(0);
