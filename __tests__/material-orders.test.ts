@@ -115,6 +115,28 @@ describe('supplier material order payout math', () => {
     expect(companyMaterialsSource).not.toContain('material:materials(item)');
   });
 
+  it('keeps company material verification errors app-safe for GC-managed material workflows', () => {
+    const companyMaterialsSource = fs.readFileSync(
+      path.join(__dirname, '../src/app/(company)/job/[id]/materials.tsx'),
+      'utf8',
+    );
+
+    expect(companyMaterialsSource).toContain("import { formatAppSafeErrorMessage, formatSupabaseFunctionError } from '@/lib/supabase/functions'");
+    expect(companyMaterialsSource).toContain("Alert.alert('Could not load materials', formatAppSafeErrorMessage(materialsResult.error, 'Please try again.'))");
+    expect(companyMaterialsSource).toContain("Alert.alert('Could not load supplier orders', formatAppSafeErrorMessage(ordersResult.error, 'Please try again.'))");
+    expect(companyMaterialsSource).toContain("Alert.alert('Could not load supplier reviews', formatAppSafeErrorMessage(reviewsError, 'Please try again.'))");
+    expect(companyMaterialsSource).toContain("throw new Error(formatAppSafeErrorMessage(error, `Could not save ${m.item}.`))");
+    expect(companyMaterialsSource).toContain("throw new Error(formatAppSafeErrorMessage(orderError, `Could not load ${m.item} order.`))");
+    expect(companyMaterialsSource).toContain("throw new Error(formatAppSafeErrorMessage(error, `Could not sync ${m.item} order.`))");
+    expect(companyMaterialsSource).toContain("Alert.alert('Could not save quantities', formatAppSafeErrorMessage(err, 'Please try again.'))");
+    expect(companyMaterialsSource).toContain("Alert.alert('Could not submit supplier review', formatAppSafeErrorMessage(err, 'Please try again.'))");
+    expect(companyMaterialsSource).not.toContain("Alert.alert('Error', materialsResult.error.message)");
+    expect(companyMaterialsSource).not.toContain("Alert.alert('Error', ordersResult.error.message)");
+    expect(companyMaterialsSource).not.toContain("Alert.alert('Error', reviewsError.message)");
+    expect(companyMaterialsSource).not.toContain("Alert.alert('Error', err instanceof Error ? err.message : 'Failed to save quantities.')");
+    expect(companyMaterialsSource).not.toContain("Alert.alert('Error', err instanceof Error ? err.message : 'Failed to submit supplier review.')");
+  });
+
   it('scopes company material verification writes to the current project', () => {
     const companyMaterialsSource = fs.readFileSync(
       path.join(__dirname, '../src/app/(company)/job/[id]/materials.tsx'),

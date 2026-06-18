@@ -17,7 +17,7 @@ import Ionicons from 'react-native-vector-icons/Ionicons';
 import { supabase } from '@/lib/supabase/client';
 import { parseNonNegativeMetricQuantity } from '@/lib/measurements';
 import { getRequiredStringParam } from '@/lib/navigation-params';
-import { formatSupabaseFunctionError } from '@/lib/supabase/functions';
+import { formatAppSafeErrorMessage, formatSupabaseFunctionError } from '@/lib/supabase/functions';
 import { useAuthStore } from '@/stores/auth.store';
 import { GlassButton, GradientBackground } from '@/components/ui';
 import { Colors, Radius, Spacing, Typography } from '@/constants/theme';
@@ -145,7 +145,7 @@ export default function ContractorMaterialsScreen() {
     ]);
 
     if (materialsResult.error) {
-      Alert.alert('Error', materialsResult.error.message);
+      Alert.alert('Could not load materials', formatAppSafeErrorMessage(materialsResult.error, 'Please try again.'));
     } else if (materialsResult.data) {
       setMaterials(materialsResult.data);
       // Pre-fill with verified qty if exists, else AI quantity
@@ -157,7 +157,7 @@ export default function ContractorMaterialsScreen() {
     }
 
     if (ordersResult.error) {
-      Alert.alert('Error', ordersResult.error.message);
+      Alert.alert('Could not load supplier orders', formatAppSafeErrorMessage(ordersResult.error, 'Please try again.'));
     } else {
       const orders = (ordersResult.data ?? []) as SupplierOrder[];
       setSupplierOrders(orders);
@@ -169,7 +169,7 @@ export default function ContractorMaterialsScreen() {
           .eq('reviewer_id', user.id)
           .in('order_id', orders.map((order) => order.id));
         if (reviewsError) {
-          Alert.alert('Error', reviewsError.message);
+          Alert.alert('Could not load supplier reviews', formatAppSafeErrorMessage(reviewsError, 'Please try again.'));
         } else {
           const byOrder: Record<string, SupplierReview> = {};
           for (const review of (reviews ?? []) as SupplierReview[]) {
@@ -221,7 +221,7 @@ export default function ContractorMaterialsScreen() {
             .maybeSingle();
 
           if (error) {
-            throw new Error(`Failed to save ${m.item}: ${error.message}`);
+            throw new Error(formatAppSafeErrorMessage(error, `Could not save ${m.item}.`));
           }
           if (!data) {
             throw new Error(`Failed to save ${m.item}: material row not found.`);
@@ -246,7 +246,7 @@ export default function ContractorMaterialsScreen() {
             .maybeSingle();
 
           if (orderError) {
-            throw new Error(`Failed to load ${m.item} order: ${orderError.message}`);
+            throw new Error(formatAppSafeErrorMessage(orderError, `Could not load ${m.item} order.`));
           }
 
           if (order) {
@@ -257,7 +257,7 @@ export default function ContractorMaterialsScreen() {
               .eq('project_id', projectId);
 
             if (error) {
-              throw new Error(`Failed to sync ${m.item} order: ${error.message}`);
+              throw new Error(formatAppSafeErrorMessage(error, `Could not sync ${m.item} order.`));
             }
           }
         })
@@ -282,7 +282,7 @@ export default function ContractorMaterialsScreen() {
       Alert.alert('Confirmed', confirmationMessage);
       navigation.goBack();
     } catch (err) {
-      Alert.alert('Error', err instanceof Error ? err.message : 'Failed to save quantities.');
+      Alert.alert('Could not save quantities', formatAppSafeErrorMessage(err, 'Please try again.'));
     } finally {
       setSaving(false);
     }
@@ -325,7 +325,7 @@ export default function ContractorMaterialsScreen() {
       if (!data) throw new Error('Supplier review was not saved.');
       await loadMaterials();
     } catch (err) {
-      Alert.alert('Error', err instanceof Error ? err.message : 'Failed to submit supplier review.');
+      Alert.alert('Could not submit supplier review', formatAppSafeErrorMessage(err, 'Please try again.'));
     } finally {
       setSubmittingReview(null);
     }
