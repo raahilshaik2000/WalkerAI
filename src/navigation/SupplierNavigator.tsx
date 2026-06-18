@@ -9,6 +9,7 @@ import NotificationsScreen from '@/app/notifications';
 import SupplierOrderFeed from '@/app/(supplier)/orders/index';
 import SupplierActiveOrders from '@/app/(supplier)/orders/active';
 import SupplierOrderDetail from '@/app/(supplier)/orders/[id]/index';
+import SupplierProjectMessages from '@/app/(homeowner)/project/[id]/messages';
 import SupplierCatalog from '@/app/(supplier)/catalog/index';
 import AddCatalogItem from '@/app/(supplier)/catalog/add';
 import EditCatalogItem from '@/app/(supplier)/catalog/[id]/index';
@@ -65,6 +66,7 @@ export function SupplierNavigator() {
       <Stack.Screen name="SupplierTabs" component={SupplierTabs} />
       <Stack.Screen name="SupplierActiveOrders" component={SupplierActiveOrders} />
       <Stack.Screen name="SupplierOrderDetail" component={SupplierOrderDetail} />
+      <Stack.Screen name="SupplierProjectMessages" component={SupplierProjectMessages} />
       <Stack.Screen name="SupplierAddCatalogItem" component={AddCatalogItem} />
       <Stack.Screen name="SupplierEditCatalogItem" component={EditCatalogItem} />
       <Stack.Screen name="Notifications" component={NotificationsScreen} />

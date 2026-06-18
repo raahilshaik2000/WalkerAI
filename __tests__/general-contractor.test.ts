@@ -1921,6 +1921,18 @@ describe('general contractor account type', () => {
       path.join(repoRoot, 'supabase/migrations/20260616193000_notify_project_message_participants.sql'),
       'utf8',
     );
+    const supplierMessageMigration = fs.readFileSync(
+      path.join(repoRoot, 'supabase/migrations/20260618132500_add_supplier_project_message_participants.sql'),
+      'utf8',
+    );
+    const supplierNavigator = fs.readFileSync(
+      path.join(repoRoot, 'src/navigation/SupplierNavigator.tsx'),
+      'utf8',
+    );
+    const supplierOrderDetail = fs.readFileSync(
+      path.join(repoRoot, 'src/app/(supplier)/orders/[id]/index.tsx'),
+      'utf8',
+    );
 
     expect(migration).toContain('messages_project_participants');
     expect(migration).toContain('general_contractor_projects gcp');
@@ -1959,6 +1971,18 @@ describe('general contractor account type', () => {
     expect(notificationMigration).toContain('FROM public.quotes q');
     expect(notificationMigration).toContain('FROM public.general_contractor_projects gcp');
     expect(notificationMigration).toContain("gcp.status IN ('invited', 'active', 'completed')");
+    expect(supplierMessageMigration).toContain('DROP POLICY IF EXISTS "messages_project_participants_select" ON public.messages');
+    expect(supplierMessageMigration).toContain('DROP POLICY IF EXISTS "messages_project_participants_insert" ON public.messages');
+    expect(supplierMessageMigration).toContain('FROM public.material_orders mo');
+    expect(supplierMessageMigration).toContain('JOIN public.suppliers s ON s.id = mo.accepted_supplier_id');
+    expect(supplierMessageMigration).toContain("u.role = 'supplier'");
+    expect(supplierMessageMigration).toContain("mo.status IN ('accepted', 'processing', 'shipped', 'delivered', 'confirmed')");
+    expect(supplierMessageMigration).toContain('CREATE OR REPLACE FUNCTION public.notify_project_message_participants()');
+    expect(supplierNavigator).toContain("import SupplierProjectMessages from '@/app/(homeowner)/project/[id]/messages'");
+    expect(supplierNavigator).toContain('SupplierProjectMessages');
+    expect(supplierOrderDetail).toContain('const supplierOwnsOrder = !!supplier?.id && order.accepted_supplier_id === supplier.id');
+    expect(supplierOrderDetail).toContain("navigation.navigate('SupplierProjectMessages', { id: order.project_id })");
+    expect(supplierOrderDetail).toContain('Project Messages');
   });
 
   it('adds a GC completion binder assembled from real project records', () => {

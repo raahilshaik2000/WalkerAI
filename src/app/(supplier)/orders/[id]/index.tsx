@@ -201,6 +201,7 @@ export default function SupplierOrderDetail() {
 
   const orderPrice = order.final_price ?? order.offered_price;
   const orderValue = orderPrice == null ? null : orderPrice;
+  const supplierOwnsOrder = !!supplier?.id && order.accepted_supplier_id === supplier.id;
 
   return (
     <GradientBackground>
@@ -293,6 +294,17 @@ export default function SupplierOrderDetail() {
               style={styles.deliverBtn}
             />
           )}
+
+          {supplierOwnsOrder && order.project_id ? (
+            <GlassButton
+              label="Project Messages"
+              onPress={() => navigation.navigate('SupplierProjectMessages', { id: order.project_id })}
+              fullWidth
+              size="lg"
+              variant="secondary"
+              style={styles.deliverBtn}
+            />
+          ) : null}
 
           {order.status === 'delivered' && (
             <Text style={styles.waitingText}>Waiting for the homeowner to confirm receipt before payout.</Text>
