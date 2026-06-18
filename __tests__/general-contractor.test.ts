@@ -1698,6 +1698,11 @@ describe('general contractor account type', () => {
     expect(homeownerConcierge).toContain('Contractor payout is 80%; WalkerAI keeps 20%.');
     expect(gcApprovals).toContain("from('gc_concierge_bookings')");
     expect(gcApprovals).toContain("supabase.rpc('respond_to_gc_concierge_booking'");
+    expect(gcApprovals).toContain("setBookingRequests((bookingResult.data ?? []) as GcConciergeBooking[])");
+    expect(gcApprovals.indexOf("from('gc_concierge_bookings')")).toBeLessThan(
+      gcApprovals.indexOf('if (projectIds.length === 0)'),
+    );
+    expect(gcApprovals).not.toMatch(/from\('gc_concierge_bookings'\)[\s\S]*?\.in\('project_id', projectIds\)[\s\S]*?if \(projectIds\.length === 0\)/);
   });
 
   it('requires GC concierge availability before accepting stale booking requests', () => {
@@ -1795,7 +1800,7 @@ describe('general contractor account type', () => {
     expect(gcApprovals).toContain("setRecommendationRequests([])");
     expect(gcApprovals).toContain("setPaymentRequests([])");
     expect(gcApprovals).toContain("setBookingRequests([])");
-    expect(gcApprovals.split(".in('project_id', projectIds)").length - 1).toBeGreaterThanOrEqual(4);
+    expect(gcApprovals.split(".in('project_id', projectIds)").length - 1).toBeGreaterThanOrEqual(3);
     expect(gcApprovals).toContain('projectTypeById.get(request.project_id)');
     expect(gcApprovals).toContain('formatGcProjectType(request.project_type, project?.room_type)');
     expect(gcApprovals).toContain('formatGcProjectType(approval.project_type, project?.room_type)');

@@ -129,21 +129,22 @@ export default function GeneralContractorApprovals() {
         ((assignments ?? []) as GcProjectAssignmentRow[]).map((assignment) => [assignment.project_id, assignment.project_type]),
       );
 
+      const bookingResult = await supabase
+        .from('gc_concierge_bookings')
+        .select('id, project_id, general_contractor_id, homeowner_id, service_kind, title, duration_minutes, price_cents, contractor_payout_cents, walker_fee_cents, status, payment_status, stripe_payment_intent_id, stripe_transfer_id, paid_at, payout_released_at, response_note, created_at, responded_at')
+        .eq('general_contractor_id', gc.id)
+        .order('created_at', { ascending: false });
+      if (bookingResult.error) throw bookingResult.error;
+      setBookingRequests((bookingResult.data ?? []) as GcConciergeBooking[]);
+
       if (projectIds.length === 0) {
         setApprovals([]);
         setRecommendationRequests([]);
         setPaymentRequests([]);
-        setBookingRequests([]);
         return;
       }
 
-      const [bookingResult, recommendationResult, paymentResult, changeOrderResult] = await Promise.all([
-        supabase
-          .from('gc_concierge_bookings')
-          .select('id, project_id, general_contractor_id, homeowner_id, service_kind, title, duration_minutes, price_cents, contractor_payout_cents, walker_fee_cents, status, payment_status, stripe_payment_intent_id, stripe_transfer_id, paid_at, payout_released_at, response_note, created_at, responded_at')
-          .eq('general_contractor_id', gc.id)
-          .in('project_id', projectIds)
-          .order('created_at', { ascending: false }),
+      const [recommendationResult, paymentResult, changeOrderResult] = await Promise.all([
         supabase
           .from('project_approval_requests')
           .select(`
@@ -172,11 +173,9 @@ export default function GeneralContractorApprovals() {
           .in('project_id', projectIds)
           .order('created_at', { ascending: false }),
       ]);
-      if (bookingResult.error) throw bookingResult.error;
       if (recommendationResult.error) throw recommendationResult.error;
       if (paymentResult.error) throw paymentResult.error;
       if (changeOrderResult.error) throw changeOrderResult.error;
-      setBookingRequests((bookingResult.data ?? []) as GcConciergeBooking[]);
       setRecommendationRequests(((recommendationResult.data ?? []) as RecommendationApprovalRow[]).map((request) => ({
         ...request,
         project_type: projectTypeById.get(request.project_id) ?? null,
