@@ -334,16 +334,16 @@ export default function ProjectConciergeScreen() {
   const assignedGc = getAssignedGc(currentAssignment);
   const assignedGcConciergeEligible = hasCompleteGcConciergeProfile(assignedGc);
   const assignedGcCanRequestConcierge = assignedGcConciergeEligible;
-  const activeVerifiedGcId = currentAssignment?.status === 'active' && assignedGc?.verified === true ? assignedGc.id : null;
+  const activeReadyGcId = currentAssignment?.status === 'active' && hasCompleteGcTrustProfile(assignedGc) ? assignedGc?.id ?? null : null;
   const canApproveGcPaymentRequest = (request: GcPaymentRequest) => (
-    request.general_contractor_id === activeVerifiedGcId
+    request.general_contractor_id === activeReadyGcId
   );
   const canApproveGcProjectRecommendation = (request: ApprovalRequest) => (
-    request.requested_by_gc_id === activeVerifiedGcId
+    request.requested_by_gc_id === activeReadyGcId
   );
   const canConfirmGcManagement = currentAssignment?.status === 'invited'
     && currentAssignment.initiated_by_gc === true
-    && assignedGc?.verified === true;
+    && hasCompleteGcTrustProfile(assignedGc);
 
   const handleApprovalResponse = async (request: ApprovalRequest, status: 'approved' | 'rejected') => {
     const currentUser = user ?? (await supabase.auth.getUser()).data.user;
@@ -352,7 +352,7 @@ export default function ProjectConciergeScreen() {
       return;
     }
     if (status === 'approved' && !canApproveGcProjectRecommendation(request)) {
-      Alert.alert('Approval request locked', 'Active verified GC management is required before this recommendation can apply project changes.');
+      Alert.alert('Approval request locked', 'Active complete verified GC management is required before this recommendation can apply project changes.');
       return;
     }
 
@@ -441,7 +441,7 @@ export default function ProjectConciergeScreen() {
       return;
     }
     if (status === 'approved' && !canApproveGcPaymentRequest(request)) {
-      Alert.alert('Payment request locked', 'Active verified GC management is required before a payment request can be approved.');
+      Alert.alert('Payment request locked', 'Active complete verified GC management is required before a payment request can be approved.');
       return;
     }
 
@@ -621,7 +621,7 @@ export default function ProjectConciergeScreen() {
       return;
     }
     if (!canConfirmGcManagement) {
-      Alert.alert('GC management locked', 'WalkerAI verification is required before this GC management request can be confirmed.');
+      Alert.alert('GC management locked', 'WalkerAI verification and complete business, license, and insurance setup are required before this GC management request can be confirmed.');
       return;
     }
 
@@ -827,7 +827,7 @@ export default function ProjectConciergeScreen() {
                   <>
                     {!canConfirmGcManagement ? (
                       <Text style={styles.emptySubText}>
-                        WalkerAI verification is required before this GC management request can be confirmed.
+                        WalkerAI verification and complete business, license, and insurance setup are required before this GC management request can be confirmed.
                       </Text>
                     ) : null}
                     <GlassButton
@@ -919,7 +919,7 @@ export default function ProjectConciergeScreen() {
                         <>
                           {paymentLocked ? (
                             <Text style={styles.emptySubText}>
-                              Active verified GC management is required before this payment request can be approved.
+                              Active complete verified GC management is required before this payment request can be approved.
                             </Text>
                           ) : null}
                           <View style={styles.approvalActions}>
@@ -984,7 +984,7 @@ export default function ProjectConciergeScreen() {
                       ))}
                       {approvalLocked ? (
                         <Text style={styles.approvalDetail}>
-                          Active verified GC management is required before this recommendation can apply project changes.
+                          Active complete verified GC management is required before this recommendation can apply project changes.
                         </Text>
                       ) : null}
                       {pending ? (

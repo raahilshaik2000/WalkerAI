@@ -428,9 +428,9 @@ describe('general contractor account type', () => {
     expect(gcProjectDetail).toContain('Complete your GC business profile, license, and insurance setup before you can accept this management invite.');
     expect(gcProjectDetail).toContain('Complete verified GC setup is required before project controls are available.');
     expect(gcProjectDetail).toContain("assignment.status === 'invited' && !assignment.initiated_by_gc && gcCanManage");
-    expect(homeownerConcierge).toContain("assignedGc?.verified === true");
+    expect(homeownerConcierge).toContain('hasCompleteGcTrustProfile(assignedGc)');
     expect(homeownerConcierge).toContain('canConfirmGcManagement');
-    expect(homeownerConcierge).toContain('WalkerAI verification is required before this GC management request can be confirmed.');
+    expect(homeownerConcierge).toContain('WalkerAI verification and complete business, license, and insurance setup are required before this GC management request can be confirmed.');
     expect(homeownerConcierge).toContain('disabled={!canConfirmGcManagement}');
   });
 
@@ -521,7 +521,7 @@ describe('general contractor account type', () => {
     expect(homeownerConcierge).toContain("from('project_approval_requests')");
     expect(homeownerConcierge).toContain("select('id, requested_by_gc_id, request_type");
     expect(homeownerConcierge).toContain('const canApproveGcProjectRecommendation = (request: ApprovalRequest) => (');
-    expect(homeownerConcierge).toContain('request.requested_by_gc_id === activeVerifiedGcId');
+    expect(homeownerConcierge).toContain('request.requested_by_gc_id === activeReadyGcId');
     expect(homeownerConcierge).toContain("status === 'approved' && !canApproveGcProjectRecommendation(request)");
     expect(homeownerConcierge).toContain("handleApprovalResponse(request, 'approved')");
     expect(homeownerConcierge).toContain("handleApprovalResponse(request, 'rejected')");
@@ -582,9 +582,9 @@ describe('general contractor account type', () => {
     expect(completeApplyMigration).toMatch(/guard_gc_approval_apply_active_assignment[\s\S]*u\.role = 'general_contractor'[\s\S]*gc\.verified IS TRUE[\s\S]*NULLIF\(TRIM\(gc\.license_doc_url\), ''\) IS NOT NULL[\s\S]*NULLIF\(TRIM\(gc\.insurance_doc_url\), ''\) IS NOT NULL/);
     expect(completeApplyMigration).toContain('Active complete verified GC management is required before this approval can apply project changes');
     expect(homeownerConcierge).toContain('const canApproveGcProjectRecommendation = (request: ApprovalRequest) => (');
-    expect(homeownerConcierge).toContain('request.requested_by_gc_id === activeVerifiedGcId');
+    expect(homeownerConcierge).toContain('request.requested_by_gc_id === activeReadyGcId');
     expect(homeownerConcierge).toContain("status === 'approved' && !canApproveGcProjectRecommendation(request)");
-    expect(homeownerConcierge).toContain('Active verified GC management is required before this recommendation can apply project changes.');
+    expect(homeownerConcierge).toContain('Active complete verified GC management is required before this recommendation can apply project changes.');
     expect(homeownerConcierge).toContain('const approvalLocked = pending && !canApproveGcProjectRecommendation(request);');
     expect(homeownerConcierge).toContain('disabled={approvalLocked}');
   });
@@ -1621,11 +1621,11 @@ describe('general contractor account type', () => {
     expect(homeownerConcierge).toContain("from('gc_payment_requests')");
     expect(homeownerConcierge).toContain("supabase.rpc('respond_to_gc_payment_request'");
     expect(homeownerConcierge).toContain('Approving this records your authorization. It does not bypass milestone escrow release.');
-    expect(homeownerConcierge).toContain("const activeVerifiedGcId = currentAssignment?.status === 'active' && assignedGc?.verified === true ? assignedGc.id : null;");
+    expect(homeownerConcierge).toContain("const activeReadyGcId = currentAssignment?.status === 'active' && hasCompleteGcTrustProfile(assignedGc) ? assignedGc?.id ?? null : null;");
     expect(homeownerConcierge).toContain('const canApproveGcPaymentRequest = (request: GcPaymentRequest) => (');
-    expect(homeownerConcierge).toContain('request.general_contractor_id === activeVerifiedGcId');
+    expect(homeownerConcierge).toContain('request.general_contractor_id === activeReadyGcId');
     expect(homeownerConcierge).toContain("status === 'approved' && !canApproveGcPaymentRequest(request)");
-    expect(homeownerConcierge).toContain('Active verified GC management is required before a payment request can be approved.');
+    expect(homeownerConcierge).toContain('Active complete verified GC management is required before a payment request can be approved.');
     expect(homeownerConcierge).toContain('const paymentLocked = pending && !canApproveGcPaymentRequest(request);');
     expect(homeownerConcierge).toContain('disabled={paymentLocked}');
   });
