@@ -1271,8 +1271,10 @@ describe('general contractor account type', () => {
     expect(navigator).toContain('GeneralContractorPermits');
     expect(gcProjectDetail).toContain("navigation.navigate('GeneralContractorPermits'");
     expect(gcPermits).toContain("select('id, status')");
-    expect(gcPermits).toContain("assignmentRow?.status !== 'active'");
+    expect(gcPermits).toContain("const canViewPermits = assignment?.status === 'active' || assignment?.status === 'completed';");
+    expect(gcPermits).toContain("!['active', 'completed'].includes(assignmentRow?.status ?? '')");
     expect(gcPermits).toContain('Permits locked');
+    expect(gcPermits).toContain('Project completed. Permit and inspection records are available read-only.');
     expect(gcPermits).toContain('The homeowner must confirm active GC management before permits, inspections, or uploaded documents can be managed.');
     expect(gcPermits).toContain("from('permits').insert");
     expect(gcPermits).toContain("assignment?.status !== 'active'");

@@ -99,7 +99,7 @@ export default function GeneralContractorPermitsScreen() {
       if (assignmentError) throw assignmentError;
 
       setAssignment(assignmentRow as Assignment | null);
-      if (assignmentRow?.status !== 'active') {
+      if (!['active', 'completed'].includes(assignmentRow?.status ?? '')) {
         setPermits([]);
         setPreviewUrls({});
         return;
@@ -248,6 +248,7 @@ export default function GeneralContractorPermitsScreen() {
     }
   };
 
+  const canViewPermits = assignment?.status === 'active' || assignment?.status === 'completed';
   const canManagePermits = assignment?.status === 'active' && gcVerified;
 
   return (
@@ -285,6 +286,11 @@ export default function GeneralContractorPermitsScreen() {
                 fullWidth
               />
             </GlassCard>
+          ) : !loading && !errorMessage && assignment?.status === 'completed' ? (
+            <GlassCard style={styles.card}>
+              <Text style={styles.sectionTitle}>Project completed</Text>
+              <Text style={styles.bodyText}>Project completed. Permit and inspection records are available read-only.</Text>
+            </GlassCard>
           ) : !loading && !errorMessage ? (
             <GlassCard style={styles.card}>
               <Text style={styles.sectionTitle}>{assignment?.status === 'active' ? 'Verification required' : 'Permits locked'}</Text>
@@ -304,9 +310,13 @@ export default function GeneralContractorPermitsScreen() {
             <GlassCard style={styles.card}>
               <Text style={styles.bodyText}>Loading permits...</Text>
             </GlassCard>
-          ) : permits.length === 0 ? (
+          ) : permits.length === 0 && canViewPermits ? (
             <GlassCard style={styles.card}>
               <Text style={styles.bodyText}>No permit or inspection records yet.</Text>
+            </GlassCard>
+          ) : permits.length === 0 ? (
+            <GlassCard style={styles.card}>
+              <Text style={styles.bodyText}>Permit records are available after homeowner-confirmed GC management starts.</Text>
             </GlassCard>
           ) : permits.map((permit) => {
             const previewUrl = previewUrls[permit.id];
