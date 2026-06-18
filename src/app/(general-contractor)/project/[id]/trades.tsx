@@ -334,6 +334,7 @@ export default function GeneralContractorTradesScreen() {
   };
 
   const selectSlot = (slot: Slot) => {
+    if (assignment?.status === 'completed') return;
     setSelectedSlotId(slot.id);
     setSelectedQuoteId(null);
     setRecommendedTradeName(slot.fulfillment_type === 'external' ? slot.external_trade_name ?? '' : '');
@@ -433,6 +434,7 @@ export default function GeneralContractorTradesScreen() {
   };
 
   const selectQuoteForNegotiation = (quote: Quote) => {
+    if (!canManageTradeRequests) return;
     setSelectedQuoteId(quote.id);
     setCounterAmount((quote.total_amount / 100).toFixed(2));
     setCounterNote('');
@@ -647,7 +649,12 @@ export default function GeneralContractorTradesScreen() {
                 const participant = slotParticipantName(slot, company?.name);
 
                 return (
-                  <TouchableOpacity key={slot.id} onPress={() => selectSlot(slot)} activeOpacity={0.85}>
+                  <TouchableOpacity
+                    key={slot.id}
+                    onPress={() => selectSlot(slot)}
+                    disabled={assignment?.status === 'completed'}
+                    activeOpacity={assignment?.status === 'completed' ? 1 : 0.85}
+                  >
                     <GlassCard style={[styles.card, selected && styles.cardSelected]}>
                       <View style={styles.slotHeader}>
                         <View style={styles.slotIcon}>

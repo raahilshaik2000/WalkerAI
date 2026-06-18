@@ -193,6 +193,7 @@ export default function GeneralContractorMaterialsScreen() {
   };
 
   const selectMaterial = (material: Material) => {
+    if (assignment?.status === 'completed') return;
     setSelectedMaterialId(material.id);
     setProductName(material.specific_model ?? '');
     setSupplier(material.brand_preference ?? '');
@@ -354,7 +355,8 @@ export default function GeneralContractorMaterialsScreen() {
                       key={material.id}
                       style={[styles.materialRow, selected && styles.materialRowSelected]}
                       onPress={() => selectMaterial(material)}
-                      activeOpacity={0.85}
+                      disabled={assignment?.status === 'completed'}
+                      activeOpacity={assignment?.status === 'completed' ? 1 : 0.85}
                     >
                       <View style={styles.materialIcon}>
                         <Icon name={selected ? 'check-circle' : 'cube-outline'} size={19} color={selected ? Colors.accent : Colors.text.secondary} />

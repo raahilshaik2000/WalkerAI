@@ -2119,9 +2119,14 @@ describe('general contractor account type', () => {
     expect(gcSchedule).toContain("disabled={assignment?.status === 'completed'}");
     expect(gcSchedule).toContain('Project completed. Final trade dates and schedule recommendations are available read-only.');
     expect(gcMaterials).toContain('Project completed. Material orders, supplier details, and substitution requests are available read-only.');
+    expect(gcMaterials).toContain("if (assignment?.status === 'completed') return;");
+    expect(gcMaterials).toContain("disabled={assignment?.status === 'completed'}");
     expect(gcPayments).toContain('Project completed. Deposit, progress, and final draw requests are available read-only; escrow releases remain in the milestone record.');
     expect(gcTrades).toContain('Project completed. No trade plan was generated for this managed project.');
     expect(gcTrades).toContain('Project completed. Trade assignments, external trade records, quotes, and negotiations are available read-only.');
+    expect(gcTrades).toContain("if (assignment?.status === 'completed') return;");
+    expect(gcTrades).toContain('if (!canManageTradeRequests) return;');
+    expect(gcTrades).toContain("disabled={assignment?.status === 'completed'}");
     expect(gcDiscovery).toContain('Project completed. Discoveries, scope changes, and homeowner decisions are available read-only.');
   });
 
