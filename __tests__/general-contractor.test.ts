@@ -1642,6 +1642,7 @@ describe('general contractor account type', () => {
     expect(gcTrades).toContain('const projectBudgetReady = (projectBudget?.ai_cost_min ?? 0) > 0 && (projectBudget?.ai_cost_max ?? 0) > 0;');
     expect(gcTrades).toContain("return 'Estimate pending';");
     expect(gcTrades).toContain("from('quotes')");
+    expect(gcTrades).toContain("const canManageTradeRequests = assignment?.status === 'active' && gcVerified;");
     expect(gcTrades).toContain("supabase.functions.invoke('generate-trade-slots'");
     expect(gcTrades).toContain('Generate Trade Plan');
     expect(gcTrades).toContain('Generate or approve the project budget before WalkerAI can create priced trade slots.');
@@ -1653,6 +1654,9 @@ describe('general contractor account type', () => {
     expect(gcTrades).toContain('projectBudgetReady ? (');
     expect(gcTrades).toContain('Generate or approve the project budget before WalkerAI can dispatch open trade slots.');
     expect(gcTrades).toContain('The homeowner must confirm GC management before you can dispatch WalkerAI trades.');
+    expect(gcTrades).toContain("disabled={quote.status !== 'pending' || !canManageTradeRequests}");
+    expect(gcTrades).toContain("negotiation.status === 'pending' && canManageTradeRequests");
+    expect(gcTrades).toContain('disabled={!canManageTradeRequests || !!cancellingNegotiationId}');
     expect(gcTrades).toContain("request_type: 'trade_substitution'");
     expect(gcTrades).toContain('No trade assignment changes until the homeowner approves');
     expect(gcTrades).not.toContain("from('project_slots').update");
@@ -1966,7 +1970,8 @@ describe('general contractor account type', () => {
     expect(gcTrades).toContain(".eq('general_contractor_id', assignment.general_contractor_id)");
     expect(gcTrades).toContain(".eq('status', 'pending')");
     expect(gcTrades).toContain('It does not change the homeowner-facing quote.');
-    expect(gcTrades).toContain('disabled={!!cancellingNegotiationId}');
+    expect(gcTrades).toContain("const canManageTradeRequests = assignment?.status === 'active' && gcVerified;");
+    expect(gcTrades).toContain('disabled={!canManageTradeRequests || !!cancellingNegotiationId}');
     expect(gcTrades).toContain('Counteroffer / revision request');
     expect(companyJob).toContain("from('gc_trade_quote_negotiations')");
     expect(companyJob).toContain("import type { GcTradeQuoteNegotiation } from '@/types/database.types'");

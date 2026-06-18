@@ -155,6 +155,7 @@ export default function GeneralContractorTradesScreen() {
     ? (quotesBySlot.get(selectedSlot.id) ?? []).some((quote) => quote.status === 'approved')
     : false;
   const projectBudgetReady = (projectBudget?.ai_cost_min ?? 0) > 0 && (projectBudget?.ai_cost_max ?? 0) > 0;
+  const canManageTradeRequests = assignment?.status === 'active' && gcVerified;
 
   const fetchData = useCallback(async () => {
     const currentUser = (await supabase.auth.getUser()).data.user;
@@ -486,6 +487,10 @@ export default function GeneralContractorTradesScreen() {
       Alert.alert('Negotiation unavailable', 'Refresh trade management and try again.');
       return;
     }
+    if (assignment.status !== 'active' || !gcVerified) {
+      Alert.alert('Active verified GC management required', 'Only an active verified GC can cancel a pending trade negotiation request.');
+      return;
+    }
 
     Alert.alert(
       'Cancel trade negotiation?',
@@ -680,7 +685,7 @@ export default function GeneralContractorTradesScreen() {
                                     <TouchableOpacity
                                       style={styles.negotiateButton}
                                       onPress={() => selectQuoteForNegotiation(quote)}
-                                      disabled={quote.status !== 'pending'}
+                                      disabled={quote.status !== 'pending' || !canManageTradeRequests}
                                     >
                                       <Text style={styles.negotiateText}>Negotiate</Text>
                                     </TouchableOpacity>
@@ -696,12 +701,12 @@ export default function GeneralContractorTradesScreen() {
                                     {negotiation.company_response_note ? (
                                       <Text style={styles.negotiationResponse} numberOfLines={2}>Trade: {negotiation.company_response_note}</Text>
                                     ) : null}
-                                    {negotiation.status === 'pending' ? (
+                                    {negotiation.status === 'pending' && canManageTradeRequests ? (
                                       <GlassButton
                                         label="Cancel Request"
                                         onPress={() => handleCancelNegotiation(negotiation)}
                                         loading={cancellingNegotiationId === negotiation.id}
-                                        disabled={!!cancellingNegotiationId}
+                                        disabled={!canManageTradeRequests || !!cancellingNegotiationId}
                                         variant="secondary"
                                         size="sm"
                                         style={styles.cancelNegotiationButton}
@@ -737,7 +742,7 @@ export default function GeneralContractorTradesScreen() {
                             <TouchableOpacity
                               style={styles.negotiateButton}
                               onPress={() => selectQuoteForNegotiation(quote)}
-                              disabled={quote.status !== 'pending'}
+                              disabled={quote.status !== 'pending' || !canManageTradeRequests}
                             >
                               <Text style={styles.negotiateText}>Negotiate</Text>
                             </TouchableOpacity>
@@ -753,12 +758,12 @@ export default function GeneralContractorTradesScreen() {
                             {negotiation.company_response_note ? (
                               <Text style={styles.negotiationResponse} numberOfLines={2}>Trade: {negotiation.company_response_note}</Text>
                             ) : null}
-                            {negotiation.status === 'pending' ? (
+                            {negotiation.status === 'pending' && canManageTradeRequests ? (
                               <GlassButton
                                 label="Cancel Request"
                                 onPress={() => handleCancelNegotiation(negotiation)}
                                 loading={cancellingNegotiationId === negotiation.id}
-                                disabled={!!cancellingNegotiationId}
+                                disabled={!canManageTradeRequests || !!cancellingNegotiationId}
                                 variant="secondary"
                                 size="sm"
                                 style={styles.cancelNegotiationButton}
