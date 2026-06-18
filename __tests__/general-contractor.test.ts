@@ -2033,7 +2033,16 @@ describe('general contractor account type', () => {
     expect(gcProjectDetail).toContain("assignment?.status === 'completed'");
     expect(gcProjectDetail).toContain('Project history');
     expect(gcProjectDetail).toContain('Completed project records are available read-only.');
-    expect(gcProjectDetail).toContain('Review permits, assistant summaries, messages, and the closeout binder without changing scope, schedule, spending, or payments.');
+    expect(gcProjectDetail).toContain('Review schedule, permits, payments, materials, trades, discoveries, messages, assistant summaries, and the closeout binder without changing scope, schedule, spending, or payments.');
+    expect(gcProjectDetail).toContain("navigation.navigate('GeneralContractorSchedule', { id: projectId })");
+    expect(gcProjectDetail).toContain("navigation.navigate('GeneralContractorPayments', { id: projectId })");
+    expect(gcProjectDetail).toContain("navigation.navigate('GeneralContractorMaterials', { id: projectId })");
+    expect(gcProjectDetail).toContain("navigation.navigate('GeneralContractorTrades', { id: projectId })");
+    expect(gcProjectDetail).toContain("navigation.navigate('GeneralContractorDiscovery', { id: projectId })");
+    expect(gcProjectDetail).toContain('Review final trade dates and schedule recommendations');
+    expect(gcProjectDetail).toContain('Review material orders and substitution requests');
+    expect(gcProjectDetail).toContain('Review assigned trades, external trades, quotes, and negotiations');
+    expect(gcProjectDetail).toContain('Review discoveries, scope changes, and homeowner decisions');
     expect(gcCompletion).toContain("from('permits')");
     expect(gcCompletion).toContain("from('warranties')");
     expect(gcCompletion).toContain("from('material_orders')");

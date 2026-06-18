@@ -933,8 +933,23 @@ export default function GeneralContractorProjectDetail() {
                 <GlassCard style={styles.card}>
                   <Text style={styles.sectionTitle}>Project history</Text>
                   <Text style={styles.bodyText}>
-                    Completed project records are available read-only. Review permits, assistant summaries, messages, and the closeout binder without changing scope, schedule, spending, or payments.
+                    Completed project records are available read-only. Review schedule, permits, payments, materials, trades, discoveries, messages, assistant summaries, and the closeout binder without changing scope, schedule, spending, or payments.
                   </Text>
+                  <View style={styles.controlDivider} />
+                  <TouchableOpacity
+                    style={styles.controlRow}
+                    onPress={() => navigation.navigate('GeneralContractorSchedule', { id: projectId })}
+                    activeOpacity={0.85}
+                  >
+                    <View style={styles.controlIcon}>
+                      <Icon name="calendar-clock" size={20} color={Colors.accent} />
+                    </View>
+                    <View style={styles.controlBody}>
+                      <Text style={styles.controlTitle}>Schedule center</Text>
+                      <Text style={styles.controlSub}>Review final trade dates and schedule recommendations</Text>
+                    </View>
+                    <Icon name="chevron-right" size={20} color={Colors.text.tertiary} />
+                  </TouchableOpacity>
                   <View style={styles.controlDivider} />
                   <TouchableOpacity
                     style={styles.controlRow}
@@ -947,6 +962,66 @@ export default function GeneralContractorProjectDetail() {
                     <View style={styles.controlBody}>
                       <Text style={styles.controlTitle}>Permits & inspections</Text>
                       <Text style={styles.controlSub}>Review final permit and inspection records</Text>
+                    </View>
+                    <Icon name="chevron-right" size={20} color={Colors.text.tertiary} />
+                  </TouchableOpacity>
+                  <View style={styles.controlDivider} />
+                  <TouchableOpacity
+                    style={styles.controlRow}
+                    onPress={() => navigation.navigate('GeneralContractorPayments', { id: projectId })}
+                    activeOpacity={0.85}
+                  >
+                    <View style={styles.controlIcon}>
+                      <Icon name="cash" size={20} color={Colors.accent} />
+                    </View>
+                    <View style={styles.controlBody}>
+                      <Text style={styles.controlTitle}>Payment requests</Text>
+                      <Text style={styles.controlSub}>Review deposit, progress, and final draw requests</Text>
+                    </View>
+                    <Icon name="chevron-right" size={20} color={Colors.text.tertiary} />
+                  </TouchableOpacity>
+                  <View style={styles.controlDivider} />
+                  <TouchableOpacity
+                    style={styles.controlRow}
+                    onPress={() => navigation.navigate('GeneralContractorMaterials', { id: projectId })}
+                    activeOpacity={0.85}
+                  >
+                    <View style={styles.controlIcon}>
+                      <Icon name="cube-send" size={20} color={Colors.accent} />
+                    </View>
+                    <View style={styles.controlBody}>
+                      <Text style={styles.controlTitle}>Material sourcing</Text>
+                      <Text style={styles.controlSub}>Review material orders and substitution requests</Text>
+                    </View>
+                    <Icon name="chevron-right" size={20} color={Colors.text.tertiary} />
+                  </TouchableOpacity>
+                  <View style={styles.controlDivider} />
+                  <TouchableOpacity
+                    style={styles.controlRow}
+                    onPress={() => navigation.navigate('GeneralContractorTrades', { id: projectId })}
+                    activeOpacity={0.85}
+                  >
+                    <View style={styles.controlIcon}>
+                      <Icon name="account-hard-hat" size={20} color={Colors.accent} />
+                    </View>
+                    <View style={styles.controlBody}>
+                      <Text style={styles.controlTitle}>Trade management</Text>
+                      <Text style={styles.controlSub}>Review assigned trades, external trades, quotes, and negotiations</Text>
+                    </View>
+                    <Icon name="chevron-right" size={20} color={Colors.text.tertiary} />
+                  </TouchableOpacity>
+                  <View style={styles.controlDivider} />
+                  <TouchableOpacity
+                    style={styles.controlRow}
+                    onPress={() => navigation.navigate('GeneralContractorDiscovery', { id: projectId })}
+                    activeOpacity={0.85}
+                  >
+                    <View style={styles.controlIcon}>
+                      <Icon name="alert-decagram-outline" size={20} color={Colors.accent} />
+                    </View>
+                    <View style={styles.controlBody}>
+                      <Text style={styles.controlTitle}>Discovery & changes</Text>
+                      <Text style={styles.controlSub}>Review discoveries, scope changes, and homeowner decisions</Text>
                     </View>
                     <Icon name="chevron-right" size={20} color={Colors.text.tertiary} />
                   </TouchableOpacity>
