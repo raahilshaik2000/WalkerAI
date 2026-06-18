@@ -73,5 +73,41 @@ target 'WalkerAI' do
         end
       end
     end
+
+    frameworks_script = File.join(
+      installer.sandbox.root,
+      'Target Support Files',
+      'Pods-WalkerAI',
+      'Pods-WalkerAI-frameworks.sh'
+    )
+    if File.exist?(frameworks_script)
+      script = File.read(frameworks_script)
+      unless script.include?('strip_code_sign_blocking_xattrs')
+        helper = <<~'SH'
+          strip_code_sign_blocking_xattrs() {
+            local target="$1"
+            if [ -e "$target" ]; then
+              find "$target" -depth -print | while IFS= read -r item; do
+                /usr/bin/xattr -d com.apple.FinderInfo "$item" 2>/dev/null || true
+                /usr/bin/xattr -d 'com.apple.fileprovider.fpfs#P' "$item" 2>/dev/null || true
+                /usr/bin/xattr -d com.apple.ResourceFork "$item" 2>/dev/null || true
+                /usr/bin/xattr -d com.apple.provenance "$item" 2>/dev/null || true
+              done
+              /usr/bin/xattr -d com.apple.FinderInfo "$target" 2>/dev/null || true
+              /usr/bin/xattr -d 'com.apple.fileprovider.fpfs#P' "$target" 2>/dev/null || true
+              /usr/bin/xattr -d com.apple.ResourceFork "$target" 2>/dev/null || true
+              /usr/bin/xattr -d com.apple.provenance "$target" 2>/dev/null || true
+            fi
+          }
+
+        SH
+        script.sub!("code_sign_if_enabled() {\n", "#{helper}code_sign_if_enabled() {\n")
+        script.sub!(
+          "  # Resign the code if required by the build settings to avoid unstable apps\n",
+          "  strip_code_sign_blocking_xattrs \"${destination}/$(basename \"$1\")\"\n\n  # Resign the code if required by the build settings to avoid unstable apps\n"
+        )
+        File.write(frameworks_script, script)
+      end
+    end
   end
 end

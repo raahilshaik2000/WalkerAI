@@ -182,6 +182,7 @@
 				00DD1BFF1BD5951E006B06BC /* Bundle React Native code and images */,
 				5CC0FABEA74AAF1BD959BE0D /* [CP] Embed Pods Frameworks */,
 				D4B98493667BF104A0D0BE19 /* [CP] Copy Pods Resources */,
+				7F4C2A901E8360F4C9D4F100 /* Strip App Extended Attributes */,
 			);
 			buildRules = (
 			);
@@ -292,6 +293,21 @@
 			shellScript = "\"${PODS_ROOT}/Target Support Files/Pods-WalkerAI/Pods-WalkerAI-frameworks.sh\"\n";
 			showEnvVarsInLog = 0;
 		};
+		7F4C2A901E8360F4C9D4F100 /* Strip App Extended Attributes */ = {
+			isa = PBXShellScriptBuildPhase;
+			alwaysOutOfDate = 1;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			inputPaths = (
+			);
+			name = "Strip App Extended Attributes";
+			outputPaths = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+			shellPath = /bin/sh;
+			shellScript = "app_path=\"${TARGET_BUILD_DIR}/${WRAPPER_NAME}\"\nif [ -d \"$app_path\" ]; then\n  find \"$app_path\" -depth -print | while IFS= read -r item; do\n    /usr/bin/xattr -d com.apple.FinderInfo \"$item\" 2>/dev/null || true\n    /usr/bin/xattr -d 'com.apple.fileprovider.fpfs#P' \"$item\" 2>/dev/null || true\n    /usr/bin/xattr -d com.apple.ResourceFork \"$item\" 2>/dev/null || true\n    /usr/bin/xattr -d com.apple.provenance \"$item\" 2>/dev/null || true\n  done\n  /usr/bin/xattr -cr \"$app_path\" || true\nfi\n";
+		};
 		D4B98493667BF104A0D0BE19 /* [CP] Copy Pods Resources */ = {
 			isa = PBXShellScriptBuildPhase;
 			buildActionMask = 2147483647;
@@ -346,6 +362,7 @@
 				CURRENT_PROJECT_VERSION = 19;
 				DEVELOPMENT_TEAM = W4V4NXYYW5;
 				ENABLE_BITCODE = NO;
+				ENABLE_USER_SCRIPT_SANDBOXING = NO;
 				INFOPLIST_FILE = WalkerAI/Info.plist;
 				INFOPLIST_KEY_CFBundleDisplayName = "Walker AI";
 				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.utilities";
@@ -381,6 +398,7 @@
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 19;
 				DEVELOPMENT_TEAM = W4V4NXYYW5;
+				ENABLE_USER_SCRIPT_SANDBOXING = NO;
 				INFOPLIST_FILE = WalkerAI/Info.plist;
 				INFOPLIST_KEY_CFBundleDisplayName = "Walker AI";
 				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.utilities";
