@@ -17,6 +17,7 @@ import { useNavigation, useRoute } from '@react-navigation/native';
 import Ionicons from 'react-native-vector-icons/Ionicons';
 import { supabase } from '@/lib/supabase/client';
 import { isValidIsoDate } from '@/lib/dates';
+import { formatAppSafeErrorMessage } from '@/lib/supabase/functions';
 import { getRequiredStringParam } from '@/lib/navigation-params';
 import { allSchedulableSlotsHaveApprovedQuotes } from '@/lib/project-activation';
 import { formatTradeLabel } from '@/lib/trade-labels';
@@ -109,7 +110,7 @@ export default function ScheduleScreen() {
     if (error) {
       setSlots([]);
       setDates({});
-      setErrorMessage(error.message);
+      setErrorMessage(formatAppSafeErrorMessage(error, 'Could not load schedule.'));
       setLoading(false);
       return;
     }
@@ -297,7 +298,7 @@ export default function ScheduleScreen() {
 
       navigation.goBack();
     } catch (err) {
-      Alert.alert('Error', err instanceof Error ? err.message : 'Failed to confirm schedule.');
+      Alert.alert('Could not confirm schedule', formatAppSafeErrorMessage(err, 'Please try again.'));
     } finally {
       setSaving(false);
     }

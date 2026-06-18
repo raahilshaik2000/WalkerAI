@@ -152,6 +152,11 @@ describe('homeowner project schedule screen source guards', () => {
       'utf8',
     );
 
+    expect(source).toContain("import { formatAppSafeErrorMessage } from '@/lib/supabase/functions';");
+    expect(source).toContain("setErrorMessage(formatAppSafeErrorMessage(error, 'Could not load schedule.'))");
+    expect(source).toContain("Alert.alert('Could not confirm schedule', formatAppSafeErrorMessage(err, 'Please try again.'))");
+    expect(source).not.toContain('setErrorMessage(error.message)');
+    expect(source).not.toContain("Alert.alert('Error', err instanceof Error ? err.message : 'Failed to confirm schedule.')");
     expect(source).toContain(".from('quotes')");
     expect(source).toContain(".eq('project_id', projectId)");
     expect(source).toContain(".eq('status', 'pending')");
