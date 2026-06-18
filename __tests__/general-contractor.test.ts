@@ -820,6 +820,10 @@ describe('general contractor account type', () => {
       path.join(repoRoot, 'supabase/migrations/20260616002245_require_gc_project_scope_contact.sql'),
       'utf8',
     );
+    const completeProfileMigration = fs.readFileSync(
+      path.join(repoRoot, 'supabase/migrations/20260618023230_require_complete_gc_profile_for_project_creation.sql'),
+      'utf8',
+    );
     const homeownerConfirmationMigration = fs.readFileSync(
       path.join(repoRoot, 'supabase/migrations/20260615003200_secure_homeowner_gc_confirmation.sql'),
       'utf8',
@@ -972,6 +976,15 @@ describe('general contractor account type', () => {
     expect(requiredContextMigration).toContain('Homeowner contact name is required before creating managed projects');
     expect(requiredContextMigration).toContain('REVOKE ALL ON FUNCTION public.create_gc_managed_project');
     expect(requiredContextMigration).toContain('GRANT EXECUTE ON FUNCTION public.create_gc_managed_project');
+    expect(completeProfileMigration).toContain("v_app_role IS DISTINCT FROM 'general_contractor'");
+    expect(completeProfileMigration).toContain('Only General Contractor accounts can create managed projects');
+    expect(completeProfileMigration).toContain('trim(COALESCE(v_gc.business_name');
+    expect(completeProfileMigration).toContain('trim(COALESCE(v_gc.license_number');
+    expect(completeProfileMigration).toContain('trim(COALESCE(v_gc.license_doc_url');
+    expect(completeProfileMigration).toContain('trim(COALESCE(v_gc.insurance_doc_url');
+    expect(completeProfileMigration).toContain('Complete GC business, license, and insurance setup is required before creating managed projects');
+    expect(completeProfileMigration).toContain('REVOKE ALL ON FUNCTION public.create_gc_managed_project');
+    expect(completeProfileMigration).toContain('GRANT EXECUTE ON FUNCTION public.create_gc_managed_project');
     expect(homeownerConfirmationMigration).toContain('DROP POLICY IF EXISTS "gc_projects_homeowner_update"');
     expect(homeownerConfirmationMigration).toContain('CREATE OR REPLACE FUNCTION public.confirm_gc_management_assignment');
     expect(homeownerConfirmationMigration).toContain('homeowner_id = (SELECT auth.uid())');
