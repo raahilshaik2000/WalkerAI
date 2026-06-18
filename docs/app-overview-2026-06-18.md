@@ -318,6 +318,7 @@ GC responsibilities:
 - request GC payment/deposit/progress/final payment approval
 - coordinate project closeout and completion binder
 - review completed project records read-only after closeout
+- review completed project assistant summaries as historical context without stale active-risk or pending-action prompts
 
 GC cannot:
 
@@ -458,10 +459,13 @@ Notification model:
 
 - notifications are stored in Supabase
 - role-aware routing maps notification type/payload to app screens
+- notification load/read failures use app-safe fallback copy instead of raw Supabase error text
 - push notifications use APNs on iOS
 - APNs setup depends on Apple key/team/bundle secrets in Supabase
 
 GC notifications route into GC screens when the current user is a GC.
+
+Transient infrastructure errors such as network failures or database timeouts are normalized through `src/lib/supabase/functions.ts` so screens can show polished fallback copy instead of database wording.
 
 ## Database and Schema Areas
 

@@ -10,7 +10,7 @@ General Contractor should be a separate app account type, not a company trade fa
 
 - Branch: `main`
 - Remote: `https://github.com/raahilshaik2000/WalkerAI`
-- Latest implementation commit when this doc was updated: `68278ee Clarify completed GC project screens`
+- Latest implementation commit when this doc was updated: `5a4ab42 Hide transient infrastructure error copy`
 - Live backend update: `generate-material-orders` was deployed to Supabase project `wgbloslndalmocckrejw`.
 - Live backend migrations were later applied through `20260618132500_add_supplier_project_message_participants.sql` on Supabase project `wgbloslndalmocckrejw`.
 - Four live QA accounts were reset/verified on Supabase and credentials were written to:
@@ -335,6 +335,30 @@ Related pushed commits:
 
 - `ef74952 Expose completed GC project history`
 - `68278ee Clarify completed GC project screens`
+- `64bf5bb Keep completed GC history read only`
+- `0d7be85 Keep completed GC assistant history read only`
+
+## Shared Notification and Error Copy Hardening
+
+Shared notification and infrastructure-error handling was cleaned up for all roles, including GC.
+
+Completed work:
+
+- Notification load/read failures now use `formatAppSafeErrorMessage` instead of showing raw Supabase error messages.
+- Transient network/database timeout messages fall back to polished screen-specific copy.
+- The specific client-facing failure shape "connection to the database timed out" is now covered by formatter regression tests.
+
+Changed files:
+
+- `src/app/notifications.tsx`
+- `src/lib/supabase/functions.ts`
+- `__tests__/notifications-navigation.test.ts`
+- `__tests__/supabase-functions.test.ts`
+
+Related pushed commits:
+
+- `e722614 Use safe notification error copy`
+- `5a4ab42 Hide transient infrastructure error copy`
 
 ## QA Account Work Completed
 
@@ -374,6 +398,13 @@ Recently run and passing:
 Latest validation after the completed-project screen update:
 
 - `npm test -- --runInBand __tests__/general-contractor.test.ts`
+- `npx tsc --noEmit`
+- `npm test -- --runInBand`
+- `git diff --check`
+
+Latest validation after notification/error-copy hardening:
+
+- `npm test -- --runInBand __tests__/supabase-functions.test.ts __tests__/notifications-navigation.test.ts`
 - `npx tsc --noEmit`
 - `npm test -- --runInBand`
 - `git diff --check`
