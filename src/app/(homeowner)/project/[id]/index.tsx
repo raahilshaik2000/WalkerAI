@@ -483,7 +483,7 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   retryButtonDisabled: { opacity: 0.65 },
-  retryButtonText: { color: '#fff', fontSize: 15, fontWeight: '700' },
+  retryButtonText: { color: Colors.accentFg, fontSize: 15, fontWeight: '700' },
   sectionTitle: { ...Typography.label, marginBottom: 10 },
   tradeRow: {
     flexDirection: 'row',

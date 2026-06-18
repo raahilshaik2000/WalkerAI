@@ -53,4 +53,17 @@ describe('homeowner project detail routes', () => {
     expect(detailSource).not.toContain("icon: '💬'");
     expect(detailSource).not.toContain("icon: '📄'");
   });
+
+  it('keeps the restart contractor search CTA text visible on the primary button', () => {
+    const repoRoot = path.resolve(__dirname, '..');
+    const detailSource = fs.readFileSync(
+      path.join(repoRoot, 'src/app/(homeowner)/project/[id]/index.tsx'),
+      'utf8',
+    );
+
+    expect(detailSource).toContain('Restart Contractor Search');
+    expect(detailSource).toContain('backgroundColor: Colors.accent');
+    expect(detailSource).toContain('retryButtonText: { color: Colors.accentFg');
+    expect(detailSource).not.toContain("retryButtonText: { color: '#fff'");
+  });
 });
