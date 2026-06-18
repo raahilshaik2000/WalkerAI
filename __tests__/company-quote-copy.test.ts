@@ -34,6 +34,19 @@ describe('company quote copy', () => {
     expect(source).not.toContain('rollbackMessage');
   });
 
+  it('keeps quote submission failure copy app-safe', () => {
+    const repoRoot = path.resolve(__dirname, '..');
+    const source = fs.readFileSync(
+      path.join(repoRoot, 'src/app/(company)/job/[id]/quote-builder.tsx'),
+      'utf8'
+    );
+
+    expect(source).toContain("import { formatAppSafeErrorMessage } from '@/lib/supabase/functions';");
+    expect(source).toContain("Alert.alert('Could not submit quote', formatAppSafeErrorMessage(err, 'Please review the quote and try again.'))");
+    expect(source).not.toContain("Alert.alert('Error', message)");
+    expect(source).not.toContain('err instanceof Error');
+  });
+
   it('lets companies replace unfunded pending quotes for GC-requested revisions', () => {
     const repoRoot = path.resolve(__dirname, '..');
     const screenSource = fs.readFileSync(

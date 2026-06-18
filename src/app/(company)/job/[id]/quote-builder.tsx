@@ -18,6 +18,7 @@ import Ionicons from 'react-native-vector-icons/Ionicons';
 import { supabase } from '@/lib/supabase/client';
 import { formatCadCents, parseNonNegativeCadToCents } from '@/lib/currency';
 import { isValidIsoDate, normalizeOptionalIsoDate } from '@/lib/dates';
+import { formatAppSafeErrorMessage } from '@/lib/supabase/functions';
 import { getRequiredStringParam } from '@/lib/navigation-params';
 import { useAuthStore } from '@/stores/auth.store';
 import { Colors, Radius, Spacing, Typography } from '@/constants/theme';
@@ -481,12 +482,7 @@ export default function QuoteBuilderScreen() {
         [{ text: 'Done', onPress: () => navigation.goBack() }]
       );
     } catch (err) {
-      const message = err instanceof Error
-        ? err.message
-        : typeof err === 'object' && err && 'message' in err
-          ? String((err as { message?: unknown }).message)
-          : 'Failed to submit quote.';
-      Alert.alert('Error', message);
+      Alert.alert('Could not submit quote', formatAppSafeErrorMessage(err, 'Please review the quote and try again.'));
     } finally {
       setSubmitting(false);
     }
