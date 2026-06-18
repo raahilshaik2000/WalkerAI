@@ -262,7 +262,7 @@ describe('notification navigation', () => {
     expect(resolveNotificationRoute('quote_submitted', { project_id: 'project-1' }, null)).toBeNull();
 
     const companyRoute = resolveNotificationRoute('job_dispatched', { project_id: 'project-1' }, 'company');
-    expect(toRootNotificationRoute(companyRoute, 'admin')).toEqual(companyRoute);
+    expect(toRootNotificationRoute(companyRoute, 'admin')).toBeNull();
   });
 
   it('keeps push tap role state in sync after auth role hydration', () => {

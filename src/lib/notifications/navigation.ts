@@ -206,7 +206,7 @@ export function toRootNotificationRoute(
   if (!route) return null;
 
   const rootName = role ? ROOT_ROUTE_BY_ROLE[role] : undefined;
-  if (!rootName) return route;
+  if (!rootName) return null;
 
   if (route.name === rootName) return route;
 
