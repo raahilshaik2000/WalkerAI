@@ -25,8 +25,15 @@ describe('Supabase function error formatting', () => {
     await expect(formatSupabaseFunctionError(error)).resolves.toBe('Function not found');
   });
 
-  it('falls back to SDK error messages', async () => {
-    await expect(formatSupabaseFunctionError(new Error('Network request failed'))).resolves.toBe('Network request failed');
+  it('falls back to polished copy for transient infrastructure errors', async () => {
+    await expect(formatSupabaseFunctionError(new Error('Network request failed'))).resolves.toBe('Request failed. Please try again.');
+    await expect(formatSupabaseFunctionError({
+      message: 'Edge Function returned a non-2xx status code',
+      context: new Response(JSON.stringify({ error: 'The connection to the database timed out' })),
+    }, 'Analysis failed. Please try again.')).resolves.toBe('Analysis failed. Please try again.');
+    expect(formatAppSafeErrorMessage(new Error('The connection to the database timed out'), 'Could not load notifications.')).toBe(
+      'Could not load notifications.',
+    );
   });
 
   it('normalizes legacy GC financial term errors before app display', async () => {
