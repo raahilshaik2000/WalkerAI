@@ -30,8 +30,6 @@ import {
 interface GCProjectAssignment {
   id: string;
   status: string;
-  markup_pct: number;
-  concierge_fee_pct: number;
   project_type: string | null;
   scope_summary: string | null;
   homeowner_contact_name: string | null;
@@ -126,7 +124,7 @@ export default function GeneralContractorDashboard() {
       const { data: rows, error: assignmentError } = await supabase
         .from('general_contractor_projects')
         .select(`
-          id, status, markup_pct, concierge_fee_pct, project_type, scope_summary,
+          id, status, project_type, scope_summary,
           homeowner_contact_name, homeowner_contact_email, homeowner_contact_phone,
           project:projects ( id, address, city, room_type, status, ai_cost_min, ai_cost_max )
         `)
@@ -432,7 +430,6 @@ const styles = StyleSheet.create({
   projectContent: { flex: 1, minWidth: 0 },
   projectTitle: { ...Typography.h3, marginBottom: 4 },
   projectMeta: { ...Typography.caption, color: Colors.text.tertiary },
-  projectTerms: { ...Typography.caption, color: Colors.text.secondary, marginTop: 2 },
   projectContactName: { ...Typography.caption, color: Colors.text.tertiary, marginTop: 4 },
   projectContactEmail: { ...Typography.caption, color: Colors.text.tertiary, marginTop: 1 },
   projectRight: { alignItems: 'flex-end', gap: 8 },

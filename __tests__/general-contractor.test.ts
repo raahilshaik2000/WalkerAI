@@ -1265,6 +1265,18 @@ describe('general contractor account type', () => {
     expect(duplicateActionMigration).toContain('Resolve the existing pending GC request for this target before submitting another');
   });
 
+  it('keeps GC dashboard project cards free of financial term percentages', () => {
+    const dashboard = fs.readFileSync(
+      path.join(repoRoot, 'src/app/(general-contractor)/index.tsx'),
+      'utf8',
+    );
+
+    expect(dashboard).not.toContain('markup_pct, concierge_fee_pct');
+    expect(dashboard).not.toContain('projectTerms');
+    expect(dashboard).not.toContain('% markup');
+    expect(dashboard).not.toContain('% concierge');
+  });
+
   it('supports externally managed trades without treating them as WalkerAI verified', () => {
     const migration = fs.readFileSync(
       path.join(repoRoot, 'supabase/migrations/20260615000500_add_external_trade_management.sql'),
