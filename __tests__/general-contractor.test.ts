@@ -261,6 +261,8 @@ describe('general contractor account type', () => {
     expect(rootNavigator).toContain("role === 'general_contractor'");
     expect(rootNavigator).toContain("resolvedRole === 'general_contractor'");
     expect(rootNavigator).toContain('component={GeneralContractorNavigator}');
+    expect(rootNavigator).not.toContain("|| role === 'admin'");
+    expect(rootNavigator).not.toContain("resolvedRole === 'admin'");
     expect(rootNavigator).toContain('isMissingUserProfileColumn');
     expect(rootNavigator).toContain('schema cache');
     expect(rootNavigator).toContain('authRoleResolved');

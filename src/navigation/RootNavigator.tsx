@@ -452,7 +452,6 @@ export function RootNavigator() {
     || role === 'company'
     || role === 'supplier'
     || role === 'general_contractor'
-    || role === 'admin'
     ? role
     : null;
   if (session && !resolvedRole) {
