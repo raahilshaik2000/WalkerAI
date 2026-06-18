@@ -1293,6 +1293,7 @@ describe('general contractor account type', () => {
     );
 
     expect(gcProjectDetail).toContain("import { calculateGcMarkup } from '@/lib/gc-markup'");
+    expect(gcProjectDetail).toContain("import { formatAppSafeErrorMessage } from '@/lib/supabase/functions'");
     expect(gcProjectDetail).toContain('Budget planning');
     expect(gcProjectDetail).toContain('Project total');
     expect(gcProjectDetail).not.toContain('Markup engine');
@@ -1311,6 +1312,10 @@ describe('general contractor account type', () => {
     expect(gcProjectDetail).toContain('disabled={submittingTerms || !!pendingTermsRequest}');
     expect(gcProjectDetail).toContain('Budget request pending');
     expect(gcProjectDetail).toContain('Terms request pending');
+    expect(gcProjectDetail).toContain("Alert.alert('Could not request terms update', formatAppSafeErrorMessage(err, 'Please try again.'))");
+    expect(gcProjectDetail).toContain("Alert.alert('Could not request budget update', formatAppSafeErrorMessage(err, 'Please try again.'))");
+    expect(gcProjectDetail).not.toContain("Alert.alert('Could not request terms update', err instanceof Error ? err.message : 'Please try again.')");
+    expect(gcProjectDetail).not.toContain("Alert.alert('Could not request budget update', err instanceof Error ? err.message : 'Please try again.')");
     expect(gcProjectDetail).toContain("from('project_approval_requests').insert");
     expect(migration).toContain("v_request.metadata->>'action' = 'update_gc_terms'");
     expect(migration).toContain('markup_pct = v_markup_pct');

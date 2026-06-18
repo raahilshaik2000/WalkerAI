@@ -47,6 +47,12 @@ describe('Supabase function error formatting', () => {
     expect(formatAppSafeErrorMessage({ message: 'Concierge fee must be between 0 and 25 percent' })).toBe(
       'Concierge allowance must be between 0% and 25%.',
     );
+    expect(formatAppSafeErrorMessage(new Error('GC markup approval request is missing a valid markup percentage'))).toBe(
+      'Management allowance approval request is missing a valid percentage.',
+    );
+    expect(formatAppSafeErrorMessage(new Error('GC terms approval request is missing a valid concierge fee percentage'))).toBe(
+      'Concierge allowance approval request is missing a valid percentage.',
+    );
     expect(formatAppSafeErrorMessage(null, 'Fallback copy')).toBe('Fallback copy');
   });
 });

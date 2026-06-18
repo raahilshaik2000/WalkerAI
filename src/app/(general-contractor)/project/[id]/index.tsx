@@ -13,6 +13,7 @@ import { useFocusEffect, useNavigation, useRoute } from '@react-navigation/nativ
 import { launchImageLibrary } from 'react-native-image-picker';
 import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
 import { supabase } from '@/lib/supabase/client';
+import { formatAppSafeErrorMessage } from '@/lib/supabase/functions';
 import { formatCad, formatStatusLabel } from '@/lib/formatters';
 import { formatSignedCadCents, parseNonNegativeCadToCents, parseSignedCadToCents } from '@/lib/currency';
 import { calculateGcMarkup } from '@/lib/gc-markup';
@@ -594,7 +595,7 @@ export default function GeneralContractorProjectDetail() {
       Alert.alert('Sent for approval', 'The homeowner must approve before WalkerAI updates the GC management terms.');
       await fetchData();
     } catch (err) {
-      Alert.alert('Could not request terms update', err instanceof Error ? err.message : 'Please try again.');
+      Alert.alert('Could not request terms update', formatAppSafeErrorMessage(err, 'Please try again.'));
     } finally {
       setSubmittingTerms(false);
     }
@@ -651,7 +652,7 @@ export default function GeneralContractorProjectDetail() {
       setProposedBudgetMax('');
       await fetchData();
     } catch (err) {
-      Alert.alert('Could not request budget update', err instanceof Error ? err.message : 'Please try again.');
+      Alert.alert('Could not request budget update', formatAppSafeErrorMessage(err, 'Please try again.'));
     } finally {
       setSubmittingBudget(false);
     }

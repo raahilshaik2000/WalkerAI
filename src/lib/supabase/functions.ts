@@ -6,6 +6,12 @@ export function appSafeFunctionMessage(message: string) {
   if (trimmed === 'Concierge fee must be between 0 and 25 percent') {
     return 'Concierge allowance must be between 0% and 25%.';
   }
+  if (trimmed === 'GC markup approval request is missing a valid markup percentage') {
+    return 'Management allowance approval request is missing a valid percentage.';
+  }
+  if (trimmed === 'GC terms approval request is missing a valid concierge fee percentage') {
+    return 'Concierge allowance approval request is missing a valid percentage.';
+  }
   return trimmed;
 }
 
