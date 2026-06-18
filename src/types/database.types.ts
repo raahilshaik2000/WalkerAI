@@ -62,6 +62,11 @@ export interface Project {
   description: string | null;
   address: string | null;
   location: unknown; // PostGIS geography
+  lat: number | null;
+  lng: number | null;
+  city: string | null;
+  province: string | null;
+  postal_code: string | null;
   room_type: RoomType | null;
   status: ProjectStatus;
   ai_analysis: AIAnalysis | null;
@@ -70,9 +75,16 @@ export interface Project {
   ai_cost_min: number | null; // CAD cents
   ai_cost_max: number | null; // CAD cents
   ai_confidence_score: number | null;
+  assigned_company_id: string | null;
+  accepted_at: string | null;
+  dispatch_round: number | null;
+  dispatch_radius_km: number | null;
+  dispatch_expires_at: string | null;
+  completed_at: string | null;
   diy_category: string | null;
   diy_guide: Record<string, unknown> | null;
   created_at: string;
+  updated_at: string | null;
 }
 
 export interface ProjectPhoto {

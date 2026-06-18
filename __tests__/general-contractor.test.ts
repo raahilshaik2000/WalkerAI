@@ -1165,6 +1165,41 @@ describe('general contractor account type', () => {
     expect(dashboard).not.toContain("assignment.status === 'invited'\n                  ? assignment.status\n                  : project?.status ?? assignment.status");
   });
 
+  it('keeps the shared Project type aligned with GC-created project columns', () => {
+    const projectTypes = fs.readFileSync(
+      path.join(repoRoot, 'src/types/database.types.ts'),
+      'utf8',
+    );
+    const projectCorrectionMigration = fs.readFileSync(
+      path.join(repoRoot, 'supabase/migrations/002_corrections.sql'),
+      'utf8',
+    );
+    const gcProjectCreationMigration = fs.readFileSync(
+      path.join(repoRoot, 'supabase/migrations/20260618023230_require_complete_gc_profile_for_project_creation.sql'),
+      'utf8',
+    );
+
+    expect(projectCorrectionMigration).toContain('ADD COLUMN IF NOT EXISTS lat DOUBLE PRECISION');
+    expect(projectCorrectionMigration).toContain('ADD COLUMN IF NOT EXISTS lng DOUBLE PRECISION');
+    expect(projectCorrectionMigration).toContain('ADD COLUMN IF NOT EXISTS city TEXT');
+    expect(projectCorrectionMigration).toContain('ADD COLUMN IF NOT EXISTS province TEXT');
+    expect(projectCorrectionMigration).toContain('ADD COLUMN IF NOT EXISTS postal_code TEXT');
+    expect(gcProjectCreationMigration).toContain('INSERT INTO public.projects');
+    expect(gcProjectCreationMigration).toContain('city,');
+    expect(gcProjectCreationMigration).toContain('province,');
+    expect(gcProjectCreationMigration).toContain('postal_code,');
+    expect(gcProjectCreationMigration).toContain('lat,');
+    expect(gcProjectCreationMigration).toContain('lng,');
+    expect(projectTypes).toContain('lat: number | null;');
+    expect(projectTypes).toContain('lng: number | null;');
+    expect(projectTypes).toContain('city: string | null;');
+    expect(projectTypes).toContain('province: string | null;');
+    expect(projectTypes).toContain('postal_code: string | null;');
+    expect(projectTypes).toContain('assigned_company_id: string | null;');
+    expect(projectTypes).toContain('dispatch_radius_km: number | null;');
+    expect(projectTypes).toContain('completed_at: string | null;');
+  });
+
   it('counts real GC homeowner actions on the dashboard approval metric', () => {
     const dashboard = fs.readFileSync(
       path.join(repoRoot, 'src/app/(general-contractor)/index.tsx'),
