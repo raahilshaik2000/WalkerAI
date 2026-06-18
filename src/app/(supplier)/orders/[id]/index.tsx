@@ -4,7 +4,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { useNavigation, useRoute } from '@react-navigation/native';
 import Ionicons from 'react-native-vector-icons/Ionicons';
 import { supabase } from '@/lib/supabase/client';
-import { formatSupabaseFunctionError } from '@/lib/supabase/functions';
+import { formatAppSafeErrorMessage, formatSupabaseFunctionError } from '@/lib/supabase/functions';
 import { joinedMaterialItemName } from '@/lib/material-orders';
 import { getRequiredStringParam } from '@/lib/navigation-params';
 import { isStripePayoutLocallyReady } from '@/lib/payouts';
@@ -87,7 +87,7 @@ export default function SupplierOrderDetail() {
     if (orderResult.error) {
       setOrder(null);
       setSupplier(null);
-      setErrorMessage(orderResult.error.message);
+      setErrorMessage(formatAppSafeErrorMessage(orderResult.error, 'Could not load material order.'));
     } else if (!orderResult.data) {
       setOrder(null);
       setSupplier(null);
@@ -95,7 +95,7 @@ export default function SupplierOrderDetail() {
     } else if (supplierResult.error) {
       setOrder(orderResult.data as MaterialOrder);
       setSupplier(null);
-      setErrorMessage(supplierResult.error.message);
+      setErrorMessage(formatAppSafeErrorMessage(supplierResult.error, 'Could not load supplier profile.'));
     } else {
       const fetchedOrder = orderResult.data as MaterialOrder;
       const fetchedSupplier = (supplierResult.data as Supplier | null) ?? null;
@@ -107,11 +107,7 @@ export default function SupplierOrderDetail() {
           setCanClaimOpenOrder(await checkSupplierCanClaimOrder(fetchedSupplier, fetchedOrder));
         } catch (eligibilityError) {
           setCanClaimOpenOrder(false);
-          setErrorMessage(
-            eligibilityError instanceof Error
-              ? eligibilityError.message
-              : 'Could not verify supplier eligibility for this order.'
-          );
+          setErrorMessage(formatAppSafeErrorMessage(eligibilityError, 'Could not verify supplier eligibility for this order.'));
         }
       } else {
         setCanClaimOpenOrder(true);
@@ -168,7 +164,7 @@ export default function SupplierOrderDetail() {
         { text: 'Manage Order', onPress: () => navigation.navigate('SupplierActiveOrders') },
       ]);
     } catch (err) {
-      Alert.alert('Error', await formatSupabaseFunctionError(err, 'Failed to claim order.'));
+      Alert.alert('Could not claim order', await formatSupabaseFunctionError(err, 'Please try again.'));
     } finally {
       setClaiming(false);
     }

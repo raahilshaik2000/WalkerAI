@@ -105,9 +105,13 @@ describe('supplier material order payout math', () => {
     });
   });
 
-  it('keeps supplier material order feed and fulfillment errors app-safe', () => {
+  it('keeps supplier material order feed, detail, and fulfillment errors app-safe', () => {
     const feedSource = fs.readFileSync(
       path.join(__dirname, '../src/app/(supplier)/orders/index.tsx'),
+      'utf8',
+    );
+    const detailSource = fs.readFileSync(
+      path.join(__dirname, '../src/app/(supplier)/orders/[id]/index.tsx'),
       'utf8',
     );
     const activeSource = fs.readFileSync(
@@ -122,6 +126,16 @@ describe('supplier material order payout math', () => {
     expect(feedSource).not.toContain('setErrorMessage(supplierError.message)');
     expect(feedSource).not.toContain('setErrorMessage(error.message)');
     expect(feedSource).not.toContain('eligibilityError instanceof Error');
+
+    expect(detailSource).toContain("import { formatAppSafeErrorMessage, formatSupabaseFunctionError } from '@/lib/supabase/functions'");
+    expect(detailSource).toContain("setErrorMessage(formatAppSafeErrorMessage(orderResult.error, 'Could not load material order.'))");
+    expect(detailSource).toContain("setErrorMessage(formatAppSafeErrorMessage(supplierResult.error, 'Could not load supplier profile.'))");
+    expect(detailSource).toContain("setErrorMessage(formatAppSafeErrorMessage(eligibilityError, 'Could not verify supplier eligibility for this order.'))");
+    expect(detailSource).toContain("Alert.alert('Could not claim order', await formatSupabaseFunctionError(err, 'Please try again.'))");
+    expect(detailSource).not.toContain('setErrorMessage(orderResult.error.message)');
+    expect(detailSource).not.toContain('setErrorMessage(supplierResult.error.message)');
+    expect(detailSource).not.toContain('eligibilityError instanceof Error');
+    expect(detailSource).not.toContain("Alert.alert('Error', await formatSupabaseFunctionError(err, 'Failed to claim order.'))");
 
     expect(activeSource).toContain("import { formatAppSafeErrorMessage } from '@/lib/supabase/functions'");
     expect(activeSource).toContain("setErrorMessage(formatAppSafeErrorMessage(supplierError, 'Could not load supplier profile.'))");
