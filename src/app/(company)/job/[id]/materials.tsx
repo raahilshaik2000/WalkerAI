@@ -216,6 +216,7 @@ export default function ContractorMaterialsScreen() {
               verified_at: verifiedAt,
             })
             .eq('id', m.id)
+            .eq('project_id', projectId)
             .select('id')
             .maybeSingle();
 
@@ -240,6 +241,7 @@ export default function ContractorMaterialsScreen() {
             .from('material_orders')
             .select('id, status')
             .eq('material_id', m.id)
+            .eq('project_id', projectId)
             .eq('status', 'open')
             .maybeSingle();
 
@@ -251,7 +253,8 @@ export default function ContractorMaterialsScreen() {
             const { error } = await supabase
               .from('material_orders')
               .update({ quantity_needed: qty })
-              .eq('id', order.id);
+              .eq('id', order.id)
+              .eq('project_id', projectId);
 
             if (error) {
               throw new Error(`Failed to sync ${m.item} order: ${error.message}`);

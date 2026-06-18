@@ -105,6 +105,23 @@ describe('supplier material order payout math', () => {
     expect(companyMaterialsSource).not.toContain('material:materials(item)');
   });
 
+  it('scopes company material verification writes to the current project', () => {
+    const companyMaterialsSource = fs.readFileSync(
+      path.join(__dirname, '../src/app/(company)/job/[id]/materials.tsx'),
+      'utf8',
+    );
+
+    expect(companyMaterialsSource).toMatch(
+      /\.from\('materials'\)[\s\S]*?\.update\(\{[\s\S]*?verified_quantity: qty,[\s\S]*?verified_by: user\.id,[\s\S]*?verified_at: verifiedAt,[\s\S]*?\}\)[\s\S]*?\.eq\('id', m\.id\)[\s\S]*?\.eq\('project_id', projectId\)[\s\S]*?\.select\('id'\)/
+    );
+    expect(companyMaterialsSource).toMatch(
+      /\.from\('material_orders'\)[\s\S]*?\.select\('id, status'\)[\s\S]*?\.eq\('material_id', m\.id\)[\s\S]*?\.eq\('project_id', projectId\)[\s\S]*?\.eq\('status', 'open'\)/
+    );
+    expect(companyMaterialsSource).toMatch(
+      /\.from\('material_orders'\)[\s\S]*?\.update\(\{ quantity_needed: qty \}\)[\s\S]*?\.eq\('id', order\.id\)[\s\S]*?\.eq\('project_id', projectId\)/
+    );
+  });
+
   it('allows suppliers to read material rows only through eligible or accepted material orders', () => {
     const migration = fs.readFileSync(
       path.join(__dirname, '../supabase/migrations/20260616052440_allow_supplier_material_order_material_reads.sql'),
