@@ -538,7 +538,9 @@ describe('create-gc-concierge-payment-intent source guards', () => {
     expect(source).toContain("booking.homeowner_id !== user.id");
     expect(source).toContain("booking.status !== 'accepted'");
     expect(source).toContain('general_contractor:general_contractors');
-    expect(source).toContain('gc.verified !== true || gc.concierge_enabled !== true');
+    expect(source).toContain('hasCompleteGcConciergeProfile(gc)');
+    expect(source).toContain("appUser?.role !== 'general_contractor'");
+    expect(source).toContain('license_number, license_doc_url, insurance_doc_url');
     expect(source).toContain('Concierge booking is no longer available for payment');
     expect(source).toContain("booking.payment_status === 'paid'");
     expect(source).toContain("gc_concierge_booking_id: booking.id");
@@ -560,7 +562,9 @@ describe('gc-concierge-payout source guards', () => {
     expect(source).toContain("booking.status !== 'accepted'");
     expect(source).toContain("booking.payment_status !== 'paid'");
     expect(source).toContain('verified, concierge_enabled, stripe_account_id');
-    expect(source).toContain('gc.verified !== true || gc.concierge_enabled !== true');
+    expect(source).toContain('hasCompleteGcConciergeProfile(gc)');
+    expect(source).toContain("appUser?.role !== 'general_contractor'");
+    expect(source).toContain('license_number, license_doc_url, insurance_doc_url');
     expect(source).toContain('General contractor is no longer eligible for concierge payouts');
     expect(source).toContain('assertStripePayoutReady');
     expect(source).toContain('stripe.transfers.create');

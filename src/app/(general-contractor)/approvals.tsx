@@ -65,8 +65,34 @@ type GcProjectAssignmentRow = {
   project_type: string | null;
 };
 
+type GcConciergeProfile = {
+  verified?: boolean | null;
+  concierge_enabled?: boolean | null;
+  business_name?: string | null;
+  city?: string | null;
+  province?: string | null;
+  lat?: number | null;
+  lng?: number | null;
+  license_number?: string | null;
+  license_doc_url?: string | null;
+  insurance_doc_url?: string | null;
+};
+
 function getProject(row: { project?: ProjectJoin }) {
   return Array.isArray(row.project) ? row.project[0] ?? null : row.project ?? null;
+}
+
+function hasCompleteGcConciergeProfile(gc: GcConciergeProfile | null | undefined) {
+  return gc?.verified === true
+    && gc?.concierge_enabled === true
+    && !!gc?.business_name?.trim()
+    && !!gc?.city?.trim()
+    && !!gc?.province?.trim()
+    && typeof gc?.lat === 'number'
+    && typeof gc?.lng === 'number'
+    && !!gc?.license_number?.trim()
+    && !!gc?.license_doc_url?.trim()
+    && !!gc?.insurance_doc_url?.trim();
 }
 
 export default function GeneralContractorApprovals() {
@@ -95,7 +121,7 @@ export default function GeneralContractorApprovals() {
       setErrorMessage(null);
       const { data: gc, error: profileError } = await supabase
         .from('general_contractors')
-        .select('id, verified, concierge_enabled')
+        .select('id, verified, concierge_enabled, business_name, city, province, lat, lng, license_number, license_doc_url, insurance_doc_url')
         .eq('user_id', currentUser.id)
         .maybeSingle();
       if (profileError) throw profileError;
@@ -107,7 +133,7 @@ export default function GeneralContractorApprovals() {
         setCanAcceptConciergeBookings(false);
         return;
       }
-      setCanAcceptConciergeBookings(gc.verified === true && gc.concierge_enabled === true);
+      setCanAcceptConciergeBookings(hasCompleteGcConciergeProfile(gc));
 
       if (gc.verified !== true) {
         setApprovals([]);
@@ -215,7 +241,7 @@ export default function GeneralContractorApprovals() {
 
   const handleBookingResponse = async (booking: GcConciergeBooking, status: 'accepted' | 'rejected') => {
     if (status === 'accepted' && !canAcceptConciergeBookings) {
-      Alert.alert('Concierge unavailable', 'WalkerAI verification and concierge marketplace access are required before you can accept concierge requests.');
+      Alert.alert('Concierge unavailable', 'WalkerAI verification, concierge marketplace access, and complete business, license, and insurance setup are required before you can accept concierge requests.');
       return;
     }
 
@@ -308,7 +334,7 @@ export default function GeneralContractorApprovals() {
                           <>
                             {!canAcceptConciergeBookings ? (
                               <Text style={styles.lockedText}>
-                                WalkerAI verification and concierge marketplace access are required before this request can be accepted.
+                                WalkerAI verification, concierge marketplace access, and complete business, license, and insurance setup are required before this request can be accepted.
                               </Text>
                             ) : null}
                             <View style={styles.bookingActions}>

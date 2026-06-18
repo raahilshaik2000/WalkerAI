@@ -6,11 +6,39 @@ const corsHeaders = {
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 };
 
+type ConciergeGeneralContractor = {
+  id?: string;
+  user_id?: string | null;
+  verified?: boolean | null;
+  concierge_enabled?: boolean | null;
+  business_name?: string | null;
+  city?: string | null;
+  province?: string | null;
+  lat?: number | null;
+  lng?: number | null;
+  license_number?: string | null;
+  license_doc_url?: string | null;
+  insurance_doc_url?: string | null;
+};
+
 function getGeneralContractor(row: { general_contractor?: unknown }) {
   const gc = Array.isArray(row.general_contractor)
     ? row.general_contractor[0]
     : row.general_contractor;
-  return gc as { id?: string; verified?: boolean | null; concierge_enabled?: boolean | null } | null | undefined;
+  return gc as ConciergeGeneralContractor | null | undefined;
+}
+
+function hasCompleteGcConciergeProfile(gc: ConciergeGeneralContractor | null | undefined) {
+  return gc?.verified === true
+    && gc?.concierge_enabled === true
+    && !!gc?.business_name?.trim()
+    && !!gc?.city?.trim()
+    && !!gc?.province?.trim()
+    && typeof gc?.lat === 'number'
+    && typeof gc?.lng === 'number'
+    && !!gc?.license_number?.trim()
+    && !!gc?.license_doc_url?.trim()
+    && !!gc?.insurance_doc_url?.trim();
 }
 
 Deno.serve(async (req) => {
@@ -55,7 +83,8 @@ Deno.serve(async (req) => {
         id, project_id, homeowner_id, general_contractor_id, title, price_cents,
         status, payment_status, stripe_payment_intent_id,
         general_contractor:general_contractors (
-          id, verified, concierge_enabled
+          id, user_id, verified, concierge_enabled, business_name, city, province, lat, lng,
+          license_number, license_doc_url, insurance_doc_url
         )
       `)
       .eq('id', booking_id)
@@ -80,7 +109,19 @@ Deno.serve(async (req) => {
     }
 
     const gc = getGeneralContractor(booking);
-    if (!gc?.id || gc.verified !== true || gc.concierge_enabled !== true) {
+    if (!gc?.id || !gc.user_id || !hasCompleteGcConciergeProfile(gc)) {
+      return new Response(JSON.stringify({ error: 'Concierge booking is no longer available for payment' }), {
+        status: 409, headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      });
+    }
+
+    const { data: appUser, error: appUserError } = await adminClient
+      .from('users')
+      .select('role')
+      .eq('id', gc.user_id)
+      .maybeSingle();
+    if (appUserError) throw appUserError;
+    if (appUser?.role !== 'general_contractor') {
       return new Response(JSON.stringify({ error: 'Concierge booking is no longer available for payment' }), {
         status: 409, headers: { ...corsHeaders, 'Content-Type': 'application/json' },
       });

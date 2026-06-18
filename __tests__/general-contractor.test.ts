@@ -1820,7 +1820,7 @@ describe('general contractor account type', () => {
 
   it('requires GC concierge availability before accepting stale booking requests', () => {
     const migration = fs.readFileSync(
-      path.join(repoRoot, 'supabase/migrations/20260615004300_require_available_gc_concierge_acceptance.sql'),
+      path.join(repoRoot, 'supabase/migrations/20260618024528_require_complete_gc_profile_for_concierge_bookings.sql'),
       'utf8',
     );
     const gcApprovals = fs.readFileSync(
@@ -1834,13 +1834,15 @@ describe('general contractor account type', () => {
 
     expect(migration).toContain('CREATE OR REPLACE FUNCTION public.respond_to_gc_concierge_booking');
     expect(migration).toContain("p_status = 'accepted'");
-    expect(migration).toContain('verified IS TRUE AND concierge_enabled IS TRUE');
+    expect(migration).toContain("u.role = 'general_contractor'");
+    expect(migration).toContain("NULLIF(TRIM(gc.license_doc_url), '') IS NOT NULL");
+    expect(migration).toContain("NULLIF(TRIM(gc.insurance_doc_url), '') IS NOT NULL");
     expect(migration).toContain('v_gc_available IS NOT TRUE');
-    expect(migration).toContain('Only verified concierge-enabled GCs can accept concierge bookings');
+    expect(migration).toContain('Only verified concierge-enabled GCs with complete business, license, and insurance setup can accept concierge bookings');
     expect(migration).toContain('Only the requested GC can respond to this booking');
     expect(migration).toContain('GRANT EXECUTE ON FUNCTION public.respond_to_gc_concierge_booking(UUID, TEXT, TEXT) TO authenticated');
-    expect(gcApprovals).toContain(".select('id, verified, concierge_enabled')");
-    expect(gcApprovals).toContain('setCanAcceptConciergeBookings(gc.verified === true && gc.concierge_enabled === true)');
+    expect(gcApprovals).toContain(".select('id, verified, concierge_enabled, business_name, city, province, lat, lng, license_number, license_doc_url, insurance_doc_url')");
+    expect(gcApprovals).toContain('setCanAcceptConciergeBookings(hasCompleteGcConciergeProfile(gc))');
     expect(gcApprovals).toContain('if (gc.verified !== true)');
     expect(gcApprovals.indexOf('if (gc.verified !== true)')).toBeLessThan(
       gcApprovals.indexOf("from('general_contractor_projects')"),
@@ -1848,14 +1850,14 @@ describe('general contractor account type', () => {
     expect(gcApprovals).toContain(".in('status', ['active', 'completed'])");
     expect(gcApprovals).not.toContain(".neq('status', 'removed')");
     expect(gcApprovals).toContain("status === 'accepted' && !canAcceptConciergeBookings");
-    expect(gcApprovals).toContain('WalkerAI verification and concierge marketplace access are required before this request can be accepted.');
+    expect(gcApprovals).toContain('WalkerAI verification, concierge marketplace access, and complete business, license, and insurance setup are required before this request can be accepted.');
     expect(gcApprovals).toContain('disabled={!canAcceptConciergeBookings || !!respondingBookingId}');
     expect(gcApprovals).toContain('disabled={!!respondingBookingId}');
-    expect(homeownerConcierge).toContain('concierge_enabled, verified');
-    expect(homeownerConcierge).toContain("Pick<GeneralContractor, 'id' | 'business_name' | 'concierge_enabled' | 'verified'>");
-    expect(homeownerConcierge).toContain('assignedGc?.verified === true && assignedGc.concierge_enabled === true');
-    expect(homeownerConcierge).toContain('WalkerAI verification is required before this GC can accept concierge service requests.');
-    expect(homeownerConcierge).toContain('WalkerAI verification is required before this GC can accept new concierge service requests.');
+    expect(homeownerConcierge).toContain('license_number, license_doc_url, insurance_doc_url');
+    expect(homeownerConcierge).toContain('function hasCompleteGcConciergeProfile');
+    expect(homeownerConcierge).toContain('const assignedGcConciergeEligible = hasCompleteGcConciergeProfile(assignedGc)');
+    expect(homeownerConcierge).toContain('WalkerAI verification, concierge marketplace access, and complete business, license, and insurance setup are required before this GC can accept concierge service requests.');
+    expect(homeownerConcierge).toContain('WalkerAI verification, concierge marketplace access, and complete business, license, and insurance setup are required before this GC can accept new concierge service requests.');
   });
 
   it('adds a deterministic GC project assistant from live project records', () => {
@@ -2174,21 +2176,23 @@ describe('general contractor account type', () => {
 
     expect(homeownerConcierge).toContain('function getBookingGc(row: ConciergeBookingWithGc)');
     expect(homeownerConcierge).toContain('function isBookingGcConciergeEligible(row: ConciergeBookingWithGc)');
-    expect(homeownerConcierge).toContain('general_contractor:general_contractors ( id, business_name, concierge_enabled, verified )');
+    expect(homeownerConcierge).toContain('id, business_name, city, province, lat, lng, concierge_enabled, verified');
     expect(homeownerConcierge).toContain('bookingRequests.length > 0 ? renderConciergeBookingsSection() : null');
     expect((homeownerConcierge.match(/bookingRequests\.map\(renderConciergeBookingCard\)/g) ?? []).length).toBe(2);
     expect(homeownerConcierge).not.toContain('bookingRequests.map((booking) => (');
     expect(homeownerConcierge).toContain("Alert.alert('Payment locked'");
     expect(homeownerConcierge).toContain("Alert.alert('Payout locked'");
-    expect(homeownerConcierge).toContain('WalkerAI verification and concierge marketplace access are required before this concierge booking can be paid.');
-    expect(homeownerConcierge).toContain('WalkerAI verification and concierge marketplace access are required before this concierge payout can be released.');
+    expect(homeownerConcierge).toContain('WalkerAI verification, concierge marketplace access, and complete business, license, and insurance setup are required before this concierge booking can be paid.');
+    expect(homeownerConcierge).toContain('WalkerAI verification, concierge marketplace access, and complete business, license, and insurance setup are required before this concierge payout can be released.');
     expect(homeownerConcierge).toContain('disabled={!bookingGcEligible || !!payingBookingId}');
     expect(homeownerConcierge).toContain('disabled={!bookingGcEligible || !!releasingBookingId}');
     expect(homeownerConcierge).toContain('GC: {bookingGc.business_name}');
     expect(homeownerConcierge).toContain('if (!isBookingGcConciergeEligible(booking))');
-    expect(paymentFunction).toContain('gc.verified !== true || gc.concierge_enabled !== true');
+    expect(paymentFunction).toContain('hasCompleteGcConciergeProfile(gc)');
+    expect(paymentFunction).toContain("appUser?.role !== 'general_contractor'");
     expect(paymentFunction).toContain('Concierge booking is no longer available for payment');
-    expect(payoutFunction).toContain('gc.verified !== true || gc.concierge_enabled !== true');
+    expect(payoutFunction).toContain('hasCompleteGcConciergeProfile(gc)');
+    expect(payoutFunction).toContain("appUser?.role !== 'general_contractor'");
     expect(payoutFunction).toContain('General contractor is no longer eligible for concierge payouts');
   });
 

@@ -25,8 +25,9 @@ import { getRequiredStringParam } from '@/lib/navigation-params';
 import { Colors, Spacing, Typography } from '@/constants/theme';
 import { GlassButton, GlassCard, GradientBackground, StatusBadge } from '@/components/ui';
 
-type AssignedGeneralContractor = Pick<GeneralContractor, 'id' | 'business_name' | 'city' | 'province' | 'rating' | 'total_reviews' | 'concierge_enabled' | 'verified'>;
-type BookingGeneralContractor = Pick<GeneralContractor, 'id' | 'business_name' | 'concierge_enabled' | 'verified'>;
+type GcTrustProfile = Pick<GeneralContractor, 'verified' | 'business_name' | 'city' | 'province' | 'lat' | 'lng' | 'license_number' | 'license_doc_url' | 'insurance_doc_url'>;
+type AssignedGeneralContractor = Pick<GeneralContractor, 'id' | 'business_name' | 'city' | 'province' | 'lat' | 'lng' | 'rating' | 'total_reviews' | 'concierge_enabled' | 'verified' | 'license_number' | 'license_doc_url' | 'insurance_doc_url'>;
+type BookingGeneralContractor = Pick<GeneralContractor, 'id' | 'business_name' | 'city' | 'province' | 'lat' | 'lng' | 'concierge_enabled' | 'verified' | 'license_number' | 'license_doc_url' | 'insurance_doc_url'>;
 type ConciergeBookingWithGc = GcConciergeBooking & {
   general_contractor?: BookingGeneralContractor | BookingGeneralContractor[] | null;
 };
@@ -80,7 +81,7 @@ function getBookingGc(row: ConciergeBookingWithGc) {
 
 function isBookingGcConciergeEligible(row: ConciergeBookingWithGc) {
   const gc = getBookingGc(row);
-  return gc?.verified === true && gc.concierge_enabled === true;
+  return hasCompleteGcConciergeProfile(gc);
 }
 
 function isMissingGcDiscoveryRpcError(error: { message?: string; details?: string } | null | undefined) {
@@ -90,16 +91,24 @@ function isMissingGcDiscoveryRpcError(error: { message?: string; details?: strin
     || text.includes('schema cache');
 }
 
-function hasCompleteGcMarketplaceProfile(gc: DiscoverableGeneralContractor) {
-  return gc.verified === true
+function hasCompleteGcTrustProfile(gc: GcTrustProfile | null | undefined) {
+  return gc?.verified === true
     && !!gc.business_name?.trim()
     && !!gc.city?.trim()
     && !!gc.province?.trim()
-    && typeof gc.lat === 'number'
-    && typeof gc.lng === 'number'
+    && typeof gc?.lat === 'number'
+    && typeof gc?.lng === 'number'
     && !!gc.license_number?.trim()
     && !!gc.license_doc_url?.trim()
     && !!gc.insurance_doc_url?.trim();
+}
+
+function hasCompleteGcMarketplaceProfile(gc: DiscoverableGeneralContractor) {
+  return hasCompleteGcTrustProfile(gc);
+}
+
+function hasCompleteGcConciergeProfile(gc: (GcTrustProfile & { concierge_enabled?: boolean | null }) | null | undefined) {
+  return hasCompleteGcTrustProfile(gc) && gc?.concierge_enabled === true;
 }
 
 async function fetchDiscoverableGeneralContractors(projectId: string): Promise<DiscoverableGeneralContractor[]> {
@@ -254,7 +263,10 @@ export default function ProjectConciergeScreen() {
           .from('general_contractor_projects')
           .select(`
             id, status, markup_pct, concierge_fee_pct, project_type, scope_summary, initiated_by_gc,
-            general_contractor:general_contractors ( id, business_name, city, province, rating, total_reviews, concierge_enabled, verified )
+            general_contractor:general_contractors (
+              id, business_name, city, province, lat, lng, rating, total_reviews, concierge_enabled, verified,
+              license_number, license_doc_url, insurance_doc_url
+            )
           `)
           .eq('project_id', projectId)
           .neq('status', 'removed')
@@ -279,7 +291,10 @@ export default function ProjectConciergeScreen() {
             price_cents, contractor_payout_cents, walker_fee_cents, status, payment_status,
             stripe_payment_intent_id, stripe_transfer_id, paid_at, payout_released_at,
             response_note, created_at, responded_at,
-            general_contractor:general_contractors ( id, business_name, concierge_enabled, verified )
+            general_contractor:general_contractors (
+              id, business_name, city, province, lat, lng, concierge_enabled, verified,
+              license_number, license_doc_url, insurance_doc_url
+            )
           `)
           .eq('project_id', projectId)
           .order('created_at', { ascending: false }),
@@ -322,7 +337,7 @@ export default function ProjectConciergeScreen() {
   };
 
   const assignedGc = getAssignedGc(currentAssignment);
-  const assignedGcConciergeEligible = assignedGc?.verified === true && assignedGc.concierge_enabled === true;
+  const assignedGcConciergeEligible = hasCompleteGcConciergeProfile(assignedGc);
   const assignedGcCanRequestConcierge = assignedGcConciergeEligible;
   const activeVerifiedGcId = currentAssignment?.status === 'active' && assignedGc?.verified === true ? assignedGc.id : null;
   const canApproveGcPaymentRequest = (request: GcPaymentRequest) => (
@@ -392,7 +407,7 @@ export default function ProjectConciergeScreen() {
       return;
     }
     if (!isBookingGcConciergeEligible(booking)) {
-      Alert.alert('Payout locked', 'WalkerAI verification and concierge marketplace access are required before this GC can receive concierge payouts.');
+      Alert.alert('Payout locked', 'WalkerAI verification, concierge marketplace access, and complete business, license, and insurance setup are required before this GC can receive concierge payouts.');
       return;
     }
 
@@ -501,7 +516,7 @@ export default function ProjectConciergeScreen() {
   };
 
   const handleRequestBooking = async (
-    gc: Pick<GeneralContractor, 'id' | 'business_name' | 'concierge_enabled' | 'verified'>,
+    gc: Pick<GeneralContractor, 'id' | 'business_name' | 'city' | 'province' | 'lat' | 'lng' | 'concierge_enabled' | 'verified' | 'license_number' | 'license_doc_url' | 'insurance_doc_url'>,
     serviceKind: ConciergeServiceKind,
   ) => {
     const currentUser = user ?? (await supabase.auth.getUser()).data.user;
@@ -509,12 +524,8 @@ export default function ProjectConciergeScreen() {
       Alert.alert('Not allowed', 'Only the homeowner can request concierge services.');
       return;
     }
-    if (!gc.concierge_enabled) {
-      Alert.alert('Concierge unavailable', 'This GC has not enabled concierge services.');
-      return;
-    }
-    if (gc.verified !== true) {
-      Alert.alert('Concierge unavailable', 'WalkerAI verification is required before this GC can accept concierge service requests.');
+    if (!hasCompleteGcConciergeProfile(gc)) {
+      Alert.alert('Concierge unavailable', 'WalkerAI verification, concierge marketplace access, and complete business, license, and insurance setup are required before this GC can accept concierge service requests.');
       return;
     }
 
@@ -561,7 +572,7 @@ export default function ProjectConciergeScreen() {
       return;
     }
     if (!isBookingGcConciergeEligible(booking)) {
-      Alert.alert('Payment locked', 'WalkerAI verification and concierge marketplace access are required before this concierge booking can be paid.');
+      Alert.alert('Payment locked', 'WalkerAI verification, concierge marketplace access, and complete business, license, and insurance setup are required before this concierge booking can be paid.');
       return;
     }
 
@@ -707,7 +718,7 @@ export default function ProjectConciergeScreen() {
           <>
             {!bookingGcEligible ? (
               <Text style={styles.emptySubText}>
-                WalkerAI verification and concierge marketplace access are required before this concierge booking can be paid.
+                WalkerAI verification, concierge marketplace access, and complete business, license, and insurance setup are required before this concierge booking can be paid.
               </Text>
             ) : null}
             <GlassButton
@@ -725,7 +736,7 @@ export default function ProjectConciergeScreen() {
             <Text style={styles.paidText}>Paid{booking.paid_at ? ` · ${new Date(booking.paid_at).toLocaleDateString('en-CA')}` : ''}</Text>
             {!bookingGcEligible ? (
               <Text style={styles.emptySubText}>
-                WalkerAI verification and concierge marketplace access are required before this concierge payout can be released.
+                WalkerAI verification, concierge marketplace access, and complete business, license, and insurance setup are required before this concierge payout can be released.
               </Text>
             ) : null}
             <GlassButton
@@ -878,7 +889,7 @@ export default function ProjectConciergeScreen() {
                   </View>
                 ) : assignedGc.concierge_enabled ? (
                   <Text style={styles.emptySubText}>
-                    WalkerAI verification is required before this GC can accept new concierge service requests.
+                    WalkerAI verification, concierge marketplace access, and complete business, license, and insurance setup are required before this GC can accept new concierge service requests.
                   </Text>
                 ) : null}
               </GlassCard>
