@@ -96,12 +96,14 @@ describe('general contractor account type', () => {
     expect(homeownerProjectDetail).toContain("Could not load GC project context: ${formatAppSafeErrorMessage(gcContextResult.error, 'Please try again.')}");
     expect(homeownerProjectDetail).not.toContain('Could not load GC project context: ${gcContextResult.error.message}');
     expect(homeownerConcierge).toContain("import { formatAppSafeErrorMessage, formatSupabaseFunctionError } from '@/lib/supabase/functions'");
+    expect(homeownerConcierge).toContain("setErrorMessage(formatAppSafeErrorMessage(err, 'Could not load concierge options.'))");
     expect(homeownerConcierge).toContain("Alert.alert('Could not invite GC', formatAppSafeErrorMessage(error, 'Please try again.'))");
     expect(homeownerConcierge).toContain("Alert.alert('Could not confirm GC', formatAppSafeErrorMessage(error, 'Please try again.'))");
     expect(homeownerConcierge).toContain("Alert.alert('Could not remove GC', formatAppSafeErrorMessage(error, 'Please try again.'))");
     expect(homeownerConcierge).not.toContain("Alert.alert('Could not invite GC', error.message)");
     expect(homeownerConcierge).not.toContain("Alert.alert('Could not confirm GC', error.message)");
     expect(homeownerConcierge).not.toContain("Alert.alert('Could not remove GC', error.message)");
+    expect(homeownerConcierge).not.toContain("setErrorMessage(err instanceof Error ? err.message : 'Could not load concierge options.')");
   });
 
   it('keeps GC onboarding separate from company onboarding', () => {

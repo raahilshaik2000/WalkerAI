@@ -308,7 +308,7 @@ export default function ProjectConciergeScreen() {
       setPaymentRequests((paymentResult.data ?? []) as GcPaymentRequest[]);
       setBookingRequests((bookingResult.data ?? []) as ConciergeBookingWithGc[]);
     } catch (err) {
-      setErrorMessage(err instanceof Error ? err.message : 'Could not load concierge options.');
+      setErrorMessage(formatAppSafeErrorMessage(err, 'Could not load concierge options.'));
       setCurrentAssignment(null);
       setGeneralContractors([]);
       setApprovalRequests([]);
