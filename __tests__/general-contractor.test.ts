@@ -2054,6 +2054,8 @@ describe('general contractor account type', () => {
     expect(homeownerConcierge).toContain('function isBookingGcConciergeEligible(row: ConciergeBookingWithGc)');
     expect(homeownerConcierge).toContain('general_contractor:general_contractors ( id, business_name, concierge_enabled, verified )');
     expect(homeownerConcierge).toContain('bookingRequests.length > 0 ? renderConciergeBookingsSection() : null');
+    expect((homeownerConcierge.match(/bookingRequests\.map\(renderConciergeBookingCard\)/g) ?? []).length).toBe(2);
+    expect(homeownerConcierge).not.toContain('bookingRequests.map((booking) => (');
     expect(homeownerConcierge).toContain("Alert.alert('Payment locked'");
     expect(homeownerConcierge).toContain("Alert.alert('Payout locked'");
     expect(homeownerConcierge).toContain('WalkerAI verification and concierge marketplace access are required before this concierge booking can be paid.');

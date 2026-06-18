@@ -849,69 +849,7 @@ export default function ProjectConciergeScreen() {
                 </Text>
                 {bookingRequests.length === 0 ? (
                   <Text style={styles.emptySubText}>No concierge consultation requests yet.</Text>
-                ) : bookingRequests.map((booking) => (
-                  <View key={booking.id} style={styles.approvalItem}>
-                    <View style={styles.approvalHeader}>
-                      <View style={styles.approvalIcon}>
-                        <Icon
-                          name={booking.status === 'accepted' ? 'calendar-check-outline' : booking.status === 'rejected' ? 'calendar-remove-outline' : 'calendar-clock-outline'}
-                          size={18}
-                          color={booking.status === 'accepted' ? Colors.success : booking.status === 'rejected' ? Colors.error : Colors.warning}
-                        />
-                      </View>
-                      <View style={styles.approvalBody}>
-                        <Text style={styles.approvalTitle}>{booking.title}</Text>
-                        <Text style={styles.approvalMeta}>
-                          {formatCadCents(booking.price_cents)} · GC {formatCadCents(booking.contractor_payout_cents)} · WalkerAI {formatCadCents(booking.walker_fee_cents)}
-                        </Text>
-                        <Text style={styles.approvalMeta}>
-                          Payment: {formatStatusLabel(booking.payment_status ?? 'unpaid')}
-                        </Text>
-                      </View>
-                      <StatusBadge label={formatStatusLabel(booking.status)} variant={['accepted', 'completed'].includes(booking.status) ? 'completed' : booking.status === 'rejected' ? 'error' : 'pending'} size="sm" />
-                    </View>
-                    {booking.status === 'accepted' && booking.payment_status !== 'paid' ? (
-                      <>
-                        {!isBookingGcConciergeEligible(booking) ? (
-                          <Text style={styles.emptySubText}>
-                            WalkerAI verification and concierge marketplace access are required before this concierge booking can be paid.
-                          </Text>
-                        ) : null}
-                        <GlassButton
-                          label={booking.payment_status === 'payment_pending' ? 'Continue Payment' : 'Pay Booking'}
-                          onPress={() => handlePayBooking(booking)}
-                          loading={payingBookingId === booking.id}
-                          disabled={!isBookingGcConciergeEligible(booking) || !!payingBookingId}
-                          fullWidth
-                          size="sm"
-                          style={styles.inviteButton}
-                        />
-                      </>
-                    ) : booking.payment_status === 'paid' && booking.status === 'accepted' ? (
-                      <>
-                        <Text style={styles.paidText}>Paid{booking.paid_at ? ` · ${new Date(booking.paid_at).toLocaleDateString('en-CA')}` : ''}</Text>
-                        {!isBookingGcConciergeEligible(booking) ? (
-                          <Text style={styles.emptySubText}>
-                            WalkerAI verification and concierge marketplace access are required before this concierge payout can be released.
-                          </Text>
-                        ) : null}
-                        <GlassButton
-                          label="Confirm Complete & Release Payout"
-                          onPress={() => handleReleaseBookingPayout(booking)}
-                          loading={releasingBookingId === booking.id}
-                          disabled={!isBookingGcConciergeEligible(booking) || !!releasingBookingId}
-                          fullWidth
-                          size="sm"
-                          style={styles.inviteButton}
-                        />
-                      </>
-                    ) : booking.status === 'completed' && booking.stripe_transfer_id ? (
-                      <Text style={styles.paidText}>
-                        Payout released{booking.payout_released_at ? ` · ${new Date(booking.payout_released_at).toLocaleDateString('en-CA')}` : ''}
-                      </Text>
-                    ) : null}
-                  </View>
-                ))}
+                ) : bookingRequests.map(renderConciergeBookingCard)}
                 {assignedGcCanRequestConcierge ? (
                   <View style={styles.serviceGrid}>
                     {CONCIERGE_SERVICE_OPTIONS.map((option) => (
