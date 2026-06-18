@@ -677,10 +677,28 @@ describe('general contractor account type', () => {
     expect(profileBoundaryMigration).toContain('guard_supplier_profile_user_role_trigger');
     expect(profileBoundaryMigration).toContain('BEFORE INSERT OR UPDATE ON public.suppliers');
     expect(profileBoundaryMigration).toContain("(SELECT auth.role()) = 'service_role'");
+    expect(deverifyMismatchedProfilesMigration).toContain(
+      'ALTER TABLE public.companies DISABLE TRIGGER guard_company_profile_user_role_trigger',
+    );
+    expect(deverifyMismatchedProfilesMigration).toContain(
+      'ALTER TABLE public.companies ENABLE TRIGGER guard_company_profile_user_role_trigger',
+    );
     expect(deverifyMismatchedProfilesMigration).toContain('UPDATE public.companies c');
     expect(deverifyMismatchedProfilesMigration).toContain("u.role = 'company'");
+    expect(deverifyMismatchedProfilesMigration).toContain(
+      'ALTER TABLE public.suppliers DISABLE TRIGGER guard_supplier_profile_user_role_trigger',
+    );
+    expect(deverifyMismatchedProfilesMigration).toContain(
+      'ALTER TABLE public.suppliers ENABLE TRIGGER guard_supplier_profile_user_role_trigger',
+    );
     expect(deverifyMismatchedProfilesMigration).toContain('UPDATE public.suppliers s');
     expect(deverifyMismatchedProfilesMigration).toContain("u.role = 'supplier'");
+    expect(deverifyMismatchedProfilesMigration).toContain(
+      'ALTER TABLE public.general_contractors DISABLE TRIGGER guard_gc_profile_user_role_trigger',
+    );
+    expect(deverifyMismatchedProfilesMigration).toContain(
+      'ALTER TABLE public.general_contractors ENABLE TRIGGER guard_gc_profile_user_role_trigger',
+    );
     expect(deverifyMismatchedProfilesMigration).toContain('UPDATE public.general_contractors gc');
     expect(deverifyMismatchedProfilesMigration).toContain("u.role = 'general_contractor'");
     expect(deverifyMismatchedProfilesMigration).toContain('SET verified = FALSE');
