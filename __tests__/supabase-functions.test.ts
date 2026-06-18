@@ -1,4 +1,4 @@
-import { formatSupabaseFunctionError } from '../src/lib/supabase/functions';
+import { formatAppSafeErrorMessage, formatSupabaseFunctionError } from '../src/lib/supabase/functions';
 
 declare const require: (moduleName: string) => any;
 declare const __dirname: string;
@@ -38,6 +38,16 @@ describe('Supabase function error formatting', () => {
     await expect(formatSupabaseFunctionError(new Error('Concierge fee must be between 0 and 25 percent'))).resolves.toBe(
       'Concierge allowance must be between 0% and 25%.',
     );
+  });
+
+  it('normalizes direct RPC error messages before app display', () => {
+    expect(formatAppSafeErrorMessage(new Error('Markup must be between 0 and 50 percent'))).toBe(
+      'Management allowance must be between 0% and 50%.',
+    );
+    expect(formatAppSafeErrorMessage({ message: 'Concierge fee must be between 0 and 25 percent' })).toBe(
+      'Concierge allowance must be between 0% and 25%.',
+    );
+    expect(formatAppSafeErrorMessage(null, 'Fallback copy')).toBe('Fallback copy');
   });
 });
 

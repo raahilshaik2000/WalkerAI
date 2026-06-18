@@ -13,6 +13,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { useNavigation } from '@react-navigation/native';
 import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
 import { supabase } from '@/lib/supabase/client';
+import { formatAppSafeErrorMessage } from '@/lib/supabase/functions';
 import { AddressAutocomplete, type AddressResult } from '@/components/ui/AddressAutocomplete';
 import { GlassButton, GlassCard, GlassInput, GradientBackground } from '@/components/ui';
 import { normalizeCanadianProvince } from '@/lib/canada';
@@ -201,7 +202,7 @@ export default function GeneralContractorCreateProject() {
         [{ text: 'Open Project', onPress: () => navigation.replace('GeneralContractorProjectDetail', { id: data }) }],
       );
     } catch (err) {
-      Alert.alert('Could not create project', err instanceof Error ? err.message : 'Please try again.');
+      Alert.alert('Could not create project', formatAppSafeErrorMessage(err, 'Please try again.'));
     } finally {
       setLoading(false);
     }

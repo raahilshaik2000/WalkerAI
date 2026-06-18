@@ -1,4 +1,4 @@
-function appSafeFunctionMessage(message: string) {
+export function appSafeFunctionMessage(message: string) {
   const trimmed = message.trim();
   if (trimmed === 'Markup must be between 0 and 50 percent') {
     return 'Management allowance must be between 0% and 50%.';
@@ -7,6 +7,25 @@ function appSafeFunctionMessage(message: string) {
     return 'Concierge allowance must be between 0% and 25%.';
   }
   return trimmed;
+}
+
+export function formatAppSafeErrorMessage(error: unknown, fallback = 'Please try again.') {
+  if (error instanceof Error && error.message.trim()) {
+    return appSafeFunctionMessage(error.message);
+  }
+
+  if (typeof error === 'string' && error.trim()) {
+    return appSafeFunctionMessage(error);
+  }
+
+  if (error && typeof error === 'object' && 'message' in error) {
+    const message = (error as { message?: unknown }).message;
+    if (typeof message === 'string' && message.trim()) {
+      return appSafeFunctionMessage(message);
+    }
+  }
+
+  return fallback;
 }
 
 export async function formatSupabaseFunctionError(error: unknown, fallback = 'Request failed. Please try again.') {
