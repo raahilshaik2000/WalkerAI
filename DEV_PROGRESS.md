@@ -1,16 +1,17 @@
 # WalkerAI — Development Progress & Context
 
-> Last updated: 2026-04-30
-> Active branch: `april-27-branch`
+> Last updated: 2026-06-18
+> Active branch: `main`
 
 ---
 
 ## App Overview
 
-React Native (iOS primary) renovation platform with 3 account types:
+React Native (iOS primary) renovation platform with 4 account types:
 - **Homeowner** — creates projects, reviews quotes, pays via Stripe escrow
-- **Company (Contractor)** — receives dispatched jobs, accepts slots, submits progress
+- **Company (Trade Contractor)** — receives dispatched jobs, accepts slots, submits quotes/progress
 - **Supplier** — fulfills material orders at AI-fixed prices
+- **General Contractor** — separate project-management account type with verified GC profile, homeowner approval workflows, concierge services, trade coordination, permits, payments, messages, and completion binder
 
 **Stack:**
 - React Native + TypeScript
@@ -34,6 +35,7 @@ Key navigators:
 - `JobDetailNavigator` — `JobDetailMain`, `JobChangeOrders`, `JobMessages`, `JobMilestones`, `QuoteBuilder`
 - `CompanyNavigator` — wraps `CompanyStack`
 - `SupplierNavigator` — in `src/navigation/SupplierNavigator.tsx`
+- `GeneralContractorNavigator` — in `src/navigation/GeneralContractorNavigator.tsx`, mounted as its own root route for `role = 'general_contractor'`
 
 ---
 
@@ -129,8 +131,8 @@ Conversion: LiDAR meters → feet = `value * 3.28084`
 | `claim-material-order` | ✅ NEW | atomic supplier claim at AI-fixed price, notifies homeowner + contractor |
 | `generate-material-orders` | existing | creates `material_orders` rows from BOM |
 | `generate-project-brief` | existing | generates project brief text |
-| `generate-questionnaire` | existing (unused) | AI-conditional questions — wired up in Phase 7 |
-| `generate-render` | existing (stub) | needs DALL-E wiring (Phase 6) |
+| `generate-questionnaire` | existing | AI-conditional questions; `analyzing.tsx` falls back to fixed questions if it fails |
+| `generate-render` | existing | render generation with external provider/fallback handling; UI no longer shows a "coming soon" render card |
 | `create-payment-intent` | existing | Stripe escrow payment |
 | `release-milestone` | existing | releases milestone payment to contractor |
 | `supplier-payout` | existing | Stripe payout to supplier |
@@ -196,8 +198,8 @@ Conversion: LiDAR meters → feet = `value * 3.28084`
 ### 1. Slot Progress on Homeowner Dashboard
 In `src/app/(homeowner)/project/[id]/index.tsx` — the dispatch radar animation shows a generic spinner. Should show individual trade slots filling in (e.g. "Plumber found ✓ — Electrician pending..."). Subscribe to `project_slots` via Supabase realtime (`postgres_changes`).
 
-### 2. Notification Deep Link → Schedule Screen
-The `all_slots_filled` notification deep link is `/(homeowner)/project/${project_id}/schedule`. The app needs to parse this and navigate to `ProjectSchedule` (registered in `ProjectDetailNavigator`). Currently just navigates to the project detail screen.
+### 2. GC-Created Homeowner Invitations
+`src/app/(general-contractor)/project/create.tsx` and `create_gc_managed_project` currently require an existing homeowner account by email. The GC MVP spec allows contractors to create projects for homeowners from homeowner contact information. Supporting non-existing homeowners needs a product/security decision for invite tokens, account claiming, email delivery, and project ownership transfer.
 
 ### 3. Apply Migration to Supabase
 `009_trade_slots.sql` has NOT been applied to production/staging yet. Run via Supabase CLI:
@@ -246,16 +248,21 @@ src/
       project/create/
         measurements.tsx        ← LiDAR entry point (Phase 1 ✅)
         confirm.tsx             ← now calls generate-trade-slots + dispatch-slots (Phase 2 ✅)
-        analyzing.tsx           ← needs Phase 7 update
-        renders.tsx             ← needs Phase 6 update
+        analyzing.tsx           ← conditional questionnaire wired with fallback (Phase 7 ✅)
+        renders.tsx             ← render generation wired (Phase 6 ✅)
       project/[id]/
-        schedule.tsx            ← NEW, needs nav registration (Phase 2 ✅)
-        quote.tsx               ← needs Phase 5 line items update
+        schedule.tsx            ← schedule confirmation (Phase 2 ✅)
+        quote.tsx               ← quote line items + per-slot quote review (Phase 5 ✅)
         index.tsx               ← needs slot progress display (suggestion)
     (company)/
       job/[id]/
-        index.tsx               ← needs slot_id acceptance wiring (MUST DO)
+        index.tsx               ← slot_id acceptance + GC negotiation routing wired
         materials.tsx           ← NEW, needs nav registration (Phase 3 ✅)
+    (general-contractor)/
+      index.tsx                 ← GC dashboard
+      profile.tsx               ← GC profile, verification, Stripe Connect setup
+      project/create.tsx        ← GC-created homeowner-owned draft projects
+      project/[id]/             ← GC project controls: budget, trades, schedule, permits, payments, materials, discovery, messages, assistant, completion
     (supplier)/
       orders/
         index.tsx               ← claim order (Phase 4 ✅)
@@ -268,8 +275,8 @@ supabase/
     dispatch-slots/             ← NEW (Phase 2 ✅)
     accept-job/                 ← UPDATED (Phase 2 ✅)
     claim-material-order/       ← NEW (Phase 4 ✅)
-    generate-render/            ← needs Phase 6 update
-    generate-questionnaire/     ← needs Phase 7 activation
+    generate-render/            ← render generation (Phase 6 ✅)
+    generate-questionnaire/     ← conditional questionnaire (Phase 7 ✅)
 
 src/data/
   pricing-reference.ts          ← lookupMaterialPrice(), estimateProjectCost()
@@ -281,15 +288,17 @@ src/data/
 ## Verification Checklist
 
 - [x] LiDAR scan → measurements auto-populate → cost estimate uses real dimensions
-- [ ] RootNavigator registers `ProjectSchedule` and `JobMaterials` screens
-- [ ] Contractor `job/[id]/index.tsx` passes `slot_id` when accepting
+- [x] RootNavigator registers `ProjectSchedule` and `JobMaterials` screens
+- [x] Contractor `job/[id]/index.tsx` passes `slot_id` when accepting
+- [x] Quote shows separate labour + material line items (Phase 5)
+- [x] AI renders generated (Phase 6)
+- [x] Conditional questionnaire live with fallback (Phase 7)
 - [ ] Project creation → slots generated by AI (e.g. plumber + electrician + tile)
 - [ ] Slot dispatched only to companies with matching `trade_types`
 - [ ] All slots filled → homeowner receives `all_slots_filled` notification
 - [ ] Homeowner approves dates in `schedule.tsx` → all contractors notified → material orders generated
 - [ ] Contractor can adjust material quantities in `job/[id]/materials.tsx`
 - [ ] Supplier sees order (no bid form) → claims at fixed price
-- [ ] Quote shows separate labour + material line items (Phase 5)
-- [ ] AI renders generated (Phase 6)
-- [ ] Conditional questionnaire live (Phase 7)
 - [ ] All milestones paid → project marked completed → rating requested
+
+Unchecked items above require a live/simulator E2E run against Supabase. Current Jest/source checks prove the implementation paths exist, but not that the live database, edge-function secrets, Stripe test mode, and device build are all aligned.
