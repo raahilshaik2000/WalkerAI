@@ -232,7 +232,7 @@ export default function GeneralContractorCreateProject() {
                 keyboardType="email-address"
                 autoCapitalize="none"
                 autoCorrect={false}
-                hint="For now, the homeowner must already have a WalkerAI homeowner account."
+                hint="Use the email on the homeowner's WalkerAI homeowner account."
                 containerStyle={styles.inputSpacing}
               />
               <GlassInput

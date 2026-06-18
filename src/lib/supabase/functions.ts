@@ -23,6 +23,9 @@ export function appSafeFunctionMessage(message: string, fallback = 'Please try a
   if (trimmed === 'GC terms approval request is missing a valid concierge fee percentage') {
     return 'Concierge allowance approval request is missing a valid percentage.';
   }
+  if (trimmed === 'No homeowner account found for that email') {
+    return 'Enter the email for an existing WalkerAI homeowner account before creating a managed project.';
+  }
   if (isTransientInfrastructureMessage(trimmed)) {
     return fallback;
   }

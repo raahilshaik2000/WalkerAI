@@ -1111,6 +1111,8 @@ describe('general contractor account type', () => {
     expect(createProject).toContain('if (!gc || setupRoute || gc.verified !== true)');
     expect(createProject).toContain('disabled={!profileReady}');
     expect(createProject).toContain('Your verified GC profile must load before creating managed projects.');
+    expect(createProject).toContain("Use the email on the homeowner's WalkerAI homeowner account.");
+    expect(createProject).not.toContain('For now, the homeowner must already have a WalkerAI homeowner account.');
     expect(createProject).toContain('GC_PROJECT_TYPES.map');
     expect(enums).toContain("'flooring'");
     expect(enums).toContain("'painting'");

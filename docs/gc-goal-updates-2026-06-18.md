@@ -452,6 +452,7 @@ Runtime fixes made from this pass:
 - Homeowner approval/rejection of GC payment authorization requests now supports optional response notes, while escrow and milestone release remain separate. Those notes are visible in the homeowner concierge history, the GC payment screen, project detail, and the GC approvals inbox.
 - Trade responses to GC counteroffers/revision requests now support optional response notes, and accepted counteroffers keep those notes visible while the trade builds the updated homeowner-facing quote package.
 - GC accept/reject responses for concierge service bookings now support optional response notes, and those notes are visible in the homeowner concierge request history.
+- GC-created project setup now uses stable existing-homeowner-account guidance and formats the missing-homeowner RPC error into actionable app copy instead of exposing backend wording.
 
 Runtime findings still not treated as complete:
 
@@ -471,5 +472,5 @@ The goal is not fully complete yet. Remaining work includes:
    - homeowner approval/rejection of GC recommendations
 2. Verify GC project creation, homeowner approval, trade coordination, material sourcing, payments, messages, schedule, permits, and completion paths in-app beyond the read-only surfaces already checked.
 3. Confirm any deployed Supabase function/migration drift beyond the updated `generate-material-orders` function and applied migrations before relying on the whole production backend as fully current.
-4. Decide product details for GC-created projects when the homeowner does not yet have an account.
+4. Decide product details for GC-created projects when the homeowner does not yet have an account. Current app behavior intentionally requires an existing homeowner account and now explains that requirement with polished copy.
 5. Re-test TestFlight/archive after these changes if the app is being shipped.

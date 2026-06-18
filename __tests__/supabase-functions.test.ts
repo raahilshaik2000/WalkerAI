@@ -60,6 +60,9 @@ describe('Supabase function error formatting', () => {
     expect(formatAppSafeErrorMessage(new Error('GC terms approval request is missing a valid concierge fee percentage'))).toBe(
       'Concierge allowance approval request is missing a valid percentage.',
     );
+    expect(formatAppSafeErrorMessage(new Error('No homeowner account found for that email'))).toBe(
+      'Enter the email for an existing WalkerAI homeowner account before creating a managed project.',
+    );
     expect(formatAppSafeErrorMessage(null, 'Fallback copy')).toBe('Fallback copy');
   });
 });
