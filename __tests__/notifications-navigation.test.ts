@@ -1,5 +1,8 @@
 import { resolveNotificationRoute, toRootNotificationRoute } from '../src/lib/notifications/navigation';
 
+const fs = require('fs');
+const path = require('path');
+
 describe('notification navigation', () => {
   it('routes homeowner quote notifications to the quote screen', () => {
     expect(resolveNotificationRoute('quote_submitted', { project_id: 'project-1' }, 'homeowner')).toEqual({
@@ -242,5 +245,22 @@ describe('notification navigation', () => {
         },
       },
     });
+  });
+
+  it('keeps push tap role state in sync after auth role hydration', () => {
+    const rootNavigator = fs.readFileSync(
+      path.join(__dirname, '../src/navigation/RootNavigator.tsx'),
+      'utf8',
+    );
+    const pushModule = fs.readFileSync(
+      path.join(__dirname, '../src/lib/push/index.ts'),
+      'utf8',
+    );
+
+    expect(pushModule).toContain('export function setPushCurrentRole(role: UserRole | null)');
+    expect(rootNavigator).toContain('setPushCurrentRole(role);');
+    expect(rootNavigator.indexOf('setPushCurrentRole(role);')).toBeLessThan(
+      rootNavigator.indexOf('const currentUserId = session?.user?.id ?? null;'),
+    );
   });
 });

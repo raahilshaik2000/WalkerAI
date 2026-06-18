@@ -32,13 +32,17 @@ export function setPushDeepLinkHandler(handler: DeepLinkHandler) {
   onDeepLink = handler;
 }
 
+export function setPushCurrentRole(role: UserRole | null) {
+  currentRole = role;
+}
+
 /**
  * Run on every successful sign-in to make sure this device's APNs token is
  * registered against the current user. Idempotent: safe to call any number
  * of times. Returns early on Android / non-supported platforms.
  */
 export async function initPushForUser(userId: string, role: UserRole | null): Promise<void> {
-  currentRole = role;
+  setPushCurrentRole(role);
   if (Platform.OS !== 'ios' || !NativeModule || !events) {
     return; // Android / other platforms not supported yet (no FCM wired).
   }

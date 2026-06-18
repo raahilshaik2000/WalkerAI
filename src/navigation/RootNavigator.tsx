@@ -17,7 +17,7 @@ import { supabase } from '@/lib/supabase/client';
 import { FloatingTabBar } from '@/components/ui/FloatingTabBar';
 import type { UserRole } from '@/constants/enums';
 import { toRootNotificationRoute } from '@/lib/notifications/navigation';
-import { initPushForUser, deactivatePushForUser, setPushDeepLinkHandler } from '@/lib/push';
+import { initPushForUser, deactivatePushForUser, setPushDeepLinkHandler, setPushCurrentRole } from '@/lib/push';
 
 // Shared navigation ref so the push module can deep-link without prop-drilling.
 const navigationRef = createNavigationContainerRef();
@@ -428,6 +428,7 @@ export function RootNavigator() {
   const lastPushUserId = useRef<string | null>(null);
   useEffect(() => {
     if (!hydrated) return;
+    setPushCurrentRole(role);
     const currentUserId = session?.user?.id ?? null;
     const previousUserId = lastPushUserId.current;
     if (currentUserId && currentUserId !== previousUserId) {
