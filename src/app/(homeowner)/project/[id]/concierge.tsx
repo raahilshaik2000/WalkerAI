@@ -169,12 +169,7 @@ function getApprovalDetailRows(request: ApprovalRequest): string[] {
       : ['Approving updates the project estimate after validation.'];
   }
   if (action === 'update_gc_terms') {
-    const markup = getMetadataNumber(request.metadata, 'proposed_markup_pct');
-    const conciergeFee = getMetadataNumber(request.metadata, 'proposed_concierge_fee_pct');
-    return [
-      markup != null ? `New markup: ${markup.toFixed(2)}%` : null,
-      conciergeFee != null ? `New concierge fee: ${conciergeFee.toFixed(2)}%` : null,
-    ].filter((row): row is string => Boolean(row));
+    return ['Updated project management terms are ready for homeowner review.'];
   }
   if (action === 'complete_project') {
     return ['Approving marks the managed project complete.'];
@@ -194,7 +189,7 @@ function getApprovalConfirmMessage(request: ApprovalRequest, status: 'approved' 
       : 'Approving updates the project estimate after WalkerAI validates the request.';
   }
   if (action === 'update_gc_terms') {
-    return 'Approving updates the GC markup and concierge fee for this managed project.';
+    return 'Approving updates the GC management terms for this managed project.';
   }
   if (action === 'complete_project') {
     return 'Approving marks this managed project complete.';
@@ -762,7 +757,7 @@ export default function ProjectConciergeScreen() {
     <GlassCard style={styles.card}>
       <Text style={styles.sectionTitle}>Concierge service requests</Text>
       <Text style={styles.bodyText}>
-        Virtual consults and site visits use fixed marketplace pricing. Contractor payout is 80%; WalkerAI keeps 20%.
+        Virtual consults and site visits use fixed marketplace pricing.
       </Text>
       {bookingRequests.length === 0 ? (
         <Text style={styles.emptySubText}>No concierge consultation requests yet.</Text>
@@ -821,10 +816,6 @@ export default function ProjectConciergeScreen() {
                     dot
                   />
                 </View>
-                <View style={styles.termsRow}>
-                  <Text style={styles.termText}>{Number(currentAssignment.markup_pct).toFixed(0)}% markup</Text>
-                  <Text style={styles.termText}>{Number(currentAssignment.concierge_fee_pct).toFixed(0)}% concierge fee</Text>
-                </View>
                 <View style={styles.projectContext}>
                   <Text style={styles.projectContextLabel}>Project</Text>
                   <Text style={styles.projectContextValue}>{formatGcProjectType(currentAssignment.project_type)}</Text>
@@ -868,7 +859,7 @@ export default function ProjectConciergeScreen() {
               <GlassCard style={styles.card}>
                 <Text style={styles.sectionTitle}>Concierge service requests</Text>
                 <Text style={styles.bodyText}>
-                  Virtual consults and site visits use fixed marketplace pricing. Contractor payout is 80%; WalkerAI keeps 20%.
+                  Virtual consults and site visits use fixed marketplace pricing.
                 </Text>
                 {bookingRequests.length === 0 ? (
                   <Text style={styles.emptySubText}>No concierge consultation requests yet.</Text>
@@ -1049,8 +1040,6 @@ export default function ProjectConciergeScreen() {
                   <StatusBadge label="Verified" variant="completed" size="sm" dot />
                 </View>
                 <View style={styles.termsRow}>
-                  <Text style={styles.termText}>{Number(gc.default_markup_pct).toFixed(0)}% markup</Text>
-                  <Text style={styles.termText}>{Number(gc.default_concierge_fee_pct).toFixed(0)}% concierge fee</Text>
                   <Text style={styles.termText}>{gc.concierge_enabled ? 'Concierge marketplace' : 'Project management only'}</Text>
                 </View>
                 {gc.concierge_enabled ? (

@@ -553,18 +553,18 @@ export default function GeneralContractorProjectDetail() {
 
     const markupPct = parsePercent(proposedMarkupPct);
     if (markupPct == null || markupPct < 0 || markupPct > 50) {
-      Alert.alert('Invalid markup', 'Markup must be between 0% and 50%.');
+      Alert.alert('Invalid management rate', 'Management rate must be between 0% and 50%.');
       return;
     }
 
     const conciergePct = parsePercent(proposedConciergeFeePct);
     if (conciergePct == null || conciergePct < 0 || conciergePct > 25) {
-      Alert.alert('Invalid concierge fee', 'Concierge fee must be between 0% and 25%.');
+      Alert.alert('Invalid concierge rate', 'Concierge rate must be between 0% and 25%.');
       return;
     }
 
     if (markupPct === Number(assignment.markup_pct) && conciergePct === Number(assignment.concierge_fee_pct)) {
-      Alert.alert('No change', 'Adjust the markup or concierge fee before sending a homeowner approval request.');
+      Alert.alert('No change', 'Adjust the management terms before sending a homeowner approval request.');
       return;
     }
 
@@ -577,10 +577,7 @@ export default function GeneralContractorProjectDetail() {
         request_type: 'general_recommendation',
         title: 'GC management terms update',
         description: [
-          `Current markup: ${Number(assignment.markup_pct).toFixed(2)}%`,
-          `Proposed markup: ${markupPct.toFixed(2)}%`,
-          `Current concierge fee: ${Number(assignment.concierge_fee_pct).toFixed(2)}%`,
-          `Proposed concierge fee: ${conciergePct.toFixed(2)}%`,
+          'A GC management terms update is ready for homeowner review.',
           'No terms change applies until the homeowner approves this request.',
         ].join('\n'),
         cost_delta: null,
@@ -594,7 +591,7 @@ export default function GeneralContractorProjectDetail() {
         },
       });
       if (error) throw error;
-      Alert.alert('Sent for approval', 'The homeowner must approve before WalkerAI updates the GC markup and concierge fee.');
+      Alert.alert('Sent for approval', 'The homeowner must approve before WalkerAI updates the GC management terms.');
       await fetchData();
     } catch (err) {
       Alert.alert('Could not request terms update', err instanceof Error ? err.message : 'Please try again.');
@@ -634,7 +631,7 @@ export default function GeneralContractorProjectDetail() {
         title: 'Preliminary project budget',
         description: [
           `Proposed budget range: ${formatCad(budgetMin)} - ${formatCad(budgetMax)}`,
-          'This becomes the project budget basis for markup, trade-slot generation, and dispatch only after homeowner approval.',
+          'This becomes the project budget basis for trade-slot generation and dispatch only after homeowner approval.',
         ].join('\n'),
         cost_delta: project?.ai_cost_min != null && project.ai_cost_max != null
           ? budgetMax - project.ai_cost_max
@@ -735,7 +732,7 @@ export default function GeneralContractorProjectDetail() {
                     <View>
                       <Text style={styles.sectionTitle}>GC management terms</Text>
                       <Text style={styles.bodyText}>
-                        {Number(assignment.markup_pct).toFixed(0)}% markup · {Number(assignment.concierge_fee_pct).toFixed(0)}% concierge fee
+                        Management is active only within the homeowner-approved project terms.
                       </Text>
                     </View>
                     <StatusBadge
@@ -1021,7 +1018,7 @@ export default function GeneralContractorProjectDetail() {
 
               {assignment ? (
                 <GlassCard style={styles.card}>
-                  <Text style={styles.sectionTitle}>Markup engine</Text>
+                  <Text style={styles.sectionTitle}>Budget planning</Text>
                   {markupSummary ? (
                     <>
                       <BudgetRow
@@ -1029,34 +1026,21 @@ export default function GeneralContractorProjectDetail() {
                         value={`${formatCad(markupSummary.baseMinCents)} - ${formatCad(markupSummary.baseMaxCents)}`}
                       />
                       <BudgetRow
-                        label={`GC markup (${Number(assignment.markup_pct).toFixed(0)}%)`}
-                        value={`${formatCad(markupSummary.markupMinCents)} - ${formatCad(markupSummary.markupMaxCents)}`}
-                      />
-                      <BudgetRow
-                        label={`Concierge fee (${Number(assignment.concierge_fee_pct).toFixed(0)}%)`}
-                        value={`${formatCad(markupSummary.conciergeFeeMinCents)} - ${formatCad(markupSummary.conciergeFeeMaxCents)}`}
-                      />
-                      <BudgetRow
-                        label="Homeowner-facing total"
+                        label="Project total"
                         value={`${formatCad(markupSummary.homeownerTotalMinCents)} - ${formatCad(markupSummary.homeownerTotalMaxCents)}`}
                         strong
-                      />
-                      <BudgetRow
-                        label="Estimated GC revenue"
-                        value={`${formatCad(markupSummary.gcRevenueMinCents)} - ${formatCad(markupSummary.gcRevenueMaxCents)}`}
-                        positive
                       />
                     </>
                   ) : (
                     <Text style={styles.bodyText}>
-                      Generate or enter an estimate before WalkerAI can calculate markup, homeowner total, and GC revenue.
+                      Generate or enter an estimate before WalkerAI can calculate the homeowner-facing total.
                     </Text>
                   )}
                   {assignmentIsActive ? (
                     <View style={styles.termsEditor}>
                       <Text style={styles.sectionSubTitle}>Budget basis</Text>
                       <Text style={styles.bodyText}>
-                        Propose the preliminary estimate range used for markup, trade-slot generation, and dispatch. The homeowner must approve before it applies.
+                        Propose the preliminary estimate range used for trade-slot generation and dispatch. The homeowner must approve before it applies.
                       </Text>
                       <View style={styles.formRow}>
                         <GlassInput
@@ -1091,18 +1075,18 @@ export default function GeneralContractorProjectDetail() {
                       <View style={styles.controlDivider} />
                       <Text style={styles.sectionSubTitle}>Management terms</Text>
                       <Text style={styles.bodyText}>
-                        Update margin terms through homeowner approval. Approved terms recalculate this project only.
+                        Update project management settings through homeowner approval. Approved settings recalculate this project only.
                       </Text>
                       <View style={styles.formRow}>
                         <GlassInput
-                          label="Markup %"
+                          label="Management rate"
                           value={proposedMarkupPct}
                           onChangeText={setProposedMarkupPct}
                           keyboardType="decimal-pad"
                           containerStyle={styles.formHalf}
                         />
                         <GlassInput
-                          label="Concierge %"
+                          label="Concierge rate"
                           value={proposedConciergeFeePct}
                           onChangeText={setProposedConciergeFeePct}
                           keyboardType="decimal-pad"

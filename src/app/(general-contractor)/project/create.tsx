@@ -166,12 +166,12 @@ export default function GeneralContractorCreateProject() {
     }
     const parsedMarkup = parsePercent(markupPct, 15);
     if (parsedMarkup == null || parsedMarkup < 0 || parsedMarkup > 50) {
-      Alert.alert('Invalid markup', 'Markup must be between 0% and 50%.');
+      Alert.alert('Invalid management rate', 'Management rate must be between 0% and 50%.');
       return;
     }
     const parsedConcierge = parsePercent(conciergeFeePct, 10);
     if (parsedConcierge == null || parsedConcierge < 0 || parsedConcierge > 25) {
-      Alert.alert('Invalid concierge fee', 'Concierge fee must be between 0% and 25%.');
+      Alert.alert('Invalid concierge rate', 'Concierge rate must be between 0% and 25%.');
       return;
     }
 
@@ -327,14 +327,14 @@ export default function GeneralContractorCreateProject() {
               ) : null}
               <View style={styles.row}>
                 <GlassInput
-                  label="Markup %"
+                  label="Management rate"
                   value={markupPct}
                   onChangeText={setMarkupPct}
                   keyboardType="decimal-pad"
                   containerStyle={styles.halfInput}
                 />
                 <GlassInput
-                  label="Concierge %"
+                  label="Concierge rate"
                   value={conciergeFeePct}
                   onChangeText={setConciergeFeePct}
                   keyboardType="decimal-pad"

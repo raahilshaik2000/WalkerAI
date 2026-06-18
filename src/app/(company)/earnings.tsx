@@ -131,7 +131,7 @@ export default function EarningsScreen() {
           <GlassCard style={styles.summaryCard}>
             <Text style={styles.summaryLabel}>Total Received</Text>
             <Text style={styles.summaryAmount}>{formatCad(netEarned)}</Text>
-            <Text style={styles.summaryNote}>After WalkerAI commission</Text>
+            <Text style={styles.summaryNote}>Estimated payout received</Text>
             <View style={styles.divider} />
             <View style={styles.summaryRow}>
               <Text style={styles.summarySubLabel}>Gross billed</Text>

@@ -257,7 +257,7 @@ export default function GeneralContractorDashboard() {
                 ? 'Complete your business profile, license, and insurance steps before WalkerAI can review your GC profile.'
                 : gc
                 ? 'Your GC profile is waiting for review. Managed projects will appear here once approved.'
-                : 'Create your General Contractor profile to manage projects, markup, approvals, and concierge workflows.'}
+                : 'Create your General Contractor profile to manage projects, approvals, and concierge workflows.'}
             </Text>
 
             {setupIncomplete || !gc ? (
@@ -347,9 +347,6 @@ export default function GeneralContractorDashboard() {
                         <View style={styles.projectContent}>
                           <Text style={styles.projectTitle}>{formatGcProjectType(assignment.project_type, project?.room_type)}</Text>
                           <Text style={styles.projectMeta}>{formatLocation(project?.city, project?.address)}</Text>
-                          <Text style={styles.projectTerms}>
-                            {Number(assignment.markup_pct).toFixed(0)}% markup · {Number(assignment.concierge_fee_pct).toFixed(0)}% concierge
-                          </Text>
                           {assignment.homeowner_contact_name ? (
                             <Text style={styles.projectContactName} numberOfLines={1}>
                               {assignment.homeowner_contact_name}

@@ -204,8 +204,6 @@ export default function GeneralContractorProfile() {
               <Text style={styles.sectionLabel}>Business Info</Text>
               <InfoRow label="Location" value={[gc.city, gc.province].filter(Boolean).join(', ') || 'Not set'} />
               <InfoRow label="Service radius" value={`${gc.service_radius_km} km`} />
-              <InfoRow label="Default markup" value={`${Number(gc.default_markup_pct).toFixed(0)}%`} />
-              <InfoRow label="Concierge fee" value={`${Number(gc.default_concierge_fee_pct).toFixed(0)}%`} />
               <InfoRow label="License" value={gc.license_number ?? 'Required'} warning={!gc.license_number} />
               <InfoRow label="License document" value={gc.license_doc_url ? 'Submitted' : 'Required'} warning={!gc.license_doc_url} />
               <InfoRow label="Insurance" value={gc.insurance_doc_url ? 'Submitted' : 'Required'} warning={!gc.insurance_doc_url} />

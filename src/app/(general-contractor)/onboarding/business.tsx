@@ -122,12 +122,12 @@ export default function GeneralContractorBusinessOnboarding() {
     }
     const markupPct = parsePercent(defaultMarkup);
     if (markupPct == null || markupPct < 0 || markupPct > 50) {
-      Alert.alert('Invalid markup', 'Default markup must be between 0% and 50%.');
+      Alert.alert('Invalid management rate', 'Default management rate must be between 0% and 50%.');
       return;
     }
     const conciergePct = parsePercent(conciergeFee);
     if (conciergePct == null || conciergePct < 0 || conciergePct > 25) {
-      Alert.alert('Invalid concierge fee', 'Default concierge fee must be between 0% and 25%.');
+      Alert.alert('Invalid concierge rate', 'Default concierge rate must be between 0% and 25%.');
       return;
     }
     if (!user?.id) {
@@ -266,14 +266,14 @@ export default function GeneralContractorBusinessOnboarding() {
 
               <View style={styles.row}>
                 <GlassInput
-                  label="Markup %"
+                  label="Management rate"
                   value={defaultMarkup}
                   onChangeText={setDefaultMarkup}
                   keyboardType="decimal-pad"
                   containerStyle={[styles.inputSpacing, styles.percentInput]}
                 />
                 <GlassInput
-                  label="Concierge %"
+                  label="Concierge rate"
                   value={conciergeFee}
                   onChangeText={setConciergeFee}
                   keyboardType="decimal-pad"

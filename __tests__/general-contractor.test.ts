@@ -535,8 +535,11 @@ describe('general contractor account type', () => {
     expect(homeownerConcierge).toContain("action === 'update_gc_budget'");
     expect(homeownerConcierge).toContain('New project estimate:');
     expect(homeownerConcierge).toContain("action === 'update_gc_terms'");
-    expect(homeownerConcierge).toContain('Approving updates the GC markup and concierge fee');
+    expect(homeownerConcierge).toContain('Updated project management terms are ready for homeowner review.');
+    expect(homeownerConcierge).toContain('Approving updates the GC management terms for this managed project.');
     expect(homeownerConcierge).toContain('Review GC recommendations before they change project budget, terms, materials, trades, schedule, or completion status.');
+    expect(homeownerConcierge).not.toContain('New markup:');
+    expect(homeownerConcierge).not.toContain('New concierge fee:');
     expect(homeownerConcierge).not.toContain('Any project updates still need to be applied by the appropriate workflow.');
   });
 
@@ -547,6 +550,10 @@ describe('general contractor account type', () => {
     );
     const verificationMigration = fs.readFileSync(
       path.join(repoRoot, 'supabase/migrations/20260616000625_require_verified_gc_approval_apply.sql'),
+      'utf8',
+    );
+    const completeApplyMigration = fs.readFileSync(
+      path.join(repoRoot, 'supabase/migrations/20260618033540_require_complete_gc_profile_for_stale_request_application.sql'),
       'utf8',
     );
     const homeownerConcierge = fs.readFileSync(
@@ -568,6 +575,9 @@ describe('general contractor account type', () => {
     expect(verificationMigration).toContain("gcp.status = 'active'");
     expect(verificationMigration).toContain('gc.verified IS TRUE');
     expect(verificationMigration).toContain('Active verified GC management is required before this approval can apply project changes');
+    expect(completeApplyMigration).toContain('CREATE OR REPLACE FUNCTION public.guard_gc_approval_apply_active_assignment()');
+    expect(completeApplyMigration).toMatch(/guard_gc_approval_apply_active_assignment[\s\S]*u\.role = 'general_contractor'[\s\S]*gc\.verified IS TRUE[\s\S]*NULLIF\(TRIM\(gc\.license_doc_url\), ''\) IS NOT NULL[\s\S]*NULLIF\(TRIM\(gc\.insurance_doc_url\), ''\) IS NOT NULL/);
+    expect(completeApplyMigration).toContain('Active complete verified GC management is required before this approval can apply project changes');
     expect(homeownerConcierge).toContain('const canApproveGcProjectRecommendation = (request: ApprovalRequest) => (');
     expect(homeownerConcierge).toContain('request.requested_by_gc_id === activeVerifiedGcId');
     expect(homeownerConcierge).toContain("status === 'approved' && !canApproveGcProjectRecommendation(request)");
@@ -762,7 +772,6 @@ describe('general contractor account type', () => {
       path.join(repoRoot, 'supabase/migrations/20260618025242_require_complete_gc_profile_for_project_control_requests.sql'),
       'utf8',
     );
-
     expect(migration).toContain('CREATE OR REPLACE FUNCTION public.guard_gc_approval_request_updates()');
     expect(migration).toContain("IF NEW.status IN ('approved', 'rejected') THEN");
     expect(migration).toContain('Only the homeowner can approve or reject a GC approval request');
@@ -825,6 +834,10 @@ describe('general contractor account type', () => {
       path.join(repoRoot, 'supabase/migrations/20260618025242_require_complete_gc_profile_for_project_control_requests.sql'),
       'utf8',
     );
+    const completeApplyMigration = fs.readFileSync(
+      path.join(repoRoot, 'supabase/migrations/20260618033540_require_complete_gc_profile_for_stale_request_application.sql'),
+      'utf8',
+    );
 
     expect(migration).toContain('CREATE OR REPLACE FUNCTION public.guard_gc_payment_request_updates()');
     expect(migration).toContain("IF NEW.status IN ('approved', 'rejected') THEN");
@@ -846,6 +859,9 @@ describe('general contractor account type', () => {
     expect(removedRequestSurfaceMigration).toMatch(/gc_payment_requests[\s\S]*gcp\.status = 'active'/);
     expect(completeControlMigration).toContain('DROP POLICY IF EXISTS "gc_payment_requests_gc_cancel"');
     expect(completeControlMigration).toMatch(/gc_payment_requests[\s\S]*gcp\.status = 'active'[\s\S]*gc\.verified IS TRUE/);
+    expect(completeApplyMigration).toContain('CREATE OR REPLACE FUNCTION public.guard_gc_payment_request_updates()');
+    expect(completeApplyMigration).toMatch(/guard_gc_payment_request_updates[\s\S]*NEW\.status = 'approved'[\s\S]*u\.role = 'general_contractor'[\s\S]*gc\.verified IS TRUE[\s\S]*NULLIF\(TRIM\(gc\.license_doc_url\), ''\) IS NOT NULL[\s\S]*NULLIF\(TRIM\(gc\.insurance_doc_url\), ''\) IS NOT NULL/);
+    expect(completeApplyMigration).toContain('Active complete verified GC management is required before approving a GC payment request');
 
     expect(migration).toContain('CREATE OR REPLACE FUNCTION public.guard_gc_trade_negotiation_updates()');
     expect(migration).toContain("IF NEW.status IN ('accepted', 'rejected', 'revision_requested') THEN");
@@ -869,6 +885,9 @@ describe('general contractor account type', () => {
     expect(tradeAcceptanceMigration).toContain("gcp.status = 'active'");
     expect(tradeAcceptanceMigration).toContain('gc.verified IS TRUE');
     expect(tradeAcceptanceMigration).toContain('Active verified GC management is required before accepting a GC trade negotiation');
+    expect(completeApplyMigration).toContain('CREATE OR REPLACE FUNCTION public.guard_gc_trade_negotiation_updates()');
+    expect(completeApplyMigration).toMatch(/guard_gc_trade_negotiation_updates[\s\S]*NEW\.status = 'accepted'[\s\S]*u\.role = 'general_contractor'[\s\S]*gc\.verified IS TRUE[\s\S]*NULLIF\(TRIM\(gc\.license_doc_url\), ''\) IS NOT NULL[\s\S]*NULLIF\(TRIM\(gc\.insurance_doc_url\), ''\) IS NOT NULL/);
+    expect(completeApplyMigration).toContain('Active complete verified GC management is required before accepting a GC trade negotiation');
   });
 
   it('requires GC approval, payment, and trade requests to start pending', () => {
@@ -1190,7 +1209,7 @@ describe('general contractor account type', () => {
     expect(gcProfile).not.toContain("row.status !== 'removed'");
   });
 
-  it('surfaces the GC markup engine on managed project detail', () => {
+  it('surfaces GC budget planning without exposing rate economics', () => {
     const migration = fs.readFileSync(
       path.join(repoRoot, 'supabase/migrations/20260615002200_apply_gc_terms_approval.sql'),
       'utf8',
@@ -1209,9 +1228,12 @@ describe('general contractor account type', () => {
     );
 
     expect(gcProjectDetail).toContain("import { calculateGcMarkup } from '@/lib/gc-markup'");
-    expect(gcProjectDetail).toContain('Markup engine');
-    expect(gcProjectDetail).toContain('Homeowner-facing total');
-    expect(gcProjectDetail).toContain('Estimated GC revenue');
+    expect(gcProjectDetail).toContain('Budget planning');
+    expect(gcProjectDetail).toContain('Project total');
+    expect(gcProjectDetail).not.toContain('Markup engine');
+    expect(gcProjectDetail).not.toContain('Homeowner-facing total');
+    expect(gcProjectDetail).not.toContain('Estimated GC revenue');
+    expect(gcProjectDetail).not.toContain('GC markup (');
     expect(gcProjectDetail).toContain('Send Budget for Approval');
     expect(gcProjectDetail).toContain("action: 'update_gc_budget'");
     expect(gcProjectDetail).toContain('proposed_ai_cost_min: budgetMin');
@@ -1933,7 +1955,8 @@ describe('general contractor account type', () => {
     expect(migration).toContain('CREATE OR REPLACE FUNCTION public.request_gc_concierge_booking');
     expect(migration).toContain('CREATE OR REPLACE FUNCTION public.respond_to_gc_concierge_booking');
     expect(homeownerConcierge).toContain("supabase.rpc('request_gc_concierge_booking'");
-    expect(homeownerConcierge).toContain('Contractor payout is 80%; WalkerAI keeps 20%.');
+    expect(homeownerConcierge).toContain('Virtual consults and site visits use fixed marketplace pricing.');
+    expect(homeownerConcierge).not.toContain('Contractor payout is 80%; WalkerAI keeps 20%.');
     expect(gcApprovals).toContain("from('gc_concierge_bookings')");
     expect(gcApprovals).toContain("supabase.rpc('respond_to_gc_concierge_booking'");
     expect(gcApprovals).toContain("setBookingRequests((bookingResult.data ?? []) as GcConciergeBooking[])");
