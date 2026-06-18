@@ -87,6 +87,8 @@ Signup supports:
 
 The app writes the requested role to auth metadata during signup and relies on the Supabase auth trigger/migrations to create or maintain the public `users` row.
 
+Login and registration screens use app-safe error formatting, so transient network/database failures fall back to polished copy instead of exposing raw backend messages.
+
 ## Account Type: Homeowner
 
 Homeowners own projects and final approvals.

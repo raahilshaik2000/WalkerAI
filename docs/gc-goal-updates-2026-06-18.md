@@ -10,7 +10,7 @@ General Contractor should be a separate app account type, not a company trade fa
 
 - Branch: `main`
 - Remote: `https://github.com/raahilshaik2000/WalkerAI`
-- Latest implementation commit when this doc was updated: `5a4ab42 Hide transient infrastructure error copy`
+- Latest implementation commit when this doc was updated: `26842c8 Use safe auth entry error copy`
 - Live backend update: `generate-material-orders` was deployed to Supabase project `wgbloslndalmocckrejw`.
 - Live backend migrations were later applied through `20260618132500_add_supplier_project_message_participants.sql` on Supabase project `wgbloslndalmocckrejw`.
 - Four live QA accounts were reset/verified on Supabase and credentials were written to:
@@ -39,6 +39,7 @@ Related pushed commits:
 
 - `f9d6c76 Tighten app role routing boundary`
 - `aa26582 Fail closed notification root routing`
+- `26842c8 Use safe auth entry error copy`
 
 ## General Contractor Navigation and Screens
 
@@ -347,11 +348,15 @@ Completed work:
 - Notification load/read failures now use `formatAppSafeErrorMessage` instead of showing raw Supabase error messages.
 - Transient network/database timeout messages fall back to polished screen-specific copy.
 - The specific client-facing failure shape "connection to the database timed out" is now covered by formatter regression tests.
+- Login and registration failures now use the same app-safe formatter, so first-entry paths for homeowner, company, supplier, and GC accounts do not show raw backend JSON or database timeout text.
 
 Changed files:
 
 - `src/app/notifications.tsx`
+- `src/app/(auth)/login.tsx`
+- `src/app/(auth)/register.tsx`
 - `src/lib/supabase/functions.ts`
+- `__tests__/auth.test.ts`
 - `__tests__/notifications-navigation.test.ts`
 - `__tests__/supabase-functions.test.ts`
 
@@ -359,6 +364,7 @@ Related pushed commits:
 
 - `e722614 Use safe notification error copy`
 - `5a4ab42 Hide transient infrastructure error copy`
+- `26842c8 Use safe auth entry error copy`
 
 ## QA Account Work Completed
 
@@ -408,6 +414,14 @@ Latest validation after notification/error-copy hardening:
 - `npx tsc --noEmit`
 - `npm test -- --runInBand`
 - `git diff --check`
+
+Latest validation after auth-entry hardening:
+
+- `npm test -- --runInBand __tests__/auth.test.ts __tests__/supabase-functions.test.ts`
+- `npx tsc --noEmit`
+- `npm test -- --runInBand`
+- `git diff --check`
+- `WALKERAI_QA_CREDENTIALS="$HOME/Downloads/walkerai-qa-credentials.txt" node scripts/check-qa-credentials.mjs`
 
 Live account readiness was also checked through Supabase REST using each account's own login session.
 
