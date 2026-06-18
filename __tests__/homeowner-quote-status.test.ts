@@ -62,4 +62,19 @@ describe('homeowner quote status copy', () => {
     expect(source).toContain('const paymentStarted = quote?.status === \'pending\' && !!quote.stripe_payment_intent_id;');
     expect(source).toContain('paymentStarted ? `Continue Payment — ${formatCad(quote.total_amount)}` : `Pay ${formatCad(quote.total_amount)} to Start`');
   });
+
+  it('uses app-safe copy for quote funding screen load failures', () => {
+    const source = fs.readFileSync(
+      path.join(__dirname, '../src/app/(homeowner)/project/[id]/quote.tsx'),
+      'utf8',
+    );
+
+    expect(source).toContain("import { formatAppSafeErrorMessage, formatSupabaseFunctionError } from '@/lib/supabase/functions';");
+    expect(source).toContain("setErrorMessage(formatAppSafeErrorMessage(projectError, 'Could not load quote.'))");
+    expect(source).toContain("setErrorMessage(formatAppSafeErrorMessage(quoteError, 'Could not load quote.'))");
+    expect(source).toContain("setErrorMessage(formatAppSafeErrorMessage(itemsError, 'Could not load quote details.'))");
+    expect(source).not.toContain('setErrorMessage(projectError.message)');
+    expect(source).not.toContain('setErrorMessage(quoteError.message)');
+    expect(source).not.toContain('setErrorMessage(itemsError.message)');
+  });
 });

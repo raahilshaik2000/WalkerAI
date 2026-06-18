@@ -465,6 +465,7 @@ Runtime fixes made from this pass:
 - Homeowner schedule confirmation now uses app-safe copy for schedule load and confirmation failures, while preserving quote/payment-aware project activation behavior.
 - Homeowner permit/inspection records now use app-safe copy for permit load and upload failures while preserving signed document previews.
 - Homeowner and company milestone/payment workflows now use app-safe copy for milestone load, dispute, update, upload, and release failures; shared Supabase error formatting also hides database policy/schema/internal wording behind polished fallback copy.
+- Homeowner quote funding now uses app-safe copy for project, quote, and quote-line-item load failures before Stripe payment starts, while keeping the existing PaymentSheet and escrow funding flow intact.
 
 Runtime findings still not treated as complete:
 
@@ -490,6 +491,13 @@ The goal is not fully complete yet. Remaining work includes:
 Latest validation after milestone/payment error-copy hardening:
 
 - `npm test -- --runInBand __tests__/homeowner-milestone-evidence.test.ts __tests__/company-milestone-upload.test.ts __tests__/supabase-functions.test.ts`
+- `npx tsc --noEmit`
+- `npm test -- --runInBand`
+- `git diff --check`
+
+Latest validation after homeowner quote funding error-copy hardening:
+
+- `npm test -- --runInBand __tests__/homeowner-quote-status.test.ts __tests__/payments.test.ts __tests__/supabase-functions.test.ts`
 - `npx tsc --noEmit`
 - `npm test -- --runInBand`
 - `git diff --check`

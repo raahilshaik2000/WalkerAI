@@ -22,7 +22,7 @@ import ReactNativeHapticFeedback from 'react-native-haptic-feedback';
 import { useStripe } from '@stripe/stripe-react-native';
 import { supabase } from '@/lib/supabase/client';
 import { formatCadCents } from '@/lib/currency';
-import { formatSupabaseFunctionError } from '@/lib/supabase/functions';
+import { formatAppSafeErrorMessage, formatSupabaseFunctionError } from '@/lib/supabase/functions';
 import { getPaymentSheetConfig } from '@/lib/payments';
 import { formatTradeLabel } from '@/lib/trade-labels';
 import { Colors, Spacing, Typography, Radius } from '@/constants/theme';
@@ -173,7 +173,7 @@ export default function CostBreakdownScreen() {
       quoteError = legacyQuotes.error;
     }
     if (projectError) {
-      setErrorMessage(projectError.message);
+      setErrorMessage(formatAppSafeErrorMessage(projectError, 'Could not load quote.'));
       setProject(null);
       setQuotes([]);
       setQuote(null);
@@ -191,7 +191,7 @@ export default function CostBreakdownScreen() {
       return;
     }
     if (quoteError) {
-      setErrorMessage(quoteError.message);
+      setErrorMessage(formatAppSafeErrorMessage(quoteError, 'Could not load quote.'));
       setProject(proj as any);
       setQuotes([]);
       setQuote(null);
@@ -224,7 +224,7 @@ export default function CostBreakdownScreen() {
           setLoading(false);
           return;
         }
-        setErrorMessage(itemsError.message);
+        setErrorMessage(formatAppSafeErrorMessage(itemsError, 'Could not load quote details.'));
         setLineItems([]);
         setLoading(false);
         return;
