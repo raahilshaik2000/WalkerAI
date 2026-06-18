@@ -130,6 +130,10 @@ describe('create-connect-account source guards', () => {
     expect(source).toContain(".select('role')");
     expect(source).toContain('appUser.role !== requestedRole');
     expect(source).toContain('Account role does not match payout setup request');
+    expect(source).toContain('hasCompleteGcPayoutProfile');
+    expect(source).toContain('business_name, city, province, lat, lng');
+    expect(source).toContain('license_number, license_doc_url, insurance_doc_url');
+    expect(source).toContain('Complete your GC business, location, license, and insurance setup before connecting payouts');
     expect(source).toContain('role: requestedRole');
     expect(source).toContain('/schema cache/i.test(message)');
   });

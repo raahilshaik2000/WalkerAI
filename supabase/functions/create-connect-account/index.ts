@@ -29,6 +29,21 @@ function isMissingColumnError(error: { message?: string } | null | undefined) {
   return /column .* does not exist/i.test(message) || /schema cache/i.test(message);
 }
 
+function hasText(value: unknown) {
+  return typeof value === 'string' && value.trim().length > 0;
+}
+
+function hasCompleteGcPayoutProfile(accountOwner: Record<string, unknown>) {
+  return hasText(accountOwner.business_name)
+    && hasText(accountOwner.city)
+    && hasText(accountOwner.province)
+    && typeof accountOwner.lat === 'number'
+    && typeof accountOwner.lng === 'number'
+    && hasText(accountOwner.license_number)
+    && hasText(accountOwner.license_doc_url)
+    && hasText(accountOwner.insurance_doc_url);
+}
+
 async function updateStripeReadiness(
   adminClient: ReturnType<typeof createClient>,
   table: 'companies' | 'suppliers' | 'general_contractors',
@@ -113,10 +128,17 @@ Deno.serve(async (req) => {
       : requestedRole === 'general_contractor'
         ? 'general_contractor_id'
         : 'company_id';
+    const ownerSelect = requestedRole === 'general_contractor'
+      ? `
+        id, stripe_account_id,
+        business_name, city, province, lat, lng,
+        license_number, license_doc_url, insurance_doc_url
+      `
+      : 'id, stripe_account_id';
 
     const { data: accountOwner, error: ownerError } = await adminClient
       .from(table)
-      .select('id, stripe_account_id')
+      .select(ownerSelect)
       .eq('user_id', user.id)
       .order('created_at', { ascending: false })
       .limit(1)
@@ -128,6 +150,12 @@ Deno.serve(async (req) => {
       const label = roleLabels[requestedRole];
       return new Response(JSON.stringify({ error: `${label} not found` }), {
         status: 404, headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      });
+    }
+
+    if (requestedRole === 'general_contractor' && !hasCompleteGcPayoutProfile(accountOwner)) {
+      return new Response(JSON.stringify({ error: 'Complete your GC business, location, license, and insurance setup before connecting payouts' }), {
+        status: 403, headers: { ...corsHeaders, 'Content-Type': 'application/json' },
       });
     }
 
