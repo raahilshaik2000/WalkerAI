@@ -127,6 +127,13 @@ function getCompanyName(slot: Slot) {
   return company?.name ?? null;
 }
 
+function getSlotParticipantName(slot: Slot) {
+  if (slot.fulfillment_type === 'external') {
+    return slot.external_trade_name ?? slot.external_trade_company ?? 'External trade';
+  }
+  return getCompanyName(slot);
+}
+
 function getApprovalAction(request: ApprovalRequest) {
   return typeof request.metadata?.action === 'string' ? request.metadata.action : null;
 }
@@ -1207,8 +1214,8 @@ export default function GeneralContractorProjectDetail() {
                       <Text style={styles.rowTitle}>{formatTrade(slot.trade_type)}</Text>
                       <Text style={styles.rowSub}>
                         {slot.fulfillment_type === 'external'
-                          ? `${slot.external_trade_name ?? 'External trade'} · Externally managed`
-                          : getCompanyName(slot) ?? formatStatusLabel(slot.status)}
+                          ? `${getSlotParticipantName(slot)} · Externally managed`
+                          : getSlotParticipantName(slot) ?? formatStatusLabel(slot.status)}
                       </Text>
                       {slot.fulfillment_type === 'external' ? (
                         <Text style={styles.externalWarning}>

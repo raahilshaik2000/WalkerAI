@@ -379,10 +379,13 @@ export default function GeneralContractorTradesScreen() {
     }
 
     const currentCompany = assignedCompany?.name;
+    const currentExternalTrade = slot.fulfillment_type === 'external'
+      ? slot.external_trade_name ?? slot.external_trade_company ?? 'External trade'
+      : null;
     const title = `${formatTrade(slot.trade_type)} trade recommendation`;
     const details = [
       currentCompany ? `Current WalkerAI trade: ${currentCompany}` : null,
-      slot.fulfillment_type === 'external' ? `Current external trade: ${slot.external_trade_name ?? 'External trade'}` : null,
+      currentExternalTrade ? `Current external trade: ${currentExternalTrade}` : null,
       recommendedTradeName.trim() ? `Recommended trade: ${recommendedTradeName.trim()}` : null,
       recommendedCompany.trim() ? `Recommended company: ${recommendedCompany.trim()}` : null,
       recommendedContact.trim() ? `Contact: ${recommendedContact.trim()}` : null,
@@ -405,6 +408,7 @@ export default function GeneralContractorTradesScreen() {
           current_company_name: currentCompany ?? null,
           current_fulfillment_type: slot.fulfillment_type ?? 'walker_ai',
           current_external_trade_name: slot.external_trade_name ?? null,
+          current_external_trade_company: slot.external_trade_company ?? null,
           recommended_trade_name: recommendedTradeName.trim() || null,
           recommended_company: recommendedCompany.trim() || null,
           recommended_contact: recommendedContact.trim() || null,

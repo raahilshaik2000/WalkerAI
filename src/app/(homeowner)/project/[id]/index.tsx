@@ -74,6 +74,13 @@ function formatCad(cents: number) {
   return new Intl.NumberFormat('en-CA', { style: 'currency', currency: 'CAD', maximumFractionDigits: 0 }).format(cents / 100);
 }
 
+function assignedTradeParticipantName(slot: AssignedTradeSlot) {
+  if (slot.fulfillment_type === 'external') {
+    return slot.external_trade_name ?? slot.external_trade_company ?? 'External trade';
+  }
+  return slot.assigned_company?.name ?? 'Contractor assigned';
+}
+
 const STATUS_VARIANT: Record<string, 'pending' | 'dispatching' | 'active' | 'completed' | 'error' | 'neutral'> = {
   draft: 'neutral',
   brief_ready: 'pending',
@@ -378,9 +385,7 @@ export default function ProjectDetailScreen() {
                       {formatTradeLabel(slot.trade_type) ?? 'Trade'}
                     </Text>
                     <Text style={styles.companyName}>
-                      {slot.fulfillment_type === 'external'
-                        ? slot.external_trade_name ?? 'External trade'
-                        : slot.assigned_company?.name ?? 'Contractor assigned'}
+                      {assignedTradeParticipantName(slot)}
                     </Text>
                     {slot.fulfillment_type === 'external' ? (
                       <Text style={styles.externalTradeNotice}>

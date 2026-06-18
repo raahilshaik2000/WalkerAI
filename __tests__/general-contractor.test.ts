@@ -1473,6 +1473,9 @@ describe('general contractor account type', () => {
     expect(gcProjectDetail).toContain("slot.fulfillment_type === 'external' || !!getCompanyName(slot)");
     expect(gcProjectDetail).toContain('external_trade_name, external_trade_company, external_trade_email, external_trade_phone,');
     expect(gcProjectDetail).toContain('external_trade_notes, external_trade_verification_status,');
+    expect(gcProjectDetail).toContain('function getSlotParticipantName(slot: Slot)');
+    expect(gcProjectDetail).toContain("slot.external_trade_name ?? slot.external_trade_company ?? 'External trade'");
+    expect(gcProjectDetail).toContain('`${getSlotParticipantName(slot)} · Externally managed`');
     expect(gcProjectDetail).toContain("setExternalTradeEmail(slot.external_trade_email ?? '')");
     expect(gcProjectDetail).toContain("setExternalTradePhone(slot.external_trade_phone ?? '')");
     expect(gcProjectDetail).toContain("setExternalTradeNotes(slot.external_trade_notes ?? '')");
@@ -1480,8 +1483,12 @@ describe('general contractor account type', () => {
     expect(gcProjectDetail).toContain('No escrow protection');
     expect(gcTrades).toContain('function slotParticipantName(slot: Slot, companyName: string | null | undefined)');
     expect(gcTrades).toContain("slot.external_trade_name ?? slot.external_trade_company ?? 'External trade'");
+    expect(gcTrades).toContain('current_external_trade_company: slot.external_trade_company ?? null');
+    expect(gcTrades).toContain('const currentExternalTrade = slot.fulfillment_type ===');
     expect(homeownerProject).toContain('Externally managed by GC');
     expect(homeownerProject).toContain('No escrow protection');
+    expect(homeownerProject).toContain('function assignedTradeParticipantName(slot: AssignedTradeSlot)');
+    expect(homeownerProject).toContain("slot.external_trade_name ?? slot.external_trade_company ?? 'External trade'");
     expect(homeownerSchedule).toContain('function isSchedulableSlot(slot: Slot)');
     expect(homeownerSchedule).toContain("slot.fulfillment_type === 'external'");
     expect(homeownerSchedule).toContain('walkerAiSchedulableSlots');
