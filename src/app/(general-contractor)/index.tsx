@@ -254,7 +254,7 @@ export default function GeneralContractorDashboard() {
             </Text>
             <Text style={styles.pendingSubtitle}>
               {setupIncomplete
-                ? 'Complete your license and insurance steps before WalkerAI can review your GC profile.'
+                ? 'Complete your business profile, license, and insurance steps before WalkerAI can review your GC profile.'
                 : gc
                 ? 'Your GC profile is waiting for review. Managed projects will appear here once approved.'
                 : 'Create your General Contractor profile to manage projects, markup, approvals, and concierge workflows.'}

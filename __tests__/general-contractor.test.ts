@@ -12,6 +12,17 @@ const path = require('path');
 const repoRoot = path.join(__dirname, '..');
 
 describe('general contractor account type', () => {
+  const completeGcSetup = {
+    business_name: 'Walker GC',
+    city: 'Toronto',
+    province: 'ON',
+    lat: 43.6532,
+    lng: -79.3832,
+    license_number: 'GC-123',
+    license_doc_url: 'qa/gc-license.pdf',
+    insurance_doc_url: 'https://example.com/insurance.pdf',
+  };
+
   it('routes general contractor notifications into the GC navigator', () => {
     expect(resolveNotificationRoute('new_message', { project_id: 'project-1' }, 'general_contractor')).toEqual({
       name: 'GeneralContractorMessages',
@@ -31,10 +42,12 @@ describe('general contractor account type', () => {
     );
 
     expect(nextGeneralContractorOnboardingRoute(null)).toBe('GeneralContractorBusinessOnboarding');
-    expect(nextGeneralContractorOnboardingRoute({ license_number: null, license_doc_url: null, insurance_doc_url: null })).toBe('GeneralContractorLicenseOnboarding');
-    expect(nextGeneralContractorOnboardingRoute({ license_number: 'GC-123', license_doc_url: null, insurance_doc_url: null })).toBe('GeneralContractorLicenseOnboarding');
-    expect(nextGeneralContractorOnboardingRoute({ license_number: 'GC-123', license_doc_url: 'qa/gc-license.pdf', insurance_doc_url: null })).toBe('GeneralContractorInsuranceOnboarding');
-    expect(isGeneralContractorSetupComplete({ license_number: 'GC-123', license_doc_url: 'qa/gc-license.pdf', insurance_doc_url: 'https://example.com/insurance.pdf' })).toBe(true);
+    expect(nextGeneralContractorOnboardingRoute({ ...completeGcSetup, business_name: '' })).toBe('GeneralContractorBusinessOnboarding');
+    expect(nextGeneralContractorOnboardingRoute({ ...completeGcSetup, lat: null })).toBe('GeneralContractorBusinessOnboarding');
+    expect(nextGeneralContractorOnboardingRoute({ ...completeGcSetup, license_number: null, license_doc_url: null, insurance_doc_url: null })).toBe('GeneralContractorLicenseOnboarding');
+    expect(nextGeneralContractorOnboardingRoute({ ...completeGcSetup, license_doc_url: null, insurance_doc_url: null })).toBe('GeneralContractorLicenseOnboarding');
+    expect(nextGeneralContractorOnboardingRoute({ ...completeGcSetup, insurance_doc_url: null })).toBe('GeneralContractorInsuranceOnboarding');
+    expect(isGeneralContractorSetupComplete(completeGcSetup)).toBe(true);
     expect(businessOnboarding).toContain("from('general_contractors')");
     expect(businessOnboarding).toContain('business_name, address, city, province, postal_code, service_radius_km');
     expect(businessOnboarding).toContain('setBusinessName(data.business_name');
