@@ -12,6 +12,8 @@ import { useNavigation } from '@react-navigation/native';
 import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
 import { supabase } from '@/lib/supabase/client';
 import { useAuthStore } from '@/stores/auth.store';
+import { isMissingSupabaseSchemaObjectError } from '@/lib/supabase/errors';
+import { formatAppSafeErrorMessage } from '@/lib/supabase/functions';
 import { formatCad } from '@/lib/formatters';
 import { gcProjectTypeIcon } from '@/lib/gc-project-type';
 import { mapCompanyCalendarMilestones, type CompanyCalendarMilestone } from '@/lib/company-calendar';
@@ -20,6 +22,7 @@ import { GlassCard, GradientBackground, ListItemSkeleton, StatusBadge } from '@/
 import { TradeMetricStrip, TradeScreenHeader } from '@/components/company/TradeUI';
 
 type Milestone = CompanyCalendarMilestone;
+type GcProjectTypeRow = { project_id: string; project_type: string | null };
 
 function groupByDate(milestones: Milestone[]): { label: string; items: Milestone[] }[] {
   const today = new Date();
@@ -88,7 +91,7 @@ export default function CalendarScreen() {
     if (companyError) {
       setMilestones([]);
       setHasCompanyProfile(false);
-      setErrorMessage(companyError.message);
+      setErrorMessage(formatAppSafeErrorMessage(companyError, 'Could not load company profile.'));
       setLoading(false);
       setRefreshing(false);
       return;
@@ -116,14 +119,44 @@ export default function CalendarScreen() {
       .order('due_date', { ascending: true, nullsFirst: false });
     if (error) {
       setMilestones([]);
-      setErrorMessage(error.message);
+      setErrorMessage(formatAppSafeErrorMessage(error, 'Could not load calendar.'));
       setLoading(false);
       setRefreshing(false);
       return;
     }
 
     // Flatten the nested join
-    const mapped = mapCompanyCalendarMilestones((data ?? []) as any[]);
+    let mapped = mapCompanyCalendarMilestones((data ?? []) as any[]);
+    const projectIds = Array.from(new Set(mapped.map((milestone) => milestone.project.id).filter(Boolean)));
+    if (projectIds.length > 0) {
+      const { data: gcRows, error: gcContextError } = await supabase
+        .from('general_contractor_projects')
+        .select('project_id, project_type')
+        .in('project_id', projectIds)
+        .neq('status', 'removed');
+
+      if (gcContextError && !isMissingSupabaseSchemaObjectError(gcContextError, 'general_contractor_projects')) {
+        setMilestones([]);
+        setErrorMessage(formatAppSafeErrorMessage(gcContextError, 'Could not load project management context.'));
+        setLoading(false);
+        setRefreshing(false);
+        return;
+      }
+
+      const gcProjectTypes = new Map<string, string | null>();
+      ((gcRows ?? []) as GcProjectTypeRow[]).forEach((row) => {
+        if (!gcProjectTypes.has(row.project_id)) {
+          gcProjectTypes.set(row.project_id, row.project_type);
+        }
+      });
+      mapped = mapped.map((milestone) => ({
+        ...milestone,
+        project: {
+          ...milestone.project,
+          gc_project_type: gcProjectTypes.get(milestone.project.id) ?? null,
+        },
+      }));
+    }
 
     setMilestones(mapped);
     setLoading(false);
@@ -215,7 +248,7 @@ export default function CalendarScreen() {
                         <View style={{ flex: 1 }}>
                           <Text style={styles.cardTitle}>{m.title}</Text>
                           <View style={styles.cardMeta}>
-                            <Icon name={gcProjectTypeIcon(null, m.project.room_type)} size={13} color={Colors.text.tertiary} />
+                            <Icon name={gcProjectTypeIcon(m.project.gc_project_type, m.project.room_type)} size={13} color={Colors.text.tertiary} />
                             <Text style={styles.cardAddress}>{m.project.city || 'Location pending'}</Text>
                             <Text style={styles.cardDot}>·</Text>
                             <Text style={styles.cardDate}>{formatDate(m.due_date)}</Text>

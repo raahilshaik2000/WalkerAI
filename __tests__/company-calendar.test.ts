@@ -92,9 +92,23 @@ describe('company calendar milestone mapping', () => {
     const source = fs.readFileSync(path.join(repoRoot, 'src/app/(company)/calendar.tsx'), 'utf8');
     const mapper = fs.readFileSync(path.join(repoRoot, 'src/lib/company-calendar.ts'), 'utf8');
 
-    expect(source).toContain('gcProjectTypeIcon(null, m.project.room_type)');
+    expect(source).toContain("from('general_contractor_projects')");
+    expect(source).toContain("isMissingSupabaseSchemaObjectError(gcContextError, 'general_contractor_projects')");
+    expect(source).toContain('gcProjectTypeIcon(m.project.gc_project_type, m.project.room_type)');
     expect(source).not.toContain("m.project.room_type === 'kitchen' ? 'countertop-outline' : 'shower'");
     expect(mapper).toContain('room_type: string | null;');
+    expect(mapper).toContain('gc_project_type?: string | null;');
     expect(mapper).toContain('room_type: null');
+  });
+
+  it('keeps company calendar load errors app-safe', () => {
+    const source = fs.readFileSync(path.join(repoRoot, 'src/app/(company)/calendar.tsx'), 'utf8');
+
+    expect(source).toContain("import { formatAppSafeErrorMessage } from '@/lib/supabase/functions';");
+    expect(source).toContain("setErrorMessage(formatAppSafeErrorMessage(companyError, 'Could not load company profile.'))");
+    expect(source).toContain("setErrorMessage(formatAppSafeErrorMessage(error, 'Could not load calendar.'))");
+    expect(source).toContain("setErrorMessage(formatAppSafeErrorMessage(gcContextError, 'Could not load project management context.'))");
+    expect(source).not.toContain('setErrorMessage(companyError.message)');
+    expect(source).not.toContain('setErrorMessage(error.message)');
   });
 });

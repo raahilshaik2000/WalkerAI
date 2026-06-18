@@ -3,6 +3,7 @@ export interface CompanyCalendarProject {
   address: string;
   city: string;
   room_type: string | null;
+  gc_project_type?: string | null;
 }
 
 export interface CompanyCalendarMilestone {

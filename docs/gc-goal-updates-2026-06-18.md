@@ -456,6 +456,7 @@ Runtime fixes made from this pass:
 - GC trade dispatch no-match responses now pass backend-provided messages through the app-safe formatter before showing them in the GC trade screen.
 - Homeowner project dispatch restart messages now use app-safe formatting in both project detail variants, so contractor-search recovery does not expose raw function wording.
 - The homeowner dashboard project carousel now formats both project-load and optional GC-context failures through app-safe copy before displaying them.
+- Company calendar milestones now attach optional GC project type context so GC-created projects such as flooring, painting, basement, and additions do not fall back to generic room-type icons; calendar load failures also use app-safe copy.
 
 Runtime findings still not treated as complete:
 
