@@ -72,7 +72,10 @@ describe('QA account seed source guards', () => {
     expect(source).toContain(".from('companies').upsert");
     expect(source).toContain(".from('suppliers').upsert");
     expect(source).toContain(".from('general_contractors').upsert");
-    expect(source).toContain("trade_types: ['plumber']");
+    expect(source).toContain("'painter'");
+    expect(source).toContain("'flooring_installer'");
+    expect(source).toContain("'drywall'");
+    expect(source).toContain("'demolition'");
     expect(source).toContain("primary_trade: 'plumber'");
     expect(source).toContain('verified: true');
     expect(source).toContain('concierge_enabled: true');
@@ -101,9 +104,12 @@ describe('QA account seed source guards', () => {
     expect(source).toContain('stripe_payouts_enabled: true');
     expect(source).toContain('stripe_transfers_active: true');
     expect(source).toContain('verified: true');
-    expect(source).toContain("trade_types: ['plumber']");
+    expect(source).toContain("'painter'");
+    expect(source).toContain("'flooring_installer'");
+    expect(source).toContain("'drywall'");
+    expect(source).toContain("'demolition'");
     expect(source).toContain("primary_trade: 'plumber'");
-    expect(source).toContain('Company is configured as a verified plumber');
+    expect(source).toContain('Company is configured as a verified multi-trade contractor');
     expect(source).toContain('lat: 43.6532');
     expect(source).toContain('lng: -79.3832');
     expect(source).not.toContain("trade_types: ['general_contractor']");
