@@ -50,17 +50,21 @@ export default function MessagesScreen() {
     }
 
     const loadMessages = async () => {
-      const { data, error } = await supabase
-        .from('messages')
-        .select('id, body, sender_id, sent_at, attachment_url')
-        .eq('project_id', projectId)
-        .order('sent_at', { ascending: true });
-      if (error) {
-        setErrorMessage(formatAppSafeErrorMessage(error, 'Could not load messages.'));
-        return;
+      try {
+        const { data, error } = await supabase
+          .from('messages')
+          .select('id, body, sender_id, sent_at, attachment_url')
+          .eq('project_id', projectId)
+          .order('sent_at', { ascending: true });
+        if (error) {
+          setErrorMessage(formatAppSafeErrorMessage(error, 'Could not load messages.'));
+          return;
+        }
+        setErrorMessage(null);
+        setMessages(data ?? []);
+      } catch (err) {
+        setErrorMessage(formatAppSafeErrorMessage(err, 'Could not load messages.'));
       }
-      setErrorMessage(null);
-      setMessages(data ?? []);
     };
     loadMessages();
 
@@ -91,19 +95,20 @@ export default function MessagesScreen() {
     const trimmed = body.trim();
     setBody('');
 
-    const { error } = await supabase.from('messages').insert({
-      project_id: projectId,
-      sender_id: user.id,
-      body: trimmed,
-    });
-
-    if (error) {
-      setBody(trimmed); // restore on error
-      Alert.alert('Message not sent', formatAppSafeErrorMessage(error, 'Please try again.'));
-    } else {
+    try {
+      const { error } = await supabase.from('messages').insert({
+        project_id: projectId,
+        sender_id: user.id,
+        body: trimmed,
+      });
+      if (error) throw error;
       ReactNativeHapticFeedback.trigger('impactLight');
+    } catch (err) {
+      setBody(trimmed); // restore on error
+      Alert.alert('Message not sent', formatAppSafeErrorMessage(err, 'Please try again.'));
+    } finally {
+      setSending(false);
     }
-    setSending(false);
   };
 
   const openAttachment = async (url: string) => {

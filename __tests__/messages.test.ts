@@ -37,13 +37,22 @@ describe('project messages', () => {
     expect(homeownerList).not.toContain('setErrorMessage(messagesError.message)');
     expect(homeownerList).not.toContain('slotResult.error?.message ?? gcResult.error?.message');
 
-    for (const source of [homeownerProjectMessages, homeownerLegacyChat, companyMessages]) {
+    for (const source of [homeownerLegacyChat, companyMessages]) {
       expect(source).toContain("import { formatAppSafeErrorMessage } from '@/lib/supabase/functions';");
       expect(source).toContain("setErrorMessage(formatAppSafeErrorMessage(error, 'Could not load messages.'))");
       expect(source).toContain("Alert.alert('Message not sent', formatAppSafeErrorMessage(error, 'Please try again.'))");
       expect(source).not.toContain('setErrorMessage(`Could not load messages: ${error.message}`)');
       expect(source).not.toContain("Alert.alert('Message not sent', error.message)");
     }
+
+    expect(homeownerProjectMessages).toContain("import { formatAppSafeErrorMessage } from '@/lib/supabase/functions';");
+    expect(homeownerProjectMessages).toContain("setErrorMessage(formatAppSafeErrorMessage(error, 'Could not load messages.'))");
+    expect(homeownerProjectMessages).toContain("setErrorMessage(formatAppSafeErrorMessage(err, 'Could not load messages.'))");
+    expect(homeownerProjectMessages).toContain("Alert.alert('Message not sent', formatAppSafeErrorMessage(err, 'Please try again.'))");
+    expect(homeownerProjectMessages).toContain('setBody(trimmed); // restore on error');
+    expect(homeownerProjectMessages).toContain('} finally {\n      setSending(false);');
+    expect(homeownerProjectMessages).not.toContain('setErrorMessage(`Could not load messages: ${error.message}`)');
+    expect(homeownerProjectMessages).not.toContain("Alert.alert('Message not sent', error.message)");
 
     expect(gcMessages).toContain("import { formatAppSafeErrorMessage } from '@/lib/supabase/functions';");
     expect(gcMessages).toContain("formatAppSafeErrorMessage(messageResult.error, 'Please try again.')");
