@@ -485,6 +485,7 @@ Runtime fixes made from this pass:
 - GC business, license, and insurance onboarding save failures now use specific app-safe alert titles instead of the generic `Error` title.
 - Supplier sign-out now clears the full persisted auth state, including role, matching the homeowner, company, and GC sign-out paths and preventing stale supplier role state after leaving the fourth-account workflow.
 - Company payout setup failures now use the same specific app-safe alert pattern as supplier and GC payout setup, instead of a generic `Error` title on the trade account surface.
+- Root account fallback sign-out now explicitly clears local session, role, profile, and fallback error state after attempting Supabase sign-out, so temporary profile failures or missing-role states cannot leave stale role routing behind.
 - GC project text-message sends now restore the typed draft and clear the sending state if auth lookup or message insert throws, and GC photo attachments now catch auth/client failures in the attachment error path.
 - GC project message-thread loading now catches thrown auth/client/query failures, shows app-safe load copy, and locks the composer with retry guidance instead of leaving the effect unhandled.
 - Homeowner schedule confirmation now uses app-safe copy for schedule load and confirmation failures, while preserving quote/payment-aware project activation behavior.
@@ -757,6 +758,13 @@ Latest validation after supplier sign-out auth cleanup:
 Latest validation after company payout setup error-copy alignment:
 
 - `npm test -- --runInBand __tests__/company-profile-services.test.ts`
+- `npx tsc --noEmit`
+- `npm test -- --runInBand`
+- `git diff --check`
+
+Latest validation after root fallback sign-out cleanup:
+
+- `npm test -- --runInBand __tests__/auth.test.ts`
 - `npx tsc --noEmit`
 - `npm test -- --runInBand`
 - `git diff --check`

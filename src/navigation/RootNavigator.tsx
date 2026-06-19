@@ -412,6 +412,19 @@ export function RootNavigator() {
     setAuthRoleResolved(true);
   }, [resetProfile, setHydrated, setRole, setSession, updateProfile]);
 
+  const handleFallbackSignOut = useCallback(async () => {
+    try {
+      await supabase.auth.signOut();
+    } finally {
+      setSession(null);
+      setRole(null);
+      resetProfile();
+      setAuthErrorMessage(null);
+      setHydrated(true);
+      setAuthRoleResolved(true);
+    }
+  }, [resetProfile, setHydrated, setRole, setSession]);
+
   useEffect(() => {
     const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, newSession) => {
       applySession(newSession);
@@ -469,7 +482,7 @@ export function RootNavigator() {
           <TouchableOpacity style={roleFallbackStyles.secondaryButton} onPress={() => applySession(session)}>
             <Text style={roleFallbackStyles.secondaryButtonText}>Try Again</Text>
           </TouchableOpacity>
-          <TouchableOpacity style={roleFallbackStyles.button} onPress={() => supabase.auth.signOut()}>
+          <TouchableOpacity style={roleFallbackStyles.button} onPress={handleFallbackSignOut}>
             <Text style={roleFallbackStyles.buttonText}>Sign Out</Text>
           </TouchableOpacity>
         </View>
@@ -490,7 +503,7 @@ export function RootNavigator() {
         <Text style={roleFallbackStyles.body}>
           Your account role is missing. Sign out and sign in again, or contact support if this keeps happening.
         </Text>
-        <TouchableOpacity style={roleFallbackStyles.button} onPress={() => supabase.auth.signOut()}>
+        <TouchableOpacity style={roleFallbackStyles.button} onPress={handleFallbackSignOut}>
           <Text style={roleFallbackStyles.buttonText}>Sign Out</Text>
         </TouchableOpacity>
       </View>

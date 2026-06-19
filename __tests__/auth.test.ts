@@ -134,5 +134,13 @@ describe('Supabase auth helpers', () => {
     expect(rootNavigator).toContain('onPress={() => applySession(session)}');
     expect(rootNavigator).toContain('Try Again');
     expect(rootNavigator).toContain('Account setup incomplete');
+    expect(rootNavigator).toContain('const handleFallbackSignOut = useCallback(async () => {');
+    expect(rootNavigator).toContain('await supabase.auth.signOut();');
+    expect(rootNavigator).toContain('setSession(null);');
+    expect(rootNavigator).toContain('setRole(null);');
+    expect(rootNavigator).toContain('resetProfile();');
+    expect(rootNavigator).toContain('setAuthErrorMessage(null);');
+    expect(rootNavigator).toContain('onPress={handleFallbackSignOut}');
+    expect(rootNavigator).not.toContain('onPress={() => supabase.auth.signOut()}');
   });
 });
