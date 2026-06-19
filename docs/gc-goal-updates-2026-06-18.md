@@ -1063,3 +1063,17 @@ Latest validation after company milestone stale-state hardening:
 - `npx tsc --noEmit`
 - `npm test -- --runInBand`
 - `git diff --check`
+
+Latest update after company quote-builder stale draft hardening:
+
+- Fixed a pricing-page stale draft case in the company/trade quote builder. When a reused quote screen opens a different project/slot that has no approved/funded quote and no editable pending quote, the editable line items, milestone split, notes, and pending-quote marker now reset to defaults for the current route instead of reusing the previous project draft.
+- The reset also applies when an accepted GC counteroffer route is opened without an existing quote and when the quote builder is opened without a valid project id.
+- Existing pending quotes still load into the editable form, and approved/funded/payment-started quotes still render read-only.
+- Added regression assertions in `__tests__/company-quote-copy.test.ts`.
+
+Latest validation after company quote-builder stale draft hardening:
+
+- `npm test -- --runInBand __tests__/company-quote-copy.test.ts`
+- `npx tsc --noEmit`
+- `npm test -- --runInBand`
+- `git diff --check`

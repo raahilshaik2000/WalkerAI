@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import {
   Alert,
   KeyboardAvoidingView,
@@ -190,10 +190,11 @@ export default function QuoteBuilderScreen() {
   const navigation = useNavigation<any>();
   const { user } = useAuthStore();
   const acceptedCounterofferCents = positiveCentsParam(route.params?.accepted_counteroffer_cents);
+  const gcNegotiationNote = route.params?.gc_negotiation_note;
 
   const [lineItems, setLineItems] = useState<LineItem[]>(() => defaultLineItems(acceptedCounterofferCents));
   const [milestones, setMilestones] = useState<MilestoneInput[]>(() => defaultMilestones(acceptedCounterofferCents));
-  const [notes, setNotes] = useState(() => defaultNotes(route.params?.gc_negotiation_note));
+  const [notes, setNotes] = useState(() => defaultNotes(gcNegotiationNote));
   const [submitting, setSubmitting] = useState(false);
   const [loadingApprovedQuote, setLoadingApprovedQuote] = useState(true);
   const [quoteReloadKey, setQuoteReloadKey] = useState(0);
@@ -203,12 +204,20 @@ export default function QuoteBuilderScreen() {
   const [approvedLineItems, setApprovedLineItems] = useState<ExistingLineItem[]>([]);
   const [approvedMilestones, setApprovedMilestones] = useState<ExistingMilestone[]>([]);
 
+  const resetEditableQuoteDraft = useCallback(() => {
+    setLineItems(defaultLineItems(acceptedCounterofferCents));
+    setMilestones(defaultMilestones(acceptedCounterofferCents));
+    setNotes(defaultNotes(gcNegotiationNote));
+    setEditingPendingQuote(null);
+  }, [acceptedCounterofferCents, gcNegotiationNote]);
+
   useEffect(() => {
     let cancelled = false;
 
     async function loadApprovedQuote() {
       if (!projectId) {
         setQuoteLoadError('Project is missing. Reopen this job from your dashboard.');
+        resetEditableQuoteDraft();
         setLoadingApprovedQuote(false);
         return;
       }
@@ -255,7 +264,9 @@ export default function QuoteBuilderScreen() {
           setApprovedQuote(null);
           setApprovedLineItems([]);
           setApprovedMilestones([]);
-          if (!acceptedCounterofferCents) {
+          if (acceptedCounterofferCents) {
+            resetEditableQuoteDraft();
+          } else {
             let pendingQuoteQuery = supabase
               .from('quotes')
               .select('id, total_amount, status, submitted_at, stripe_payment_intent_id')
@@ -298,6 +309,8 @@ export default function QuoteBuilderScreen() {
                 setNotes(editableNotesFromQuote(existingLineItems));
                 setEditingPendingQuote(quote);
               }
+            } else if (!cancelled) {
+              resetEditableQuoteDraft();
             }
           }
           setLoadingApprovedQuote(false);
@@ -344,7 +357,7 @@ export default function QuoteBuilderScreen() {
     return () => {
       cancelled = true;
     };
-  }, [acceptedCounterofferCents, projectId, quoteReloadKey, slotId, user?.id]);
+  }, [acceptedCounterofferCents, projectId, quoteReloadKey, resetEditableQuoteDraft, slotId, user?.id]);
 
   const addLineItem = () => {
     setLineItems((prev) => [...prev, { id: Date.now().toString(), description: '', amount: '' }]);

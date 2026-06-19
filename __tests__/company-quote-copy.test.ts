@@ -150,6 +150,23 @@ describe('company quote copy', () => {
     expect(jobDetail).toContain("hasEditablePendingQuote ? 'Edit pending' : 'Build quote'");
   });
 
+  it('resets editable quote drafts when the current project has no quote pricing state', () => {
+    const repoRoot = path.resolve(__dirname, '..');
+    const quoteBuilder = fs.readFileSync(
+      path.join(repoRoot, 'src/app/(company)/job/[id]/quote-builder.tsx'),
+      'utf8'
+    );
+
+    expect(quoteBuilder).toContain('const resetEditableQuoteDraft = useCallback(() => {');
+    expect(quoteBuilder).toContain('setLineItems(defaultLineItems(acceptedCounterofferCents));');
+    expect(quoteBuilder).toContain('setMilestones(defaultMilestones(acceptedCounterofferCents));');
+    expect(quoteBuilder).toContain('setNotes(defaultNotes(gcNegotiationNote));');
+    expect(quoteBuilder).toContain("setQuoteLoadError('Project is missing. Reopen this job from your dashboard.');\n        resetEditableQuoteDraft();");
+    expect(quoteBuilder).toContain('if (acceptedCounterofferCents) {\n            resetEditableQuoteDraft();');
+    expect(quoteBuilder).toContain('} else if (!cancelled) {\n              resetEditableQuoteDraft();');
+    expect(quoteBuilder).toContain('}, [acceptedCounterofferCents, projectId, quoteReloadKey, resetEditableQuoteDraft, slotId, user?.id]);');
+  });
+
   it('blocks quote editing when pricing state cannot be safely loaded', () => {
     const repoRoot = path.resolve(__dirname, '..');
     const quoteBuilder = fs.readFileSync(
