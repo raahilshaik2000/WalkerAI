@@ -39,6 +39,8 @@ describe('company entry and onboarding errors', () => {
 
     expect(license).toContain("import { formatAppSafeErrorMessage } from '@/lib/supabase/functions';");
     expect(license).toContain("Alert.alert('Could not save license', formatAppSafeErrorMessage(err, 'Please try again.'))");
+    expect(license).not.toContain("navigation.navigate('InsuranceOnboarding')\n            style={styles.skipButton}");
+    expect(license).not.toContain('Skip for now');
     expect(license).not.toContain("Alert.alert('Error', err instanceof Error ? err.message : 'Failed to save. Please try again.')");
 
     expect(insurance).toContain("import { formatAppSafeErrorMessage } from '@/lib/supabase/functions';");
