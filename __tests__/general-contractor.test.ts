@@ -99,9 +99,17 @@ describe('general contractor account type', () => {
     expect(homeownerConcierge).toContain("import { formatAppSafeErrorMessage, formatSupabaseFunctionError } from '@/lib/supabase/functions'");
     expect(homeownerConcierge).toContain("setErrorMessage(formatAppSafeErrorMessage(err, 'Could not load concierge options.'))");
     expect(homeownerConcierge).toContain("Alert.alert('Could not invite GC', formatAppSafeErrorMessage(error, 'Please try again.'))");
+    expect(homeownerConcierge).toContain("Alert.alert('Could not invite GC', formatAppSafeErrorMessage(err, 'Please try again.'))");
+    expect(homeownerConcierge).toContain("} finally {\n              setInvitingId(null);");
+    expect(homeownerConcierge).toContain("Alert.alert('Could not request service', formatAppSafeErrorMessage(error, 'Please try again.'))");
+    expect(homeownerConcierge).toContain("Alert.alert('Could not request service', formatAppSafeErrorMessage(err, 'Please try again.'))");
+    expect(homeownerConcierge).toContain("} finally {\n              setBookingId(null);");
     expect(homeownerConcierge).toContain("Alert.alert('Could not confirm GC', formatAppSafeErrorMessage(error, 'Please try again.'))");
+    expect(homeownerConcierge).toContain("Alert.alert('Could not confirm GC', formatAppSafeErrorMessage(err, 'Please try again.'))");
     expect(homeownerConcierge).toContain("Alert.alert('Could not remove GC', formatAppSafeErrorMessage(error, 'Please try again.'))");
+    expect(homeownerConcierge).toContain("Alert.alert('Could not remove GC', formatAppSafeErrorMessage(err, 'Please try again.'))");
     expect(homeownerConcierge).not.toContain("Alert.alert('Could not invite GC', error.message)");
+    expect(homeownerConcierge).not.toContain("Alert.alert('Could not request service', error.message)");
     expect(homeownerConcierge).not.toContain("Alert.alert('Could not confirm GC', error.message)");
     expect(homeownerConcierge).not.toContain("Alert.alert('Could not remove GC', error.message)");
     expect(homeownerConcierge).not.toContain("setErrorMessage(err instanceof Error ? err.message : 'Could not load concierge options.')");

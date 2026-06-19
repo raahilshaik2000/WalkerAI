@@ -518,16 +518,21 @@ export default function ProjectConciergeScreen() {
           text: 'Invite',
           onPress: async () => {
             setInvitingId(gc.id);
-            const { error } = await supabase.rpc('invite_gc_to_project', {
-              p_project_id: projectId,
-              p_general_contractor_id: gc.id,
-            });
-            if (error) {
-              Alert.alert('Could not invite GC', formatAppSafeErrorMessage(error, 'Please try again.'));
-            } else {
-              await fetchData();
+            try {
+              const { error } = await supabase.rpc('invite_gc_to_project', {
+                p_project_id: projectId,
+                p_general_contractor_id: gc.id,
+              });
+              if (error) {
+                Alert.alert('Could not invite GC', formatAppSafeErrorMessage(error, 'Please try again.'));
+              } else {
+                await fetchData();
+              }
+            } catch (err) {
+              Alert.alert('Could not invite GC', formatAppSafeErrorMessage(err, 'Please try again.'));
+            } finally {
+              setInvitingId(null);
             }
-            setInvitingId(null);
           },
         },
       ],
@@ -559,17 +564,22 @@ export default function ProjectConciergeScreen() {
           onPress: async () => {
             const requestKey = `${gc.id}:${serviceKind}`;
             setBookingId(requestKey);
-            const { error } = await supabase.rpc('request_gc_concierge_booking', {
-              p_project_id: projectId,
-              p_general_contractor_id: gc.id,
-              p_service_kind: serviceKind,
-            });
-            if (error) {
-              Alert.alert('Could not request service', formatAppSafeErrorMessage(error, 'Please try again.'));
-            } else {
-              await fetchData();
+            try {
+              const { error } = await supabase.rpc('request_gc_concierge_booking', {
+                p_project_id: projectId,
+                p_general_contractor_id: gc.id,
+                p_service_kind: serviceKind,
+              });
+              if (error) {
+                Alert.alert('Could not request service', formatAppSafeErrorMessage(error, 'Please try again.'));
+              } else {
+                await fetchData();
+              }
+            } catch (err) {
+              Alert.alert('Could not request service', formatAppSafeErrorMessage(err, 'Please try again.'));
+            } finally {
+              setBookingId(null);
             }
-            setBookingId(null);
           },
         },
       ],
@@ -658,15 +668,20 @@ export default function ProjectConciergeScreen() {
           text: 'Confirm',
           onPress: async () => {
             setRespondingId(currentAssignment.id);
-            const { error } = await supabase.rpc('confirm_gc_management_assignment', {
-              p_assignment_id: currentAssignment.id,
-            });
-            if (error) {
-              Alert.alert('Could not confirm GC', formatAppSafeErrorMessage(error, 'Please try again.'));
-            } else {
-              await fetchData();
+            try {
+              const { error } = await supabase.rpc('confirm_gc_management_assignment', {
+                p_assignment_id: currentAssignment.id,
+              });
+              if (error) {
+                Alert.alert('Could not confirm GC', formatAppSafeErrorMessage(error, 'Please try again.'));
+              } else {
+                await fetchData();
+              }
+            } catch (err) {
+              Alert.alert('Could not confirm GC', formatAppSafeErrorMessage(err, 'Please try again.'));
+            } finally {
+              setRespondingId(null);
             }
-            setRespondingId(null);
           },
         },
       ],
@@ -690,15 +705,20 @@ export default function ProjectConciergeScreen() {
           style: 'destructive',
           onPress: async () => {
             setRespondingId(currentAssignment.id);
-            const { error } = await supabase.rpc('remove_gc_management_assignment', {
-              p_assignment_id: currentAssignment.id,
-            });
-            if (error) {
-              Alert.alert('Could not remove GC', formatAppSafeErrorMessage(error, 'Please try again.'));
-            } else {
-              await fetchData();
+            try {
+              const { error } = await supabase.rpc('remove_gc_management_assignment', {
+                p_assignment_id: currentAssignment.id,
+              });
+              if (error) {
+                Alert.alert('Could not remove GC', formatAppSafeErrorMessage(error, 'Please try again.'));
+              } else {
+                await fetchData();
+              }
+            } catch (err) {
+              Alert.alert('Could not remove GC', formatAppSafeErrorMessage(err, 'Please try again.'));
+            } finally {
+              setRespondingId(null);
             }
-            setRespondingId(null);
           },
         },
       ],
