@@ -58,41 +58,49 @@ export default function ProjectWarrantiesScreen() {
   const fetchWarranties = useCallback(async () => {
     if (!projectId) {
       setErrorMessage('Project is missing. Reopen warranties from the project page.');
-      setLoading(false);
-      return;
-    }
-
-    setLoading(true);
-    setErrorMessage(null);
-    const { data, error } = await supabase
-      .from('warranties')
-      .select('id, document_url, expiry_date, created_at')
-      .eq('project_id', projectId)
-      .order('created_at', { ascending: false });
-
-    if (error) {
       setWarranties([]);
       setPreviewUrls({});
-      setErrorMessage(formatAppSafeErrorMessage(error, 'Could not load warranties.'));
       setLoading(false);
       return;
     }
 
-    const rows = (data ?? []) as Warranty[];
-    const previews: Record<string, string> = {};
-    await Promise.all(rows.map(async (warranty) => {
-      try {
-        previews[warranty.id] = /^https?:\/\//i.test(warranty.document_url)
-          ? warranty.document_url
-          : await getSignedUrl('warranties', warranty.document_url, 3600);
-      } catch {
-        // Keep the document row visible even if the private preview cannot be minted.
-      }
-    }));
+    try {
+      setLoading(true);
+      setErrorMessage(null);
+      const { data, error } = await supabase
+        .from('warranties')
+        .select('id, document_url, expiry_date, created_at')
+        .eq('project_id', projectId)
+        .order('created_at', { ascending: false });
 
-    setWarranties(rows);
-    setPreviewUrls(previews);
-    setLoading(false);
+      if (error) {
+        setWarranties([]);
+        setPreviewUrls({});
+        setErrorMessage(formatAppSafeErrorMessage(error, 'Could not load warranties.'));
+        return;
+      }
+
+      const rows = (data ?? []) as Warranty[];
+      const previews: Record<string, string> = {};
+      await Promise.all(rows.map(async (warranty) => {
+        try {
+          previews[warranty.id] = /^https?:\/\//i.test(warranty.document_url)
+            ? warranty.document_url
+            : await getSignedUrl('warranties', warranty.document_url, 3600);
+        } catch {
+          // Keep the document row visible even if the private preview cannot be minted.
+        }
+      }));
+
+      setWarranties(rows);
+      setPreviewUrls(previews);
+    } catch (err) {
+      setWarranties([]);
+      setPreviewUrls({});
+      setErrorMessage(formatAppSafeErrorMessage(err, 'Could not load warranties.'));
+    } finally {
+      setLoading(false);
+    }
   }, [projectId]);
 
   useEffect(() => {

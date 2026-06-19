@@ -1009,3 +1009,16 @@ Latest validation after GC payment request stale-state hardening:
 - `npx tsc --noEmit`
 - `npm test -- --runInBand`
 - `git diff --check`
+
+Latest update after warranty closeout stale-state hardening:
+
+- Hardened homeowner warranty viewing so missing project ids, warranty load errors, or thrown load exceptions clear warranty rows and signed preview URLs instead of leaving stale closeout documents visible.
+- Hardened company warranty upload/viewing so missing project ids, warranty load errors, or thrown load exceptions clear warranty rows, signed preview URLs, selected upload file metadata, and draft expiry input.
+- Added regression assertions in `__tests__/warranty-upload.test.ts`.
+
+Latest validation after warranty closeout stale-state hardening:
+
+- `npm test -- --runInBand __tests__/warranty-upload.test.ts`
+- `npx tsc --noEmit`
+- `npm test -- --runInBand`
+- `git diff --check`
