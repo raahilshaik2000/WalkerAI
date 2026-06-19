@@ -983,3 +983,16 @@ Latest validation after homeowner concierge authority-state hardening:
 - `npx tsc --noEmit`
 - `npm test -- --runInBand`
 - `git diff --check`
+
+Latest update after permit and schedule stale-state hardening:
+
+- Hardened the homeowner permit document screen so missing project ids, Supabase load errors, or thrown load exceptions clear permit rows and signed preview URLs instead of leaving stale permit records visible.
+- Hardened the GC schedule screen so missing project ids, signed-out auth state, or load failures clear assignment, trade slots, selected slot, pending date inputs, notes, and GC readiness before showing the scheduling error state.
+- Added regression assertions in `__tests__/homeowner-permits.test.ts` and `__tests__/general-contractor.test.ts`.
+
+Latest validation after permit and schedule stale-state hardening:
+
+- `npm test -- --runInBand __tests__/homeowner-permits.test.ts __tests__/general-contractor.test.ts`
+- `npx tsc --noEmit`
+- `npm test -- --runInBand`
+- `git diff --check`

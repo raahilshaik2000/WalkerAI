@@ -1671,6 +1671,10 @@ describe('general contractor account type', () => {
     expect(gcSchedule).toContain('function slotParticipantName(slot: Slot)');
     expect(gcSchedule).toContain('external_trade_name, external_trade_company');
     expect(gcSchedule).toContain("slot.external_trade_name ?? slot.external_trade_company ?? 'External trade'");
+    expect(gcSchedule).toContain('const clearScheduleState = useCallback(() => {');
+    expect(gcSchedule).toContain("setErrorMessage('Project is missing. Reopen scheduling from the GC project page.');\n      clearScheduleState();");
+    expect(gcSchedule).toContain("setErrorMessage('You need to be signed in to view scheduling.');\n      clearScheduleState();");
+    expect(gcSchedule).toContain("setErrorMessage(formatAppSafeErrorMessage(err, 'Could not load schedule.'));\n      clearScheduleState();");
     expect(gcSchedule).toContain('Assign a WalkerAI trade or mark this scope externally managed before recommending schedule dates.');
     expect(gcSchedule).toContain("request_type: 'schedule_change'");
     expect(gcSchedule).toContain('Send Schedule for Approval');
