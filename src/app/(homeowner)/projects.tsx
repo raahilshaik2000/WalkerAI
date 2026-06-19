@@ -20,6 +20,7 @@ import { ProgressRing } from '@/components/dashboard/ProgressRing';
 import { Colors, Radius } from '@/constants/theme';
 import { supabase } from '@/lib/supabase/client';
 import { isMissingSupabaseSchemaObjectError } from '@/lib/supabase/errors';
+import { formatAppSafeErrorMessage } from '@/lib/supabase/functions';
 import { formatGcProjectType } from '@/lib/gc-project-type';
 import { useAuthStore } from '@/stores/auth.store';
 import { useDIYWizardStore, type DIYGuide } from '@/stores/diy-wizard.store';
@@ -285,7 +286,7 @@ export default function HomeownerProjects() {
     } catch (err) {
       setProjects([]);
       setMilestoneProgressMap({});
-      setProjectsError(err instanceof Error ? err.message : 'Could not load projects.');
+      setProjectsError(formatAppSafeErrorMessage(err, 'Could not load projects.'));
     } finally {
       setProjectsLoading(false);
     }

@@ -45,4 +45,17 @@ describe('homeowner utility screens', () => {
     expect(settings).not.toContain("err instanceof Error ? err.message : 'Could not request account deletion. Please try again.'");
     expect(settings).not.toContain("err instanceof Error ? err.message : 'Could not request a data export. Please try again.'");
   });
+
+  it('uses app-safe copy for homeowner project and profile overview load failures', () => {
+    const projects = fs.readFileSync(path.join(__dirname, '../src/app/(homeowner)/projects.tsx'), 'utf8');
+    const profile = fs.readFileSync(path.join(__dirname, '../src/app/(homeowner)/profile.tsx'), 'utf8');
+
+    expect(projects).toContain("import { formatAppSafeErrorMessage } from '@/lib/supabase/functions';");
+    expect(projects).toContain("setProjectsError(formatAppSafeErrorMessage(err, 'Could not load projects.'))");
+    expect(projects).not.toContain("setProjectsError(err instanceof Error ? err.message : 'Could not load projects.')");
+
+    expect(profile).toContain("import { formatAppSafeErrorMessage } from '@/lib/supabase/functions';");
+    expect(profile).toContain("setStatsError(formatAppSafeErrorMessage(error, 'Could not load profile stats.'))");
+    expect(profile).not.toContain('setStatsError(error.message)');
+  });
 });

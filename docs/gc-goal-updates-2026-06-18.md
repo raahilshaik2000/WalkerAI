@@ -477,6 +477,7 @@ Runtime fixes made from this pass:
 - Homeowner top-level schedule and legacy chat screens now use app-safe copy for schedule project/slot/milestone loads plus message load/send failures, aligning them with the newer project-specific schedule and message surfaces.
 - Homeowner DIY guide save/convert, project sharing, settings, voice address search, address save, and final project dispatch now use app-safe copy instead of showing raw Supabase, native share-sheet, or backend messages.
 - Homeowner project creation now uses app-safe copy for questionnaire voice failures, visual preview/render load failures, AI brief generation failures, material-detail save failures, and DIY guide generation failures.
+- Homeowner project overview and profile stats now use app-safe copy for project-list, milestone-progress, optional GC-context, and profile-stat load failures.
 
 Runtime findings still not treated as complete:
 
@@ -586,6 +587,13 @@ Latest validation after homeowner project utility error-copy hardening:
 Latest validation after project-creation error-copy hardening:
 
 - `npm test -- --runInBand __tests__/project-creation-flow.test.ts __tests__/diy-guide.test.ts __tests__/visual-preview.test.ts __tests__/project-voice.test.ts`
+- `npx tsc --noEmit`
+- `npm test -- --runInBand`
+- `git diff --check`
+
+Latest validation after homeowner overview/profile error-copy hardening:
+
+- `npm test -- --runInBand __tests__/homeowner-utility-errors.test.ts __tests__/dashboard-data.test.ts __tests__/homeowner-quote-status.test.ts`
 - `npx tsc --noEmit`
 - `npm test -- --runInBand`
 - `git diff --check`

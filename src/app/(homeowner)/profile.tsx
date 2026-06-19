@@ -9,6 +9,7 @@ import { useAuthStore } from '@/stores/auth.store';
 import { useProfileStore } from '@/stores/profile.store';
 import { signOut } from '@/lib/supabase/auth';
 import { supabase } from '@/lib/supabase/client';
+import { formatAppSafeErrorMessage } from '@/lib/supabase/functions';
 
 export default function HomeownerProfile() {
   const navigation = useNavigation<any>();
@@ -35,7 +36,7 @@ export default function HomeownerProfile() {
         .eq('homeowner_id', user.id)
         .not('status', 'eq', 'diy_saved');
       if (error) {
-        setStatsError(error.message);
+        setStatsError(formatAppSafeErrorMessage(error, 'Could not load profile stats.'));
         return;
       }
       if (!data) return;
