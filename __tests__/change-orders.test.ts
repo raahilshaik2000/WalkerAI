@@ -41,8 +41,14 @@ describe('change-order workflow copy', () => {
 
     expect(homeownerChangeOrders).toContain("import { formatAppSafeErrorMessage } from '@/lib/supabase/functions';");
     expect(homeownerChangeOrders).toContain("setErrorMessage(formatAppSafeErrorMessage(error, 'Could not load change orders.'))");
+    expect(homeownerChangeOrders).toContain("setErrorMessage(formatAppSafeErrorMessage(err, 'Could not load change orders.'))");
+    expect(homeownerChangeOrders).toContain("} finally {\n      setLoading(false);");
     expect(homeownerChangeOrders).toContain("Alert.alert('Could not approve change order', formatAppSafeErrorMessage(error, 'Please try again.'))");
+    expect(homeownerChangeOrders).toContain("Alert.alert('Could not approve change order', formatAppSafeErrorMessage(err, 'Please try again.'))");
     expect(homeownerChangeOrders).toContain("Alert.alert('Could not reject change order', formatAppSafeErrorMessage(error, 'Please try again.'))");
+    expect(homeownerChangeOrders).toContain("Alert.alert('Could not reject change order', formatAppSafeErrorMessage(err, 'Please try again.'))");
+    expect(homeownerChangeOrders).toContain("} finally {\n              setResponding(null);");
+    expect(homeownerChangeOrders).toContain('variant="destructive"\n                        loading={isResponding}');
     expect(homeownerChangeOrders).not.toContain('setErrorMessage(`Could not load change orders: ${error.message}`)');
     expect(homeownerChangeOrders).not.toContain("Alert.alert('Error', error.message)");
 
