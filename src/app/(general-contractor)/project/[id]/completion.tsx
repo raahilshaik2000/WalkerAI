@@ -349,21 +349,26 @@ export default function GeneralContractorCompletionScreen() {
           text: 'Request',
           onPress: async () => {
             setSubmittingCompletion(true);
-            const { error } = await supabase.from('project_approval_requests').insert({
-              project_id: projectId,
-              requested_by_gc_id: assignment.general_contractor_id,
-              homeowner_id: assignment.homeowner_id,
-              request_type: 'general_recommendation',
-              title: 'Project completion approval',
-              description: 'GC recommends marking the renovation complete. Escrow and milestone releases still follow their existing payment workflows.',
-              metadata: { action: 'complete_project' },
-            });
-            if (error) {
-              Alert.alert('Could not request completion', formatAppSafeErrorMessage(error, 'Please try again.'));
-            } else {
-              await fetchData();
+            try {
+              const { error } = await supabase.from('project_approval_requests').insert({
+                project_id: projectId,
+                requested_by_gc_id: assignment.general_contractor_id,
+                homeowner_id: assignment.homeowner_id,
+                request_type: 'general_recommendation',
+                title: 'Project completion approval',
+                description: 'GC recommends marking the renovation complete. Escrow and milestone releases still follow their existing payment workflows.',
+                metadata: { action: 'complete_project' },
+              });
+              if (error) {
+                Alert.alert('Could not request completion', formatAppSafeErrorMessage(error, 'Please try again.'));
+              } else {
+                await fetchData();
+              }
+            } catch (err) {
+              Alert.alert('Could not request completion', formatAppSafeErrorMessage(err, 'Please try again.'));
+            } finally {
+              setSubmittingCompletion(false);
             }
-            setSubmittingCompletion(false);
           },
         },
       ],

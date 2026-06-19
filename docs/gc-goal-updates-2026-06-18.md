@@ -478,6 +478,7 @@ Runtime fixes made from this pass:
 - Supplier catalog, catalog item creation, earnings, and profile screens now use app-safe copy for supplier profile, catalog, stock toggle, payout setup, and earnings load/save failures across the material-sourcing account workflow.
 - Supplier business, license, and category onboarding plus catalog-item editing/deletion now use app-safe copy for profile load, setup save, catalog item load, save, and delete failures.
 - Homeowner/company warranty screens and the company-to-homeowner review screen now use app-safe copy for closeout warranty load/upload and review load/submit failures.
+- GC completion approval submission now clears its loading state even if the approval insert throws from a network/client failure instead of returning a Supabase error object.
 - Homeowner edit profile, saved addresses, and project search now use app-safe copy for profile save, address save, avatar remove/upload, address load, and project search load failures.
 - Homeowner top-level schedule and legacy chat screens now use app-safe copy for schedule project/slot/milestone loads plus message load/send failures, aligning them with the newer project-specific schedule and message surfaces.
 - Homeowner DIY guide save/convert, project sharing, settings, voice address search, address save, and final project dispatch now use app-safe copy instead of showing raw Supabase, native share-sheet, or backend messages.

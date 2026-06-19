@@ -2429,6 +2429,8 @@ describe('general contractor account type', () => {
     expect(gcCompletion).toContain('formatGcProjectType(assignment?.project_type, project.room_type)');
     expect(gcCompletion).toContain("metadata: { action: 'complete_project' }");
     expect(gcCompletion).toContain('This does not release escrow funds.');
+    expect(gcCompletion).toContain("try {\n              const { error } = await supabase.from('project_approval_requests').insert");
+    expect(gcCompletion).toContain("} catch (err) {\n              Alert.alert('Could not request completion', formatAppSafeErrorMessage(err, 'Please try again.'));\n            } finally {\n              setSubmittingCompletion(false);");
     expect(gcCompletion).toContain("from('gc_trade_quote_negotiations')");
     expect(gcCompletion).toContain("from('quotes')");
     expect(gcCompletion).toContain('const activeCloseoutBlockers = (projectReadyForCloseout ? 0 : 1)');
