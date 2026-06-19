@@ -18,6 +18,7 @@ import Ionicons from 'react-native-vector-icons/Ionicons';
 import { AnimatedPressable, GlassButton, GradientBackground } from '@/components/ui';
 import { Colors, Radius } from '@/constants/theme';
 import { supabase } from '@/lib/supabase/client';
+import { formatAppSafeErrorMessage } from '@/lib/supabase/functions';
 import { useAuthStore } from '@/stores/auth.store';
 import { getRequiredStringParam } from '@/lib/navigation-params';
 
@@ -88,7 +89,7 @@ export default function ChatScreen() {
 
     if (error) {
       setMessages([]);
-      setErrorMessage(`Could not load messages: ${error.message}`);
+      setErrorMessage(formatAppSafeErrorMessage(error, 'Could not load messages.'));
       setLoading(false);
       return;
     }
@@ -130,7 +131,7 @@ export default function ChatScreen() {
     const { error } = await supabase.from('messages').insert({ project_id: projectId, sender_id: user.id, body });
     if (error) {
       setText(body);
-      Alert.alert('Message not sent', error.message);
+      Alert.alert('Message not sent', formatAppSafeErrorMessage(error, 'Please try again.'));
     }
     setSending(false);
   };

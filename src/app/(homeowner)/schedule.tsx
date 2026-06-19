@@ -4,6 +4,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import Ionicons from 'react-native-vector-icons/Ionicons';
 import { useNavigation } from '@react-navigation/native';
 import { supabase } from '@/lib/supabase/client';
+import { formatAppSafeErrorMessage } from '@/lib/supabase/functions';
 import { useAuthStore } from '@/stores/auth.store';
 import { formatCad, formatStatusLabel } from '@/lib/formatters';
 import {
@@ -53,7 +54,7 @@ export default function ScheduleScreen() {
 
     if (projectsError) {
       setItems([]);
-      setErrorMessage(projectsError.message);
+      setErrorMessage(formatAppSafeErrorMessage(projectsError, 'Could not load schedule.'));
       setLoading(false);
       setRefreshing(false);
       return;
@@ -87,7 +88,7 @@ export default function ScheduleScreen() {
 
     if (slotsResult.error || milestonesResult.error) {
       setItems([]);
-      setErrorMessage(slotsResult.error?.message ?? milestonesResult.error?.message ?? 'Could not load schedule.');
+      setErrorMessage(formatAppSafeErrorMessage(slotsResult.error ?? milestonesResult.error, 'Could not load schedule.'));
       setLoading(false);
       setRefreshing(false);
       return;

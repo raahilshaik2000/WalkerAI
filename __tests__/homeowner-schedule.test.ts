@@ -184,4 +184,17 @@ describe('homeowner project schedule screen source guards', () => {
     expect(source).toContain('Scheduled trades and approved quote milestone due dates will appear here once your project has assigned dates or approved milestones.');
     expect(source).not.toContain('once your project is active.');
   });
+
+  it('uses app-safe copy for the top-level homeowner schedule feed', () => {
+    const source = fs.readFileSync(
+      path.join(__dirname, '../src/app/(homeowner)/schedule.tsx'),
+      'utf8',
+    );
+
+    expect(source).toContain("import { formatAppSafeErrorMessage } from '@/lib/supabase/functions';");
+    expect(source).toContain("setErrorMessage(formatAppSafeErrorMessage(projectsError, 'Could not load schedule.'))");
+    expect(source).toContain("setErrorMessage(formatAppSafeErrorMessage(slotsResult.error ?? milestonesResult.error, 'Could not load schedule.'))");
+    expect(source).not.toContain('setErrorMessage(projectsError.message)');
+    expect(source).not.toContain("setErrorMessage(slotsResult.error?.message ?? milestonesResult.error?.message ?? 'Could not load schedule.')");
+  });
 });

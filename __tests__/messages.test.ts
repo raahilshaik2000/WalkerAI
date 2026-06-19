@@ -16,6 +16,10 @@ describe('project messages', () => {
       path.join(__dirname, '../src/app/(homeowner)/project/[id]/messages.tsx'),
       'utf8',
     );
+    const homeownerLegacyChat = fs.readFileSync(
+      path.join(__dirname, '../src/app/(homeowner)/chat.tsx'),
+      'utf8',
+    );
     const companyMessages = fs.readFileSync(
       path.join(__dirname, '../src/app/(company)/job/[id]/messages.tsx'),
       'utf8',
@@ -33,7 +37,7 @@ describe('project messages', () => {
     expect(homeownerList).not.toContain('setErrorMessage(messagesError.message)');
     expect(homeownerList).not.toContain('slotResult.error?.message ?? gcResult.error?.message');
 
-    for (const source of [homeownerProjectMessages, companyMessages]) {
+    for (const source of [homeownerProjectMessages, homeownerLegacyChat, companyMessages]) {
       expect(source).toContain("import { formatAppSafeErrorMessage } from '@/lib/supabase/functions';");
       expect(source).toContain("setErrorMessage(formatAppSafeErrorMessage(error, 'Could not load messages.'))");
       expect(source).toContain("Alert.alert('Message not sent', formatAppSafeErrorMessage(error, 'Please try again.'))");
