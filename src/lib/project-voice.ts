@@ -5,7 +5,8 @@ type WalkerVoiceAssistantModule = {
   requestPermissions: () => Promise<{ speech: boolean; microphone: boolean }>;
   speak: (text: string) => Promise<{ spoken: boolean }>;
   stopSpeaking: () => Promise<{ stopped: boolean }>;
-  listenOnce: (locale: string, durationSeconds: number, contextualStrings: string[]) => Promise<{ transcript: string }>;
+  cancelListening?: () => Promise<{ cancelled: boolean }>;
+  listenOnce: (locale: string, durationSeconds: number, contextualStrings: string[]) => Promise<{ transcript: string; cancelled?: boolean }>;
 };
 
 const nativeVoice = NativeModules.WalkerVoiceAssistant as WalkerVoiceAssistantModule | undefined;
@@ -45,13 +46,15 @@ export async function listenForProjectAnswer(durationSeconds = 7, contextTerms: 
     throw new Error('Voice answers are not available on this device.');
   }
   const result = await nativeVoice.listenOnce('en-CA', durationSeconds, contextTerms);
+  if (result.cancelled) return 'voice cancelled';
   return result.transcript.trim();
 }
 
 export async function stopProjectVoice() {
-  if (nativeVoice?.stopSpeaking) {
-    await nativeVoice.stopSpeaking();
-  }
+  const stopTasks: Array<Promise<unknown>> = [];
+  if (nativeVoice?.stopSpeaking) stopTasks.push(nativeVoice.stopSpeaking());
+  if (nativeVoice?.cancelListening) stopTasks.push(nativeVoice.cancelListening());
+  await Promise.allSettled(stopTasks);
 }
 
 function normalize(value: string) {
@@ -207,7 +210,7 @@ export function transcriptRejectsSelection(transcript: string) {
 
 export function transcriptRequestsVoiceStop(transcript: string) {
   const normalizedTranscript = normalize(transcript);
-  return /\b(stop|pause|cancel|quit|exit|manual|tap manually)\b/.test(normalizedTranscript);
+  return /\b(stop|pause|cancel|quit|exit|manual|tap manually|voice cancelled)\b/.test(normalizedTranscript);
 }
 
 export function buildVoiceContextTerms(question: QuestionnaireQuestion) {

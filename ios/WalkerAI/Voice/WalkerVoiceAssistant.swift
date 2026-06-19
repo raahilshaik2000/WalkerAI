@@ -91,6 +91,16 @@ class WalkerVoiceAssistant: NSObject, AVSpeechSynthesizerDelegate {
     }
   }
 
+  @objc func cancelListening(
+    _ resolve: @escaping RCTPromiseResolveBlock,
+    rejecter reject: @escaping RCTPromiseRejectBlock
+  ) {
+    DispatchQueue.main.async { [weak self] in
+      self?.resolveActiveListening(cancelled: true)
+      resolve(["cancelled": true])
+    }
+  }
+
   @objc func listenOnce(
     _ locale: String,
     durationSeconds: NSNumber,
@@ -170,10 +180,14 @@ class WalkerVoiceAssistant: NSObject, AVSpeechSynthesizerDelegate {
   }
 
   private func finishListening() {
+    resolveActiveListening(cancelled: false)
+  }
+
+  private func resolveActiveListening(cancelled: Bool) {
     let transcript = lastTranscript
     let resolve = activeResolve
     stopRecognition()
-    resolve?(["transcript": transcript])
+    resolve?(["transcript": transcript, "cancelled": cancelled])
   }
 
   private func resolveSpeech(spoken: Bool) {

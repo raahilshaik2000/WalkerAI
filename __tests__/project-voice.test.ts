@@ -20,6 +20,14 @@ const question: QuestionnaireQuestion = {
   ],
 };
 
+const readNativeVoiceType = () => {
+  const source = require('fs').readFileSync(
+    require('path').join(__dirname, '../src/lib/project-voice.ts'),
+    'utf8',
+  );
+  return source;
+};
+
 describe('project voice answer matching', () => {
   it('matches spoken option numbers', () => {
     expect(matchTranscriptToQuestionOption('I choose option two', question)).toBe('k_ct_granite');
@@ -76,5 +84,12 @@ describe('project voice answer matching', () => {
     expect(terms).toContain('Quartz — engineered stone, low maintenance');
     expect(terms).toContain('granite');
     expect(terms).toContain('marble');
+  });
+
+  it('stops both speech output and active listening sessions', () => {
+    const source = readNativeVoiceType();
+
+    expect(source).toContain('cancelListening?: () => Promise<{ cancelled: boolean }>;');
+    expect(source).toContain('nativeVoice.cancelListening()');
   });
 });

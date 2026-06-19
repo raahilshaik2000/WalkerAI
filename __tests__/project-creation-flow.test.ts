@@ -99,13 +99,17 @@ describe('project creation flow guards', () => {
     expect(questionnaireSource).toContain('while (voiceWalkthroughRef.current && safetyCount < questions.length + 2) {');
     expect(questionnaireSource).toContain('const shouldContinue = advanceAfterVoiceAnswer(activeQuestion, result.optionId);');
     expect(questionnaireSource).toContain('const stopVoiceWalkthrough = async () => {');
+    expect(questionnaireSource).toContain('voiceWalkthroughRef.current = false;');
     expect(questionnaireSource).toContain('Start voice walkthrough');
     expect(questionnaireSource).toContain('Stop voice walkthrough');
     expect(questionnaireSource).not.toContain('const matchedOptionId = matchTranscriptToQuestionOption(transcript, question);');
 
     expect(nativeVoiceSource).toContain('request.contextualStrings = contextualStrings');
+    expect(nativeVoiceSource).toContain('@objc func cancelListening(');
+    expect(nativeVoiceSource).toContain('resolveActiveListening(cancelled: true)');
     expect(nativeVoiceSource).toContain('private func preferredVoice() -> AVSpeechSynthesisVoice?');
     expect(nativeVoiceBridge).toContain('contextualStrings:(NSArray *)contextualStrings');
+    expect(nativeVoiceBridge).toContain('RCT_EXTERN_METHOD(cancelListening:');
   });
 
   it('uses app-safe copy for voice address, address save, and dispatch failures', () => {
