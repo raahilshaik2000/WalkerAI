@@ -176,9 +176,14 @@ describe('supplier material order payout math', () => {
     );
 
     expect(companyMaterialsSource).toContain("import { formatAppSafeErrorMessage, formatSupabaseFunctionError } from '@/lib/supabase/functions'");
+    expect(companyMaterialsSource).toContain("setMaterials([]);\n      setQuantities({});\n      Alert.alert('Could not load materials', formatAppSafeErrorMessage(materialsResult.error, 'Please try again.'))");
+    expect(companyMaterialsSource).toContain("setSupplierOrders([]);\n      setExistingReviews({});\n      Alert.alert('Could not load supplier orders', formatAppSafeErrorMessage(ordersResult.error, 'Please try again.'))");
+    expect(companyMaterialsSource).toContain("setExistingReviews({});\n          Alert.alert('Could not load supplier reviews', formatAppSafeErrorMessage(reviewsError, 'Please try again.'))");
     expect(companyMaterialsSource).toContain("Alert.alert('Could not load materials', formatAppSafeErrorMessage(materialsResult.error, 'Please try again.'))");
     expect(companyMaterialsSource).toContain("Alert.alert('Could not load supplier orders', formatAppSafeErrorMessage(ordersResult.error, 'Please try again.'))");
     expect(companyMaterialsSource).toContain("Alert.alert('Could not load supplier reviews', formatAppSafeErrorMessage(reviewsError, 'Please try again.'))");
+    expect(companyMaterialsSource).toContain("Alert.alert('Sign in required', 'You need to be signed in to verify materials.')");
+    expect(companyMaterialsSource).toContain("Alert.alert('Sign in required', 'You need to be signed in to review a supplier.')");
     expect(companyMaterialsSource).toContain("throw new Error(formatAppSafeErrorMessage(error, `Could not save ${m.item}.`))");
     expect(companyMaterialsSource).toContain("throw new Error(formatAppSafeErrorMessage(orderError, `Could not load ${m.item} order.`))");
     expect(companyMaterialsSource).toContain("throw new Error(formatAppSafeErrorMessage(error, `Could not sync ${m.item} order.`))");
@@ -187,6 +192,8 @@ describe('supplier material order payout math', () => {
     expect(companyMaterialsSource).not.toContain("Alert.alert('Error', materialsResult.error.message)");
     expect(companyMaterialsSource).not.toContain("Alert.alert('Error', ordersResult.error.message)");
     expect(companyMaterialsSource).not.toContain("Alert.alert('Error', reviewsError.message)");
+    expect(companyMaterialsSource).not.toContain("Alert.alert('Error', 'You need to be signed in to verify materials.')");
+    expect(companyMaterialsSource).not.toContain("Alert.alert('Error', 'You need to be signed in to review a supplier.')");
     expect(companyMaterialsSource).not.toContain("Alert.alert('Error', err instanceof Error ? err.message : 'Failed to save quantities.')");
     expect(companyMaterialsSource).not.toContain("Alert.alert('Error', err instanceof Error ? err.message : 'Failed to submit supplier review.')");
   });

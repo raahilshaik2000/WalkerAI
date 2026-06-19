@@ -145,6 +145,8 @@ export default function ContractorMaterialsScreen() {
     ]);
 
     if (materialsResult.error) {
+      setMaterials([]);
+      setQuantities({});
       Alert.alert('Could not load materials', formatAppSafeErrorMessage(materialsResult.error, 'Please try again.'));
     } else if (materialsResult.data) {
       setMaterials(materialsResult.data);
@@ -157,6 +159,8 @@ export default function ContractorMaterialsScreen() {
     }
 
     if (ordersResult.error) {
+      setSupplierOrders([]);
+      setExistingReviews({});
       Alert.alert('Could not load supplier orders', formatAppSafeErrorMessage(ordersResult.error, 'Please try again.'));
     } else {
       const orders = (ordersResult.data ?? []) as SupplierOrder[];
@@ -169,6 +173,7 @@ export default function ContractorMaterialsScreen() {
           .eq('reviewer_id', user.id)
           .in('order_id', orders.map((order) => order.id));
         if (reviewsError) {
+          setExistingReviews({});
           Alert.alert('Could not load supplier reviews', formatAppSafeErrorMessage(reviewsError, 'Please try again.'));
         } else {
           const byOrder: Record<string, SupplierReview> = {};
@@ -190,7 +195,7 @@ export default function ContractorMaterialsScreen() {
 
   async function handleConfirm() {
     if (!user?.id) {
-      Alert.alert('Error', 'You need to be signed in to verify materials.');
+      Alert.alert('Sign in required', 'You need to be signed in to verify materials.');
       return;
     }
 
@@ -290,7 +295,7 @@ export default function ContractorMaterialsScreen() {
 
   async function handleSupplierReview(order: SupplierOrder) {
     if (!user?.id) {
-      Alert.alert('Error', 'You need to be signed in to review a supplier.');
+      Alert.alert('Sign in required', 'You need to be signed in to review a supplier.');
       return;
     }
     if (!order.accepted_supplier_id) {
