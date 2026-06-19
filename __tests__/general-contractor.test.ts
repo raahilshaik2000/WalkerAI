@@ -1714,6 +1714,7 @@ describe('general contractor account type', () => {
     expect(gcPermits).toContain('The homeowner must confirm active GC management before permits, inspections, or uploaded documents can be managed.');
     expect(gcPermits).toContain("from('permits').insert");
     expect(gcPermits).toContain("assignment?.status !== 'active'");
+    expect(gcPermits).toContain("} catch (err) {\n      Alert.alert('Could not update status', formatAppSafeErrorMessage(err, 'Please try again.'));\n    }");
     expect(gcPermits).toContain('Upload Document');
     expect(gcPermits).toContain('inspection_scheduled');
     expect(gcPermits).toContain('handleOpenDocument(previewUrl)');
@@ -1764,6 +1765,7 @@ describe('general contractor account type', () => {
     expect(gcPayments).toContain('No escrow or milestone funds are moved.');
     expect(gcPayments).toContain('pending && canManagePaymentRequests');
     expect(gcPayments).toContain('disabled={!canManagePaymentRequests || !!cancellingRequestId}');
+    expect(gcPayments).toContain("} catch (err) {\n              Alert.alert('Could not cancel request', formatAppSafeErrorMessage(err, 'Please try again.'));\n            } finally {\n              setCancellingRequestId(null);");
     expect(gcPayments).toContain('Funds are still released through existing escrow milestones');
     expect(gcApprovals).toContain("from('gc_payment_requests')");
     expect(gcApprovals).toContain('Payment requests');

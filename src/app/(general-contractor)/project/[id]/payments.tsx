@@ -203,23 +203,28 @@ export default function GeneralContractorPaymentsScreen() {
           style: 'destructive',
           onPress: async () => {
             setCancellingRequestId(request.id);
-            const { error } = await supabase
-              .from('gc_payment_requests')
-              .update({
-                status: 'cancelled',
-                cancelled_at: new Date().toISOString(),
-              })
-              .eq('id', request.id)
-              .eq('project_id', projectId)
-              .eq('general_contractor_id', assignment.general_contractor_id)
-              .eq('status', 'pending');
+            try {
+              const { error } = await supabase
+                .from('gc_payment_requests')
+                .update({
+                  status: 'cancelled',
+                  cancelled_at: new Date().toISOString(),
+                })
+                .eq('id', request.id)
+                .eq('project_id', projectId)
+                .eq('general_contractor_id', assignment.general_contractor_id)
+                .eq('status', 'pending');
 
-            if (error) {
-              Alert.alert('Could not cancel request', formatAppSafeErrorMessage(error, 'Please try again.'));
-            } else {
+              if (error) {
+                Alert.alert('Could not cancel request', formatAppSafeErrorMessage(error, 'Please try again.'));
+                return;
+              }
               await fetchData();
+            } catch (err) {
+              Alert.alert('Could not cancel request', formatAppSafeErrorMessage(err, 'Please try again.'));
+            } finally {
+              setCancellingRequestId(null);
             }
-            setCancellingRequestId(null);
           },
         },
       ],

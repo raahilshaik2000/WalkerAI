@@ -192,16 +192,17 @@ export default function GeneralContractorPermitsScreen() {
       Alert.alert('Complete setup required', 'Complete verified GC setup is required before permit statuses can be updated.');
       return;
     }
-    const { error } = await supabase
-      .from('permits')
-      .update({ status })
-      .eq('id', permit.id)
-      .eq('project_id', projectId);
-    if (error) {
-      Alert.alert('Could not update status', formatAppSafeErrorMessage(error, 'Please try again.'));
-      return;
+    try {
+      const { error } = await supabase
+        .from('permits')
+        .update({ status })
+        .eq('id', permit.id)
+        .eq('project_id', projectId);
+      if (error) throw error;
+      await fetchPermits();
+    } catch (err) {
+      Alert.alert('Could not update status', formatAppSafeErrorMessage(err, 'Please try again.'));
     }
-    await fetchPermits();
   };
 
   const handleUpload = async (permit: Permit) => {
