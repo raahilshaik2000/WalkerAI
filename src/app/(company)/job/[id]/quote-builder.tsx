@@ -65,6 +65,14 @@ interface CompanyProfileRef {
   id: string;
 }
 
+async function getCurrentUserId(cachedUserId?: string | null): Promise<string | null> {
+  if (cachedUserId) return cachedUserId;
+
+  const { data, error } = await supabase.auth.getUser();
+  if (error) throw error;
+  return data.user?.id ?? null;
+}
+
 function formatTotal(items: LineItem[]): number {
   return items.reduce((s, i) => s + (parseMoneyToCents(i.amount) / 100), 0);
 }
@@ -227,11 +235,14 @@ export default function QuoteBuilderScreen() {
         setLoadingApprovedQuote(true);
         setEditingPendingQuote(null);
         let companyId: string | null = null;
-        if (user?.id) {
+        const currentUserId = await getCurrentUserId(user?.id);
+        if (cancelled) return;
+
+        if (currentUserId) {
           const companyResult = await supabase
             .from('companies')
             .select('id')
-            .eq('user_id', user.id)
+            .eq('user_id', currentUserId)
             .order('created_at', { ascending: false })
             .limit(1)
             .maybeSingle();
@@ -404,8 +415,14 @@ export default function QuoteBuilderScreen() {
       Alert.alert('Missing project', 'Reopen this job from your dashboard and try again.');
       return;
     }
-    if (!user) {
-      Alert.alert('Sign in required', 'Please sign in again before submitting a quote.');
+    try {
+      const currentUserId = await getCurrentUserId(user?.id);
+      if (!currentUserId) {
+        Alert.alert('Sign in required', 'Please sign in again before submitting a quote.');
+        return;
+      }
+    } catch (err) {
+      Alert.alert('Sign in required', formatAppSafeErrorMessage(err, 'Please sign in again before submitting a quote.'));
       return;
     }
 

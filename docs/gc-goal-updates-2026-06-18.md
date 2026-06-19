@@ -1278,3 +1278,17 @@ Latest validation after homeowner GC concierge load-state hardening:
 - `npx tsc --noEmit`
 - `npm test -- --runInBand`
 - `git diff --check`
+
+Latest update after company GC quote auth fallback hardening:
+
+- Hardened the company job detail screen so a stale in-memory auth store no longer makes an otherwise signed-in company lose the GC trade negotiation and pricing context. The loader now falls back to the active Supabase session before loading the company payout profile, job, quotes, and GC negotiation rows.
+- Hardened the company quote builder so pricing load and quote submission also fall back to the active Supabase session before deciding the company is signed out.
+- This directly protects the GC counteroffer flow where a trade accepts GC pricing, opens the quote builder, and submits an updated quote package for homeowner review.
+- Added regression assertions in `__tests__/company-quote-copy.test.ts`.
+
+Latest validation after company GC quote auth fallback hardening:
+
+- `npm test -- --runInBand __tests__/company-quote-copy.test.ts`
+- `npx tsc --noEmit`
+- `npm test -- --runInBand`
+- `git diff --check`

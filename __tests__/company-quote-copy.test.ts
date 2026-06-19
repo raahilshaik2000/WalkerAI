@@ -47,6 +47,27 @@ describe('company quote copy', () => {
     expect(source).not.toContain('err instanceof Error');
   });
 
+  it('falls back to the active Supabase session when company auth store is stale', () => {
+    const repoRoot = path.resolve(__dirname, '..');
+    const jobDetail = fs.readFileSync(
+      path.join(repoRoot, 'src/app/(company)/job/[id]/index.tsx'),
+      'utf8'
+    );
+    const quoteBuilder = fs.readFileSync(
+      path.join(repoRoot, 'src/app/(company)/job/[id]/quote-builder.tsx'),
+      'utf8'
+    );
+
+    expect(jobDetail).toContain('const { data: authData, error: authError } = await supabase.auth.getUser();');
+    expect(jobDetail).toContain('if (authError) throw authError;');
+    expect(jobDetail).toContain('fetchCompanyPayoutProfile(currentUserId)');
+    expect(jobDetail).not.toContain('if (!projectId || !user?.id)');
+    expect(quoteBuilder).toContain('async function getCurrentUserId');
+    expect(quoteBuilder).toContain('await supabase.auth.getUser();');
+    expect(quoteBuilder).toContain('const currentUserId = await getCurrentUserId(user?.id);');
+    expect(quoteBuilder).not.toContain("if (!user) {\n      Alert.alert('Sign in required'");
+  });
+
   it('lets companies replace unfunded pending quotes for GC-requested revisions', () => {
     const repoRoot = path.resolve(__dirname, '..');
     const screenSource = fs.readFileSync(
