@@ -35,4 +35,12 @@ describe('supplier onboarding helpers', () => {
     expect(categories).toContain("Alert.alert('Could not save categories', formatAppSafeErrorMessage(err, 'Please try again.'))");
     expect(categories).not.toContain("Alert.alert('Error', err instanceof Error ? err.message : 'Failed to save. Try again.')");
   });
+
+  it('clears the full auth session on supplier sign out', () => {
+    const profile = fs.readFileSync(path.join(__dirname, '../src/app/(supplier)/profile/index.tsx'), 'utf8');
+
+    expect(profile).toContain('const { user, clearSession } = useAuthStore();');
+    expect(profile).toContain('await supabase.auth.signOut(); clearSession();');
+    expect(profile).not.toContain('setSession(null)');
+  });
 });

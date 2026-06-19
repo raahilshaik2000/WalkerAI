@@ -24,7 +24,7 @@ function nextSupplierOnboardingRoute(supplier: Supplier | null): string | null {
 
 export default function SupplierProfile() {
   const navigation = useNavigation<any>();
-  const { user, setSession } = useAuthStore();
+  const { user, clearSession } = useAuthStore();
   const [supplier, setSupplier] = useState<Supplier | null>(null);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
@@ -80,7 +80,7 @@ export default function SupplierProfile() {
   const signOut = () => {
     Alert.alert('Sign out', 'Are you sure?', [
       { text: 'Cancel', style: 'cancel' },
-      { text: 'Sign out', style: 'destructive', onPress: async () => { await supabase.auth.signOut(); setSession(null); } },
+      { text: 'Sign out', style: 'destructive', onPress: async () => { await supabase.auth.signOut(); clearSession(); } },
     ]);
   };
 
