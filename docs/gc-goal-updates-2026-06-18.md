@@ -11,8 +11,9 @@ General Contractor should be a separate app account type, not a company trade fa
 - Branch: `main`
 - Remote: `https://github.com/raahilshaik2000/WalkerAI`
 - Latest implementation commit when this doc was updated: `26842c8 Use safe auth entry error copy`
-- Live backend update: `generate-material-orders` was deployed to Supabase project `wgbloslndalmocckrejw`.
+- Live backend updates: `generate-material-orders`, `create-gc-concierge-payment-intent`, and `gc-concierge-payout` were deployed to Supabase project `wgbloslndalmocckrejw`.
 - Live backend migrations were later applied through `20260618132500_add_supplier_project_message_participants.sql` on Supabase project `wgbloslndalmocckrejw`.
+- Remote migration history was verified with `supabase migration list --linked`; local and remote migration versions match through `20260618132500`.
 - Four live QA accounts were reset/verified on Supabase and credentials were written to:
   - `/Users/raahilshaik/Downloads/walkerai-qa-credentials.txt`
 - Passwords are intentionally not included in this repo document.
@@ -478,6 +479,7 @@ Runtime fixes made from this pass:
 - Homeowner DIY guide save/convert, project sharing, settings, voice address search, address save, and final project dispatch now use app-safe copy instead of showing raw Supabase, native share-sheet, or backend messages.
 - Homeowner project creation now uses app-safe copy for questionnaire voice failures, visual preview/render load failures, AI brief generation failures, material-detail save failures, and DIY guide generation failures.
 - Homeowner project overview and profile stats now use app-safe copy for project-list, milestone-progress, optional GC-context, and profile-stat load failures.
+- Supabase drift verification found the GC concierge payment functions were present locally and invoked by the app but missing remotely. `create-gc-concierge-payment-intent` and `gc-concierge-payout` were deployed and re-listed as ACTIVE on project `wgbloslndalmocckrejw`.
 
 Runtime findings still not treated as complete:
 
@@ -496,9 +498,8 @@ The goal is not fully complete yet. Remaining work includes:
    - supplier order state changes
    - homeowner approval/rejection of GC recommendations
 2. Verify GC project creation, homeowner approval, trade coordination, material sourcing, payments, messages, schedule, permits, and completion paths in-app beyond the read-only surfaces already checked.
-3. Confirm any deployed Supabase function/migration drift beyond the updated `generate-material-orders` function and applied migrations before relying on the whole production backend as fully current.
-4. Decide product details for GC-created projects when the homeowner does not yet have an account. Current app behavior intentionally requires an existing homeowner account and now explains that requirement with polished copy.
-5. Re-test TestFlight/archive after these changes if the app is being shipped.
+3. Decide product details for GC-created projects when the homeowner does not yet have an account. Current app behavior intentionally requires an existing homeowner account and now explains that requirement with polished copy.
+4. Re-test TestFlight/archive after these changes if the app is being shipped.
 
 Latest validation after milestone/payment error-copy hardening:
 
@@ -594,6 +595,16 @@ Latest validation after project-creation error-copy hardening:
 Latest validation after homeowner overview/profile error-copy hardening:
 
 - `npm test -- --runInBand __tests__/homeowner-utility-errors.test.ts __tests__/dashboard-data.test.ts __tests__/homeowner-quote-status.test.ts`
+- `npx tsc --noEmit`
+- `npm test -- --runInBand`
+- `git diff --check`
+
+Latest validation after Supabase drift check and GC concierge function deployment:
+
+- `supabase migration list --linked`
+- `supabase functions deploy create-gc-concierge-payment-intent gc-concierge-payout --project-ref wgbloslndalmocckrejw --use-api`
+- `supabase functions list --project-ref wgbloslndalmocckrejw`
+- `npm test -- --runInBand __tests__/general-contractor.test.ts __tests__/supabase-functions.test.ts`
 - `npx tsc --noEmit`
 - `npm test -- --runInBand`
 - `git diff --check`
