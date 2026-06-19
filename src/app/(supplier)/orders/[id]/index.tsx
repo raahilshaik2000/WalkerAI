@@ -61,59 +61,61 @@ export default function SupplierOrderDetail() {
   const fetchOrder = useCallback(async () => {
     setLoading(true);
     setErrorMessage(null);
-    if (!orderId) {
-      setOrder(null);
-      setErrorMessage('Order is missing. Reopen it from the order feed.');
-      setLoading(false);
-      return;
-    }
-    const [orderResult, supplierResult] = await Promise.all([
-      supabase
-          .from('material_orders')
-          .select('*, material:materials!material_orders_material_id_fkey(*)')
-          .eq('id', orderId)
-          .maybeSingle(),
-      user?.id
-        ? supabase
-            .from('suppliers')
-            .select('*')
-            .eq('user_id', user.id)
-            .order('created_at', { ascending: false })
-            .limit(1)
-            .maybeSingle()
-        : Promise.resolve({ data: null, error: null }),
-    ]);
-
-    if (orderResult.error) {
-      setOrder(null);
-      setSupplier(null);
-      setErrorMessage(formatAppSafeErrorMessage(orderResult.error, 'Could not load material order.'));
-    } else if (!orderResult.data) {
-      setOrder(null);
-      setSupplier(null);
-      setErrorMessage('This order may have been claimed, cancelled, or removed.');
-    } else if (supplierResult.error) {
-      setOrder(orderResult.data as MaterialOrder);
-      setSupplier(null);
-      setErrorMessage(formatAppSafeErrorMessage(supplierResult.error, 'Could not load supplier profile.'));
-    } else {
-      const fetchedOrder = orderResult.data as MaterialOrder;
-      const fetchedSupplier = (supplierResult.data as Supplier | null) ?? null;
-      setOrder(fetchedOrder);
-      setSupplier(fetchedSupplier);
-
-      if (fetchedOrder.status === 'open' && fetchedSupplier?.verified) {
-        try {
-          setCanClaimOpenOrder(await checkSupplierCanClaimOrder(fetchedSupplier, fetchedOrder));
-        } catch (eligibilityError) {
-          setCanClaimOpenOrder(false);
-          setErrorMessage(formatAppSafeErrorMessage(eligibilityError, 'Could not verify supplier eligibility for this order.'));
-        }
-      } else {
-        setCanClaimOpenOrder(true);
+    try {
+      if (!orderId) {
+        setOrder(null);
+        setErrorMessage('Order is missing. Reopen it from the order feed.');
+        return;
       }
+      const [orderResult, supplierResult] = await Promise.all([
+        supabase
+            .from('material_orders')
+            .select('*, material:materials!material_orders_material_id_fkey(*)')
+            .eq('id', orderId)
+            .maybeSingle(),
+        user?.id
+          ? supabase
+              .from('suppliers')
+              .select('*')
+              .eq('user_id', user.id)
+              .order('created_at', { ascending: false })
+              .limit(1)
+              .maybeSingle()
+          : Promise.resolve({ data: null, error: null }),
+      ]);
+
+      if (orderResult.error) {
+        setOrder(null);
+        setSupplier(null);
+        setErrorMessage(formatAppSafeErrorMessage(orderResult.error, 'Could not load material order.'));
+      } else if (!orderResult.data) {
+        setOrder(null);
+        setSupplier(null);
+        setErrorMessage('This order may have been claimed, cancelled, or removed.');
+      } else if (supplierResult.error) {
+        setOrder(orderResult.data as MaterialOrder);
+        setSupplier(null);
+        setErrorMessage(formatAppSafeErrorMessage(supplierResult.error, 'Could not load supplier profile.'));
+      } else {
+        const fetchedOrder = orderResult.data as MaterialOrder;
+        const fetchedSupplier = (supplierResult.data as Supplier | null) ?? null;
+        setOrder(fetchedOrder);
+        setSupplier(fetchedSupplier);
+
+        if (fetchedOrder.status === 'open' && fetchedSupplier?.verified) {
+          setCanClaimOpenOrder(await checkSupplierCanClaimOrder(fetchedSupplier, fetchedOrder));
+        } else {
+          setCanClaimOpenOrder(true);
+        }
+      }
+    } catch (err) {
+      setOrder(null);
+      setSupplier(null);
+      setCanClaimOpenOrder(false);
+      setErrorMessage(formatAppSafeErrorMessage(err, 'Could not load material order.'));
+    } finally {
+      setLoading(false);
     }
-    setLoading(false);
   }, [orderId, user?.id]);
 
   useEffect(() => {

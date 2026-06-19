@@ -72,60 +72,64 @@ export default function SupplierActiveOrders() {
   const [supplierId, setSupplierId] = useState<string | null>(null);
 
   const fetchData = useCallback(async () => {
-    if (!user) {
-      setOrders([]);
-      setHasSupplierProfile(false);
-      setSupplierId(null);
-      setErrorMessage('You need to be signed in to view supplier orders.');
-      setLoading(false);
-      return;
-    }
+    try {
+      if (!user) {
+        setOrders([]);
+        setHasSupplierProfile(false);
+        setSupplierId(null);
+        setErrorMessage('You need to be signed in to view supplier orders.');
+        return;
+      }
 
-    setErrorMessage(null);
-    const { data: sup, error: supplierError } = await supabase
-      .from('suppliers')
-      .select('*')
-      .eq('user_id', user.id)
-      .order('created_at', { ascending: false })
-      .limit(1)
-      .maybeSingle();
-
-    if (supplierError) {
-      setOrders([]);
-      setHasSupplierProfile(false);
-      setSupplierId(null);
-      setErrorMessage(formatAppSafeErrorMessage(supplierError, 'Could not load supplier profile.'));
-      setLoading(false);
-      return;
-    }
-
-    if (!sup) {
-      setOrders([]);
-      setHasSupplierProfile(false);
-      setSupplierId(null);
       setErrorMessage(null);
-      setLoading(false);
-      return;
-    }
+      const { data: sup, error: supplierError } = await supabase
+        .from('suppliers')
+        .select('*')
+        .eq('user_id', user.id)
+        .order('created_at', { ascending: false })
+        .limit(1)
+        .maybeSingle();
 
-    setHasSupplierProfile(true);
-    setSupplierId(sup.id);
-    const { data, error } = await supabase
-      .from('material_orders')
-      .select('*, material:materials!material_orders_material_id_fkey(*)')
-      .eq('accepted_supplier_id', sup.id)
-      .not('status', 'in', '("open","cancelled")')
-      .order('created_at', { ascending: false });
+      if (supplierError) {
+        setOrders([]);
+        setHasSupplierProfile(false);
+        setSupplierId(null);
+        setErrorMessage(formatAppSafeErrorMessage(supplierError, 'Could not load supplier profile.'));
+        return;
+      }
 
-    if (error) {
+      if (!sup) {
+        setOrders([]);
+        setHasSupplierProfile(false);
+        setSupplierId(null);
+        setErrorMessage(null);
+        return;
+      }
+
+      setHasSupplierProfile(true);
+      setSupplierId(sup.id);
+      const { data, error } = await supabase
+        .from('material_orders')
+        .select('*, material:materials!material_orders_material_id_fkey(*)')
+        .eq('accepted_supplier_id', sup.id)
+        .not('status', 'in', '("open","cancelled")')
+        .order('created_at', { ascending: false });
+
+      if (error) {
+        setOrders([]);
+        setErrorMessage(formatAppSafeErrorMessage(error, 'Could not load active supplier orders.'));
+        return;
+      }
+
+      setOrders((data as MaterialOrder[]) ?? []);
+    } catch (err) {
       setOrders([]);
-      setErrorMessage(formatAppSafeErrorMessage(error, 'Could not load active supplier orders.'));
+      setHasSupplierProfile(false);
+      setSupplierId(null);
+      setErrorMessage(formatAppSafeErrorMessage(err, 'Could not load active supplier orders.'));
+    } finally {
       setLoading(false);
-      return;
     }
-
-    setOrders((data as MaterialOrder[]) ?? []);
-    setLoading(false);
   }, [user]);
 
   useFocusEffect(

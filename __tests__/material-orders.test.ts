@@ -136,7 +136,8 @@ describe('supplier material order payout math', () => {
     expect(detailSource).toContain("import { formatAppSafeErrorMessage, formatSupabaseFunctionError } from '@/lib/supabase/functions'");
     expect(detailSource).toContain("setErrorMessage(formatAppSafeErrorMessage(orderResult.error, 'Could not load material order.'))");
     expect(detailSource).toContain("setErrorMessage(formatAppSafeErrorMessage(supplierResult.error, 'Could not load supplier profile.'))");
-    expect(detailSource).toContain("setErrorMessage(formatAppSafeErrorMessage(eligibilityError, 'Could not verify supplier eligibility for this order.'))");
+    expect(detailSource).toContain("setErrorMessage(formatAppSafeErrorMessage(err, 'Could not load material order.'))");
+    expect(detailSource).toContain("} finally {\n      setLoading(false);");
     expect(detailSource).toContain("Alert.alert('Could not claim order', await formatSupabaseFunctionError(err, 'Please try again.'))");
     expect(detailSource).not.toContain('setErrorMessage(orderResult.error.message)');
     expect(detailSource).not.toContain('setErrorMessage(supplierResult.error.message)');
@@ -146,6 +147,8 @@ describe('supplier material order payout math', () => {
     expect(activeSource).toContain("import { formatAppSafeErrorMessage } from '@/lib/supabase/functions'");
     expect(activeSource).toContain("setErrorMessage(formatAppSafeErrorMessage(supplierError, 'Could not load supplier profile.'))");
     expect(activeSource).toContain("setErrorMessage(formatAppSafeErrorMessage(error, 'Could not load active supplier orders.'))");
+    expect(activeSource).toContain("setErrorMessage(formatAppSafeErrorMessage(err, 'Could not load active supplier orders.'))");
+    expect(activeSource).toContain("} finally {\n      setLoading(false);");
     expect(activeSource).toContain("Alert.alert('Could not update order', formatAppSafeErrorMessage(err, 'Please try again.'))");
     expect(activeSource).toContain("Alert.alert('Could not mark order shipped', formatAppSafeErrorMessage(err, 'Please try again.'))");
     expect(activeSource).toContain("Alert.alert('Could not mark order delivered', formatAppSafeErrorMessage(err, 'Please try again.'))");

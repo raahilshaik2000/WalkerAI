@@ -470,6 +470,7 @@ Runtime fixes made from this pass:
 - Company material verification now formats material, supplier-order, supplier-review, quantity-save, and supplier-review submission failures through app-safe copy for GC-managed material sourcing workflows.
 - Supplier material order feed, detail, and active fulfillment screens now format supplier profile, order-load, eligibility, claim, processing, shipped, and delivered update failures through app-safe copy for GC-managed material order lifecycles.
 - Supplier open material order feed now catches thrown load/eligibility failures, clears the loading state reliably, and uses a specific `Could not claim order` title for non-race claim failures.
+- Supplier material order detail and active fulfillment screens now also catch thrown load failures and clear loading state reliably, so GC-managed material order views do not hang on transient client/network failures.
 - Homeowner material receipt and supplier-payment release now use app-safe copy for material order load failures and payout release failures, while keeping delivery-proof gating intact.
 - Homeowner GC approval/rejection and GC payment authorization responses now clear their in-progress state even if the RPC throws from a network/client failure.
 - Homeowner project photo analysis now formats outer project-creation and upload failures through app-safe copy, so transient database timeouts no longer show raw backend wording on the analysis failure screen.
