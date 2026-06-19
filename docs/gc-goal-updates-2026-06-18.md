@@ -1322,3 +1322,17 @@ Latest validation after company core-screen auth fallback hardening:
 - `npx tsc --noEmit`
 - `npm test -- --runInBand`
 - `git diff --check`
+
+Latest update after homeowner project-generation auth fallback hardening:
+
+- Hardened the homeowner renovation photo-analysis step so draft project creation falls back to the active Supabase session before deciding the homeowner is signed out.
+- Hardened the homeowner DIY guide generator so both modern and legacy draft-project insert paths use the same active-session fallback.
+- This protects project creation from failing before the existing analysis fallback can run when the app session is valid but the local auth store has not hydrated yet.
+- Added regression assertions in `__tests__/project-creation-flow.test.ts`.
+
+Latest validation after homeowner project-generation auth fallback hardening:
+
+- `npm test -- --runInBand __tests__/project-creation-flow.test.ts __tests__/diy-guide.test.ts __tests__/project-analysis.test.ts`
+- `npx tsc --noEmit`
+- `npm test -- --runInBand`
+- `git diff --check`

@@ -11,6 +11,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { useNavigation } from '@react-navigation/native';
 import Ionicons from 'react-native-vector-icons/Ionicons';
 import { supabase } from '@/lib/supabase/client';
+import { getCurrentUser } from '@/lib/supabase/auth';
 import { formatAppSafeErrorMessage, formatSupabaseFunctionError } from '@/lib/supabase/functions';
 import { uploadBase64 } from '@/lib/supabase/storage';
 import {
@@ -144,14 +145,15 @@ export default function AnalyzingScreen() {
 
     const runAnalysis = async () => {
       try {
-        if (!user?.id) {
+        const currentUserId = user?.id ?? (await getCurrentUser())?.id ?? null;
+        if (!currentUserId) {
           throw new Error('You need to be signed in to create a project.');
         }
 
         const selectedRoomType = roomType || 'kitchen';
         const pid = await ensureDraftProjectId({
           existingProjectId: projectId,
-          userId: user.id,
+          userId: currentUserId,
           roomType: selectedRoomType,
         });
 
@@ -284,7 +286,7 @@ export default function AnalyzingScreen() {
     };
 
     runAnalysis();
-  }, [analysisRunId, navigation, photos, projectId, roomType, setAnalysisResult, setQuestions, user]);
+  }, [analysisRunId, navigation, photos, projectId, roomType, setAnalysisResult, setQuestions, user?.id]);
 
   const spin = rotateAnim.interpolate({
     inputRange: [0, 1],

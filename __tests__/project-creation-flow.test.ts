@@ -147,4 +147,25 @@ describe('project creation flow guards', () => {
     expect(briefSource).not.toContain("setError(err instanceof Error ? err.message : 'Failed to generate brief.')");
     expect(briefSource).not.toContain("setError(err instanceof Error ? err.message : 'Failed to save material details.')");
   });
+
+  it('falls back to the active Supabase session before creating homeowner projects', () => {
+    const analyzingSource = fs.readFileSync(
+      path.join(__dirname, '../src/app/(homeowner)/project/create/analyzing.tsx'),
+      'utf8',
+    );
+    const diyGeneratingSource = fs.readFileSync(
+      path.join(__dirname, '../src/app/(homeowner)/project/create/diy-generating.tsx'),
+      'utf8',
+    );
+
+    [analyzingSource, diyGeneratingSource].forEach((source) => {
+      expect(source).toContain("import { getCurrentUser } from '@/lib/supabase/auth';");
+      expect(source).toContain('user?.id ?? (await getCurrentUser())?.id ?? null');
+      expect(source).not.toContain('if (!user?.id)');
+    });
+    expect(analyzingSource).toContain('userId: currentUserId');
+    expect(analyzingSource).toContain('}, [analysisRunId, navigation, photos, projectId, roomType, setAnalysisResult, setQuestions, user?.id]);');
+    expect(diyGeneratingSource).toContain('homeowner_id: currentUserId');
+    expect(diyGeneratingSource).toContain('}, [navigation, store, user?.id]);');
+  });
 });
