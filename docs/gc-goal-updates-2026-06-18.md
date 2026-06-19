@@ -718,3 +718,10 @@ Latest validation after GC onboarding error-title polish:
 - `npx tsc --noEmit`
 - `npm test -- --runInBand`
 - `git diff --check`
+
+Latest validation after GC message send hardening:
+
+- `npm test -- --runInBand __tests__/messages.test.ts __tests__/general-contractor.test.ts`
+- `npx tsc --noEmit`
+- `npm test -- --runInBand`
+- `git diff --check`
