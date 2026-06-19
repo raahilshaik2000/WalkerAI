@@ -725,3 +725,10 @@ Latest validation after GC message send hardening:
 - `npx tsc --noEmit`
 - `npm test -- --runInBand`
 - `git diff --check`
+
+Latest validation after GC attachment auth hardening:
+
+- `npm test -- --runInBand __tests__/messages.test.ts __tests__/general-contractor.test.ts`
+- `npx tsc --noEmit`
+- `npm test -- --runInBand`
+- `git diff --check`
