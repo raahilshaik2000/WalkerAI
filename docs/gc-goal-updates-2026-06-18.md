@@ -1091,3 +1091,16 @@ Latest validation after 2D room model opening attachment hardening:
 - `npx tsc --noEmit`
 - `npm test -- --runInBand`
 - `git diff --check`
+
+Latest update after Stripe Connect refresh role-boundary hardening:
+
+- Hardened the `refresh-connect-status` edge function so payout readiness refreshes now verify the authenticated app user's `users.role` matches the requested payout role before selecting or updating `companies`, `suppliers`, or `general_contractors`.
+- This aligns the cheap status-refresh path with `create-connect-account`, which already rejects mismatched payout setup requests.
+- Added regression assertions in `__tests__/supabase-functions.test.ts`.
+
+Latest validation after Stripe Connect refresh role-boundary hardening:
+
+- `npm test -- --runInBand __tests__/supabase-functions.test.ts`
+- `npx tsc --noEmit`
+- `npm test -- --runInBand`
+- `git diff --check`

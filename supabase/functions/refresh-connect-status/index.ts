@@ -85,6 +85,19 @@ Deno.serve(async (req) => {
       // Company callers send no body.
     }
 
+    const { data: appUser, error: appUserError } = await adminClient
+      .from('users')
+      .select('role')
+      .eq('id', user.id)
+      .maybeSingle();
+
+    if (appUserError) throw appUserError;
+    if (!appUser || appUser.role !== requestedRole) {
+      return new Response(JSON.stringify({ error: 'Account role does not match payout status refresh request' }), {
+        status: 403, headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      });
+    }
+
     const table = requestedRole === 'supplier'
       ? 'suppliers'
       : requestedRole === 'general_contractor'

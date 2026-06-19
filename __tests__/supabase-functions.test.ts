@@ -261,6 +261,10 @@ describe('refresh-connect-status source guards', () => {
     expect(source).toContain("body?.role === 'general_contractor'");
     expect(source).toContain("'general_contractors'");
     expect(source).toContain("'General contractor'");
+    expect(source).toContain(".from('users')");
+    expect(source).toContain(".select('role')");
+    expect(source).toContain('appUser.role !== requestedRole');
+    expect(source).toContain('Account role does not match payout status refresh request');
     expect(source).toContain("JSON.stringify({ error: `${roleLabel} not found` })");
     expect(source).toContain('stripe.accounts.retrieve(accountId)');
     expect(source).toContain('await updateStripeReadiness(adminClient, table, accountOwner.id, readiness)');
