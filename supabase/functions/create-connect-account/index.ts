@@ -173,6 +173,11 @@ Deno.serve(async (req) => {
         type: 'express',
         country: 'CA',
         capabilities: {
+          // transfers-only "recipient" accounts need separate Stripe approval;
+          // requesting card_payments alongside transfers avoids the
+          // "platform needs approval for accounts to have requested transfers
+          // without card_payments" error that blocked all payout onboarding.
+          card_payments: { requested: true },
           transfers: { requested: true },
         },
         metadata: {

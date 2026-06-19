@@ -8,8 +8,8 @@ LogBox.ignoreLogs([
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { StripeProvider } from '@stripe/stripe-react-native';
-import Config from 'react-native-config';
 import { RootNavigator } from './src/navigation/RootNavigator';
+import { STRIPE_PUBLISHABLE_KEY } from './src/lib/stripe';
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -25,7 +25,7 @@ export default function App() {
   return (
     <GestureHandlerRootView style={{ flex: 1 }}>
       <StripeProvider
-        publishableKey={Config.STRIPE_PUBLISHABLE_KEY ?? ''}
+        publishableKey={STRIPE_PUBLISHABLE_KEY}
         merchantIdentifier="merchant.com.walkerai.app"
       >
         <QueryClientProvider client={queryClient}>
