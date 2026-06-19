@@ -131,6 +131,8 @@ describe('general contractor account type', () => {
     expect(businessOnboarding).toContain('setBusinessName(data.business_name');
     expect(businessOnboarding).toContain('setDefaultMarkup(data.default_markup_pct');
     expect(businessOnboarding).toContain('setConciergeEnabled(data.concierge_enabled === true)');
+    expect(businessOnboarding).toContain("Alert.alert('Could not load business profile', formatAppSafeErrorMessage(err, 'Please try again.'))");
+    expect(businessOnboarding).not.toContain('loadExistingProfile().catch(() => undefined)');
     expect(businessOnboarding).toContain('existing?.id');
     expect(businessOnboarding).toContain('returnToProfile');
     expect(businessOnboarding).toContain('Concierge marketplace');

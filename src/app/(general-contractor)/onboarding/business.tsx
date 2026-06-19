@@ -81,7 +81,8 @@ export default function GeneralContractorBusinessOnboarding() {
         .eq('user_id', user.id)
         .maybeSingle();
 
-      if (cancelled || error || !data) return;
+      if (error) throw error;
+      if (cancelled || !data) return;
       setBusinessName(data.business_name ?? '');
       setAddress(data.address ?? '');
       setCity(data.city ?? '');
@@ -95,7 +96,11 @@ export default function GeneralContractorBusinessOnboarding() {
       setLng(data.lng ?? null);
     };
 
-    loadExistingProfile().catch(() => undefined);
+    loadExistingProfile().catch((err) => {
+      if (!cancelled) {
+        Alert.alert('Could not load business profile', formatAppSafeErrorMessage(err, 'Please try again.'));
+      }
+    });
 
     return () => {
       cancelled = true;

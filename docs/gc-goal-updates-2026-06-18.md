@@ -474,6 +474,7 @@ Runtime fixes made from this pass:
 - GC payment-request cancellation now clears its in-progress state if the update or refresh throws, and GC permit status updates now show app-safe failure copy for thrown client/network errors.
 - GC native picker failures for license documents, insurance documents, permit uploads, project message attachments, and external-trade documents now route through app-safe alerts instead of bypassing upload error handling.
 - GC license and insurance onboarding now surfaces app-safe preload failures instead of silently showing blank existing document fields when the profile query fails.
+- GC business onboarding now surfaces app-safe preload failures instead of silently leaving default business, service-area, markup, and concierge values when the profile query fails.
 - Homeowner schedule confirmation now uses app-safe copy for schedule load and confirmation failures, while preserving quote/payment-aware project activation behavior.
 - Homeowner permit/inspection records now use app-safe copy for permit load and upload failures while preserving signed document previews.
 - Homeowner and company milestone/payment workflows now use app-safe copy for milestone load, dispute, update, upload, and release failures; shared Supabase error formatting also hides database policy/schema/internal wording behind polished fallback copy.
