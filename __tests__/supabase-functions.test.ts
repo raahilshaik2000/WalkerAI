@@ -657,6 +657,21 @@ describe('send-push source guards', () => {
       /case 'order_delivered':[\s\S]*?case 'gc_approval_requested':[\s\S]*?case 'gc_trade_negotiation_responded':[\s\S]*?return 'milestone_updates';/
     );
   });
+
+  it('keeps live notification types behind user push preferences', () => {
+    const source = fs.readFileSync(
+      path.join(__dirname, '../supabase/functions/send-push/index.ts'),
+      'utf8',
+    );
+    const preferenceMapper = source.slice(source.indexOf('function notificationPreferenceKey'));
+
+    expect(preferenceMapper).toMatch(
+      /case 'milestone_paid':[\s\S]*?case 'supplier_paid':[\s\S]*?case 'gc_concierge_payout_released':[\s\S]*?return 'payment_updates';/
+    );
+    expect(preferenceMapper).toMatch(
+      /case 'job_accepted':[\s\S]*?case 'slot_accepted':[\s\S]*?case 'dispute_raised':[\s\S]*?return 'milestone_updates';/
+    );
+  });
 });
 
 describe('create-gc-concierge-payment-intent source guards', () => {

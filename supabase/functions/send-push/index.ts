@@ -506,8 +506,15 @@ function notificationPreferenceKey(type: string): string | null {
     case 'quote_submitted':
     case 'quote_approved':
       return 'quote_updates';
+    case 'milestone_paid':
+    case 'supplier_paid':
+    case 'gc_concierge_payout_released':
+      return 'payment_updates';
+    case 'job_accepted':
+    case 'slot_accepted':
     case 'milestone_needs_approval':
     case 'milestone_completed':
+    case 'dispute_raised':
     case 'project_complete':
     case 'all_slots_filled':
     case 'schedule_confirmed':
@@ -525,7 +532,6 @@ function notificationPreferenceKey(type: string): string | null {
     case 'gc_concierge_booking_requested':
     case 'gc_concierge_booking_responded':
     case 'gc_concierge_booking_paid':
-    case 'gc_concierge_payout_released':
     case 'gc_trade_negotiation_requested':
     case 'gc_trade_negotiation_responded':
       return 'milestone_updates';

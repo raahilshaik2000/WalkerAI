@@ -800,3 +800,10 @@ Latest validation after generic project message deep-link parsing:
 - `npx tsc --noEmit`
 - `npm test -- --runInBand`
 - `git diff --check`
+
+Latest validation after live notification preference routing:
+
+- `npm test -- --runInBand __tests__/supabase-functions.test.ts`
+- `npx tsc --noEmit`
+- `npm test -- --runInBand`
+- `git diff --check`
