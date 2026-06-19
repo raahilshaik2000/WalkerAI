@@ -148,6 +148,7 @@ export default function CompanyProfileScreen() {
       return;
     }
     setErrorMessage(null);
+    await supabase.functions.invoke('refresh-connect-status');
 
     let co: Company | null = null;
     try {

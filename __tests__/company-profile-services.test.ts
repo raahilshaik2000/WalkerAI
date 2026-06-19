@@ -30,4 +30,11 @@ describe('company profile services display', () => {
     expect(source).not.toContain('setErrorMessage(slotProjectsError.message)');
     expect(source).not.toContain('setErrorMessage(milestonesError.message)');
   });
+
+  it('refreshes Stripe payout readiness before loading the company profile', () => {
+    expect(source).toContain("supabase.functions.invoke('refresh-connect-status')");
+    expect(source).toMatch(
+      /setErrorMessage\(null\);[\s\S]*?supabase\.functions\.invoke\('refresh-connect-status'\);[\s\S]*?co = await fetchCompanyProfile/
+    );
+  });
 });

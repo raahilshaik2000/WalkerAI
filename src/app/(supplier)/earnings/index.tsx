@@ -31,6 +31,9 @@ export default function SupplierEarnings() {
       setRefreshing(false);
       return;
     }
+    await supabase.functions.invoke('refresh-connect-status', {
+      body: { role: 'supplier' },
+    });
     const { data: sup, error: supplierError } = await supabase
       .from('suppliers')
       .select('*')
