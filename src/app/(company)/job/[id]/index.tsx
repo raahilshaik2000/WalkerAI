@@ -439,15 +439,17 @@ export default function JobBriefScreen() {
         style: status === 'rejected' ? 'destructive' : 'default',
         onPress: async () => {
           setRespondingNegotiationId(negotiation.id);
-          const responseNote = negotiationResponseNotes[negotiation.id]?.trim() ?? '';
-          const { error } = await supabase.rpc('respond_to_gc_trade_quote_negotiation', {
-            p_negotiation_id: negotiation.id,
-            p_status: status,
-            p_response_note: responseNote || null,
-          });
-          if (error) {
-            Alert.alert('Could not respond', formatAppSafeErrorMessage(error, 'Please try again.'));
-          } else {
+          try {
+            const responseNote = negotiationResponseNotes[negotiation.id]?.trim() ?? '';
+            const { error } = await supabase.rpc('respond_to_gc_trade_quote_negotiation', {
+              p_negotiation_id: negotiation.id,
+              p_status: status,
+              p_response_note: responseNote || null,
+            });
+            if (error) {
+              Alert.alert('Could not respond', formatAppSafeErrorMessage(error, 'Please try again.'));
+              return;
+            }
             setNegotiationResponseNotes((current) => {
               const next = { ...current };
               delete next[negotiation.id];
@@ -466,8 +468,11 @@ export default function JobBriefScreen() {
                 ],
               );
             }
+          } catch (err) {
+            Alert.alert('Could not respond', formatAppSafeErrorMessage(err, 'Please try again.'));
+          } finally {
+            setRespondingNegotiationId(null);
           }
-          setRespondingNegotiationId(null);
         },
       },
     ]);

@@ -299,6 +299,7 @@ describe('company quote copy', () => {
     expect(jobDetail).toContain('isGeneralContractorReadyForProjectControls(getNegotiationGcProfile(negotiation))');
     expect(jobDetail).toContain('This quote is already approved or payment has started. Use change orders for pricing changes after funding begins.');
     expect(jobDetail).toContain('disabled={!gcReady || !quoteEditable || !!respondingNegotiationId}');
+    expect(jobDetail).toContain("} catch (err) {\n            Alert.alert('Could not respond', formatAppSafeErrorMessage(err, 'Please try again.'));\n          } finally {\n            setRespondingNegotiationId(null);");
     expect(migration).toContain("NEW.status = 'accepted'");
     expect(migration).toContain("q.status = 'pending'");
     expect(migration).toContain('q.stripe_payment_intent_id IS NULL');
