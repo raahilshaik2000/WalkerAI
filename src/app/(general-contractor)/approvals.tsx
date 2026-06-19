@@ -103,11 +103,13 @@ export default function GeneralContractorApprovals() {
   const [respondingBookingId, setRespondingBookingId] = useState<string | null>(null);
   const [bookingResponseNotes, setBookingResponseNotes] = useState<Record<string, string>>({});
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  const [setupLockMessage, setSetupLockMessage] = useState<string | null>(null);
 
   const fetchData = useCallback(async () => {
     const currentUser = user ?? (await supabase.auth.getUser()).data.user;
     if (!currentUser) {
       setErrorMessage('You need to be signed in to view approvals.');
+      setSetupLockMessage(null);
       setLoading(false);
       setRefreshing(false);
       return;
@@ -115,6 +117,7 @@ export default function GeneralContractorApprovals() {
 
     try {
       setErrorMessage(null);
+      setSetupLockMessage(null);
       const { data: gc, error: profileError } = await supabase
         .from('general_contractors')
         .select('id, verified, concierge_enabled, business_name, city, province, lat, lng, license_number, license_doc_url, insurance_doc_url')
@@ -127,6 +130,7 @@ export default function GeneralContractorApprovals() {
         setPaymentRequests([]);
         setBookingRequests([]);
         setCanAcceptConciergeBookings(false);
+        setSetupLockMessage('Create your GC business profile before approvals, payment requests, and concierge bookings can be reviewed.');
         return;
       }
       const gcReadyForProjectControls = isGeneralContractorReadyForProjectControls(gc);
@@ -137,6 +141,7 @@ export default function GeneralContractorApprovals() {
         setRecommendationRequests([]);
         setPaymentRequests([]);
         setBookingRequests([]);
+        setSetupLockMessage('Complete verified GC setup is required before approvals, payment requests, and concierge bookings can be reviewed.');
         return;
       }
 
@@ -219,6 +224,7 @@ export default function GeneralContractorApprovals() {
       setPaymentRequests([]);
       setBookingRequests([]);
       setCanAcceptConciergeBookings(false);
+      setSetupLockMessage(null);
     } finally {
       setLoading(false);
       setRefreshing(false);
@@ -299,6 +305,12 @@ export default function GeneralContractorApprovals() {
             <GlassCard style={styles.card}>
               <Text style={styles.bodyText}>Loading approvals...</Text>
             </GlassCard>
+          ) : setupLockMessage ? (
+            <TradeEmptyState
+              icon="lock-alert-outline"
+              title="GC setup required"
+              body={setupLockMessage}
+            />
           ) : approvals.length === 0 && recommendationRequests.length === 0 && paymentRequests.length === 0 && bookingRequests.length === 0 ? (
             <TradeEmptyState
               icon="clipboard-check-outline"

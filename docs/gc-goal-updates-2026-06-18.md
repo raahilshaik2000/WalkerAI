@@ -6,6 +6,13 @@ This document summarizes the work completed during the active goal to make Gener
 
 General Contractor should be a separate app account type, not a company trade fallback. The app should route, onboard, authorize, and display GC workflows through their own profile, project-management workspace, and backend authorization rules.
 
+## Latest Continuation Updates
+
+- Audited GC project detail and sub-screens for active-assignment, verified-profile, complete-setup, homeowner-approval, and read-only completed-project gates.
+- Confirmed schedule, discovery, materials, trade recommendations, payment requests, permit management, assistant summaries, and completion requests are gated by active GC management and complete verified GC setup where they mutate project state.
+- Fixed the GC Approvals tab so incomplete, missing, or unverified GC profiles now see an explicit setup-required empty state instead of a misleading "No approval requests" state.
+- Added a regression guard in `__tests__/general-contractor.test.ts` for the GC Approvals setup lock copy and state.
+
 ## Current Repo State When This Doc Was Created
 
 - Branch: `main`
@@ -841,6 +848,13 @@ Latest validation after company license onboarding bypass removal:
 Latest validation after company change-order thrown-failure hardening:
 
 - `npm test -- --runInBand __tests__/change-orders.test.ts`
+- `npx tsc --noEmit`
+- `npm test -- --runInBand`
+- `git diff --check`
+
+Latest validation after GC approvals setup-lock UX:
+
+- `npm test -- --runInBand __tests__/general-contractor.test.ts`
 - `npx tsc --noEmit`
 - `npm test -- --runInBand`
 - `git diff --check`

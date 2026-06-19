@@ -2302,6 +2302,11 @@ describe('general contractor account type', () => {
     expect(gcApprovals).toContain('setCanAcceptConciergeBookings(hasCompleteGcConciergeProfile(gc))');
     expect(gcApprovals).toContain('isGeneralContractorReadyForProjectControls(gc)');
     expect(gcApprovals).toContain('const gcReadyForProjectControls = isGeneralContractorReadyForProjectControls(gc);');
+    expect(gcApprovals).toContain('const [setupLockMessage, setSetupLockMessage] = useState<string | null>(null);');
+    expect(gcApprovals).toContain("setSetupLockMessage('Create your GC business profile before approvals, payment requests, and concierge bookings can be reviewed.')");
+    expect(gcApprovals).toContain("setSetupLockMessage('Complete verified GC setup is required before approvals, payment requests, and concierge bookings can be reviewed.')");
+    expect(gcApprovals).toContain('title="GC setup required"');
+    expect(gcApprovals).toContain('body={setupLockMessage}');
     expect(gcApprovals).toContain('if (!gcReadyForProjectControls)');
     expect(gcApprovals.indexOf('if (!gcReadyForProjectControls)')).toBeLessThan(
       gcApprovals.indexOf("from('general_contractor_projects')"),
