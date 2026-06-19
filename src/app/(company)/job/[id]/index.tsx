@@ -404,7 +404,7 @@ export default function JobBriefScreen() {
       if (msg.includes('lock') || msg.includes('RACE')) {
         Alert.alert('Try again', 'Another contractor is claiming this slot right now. Try again.');
       } else {
-        Alert.alert('Error', msg);
+        Alert.alert('Could not accept job', msg);
       }
     } finally {
       setAccepting(false);

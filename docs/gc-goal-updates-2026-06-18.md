@@ -462,6 +462,7 @@ Runtime fixes made from this pass:
 - Company calendar milestones now attach optional GC project type context so GC-created projects such as flooring, painting, basement, and additions do not fall back to generic room-type icons; calendar load failures also use app-safe copy.
 - Company quote/pricing submission failures now use app-safe copy instead of surfacing raw backend or database messages when a trade submits or revises pricing during GC negotiation workflows.
 - Company job detail load failures now use app-safe copy, covering the trade acceptance and GC quote-negotiation entry point without exposing raw backend errors.
+- Company job acceptance failures now keep race-condition guidance specific and use a clear `Could not accept job` title for other app-safe accept-job failures instead of a generic `Error` title.
 - Company job detail now scopes GC trade negotiation prompts to the active quote slot, preventing project-level pricing views from showing slot-specific negotiation prompts from a different trade path.
 - Company/trade responses to GC trade counteroffers and revision requests now clear their in-progress state even if the negotiation response RPC throws from a network/client failure.
 - Company material verification now formats material, supplier-order, supplier-review, quantity-save, and supplier-review submission failures through app-safe copy for GC-managed material sourcing workflows.

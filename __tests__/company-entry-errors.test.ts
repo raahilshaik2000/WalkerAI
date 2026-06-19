@@ -47,6 +47,8 @@ describe('company entry and onboarding errors', () => {
 
     expect(jobDetail).toContain("formatSupabaseFunctionError(err, 'Failed to accept job.')");
     expect(jobDetail).toContain("Alert.alert('Try again', 'Another contractor is claiming this slot right now. Try again.')");
+    expect(jobDetail).toContain("Alert.alert('Could not accept job', msg)");
     expect(jobDetail).not.toContain("Alert.alert('Error', err instanceof Error ? err.message");
+    expect(jobDetail).not.toContain("Alert.alert('Error', msg)");
   });
 });
