@@ -1173,3 +1173,16 @@ Latest validation after GC profile and approvals stale-state hardening:
 - `npx tsc --noEmit`
 - `npm test -- --runInBand`
 - `git diff --check`
+
+Latest update after GC project detail stale-draft hardening:
+
+- Hardened the GC managed-project detail screen so project load failures clear project records, assignment context, slots, change orders, approval requests, generic approval draft fields, external-trade draft fields, proposed budget and terms fields, in-flight action flags, and GC readiness flags.
+- This prevents stale homeowner approval drafts, external trade forms, or project-control state from remaining visible if the GC loses auth context or opens an invalid/unavailable managed project.
+- Added regression assertions in `__tests__/general-contractor.test.ts`.
+
+Latest validation after GC project detail stale-draft hardening:
+
+- `npm test -- --runInBand __tests__/general-contractor.test.ts`
+- `npx tsc --noEmit`
+- `npm test -- --runInBand`
+- `git diff --check`

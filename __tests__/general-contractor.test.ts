@@ -2495,6 +2495,14 @@ describe('general contractor account type', () => {
     );
 
     expect(gcProjectDetail).toContain('You need to be signed in to view managed projects.');
+    expect(gcProjectDetail).toContain('const clearProjectDetailState = useCallback(() => {');
+    expect(gcProjectDetail).toContain("setErrorMessage(formatAppSafeErrorMessage(err, 'Could not load managed project.'));\n      clearProjectDetailState();");
+    expect(gcProjectDetail).toContain('setApprovalTitle(\'\');');
+    expect(gcProjectDetail).toContain('setExternalSlotId(null);');
+    expect(gcProjectDetail).toContain('setProposedBudgetMin(\'\');');
+    expect(gcProjectDetail).toContain('setProposedMarkupPct(\'\');');
+    expect(gcProjectDetail).toContain('setUploadingExternalDocSlotId(null);');
+    expect(gcProjectDetail).toContain('}, [clearProjectDetailState, projectId]);');
     expect(gcProjectDetail).toContain("const pendingApprovalRequests = approvalRequests.filter((request) => request.status === 'pending');");
     expect(gcProjectDetail).toContain(".eq('requested_by_gc_id', gc.id)");
     expect(gcProjectDetail).toContain('const pendingApprovals = pendingChangeOrders.length + pendingApprovalRequests.length;');

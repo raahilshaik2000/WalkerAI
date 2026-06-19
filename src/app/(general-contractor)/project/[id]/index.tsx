@@ -175,6 +175,38 @@ export default function GeneralContractorProjectDetail() {
   const [gcReady, setGcReady] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
+  const clearProjectDetailState = useCallback(() => {
+    setProject(null);
+    setAssignment(null);
+    setSlots([]);
+    setChangeOrders([]);
+    setApprovalRequests([]);
+    setApprovalTitle('');
+    setApprovalDescription('');
+    setApprovalCostDelta('');
+    setApprovalTimelineDelta('');
+    setExternalSlotId(null);
+    setExternalTradeName('');
+    setExternalTradeCompany('');
+    setExternalTradeEmail('');
+    setExternalTradePhone('');
+    setExternalTradeNotes('');
+    setProposedBudgetMin('');
+    setProposedBudgetMax('');
+    setProposedMarkupPct('');
+    setProposedConciergeFeePct('');
+    setAccepting(false);
+    setSubmittingApproval(false);
+    setSubmittingBudget(false);
+    setSubmittingTerms(false);
+    setCancellingApprovalId(null);
+    setSavingExternalTrade(false);
+    setUploadingExternalDocSlotId(null);
+    setGcVerified(false);
+    setGcProfileComplete(false);
+    setGcReady(false);
+  }, []);
+
   const fetchData = useCallback(async () => {
     try {
       setErrorMessage(null);
@@ -249,19 +281,12 @@ export default function GeneralContractorProjectDetail() {
       setProposedConciergeFeePct(assignmentRow?.concierge_fee_pct != null ? Number(assignmentRow.concierge_fee_pct).toFixed(0) : '');
     } catch (err) {
       setErrorMessage(formatAppSafeErrorMessage(err, 'Could not load managed project.'));
-      setProject(null);
-      setAssignment(null);
-      setSlots([]);
-      setChangeOrders([]);
-      setApprovalRequests([]);
-      setGcVerified(false);
-      setGcProfileComplete(false);
-      setGcReady(false);
+      clearProjectDetailState();
     } finally {
       setLoading(false);
       setRefreshing(false);
     }
-  }, [projectId]);
+  }, [clearProjectDetailState, projectId]);
 
   useFocusEffect(
     useCallback(() => {
