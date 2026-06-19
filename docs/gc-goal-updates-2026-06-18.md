@@ -872,3 +872,12 @@ Latest validation after GC-created project validation hardening:
 - `npx tsc --noEmit`
 - `npm test -- --runInBand`
 - `git diff --check`
+
+Latest no-code audit pass:
+
+- Homeowner GC confirmation/removal: verified GC-created projects require homeowner confirmation, homeowner-created GC invites require GC acceptance, and both RPC paths re-check complete verified GC setup before activation.
+- Homeowner approval authority: verified the homeowner Concierge screen checks project ownership before responding to approvals, payment requests, bookings, GC confirmation, and GC removal. Approval of project-changing GC requests remains locked to an active complete verified GC assignment.
+- Company/trade pricing: verified trade-slot acceptance routes into the nested `QuoteBuilder`, quote params are normalized, pending unfunded quotes reopen editable, approved or payment-started quotes are read-only, and `submit_company_quote` atomically replaces pending quotes while preserving GC negotiation links.
+- Supplier workflow: verified order claiming requires verified supplier setup, category/service-area eligibility, and Stripe payout readiness. Fulfillment updates are scoped to the accepted supplier and current order status, and delivery proof is required before homeowner payout release.
+- Voice project creation: verified the iOS native `WalkerVoiceAssistant` module is present in the Xcode target with microphone and speech usage descriptions. The app disables voice controls when unavailable, confirms recognized questionnaire answers before applying them, and uses voice address input only as an address-search query.
+- Kitchen/bathroom customization: verified the optional visual-preview step uses the measured room model on iOS when scan data exists, falls back to the 2D finish customizer otherwise, and persists only homeowner-intent finish selections into pricing answers and the project brief. Current scope is a V1 finish/surface customizer, not a guaranteed semantic cabinet/countertop reconstruction from every LiDAR mesh.
