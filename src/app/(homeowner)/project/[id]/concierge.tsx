@@ -368,23 +368,28 @@ export default function ProjectConciergeScreen() {
           style: status === 'rejected' ? 'destructive' : 'default',
           onPress: async () => {
             setRespondingId(request.id);
-            const responseNote = approvalResponseNotes[request.id]?.trim() ?? '';
-            const { error } = await supabase.rpc('respond_to_project_approval_request', {
-              p_request_id: request.id,
-              p_status: status,
-              p_response_note: responseNote || null,
-            });
-            if (error) {
-              Alert.alert('Could not respond', formatAppSafeErrorMessage(error, 'Please try again.'));
-            } else {
-              setApprovalResponseNotes((current) => {
-                const next = { ...current };
-                delete next[request.id];
-                return next;
+            try {
+              const responseNote = approvalResponseNotes[request.id]?.trim() ?? '';
+              const { error } = await supabase.rpc('respond_to_project_approval_request', {
+                p_request_id: request.id,
+                p_status: status,
+                p_response_note: responseNote || null,
               });
-              await fetchData();
+              if (error) {
+                Alert.alert('Could not respond', formatAppSafeErrorMessage(error, 'Please try again.'));
+              } else {
+                setApprovalResponseNotes((current) => {
+                  const next = { ...current };
+                  delete next[request.id];
+                  return next;
+                });
+                await fetchData();
+              }
+            } catch (err) {
+              Alert.alert('Could not respond', formatAppSafeErrorMessage(err, 'Please try again.'));
+            } finally {
+              setRespondingId(null);
             }
-            setRespondingId(null);
           },
         },
       ],
@@ -465,23 +470,28 @@ export default function ProjectConciergeScreen() {
           style: status === 'rejected' ? 'destructive' : 'default',
           onPress: async () => {
             setRespondingId(request.id);
-            const responseNote = paymentResponseNotes[request.id]?.trim() ?? '';
-            const { error } = await supabase.rpc('respond_to_gc_payment_request', {
-              p_request_id: request.id,
-              p_status: status,
-              p_response_note: responseNote || null,
-            });
-            if (error) {
-              Alert.alert('Could not respond', formatAppSafeErrorMessage(error, 'Please try again.'));
-            } else {
-              setPaymentResponseNotes((current) => {
-                const next = { ...current };
-                delete next[request.id];
-                return next;
+            try {
+              const responseNote = paymentResponseNotes[request.id]?.trim() ?? '';
+              const { error } = await supabase.rpc('respond_to_gc_payment_request', {
+                p_request_id: request.id,
+                p_status: status,
+                p_response_note: responseNote || null,
               });
-              await fetchData();
+              if (error) {
+                Alert.alert('Could not respond', formatAppSafeErrorMessage(error, 'Please try again.'));
+              } else {
+                setPaymentResponseNotes((current) => {
+                  const next = { ...current };
+                  delete next[request.id];
+                  return next;
+                });
+                await fetchData();
+              }
+            } catch (err) {
+              Alert.alert('Could not respond', formatAppSafeErrorMessage(err, 'Please try again.'));
+            } finally {
+              setRespondingId(null);
             }
-            setRespondingId(null);
           },
         },
       ],

@@ -1635,6 +1635,7 @@ describe('general contractor account type', () => {
     expect(gcSchedule).toContain("request_type: 'schedule_change'");
     expect(gcSchedule).toContain('Send Schedule for Approval');
     expect(homeownerConcierge).toContain("supabase.rpc('respond_to_project_approval_request'");
+    expect(homeownerConcierge).toContain("} catch (err) {\n              Alert.alert('Could not respond', formatAppSafeErrorMessage(err, 'Please try again.'));\n            } finally {\n              setRespondingId(null);");
     expect(homeownerConcierge).toContain('const [approvalResponseNotes, setApprovalResponseNotes] = useState<Record<string, string>>({});');
     expect(homeownerConcierge).toContain('p_response_note: responseNote || null');
     expect(homeownerConcierge).toContain('Optional response note');
@@ -1769,6 +1770,7 @@ describe('general contractor account type', () => {
     expect(gcApprovals).toMatch(/Payment requests[\s\S]*\) : request\.response_note \? \([\s\S]*Homeowner note: \{request\.response_note\}/);
     expect(homeownerConcierge).toContain("from('gc_payment_requests')");
     expect(homeownerConcierge).toContain("supabase.rpc('respond_to_gc_payment_request'");
+    expect(homeownerConcierge).toContain("} catch (err) {\n              Alert.alert('Could not respond', formatAppSafeErrorMessage(err, 'Please try again.'));\n            } finally {\n              setRespondingId(null);");
     expect(homeownerConcierge).toContain('const [paymentResponseNotes, setPaymentResponseNotes] = useState<Record<string, string>>({});');
     expect(homeownerConcierge).toContain('p_response_note: responseNote || null');
     expect(homeownerConcierge).toContain('Approving this records your authorization. It does not bypass milestone escrow release.');
