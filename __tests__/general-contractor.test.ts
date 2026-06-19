@@ -1984,6 +1984,11 @@ describe('general contractor account type', () => {
     expect(navigator).toContain('GeneralContractorMessages');
     expect(gcProjectDetail).toContain("navigation.navigate('GeneralContractorMessages'");
     expect(gcMessages).toContain("from('messages').insert");
+    expect(gcMessages).toContain("let trimmed = '';");
+    expect(gcMessages).toContain('if (error) throw error;');
+    expect(gcMessages).toContain("if (trimmed) setBody(trimmed);");
+    expect(gcMessages).toContain("Alert.alert('Message not sent', formatAppSafeErrorMessage(err, 'Please try again.'))");
+    expect(gcMessages).toContain("} finally {\n      setSending(false);");
     expect(gcMessages).toContain("channel(`gc-messages:${projectId}`)");
     expect(gcMessages).toContain("import { launchImageLibrary } from 'react-native-image-picker'");
     expect(gcMessages).toContain("const [uploadingAttachment, setUploadingAttachment] = useState(false)");

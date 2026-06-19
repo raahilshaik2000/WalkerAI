@@ -476,6 +476,7 @@ Runtime fixes made from this pass:
 - GC license and insurance onboarding now surfaces app-safe preload failures instead of silently showing blank existing document fields when the profile query fails.
 - GC business onboarding now surfaces app-safe preload failures instead of silently leaving default business, service-area, markup, and concierge values when the profile query fails.
 - GC business, license, and insurance onboarding save failures now use specific app-safe alert titles instead of the generic `Error` title.
+- GC project text-message sends now restore the typed draft and clear the sending state if auth lookup or message insert throws, not only when Supabase returns an error object.
 - Homeowner schedule confirmation now uses app-safe copy for schedule load and confirmation failures, while preserving quote/payment-aware project activation behavior.
 - Homeowner permit/inspection records now use app-safe copy for permit load and upload failures while preserving signed document previews.
 - Homeowner and company milestone/payment workflows now use app-safe copy for milestone load, dispute, update, upload, and release failures; shared Supabase error formatting also hides database policy/schema/internal wording behind polished fallback copy.

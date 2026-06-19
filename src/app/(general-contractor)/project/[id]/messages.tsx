@@ -160,28 +160,30 @@ export default function GeneralContractorMessagesScreen() {
       Alert.alert('Messages locked', composeLockMessage || 'Project messages are currently read-only.');
       return;
     }
-    const currentUser = user ?? (await supabase.auth.getUser()).data.user;
-    if (!projectId || !currentUser?.id) {
-      Alert.alert('Unable to send', 'Please reopen this project and try again.');
-      return;
-    }
-    setSending(true);
-    const trimmed = body.trim();
-    setBody('');
+    let trimmed = '';
+    try {
+      const currentUser = user ?? (await supabase.auth.getUser()).data.user;
+      if (!projectId || !currentUser?.id) {
+        Alert.alert('Unable to send', 'Please reopen this project and try again.');
+        return;
+      }
+      setSending(true);
+      trimmed = body.trim();
+      setBody('');
 
-    const { error } = await supabase.from('messages').insert({
-      project_id: projectId,
-      sender_id: currentUser.id,
-      body: trimmed,
-    });
-
-    if (error) {
-      setBody(trimmed);
-      Alert.alert('Message not sent', formatAppSafeErrorMessage(error, 'Please try again.'));
-    } else {
+      const { error } = await supabase.from('messages').insert({
+        project_id: projectId,
+        sender_id: currentUser.id,
+        body: trimmed,
+      });
+      if (error) throw error;
       ReactNativeHapticFeedback.trigger('impactLight');
+    } catch (err) {
+      if (trimmed) setBody(trimmed);
+      Alert.alert('Message not sent', formatAppSafeErrorMessage(err, 'Please try again.'));
+    } finally {
+      setSending(false);
     }
-    setSending(false);
   };
 
   const sendPhotoAttachment = async () => {
