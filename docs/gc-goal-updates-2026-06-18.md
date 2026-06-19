@@ -11,7 +11,7 @@ General Contractor should be a separate app account type, not a company trade fa
 - Branch: `main`
 - Remote: `https://github.com/raahilshaik2000/WalkerAI`
 - Latest implementation commit when this doc was updated: `26842c8 Use safe auth entry error copy`
-- Live backend updates: `generate-material-orders`, `create-gc-concierge-payment-intent`, `gc-concierge-payout`, and `refresh-connect-status` were deployed to Supabase project `wgbloslndalmocckrejw`.
+- Live backend updates: `generate-material-orders`, `create-gc-concierge-payment-intent`, `gc-concierge-payout`, `refresh-connect-status`, `create-connect-account`, and `stripe-return` were deployed to Supabase project `wgbloslndalmocckrejw`.
 - Live backend migrations were later applied through `20260618132500_add_supplier_project_message_participants.sql` on Supabase project `wgbloslndalmocckrejw`.
 - Remote migration history was verified with `supabase migration list --linked`; local and remote migration versions match through `20260618132500`.
 - Four live QA accounts were reset/verified on Supabase and credentials were written to:
@@ -481,6 +481,7 @@ Runtime fixes made from this pass:
 - Homeowner project overview and profile stats now use app-safe copy for project-list, milestone-progress, optional GC-context, and profile-stat load failures.
 - Supabase drift verification found the GC concierge payment functions were present locally and invoked by the app but missing remotely. `create-gc-concierge-payment-intent` and `gc-concierge-payout` were deployed and re-listed as ACTIVE on project `wgbloslndalmocckrejw`.
 - Remote-only Stripe Connect support functions `stripe-return` and `refresh-connect-status` were downloaded into `supabase/functions/` so the repo matches deployed backend surface area. `refresh-connect-status` now supports `general_contractor` and the GC profile refreshes Stripe payout readiness when the screen regains focus.
+- Stripe Connect onboarding now uses the repo-owned public `stripe-return` Edge Function for both return and expired-link refresh paths instead of hardcoded undeclared `walkerai.app` routes. `create-connect-account` derives those URLs from `SUPABASE_URL`, and `stripe-return` was redeployed with JWT verification disabled so Stripe/Safari can open it.
 
 Runtime findings still not treated as complete:
 
@@ -619,4 +620,14 @@ Latest validation after Stripe Connect function source sync and GC payout refres
 - `supabase functions deploy refresh-connect-status --project-ref wgbloslndalmocckrejw --use-api`
 - `supabase functions list --project-ref wgbloslndalmocckrejw`
 - `npm test -- --runInBand`
+- `git diff --check`
+
+Latest validation after Stripe Connect return URL hardening:
+
+- `npm test -- --runInBand __tests__/supabase-functions.test.ts __tests__/general-contractor.test.ts`
+- `npx tsc --noEmit`
+- `npm test -- --runInBand`
+- `supabase functions deploy create-connect-account --project-ref wgbloslndalmocckrejw --use-api`
+- `supabase functions deploy stripe-return --project-ref wgbloslndalmocckrejw --use-api --no-verify-jwt`
+- `supabase functions list --project-ref wgbloslndalmocckrejw`
 - `git diff --check`

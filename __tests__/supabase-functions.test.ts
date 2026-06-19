@@ -225,6 +225,27 @@ describe('create-connect-account source guards', () => {
     expect(source).toContain('Complete your GC business, location, license, and insurance setup before connecting payouts');
     expect(source).toContain('role: requestedRole');
     expect(source).toContain('/schema cache/i.test(message)');
+    expect(source).toContain("function publicFunctionUrl(slug: string, query = '')");
+    expect(source).toContain("refresh_url: publicFunctionUrl('stripe-return', '?refresh=1')");
+    expect(source).toContain("return_url: publicFunctionUrl('stripe-return')");
+    expect(source).not.toContain("https://walkerai.app/stripe-refresh");
+    expect(source).not.toContain("https://walkerai.app/stripe-return");
+  });
+});
+
+describe('stripe-return source guards', () => {
+  it('serves a public text-only return and refresh target for Stripe Connect onboarding', () => {
+    const source = fs.readFileSync(
+      path.join(__dirname, '../supabase/functions/stripe-return/index.ts'),
+      'utf8',
+    );
+
+    expect(source).toContain('Deploy with --no-verify-jwt');
+    expect(source).toContain('Content-Type');
+    expect(source).toContain('text/plain; charset=utf-8');
+    expect(source).toContain("url.searchParams.get('refresh') === '1'");
+    expect(source).toContain('Your setup link expired.');
+    expect(source).toContain("You're all set.");
   });
 });
 

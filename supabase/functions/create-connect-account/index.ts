@@ -14,6 +14,11 @@ const roleLabels: Record<AccountRole, string> = {
   general_contractor: 'General contractor',
 };
 
+function publicFunctionUrl(slug: string, query = '') {
+  const supabaseUrl = Deno.env.get('SUPABASE_URL')!.replace(/\/$/, '');
+  return `${supabaseUrl}/functions/v1/${slug}${query}`;
+}
+
 function stripeReadiness(account: Stripe.Account) {
   return {
     stripe_account_id: account.id,
@@ -187,8 +192,8 @@ Deno.serve(async (req) => {
     // Create a fresh account link every time (links expire after a few minutes)
     const accountLink = await stripe.accountLinks.create({
       account: accountId,
-      refresh_url: 'https://walkerai.app/stripe-refresh',
-      return_url: 'https://walkerai.app/stripe-return',
+      refresh_url: publicFunctionUrl('stripe-return', '?refresh=1'),
+      return_url: publicFunctionUrl('stripe-return'),
       type: 'account_onboarding',
     });
 
