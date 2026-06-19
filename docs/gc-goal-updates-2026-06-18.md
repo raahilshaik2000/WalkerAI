@@ -656,3 +656,24 @@ Latest validation after best-effort Stripe Connect refresh hardening:
 - `npx tsc --noEmit`
 - `npm test -- --runInBand`
 - `git diff --check`
+
+Latest validation after company/trade negotiation response hardening:
+
+- `npm test -- --runInBand __tests__/company-quote-copy.test.ts __tests__/general-contractor.test.ts`
+- `npx tsc --noEmit`
+- `npm test -- --runInBand`
+- `git diff --check`
+
+Latest validation after supplier stock toggle rollback hardening:
+
+- `npm test -- --runInBand __tests__/supplier-catalog.test.ts __tests__/material-orders.test.ts`
+- `npx tsc --noEmit`
+- `npm test -- --runInBand`
+- `git diff --check`
+
+Latest validation after GC action response-state hardening:
+
+- `npm test -- --runInBand __tests__/general-contractor.test.ts`
+- `npx tsc --noEmit`
+- `npm test -- --runInBand`
+- `git diff --check`
