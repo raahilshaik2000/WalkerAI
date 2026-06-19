@@ -14,38 +14,51 @@ import Ionicons from 'react-native-vector-icons/Ionicons';
 import { GlassButton, GradientBackground } from '@/components/ui';
 import { UnsupportedDevice } from '@/components/room-scan';
 import { Colors, Typography, Spacing } from '@/constants/theme';
+import { formatAppSafeErrorMessage } from '@/lib/supabase/functions';
 
 // Use platform-specific native module
 const ScanModule = Platform.OS === 'ios'
   ? NativeModules.RoomPlanModule
   : NativeModules.RoomScanModule;
-const scanEmitter = ScanModule ? new NativeEventEmitter(ScanModule) : null;
 
 type SupportStatus = 'checking' | 'supported' | 'unsupported';
+type ScanMode = 'roomplan' | 'ar_measure' | 'unsupported';
 
 export default function RoomScanScreen() {
   const navigation = useNavigation<any>();
   const route = useRoute<any>();
   const fromWizard = route.params?.fromWizard ?? false;
   const [supportStatus, setSupportStatus] = useState<SupportStatus>('checking');
+  const [supportReason, setSupportReason] = useState<string | null>(null);
+  const [supportMode, setSupportMode] = useState<ScanMode | null>(null);
   const [isScanning, setIsScanning] = useState(false);
+  const usesManualAR = supportMode === 'ar_measure';
 
   useEffect(() => {
     checkSupport();
   }, []);
 
   useEffect(() => {
-    if (!scanEmitter) return undefined;
+    if (!ScanModule) return undefined;
+
+    let scanEmitter: NativeEventEmitter;
+    try {
+      scanEmitter = new NativeEventEmitter(ScanModule);
+    } catch (err) {
+      setSupportStatus('unsupported');
+      setSupportReason(formatAppSafeErrorMessage(err, 'Room scanning is unavailable on this device.'));
+      return undefined;
+    }
 
     const completedSub = scanEmitter.addListener('onScanCompleted', (data) => {
       setIsScanning(false);
       navigation.replace('RoomResults', { scanData: data, fromWizard });
     });
 
-    const errorSub = scanEmitter.addListener('onScanError', () => {
+    const errorSub = scanEmitter.addListener('onScanError', (payload?: { error?: string }) => {
       setIsScanning(false);
-      // Could show an alert here, for now just go back
-      navigation.goBack();
+      setSupportReason(formatAppSafeErrorMessage(payload?.error, 'Room scanning is unavailable on this device.'));
+      setSupportStatus('unsupported');
     });
 
     const cancelSub = scanEmitter.addListener('onScanCancelled', () => {
@@ -67,8 +80,11 @@ export default function RoomScanScreen() {
 
     try {
       const result = await ScanModule.checkDeviceSupport();
+      setSupportReason(result.reason ?? null);
+      setSupportMode(result.mode ?? null);
       setSupportStatus(result.supported ? 'supported' : 'unsupported');
-    } catch {
+    } catch (err) {
+      setSupportReason(formatAppSafeErrorMessage(err, 'Room scanning is unavailable on this device.'));
       setSupportStatus('unsupported');
     }
   }
@@ -82,8 +98,10 @@ export default function RoomScanScreen() {
     try {
       setIsScanning(true);
       await ScanModule.startScan();
-    } catch {
+    } catch (err) {
       setIsScanning(false);
+      setSupportReason(formatAppSafeErrorMessage(err, 'Room scanning is unavailable on this device.'));
+      setSupportStatus('unsupported');
     }
   }
 
@@ -105,6 +123,7 @@ export default function RoomScanScreen() {
           <UnsupportedDevice
             onManualMeasurement={() => navigation.replace('ManualMeasurement', { fromWizard })}
             onGoBack={() => navigation.goBack()}
+            reason={supportReason}
           />
         </SafeAreaView>
       </GradientBackground>
@@ -131,23 +150,30 @@ export default function RoomScanScreen() {
             <Ionicons name="scan-outline" size={72} color="#06B6D4" />
           </View>
 
-          <Text style={styles.title}>Measure Your Room</Text>
+          <Text style={styles.title}>{usesManualAR ? 'Measure with AR' : 'Measure Your Room'}</Text>
           <Text style={styles.description}>
-            Point your camera around the room and move slowly. The scanner will automatically
-            capture walls, doors, windows, and furniture.
+            {usesManualAR
+              ? 'This device does not have LiDAR, so tap two points for length, width, and ceiling height.'
+              : 'Point your camera around the room and move slowly. The scanner will automatically capture walls, doors, windows, and furniture.'}
           </Text>
 
           <View style={styles.tips}>
             <TipItem icon="sunny-outline" text="Make sure the room is well lit" />
-            <TipItem icon="walk-outline" text="Walk slowly around the entire room" />
-            <TipItem icon="phone-portrait-outline" text="Keep the phone steady while scanning" />
+            <TipItem
+              icon={usesManualAR ? 'radio-button-on-outline' : 'walk-outline'}
+              text={usesManualAR ? 'Tap both ends of each measurement' : 'Walk slowly around the entire room'}
+            />
+            <TipItem
+              icon="phone-portrait-outline"
+              text={usesManualAR ? 'Keep the phone steady while tapping points' : 'Keep the phone steady while scanning'}
+            />
           </View>
         </View>
 
         {/* CTA */}
         <View style={styles.bottom}>
           <GlassButton
-            label={isScanning ? 'Scanning...' : 'Start Scanning'}
+            label={isScanning ? (usesManualAR ? 'Measuring...' : 'Scanning...') : (usesManualAR ? 'Start AR Measure' : 'Start Scanning')}
             variant="primary"
             size="lg"
             fullWidth

@@ -8,7 +8,7 @@ import {
   View,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { useNavigation } from '@react-navigation/native';
+import { useNavigation, useRoute } from '@react-navigation/native';
 import Ionicons from 'react-native-vector-icons/Ionicons';
 import { supabase } from '@/lib/supabase/client';
 import { getCurrentUser } from '@/lib/supabase/auth';
@@ -105,6 +105,8 @@ async function ensureDraftProjectId(params: {
 
 export default function AnalyzingScreen() {
   const navigation = useNavigation<any>();
+  const route = useRoute<any>();
+  const measurementsSkipped = route.params?.measurementsSkipped === true;
   const { user } = useAuthStore();
   const { projectId, photos, roomType, setAnalysisResult, setQuestions } = useProjectWizardStore();
 
@@ -281,12 +283,17 @@ export default function AnalyzingScreen() {
         useProjectWizardStore.getState().setStep(4);
         navigation.navigate('Questionnaire');
       } catch (err: any) {
-        setError(formatAppSafeErrorMessage(err, 'Analysis failed. Please try again.'));
+        setError(formatAppSafeErrorMessage(
+          err,
+          measurementsSkipped
+            ? 'Project setup timed out after skipping measurements. Your photos are still selected; retry analysis.'
+            : 'Analysis failed. Please try again.',
+        ));
       }
     };
 
     runAnalysis();
-  }, [analysisRunId, navigation, photos, projectId, roomType, setAnalysisResult, setQuestions, user?.id]);
+  }, [analysisRunId, measurementsSkipped, navigation, photos, projectId, roomType, setAnalysisResult, setQuestions, user?.id]);
 
   const spin = rotateAnim.interpolate({
     inputRange: [0, 1],

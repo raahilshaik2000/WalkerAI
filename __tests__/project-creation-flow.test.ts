@@ -112,8 +112,11 @@ describe('project creation flow guards', () => {
     );
 
     expect(analyzingSource).toContain("import { formatAppSafeErrorMessage, formatSupabaseFunctionError } from '@/lib/supabase/functions';");
+    expect(analyzingSource).toContain("import { useNavigation, useRoute } from '@react-navigation/native';");
+    expect(analyzingSource).toContain('const measurementsSkipped = route.params?.measurementsSkipped === true;');
     expect(analyzingSource).toContain("throw new Error(formatAppSafeErrorMessage(recoveryError ?? lastError, 'Project creation failed. Please try again.'))");
-    expect(analyzingSource).toContain("setError(formatAppSafeErrorMessage(err, 'Analysis failed. Please try again.'))");
+    expect(analyzingSource).toContain("'Project setup timed out after skipping measurements. Your photos are still selected; retry analysis.'");
+    expect(analyzingSource).toContain("'Analysis failed. Please try again.'");
     expect(analyzingSource).not.toContain('Project creation failed: ${errorMessage');
     expect(analyzingSource).not.toContain('const msg = err?.message || err?.details || JSON.stringify(err);');
     expect(analyzingSource).not.toContain('setError(msg)');
@@ -164,7 +167,7 @@ describe('project creation flow guards', () => {
       expect(source).not.toContain('if (!user?.id)');
     });
     expect(analyzingSource).toContain('userId: currentUserId');
-    expect(analyzingSource).toContain('}, [analysisRunId, navigation, photos, projectId, roomType, setAnalysisResult, setQuestions, user?.id]);');
+    expect(analyzingSource).toContain('}, [analysisRunId, measurementsSkipped, navigation, photos, projectId, roomType, setAnalysisResult, setQuestions, user?.id]);');
     expect(diyGeneratingSource).toContain('homeowner_id: currentUserId');
     expect(diyGeneratingSource).toContain('}, [navigation, store, user?.id]);');
   });

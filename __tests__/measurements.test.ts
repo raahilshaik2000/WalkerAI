@@ -89,4 +89,19 @@ describe('measurement parsing', () => {
     expect(source).toContain("if (!isBlank(height) && parsedHeight == null)");
     expect(source).not.toContain('Number.parseInt');
   });
+
+  it('guards skip measurements from duplicate analysis navigation', () => {
+    const source = fs.readFileSync(
+      path.join(__dirname, '../src/app/(homeowner)/project/create/measurements.tsx'),
+      'utf8',
+    );
+
+    expect(source).toContain('const [submitting, setSubmitting] = useState(false);');
+    expect(source).toContain('if (submitting) return;');
+    expect(source).toContain('setSubmitting(true);');
+    expect(source).toContain("navigation.navigate('Analyzing', { measurementsSkipped: true })");
+    expect(source).toContain("navigation.navigate('Analyzing', { measurementsSkipped: false })");
+    expect(source).toContain('disabled={submitting}');
+    expect(source).toContain('style={[styles.skipBtn, submitting && styles.skipBtnDisabled]}');
+  });
 });
