@@ -3,7 +3,7 @@ import { StyleProp, StyleSheet, TouchableOpacity, View, ViewStyle } from 'react-
 import { useNavigation } from '@react-navigation/native';
 import Ionicons from 'react-native-vector-icons/Ionicons';
 import { supabase } from '@/lib/supabase/client';
-import { getCurrentUser } from '@/lib/supabase/auth';
+import { getSession } from '@/lib/supabase/auth';
 import { useAuthStore } from '@/stores/auth.store';
 import { Colors } from '@/constants/theme';
 
@@ -18,7 +18,7 @@ export function NotificationButton({ style }: { style?: StyleProp<ViewStyle> }) 
 
     const fetchUnread = async () => {
       try {
-        const activeUserId = user?.id ?? (await getCurrentUser())?.id ?? null;
+        const activeUserId = user?.id ?? (await getSession())?.user?.id ?? null;
         if (!activeUserId) {
           if (!cancelled) setUnreadCount(0);
           return;
@@ -36,7 +36,7 @@ export function NotificationButton({ style }: { style?: StyleProp<ViewStyle> }) 
     };
 
     const subscribe = async () => {
-      const activeUserId = user?.id ?? (await getCurrentUser())?.id ?? null;
+      const activeUserId = user?.id ?? (await getSession())?.user?.id ?? null;
       if (!activeUserId || cancelled) {
         setUnreadCount(0);
         return;
@@ -54,7 +54,9 @@ export function NotificationButton({ style }: { style?: StyleProp<ViewStyle> }) 
         .subscribe();
     };
 
-    subscribe();
+    subscribe().catch(() => {
+      if (!cancelled) setUnreadCount(0);
+    });
 
     return () => {
       cancelled = true;

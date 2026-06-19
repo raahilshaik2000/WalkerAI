@@ -10,7 +10,7 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useNavigation } from '@react-navigation/native';
 import { supabase } from '@/lib/supabase/client';
-import { getCurrentUser } from '@/lib/supabase/auth';
+import { getSession } from '@/lib/supabase/auth';
 import { formatAppSafeErrorMessage } from '@/lib/supabase/functions';
 import { notificationDisplayMeta } from '@/lib/notifications/meta';
 import { navigateToNotification } from '@/lib/notifications/navigation';
@@ -51,7 +51,7 @@ export default function NotificationsScreen() {
     else if (mode === 'initial') setLoading(true);
 
     try {
-      const activeUserId = currentUserId ?? (await getCurrentUser())?.id ?? null;
+      const activeUserId = currentUserId ?? (await getSession())?.user?.id ?? null;
       if (!activeUserId) {
         setNotifications([]);
         setErrorMessage('Sign in to view notifications.');
@@ -117,7 +117,7 @@ export default function NotificationsScreen() {
 
   const markAllRead = async () => {
     try {
-      const activeUserId = currentUserId ?? (await getCurrentUser())?.id ?? null;
+      const activeUserId = currentUserId ?? (await getSession())?.user?.id ?? null;
       if (!activeUserId) {
         setErrorMessage('Sign in to update notifications.');
         return;

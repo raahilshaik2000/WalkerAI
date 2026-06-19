@@ -162,13 +162,32 @@ describe('project creation flow guards', () => {
     );
 
     [analyzingSource, diyGeneratingSource].forEach((source) => {
-      expect(source).toContain("import { getCurrentUser } from '@/lib/supabase/auth';");
-      expect(source).toContain('user?.id ?? (await getCurrentUser())?.id ?? null');
+      expect(source).toContain("import { getSession } from '@/lib/supabase/auth';");
+      expect(source).toContain('user?.id ?? (await getSession())?.user?.id ?? null');
       expect(source).not.toContain('if (!user?.id)');
     });
     expect(analyzingSource).toContain('userId: currentUserId');
     expect(analyzingSource).toContain('}, [analysisRunId, measurementsSkipped, navigation, photos, projectId, roomType, setAnalysisResult, setQuestions, user?.id]);');
     expect(diyGeneratingSource).toContain('homeowner_id: currentUserId');
     expect(diyGeneratingSource).toContain('}, [navigation, store, user?.id]);');
+  });
+
+  it('serializes project photo saves before invoking photo analysis', () => {
+    const analyzingSource = fs.readFileSync(
+      path.join(__dirname, '../src/app/(homeowner)/project/create/analyzing.tsx'),
+      'utf8',
+    );
+
+    expect(analyzingSource).toContain('const PHOTO_SAVE_ATTEMPTS = 3;');
+    expect(analyzingSource).toContain('async function saveProjectPhoto(params: {');
+    expect(analyzingSource).toContain("uploadBase64(\n        'project-photos',");
+    expect(analyzingSource).toContain('{ retries: 2 },');
+    expect(analyzingSource).toContain('for (const [i, photo] of localPhotos.entries()) {');
+    expect(analyzingSource).toContain('uploadedPhotoResults.push(await saveProjectPhoto({');
+    expect(analyzingSource).toContain("supabase.functions.invoke('analyze-photos'");
+    expect(analyzingSource.indexOf('uploadedPhotoResults.push(await saveProjectPhoto({')).toBeLessThan(
+      analyzingSource.indexOf("supabase.functions.invoke('analyze-photos'"),
+    );
+    expect(analyzingSource).not.toContain('const uploadPromise = Promise.all(');
   });
 });
