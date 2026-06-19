@@ -915,3 +915,6 @@ Latest validation after partial trade quote dispatch fix:
 - `npx tsc --noEmit`
 - `npm test -- --runInBand`
 - `git diff --check`
+- Remote dry run before deployment showed only `20260619033435_keep_partial_trade_projects_dispatching_on_quote.sql` pending.
+- Applied `20260619033435_keep_partial_trade_projects_dispatching_on_quote.sql` to linked Supabase project `wgbloslndalmocckrejw` with `supabase db push --linked`.
+- Post-apply read-only verification attempts (`supabase db query --linked` and a no-op `supabase db push --linked --dry-run`) hit Supabase login-role `504` responses, so further remote polling was stopped to avoid unnecessary backend traffic.
