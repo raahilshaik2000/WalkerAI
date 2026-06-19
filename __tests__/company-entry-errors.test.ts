@@ -24,6 +24,10 @@ describe('company entry and onboarding errors', () => {
       path.join(__dirname, '../src/app/(company)/onboarding/insurance.tsx'),
       'utf8',
     );
+    const jobDetail = fs.readFileSync(
+      path.join(__dirname, '../src/app/(company)/job/[id]/index.tsx'),
+      'utf8',
+    );
 
     expect(jobFeed).toContain("import { formatAppSafeErrorMessage } from '@/lib/supabase/functions';");
     expect(jobFeed).toContain("setErrorMessage(formatAppSafeErrorMessage(err, 'Could not load jobs.'))");
@@ -40,5 +44,9 @@ describe('company entry and onboarding errors', () => {
     expect(insurance).toContain("import { formatAppSafeErrorMessage } from '@/lib/supabase/functions';");
     expect(insurance).toContain("Alert.alert('Could not submit verification', formatAppSafeErrorMessage(err, 'Please try again.'))");
     expect(insurance).not.toContain("Alert.alert('Error', err instanceof Error ? err.message : 'Failed to save. Please try again.')");
+
+    expect(jobDetail).toContain("formatSupabaseFunctionError(err, 'Failed to accept job.')");
+    expect(jobDetail).toContain("Alert.alert('Try again', 'Another contractor is claiming this slot right now. Try again.')");
+    expect(jobDetail).not.toContain("Alert.alert('Error', err instanceof Error ? err.message");
   });
 });

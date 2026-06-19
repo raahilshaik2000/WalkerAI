@@ -123,9 +123,12 @@ describe('supplier material order payout math', () => {
     expect(feedSource).toContain("setErrorMessage(formatAppSafeErrorMessage(supplierError, 'Could not load supplier profile.'))");
     expect(feedSource).toContain("setErrorMessage(formatAppSafeErrorMessage(error, 'Could not load open material orders.'))");
     expect(feedSource).toContain("setErrorMessage(formatAppSafeErrorMessage(eligibilityError, 'Could not verify supplier eligibility for open orders.'))");
+    expect(feedSource).toContain("const msg = await formatSupabaseFunctionError(err, 'Failed to claim order')");
+    expect(feedSource).toContain("Alert.alert('Order taken', 'Another supplier just claimed this order.')");
     expect(feedSource).not.toContain('setErrorMessage(supplierError.message)');
     expect(feedSource).not.toContain('setErrorMessage(error.message)');
     expect(feedSource).not.toContain('eligibilityError instanceof Error');
+    expect(feedSource).not.toContain("Alert.alert('Error', err instanceof Error ? err.message");
 
     expect(detailSource).toContain("import { formatAppSafeErrorMessage, formatSupabaseFunctionError } from '@/lib/supabase/functions'");
     expect(detailSource).toContain("setErrorMessage(formatAppSafeErrorMessage(orderResult.error, 'Could not load material order.'))");
