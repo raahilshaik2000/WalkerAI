@@ -177,7 +177,7 @@ export default function GeneralContractorBusinessOnboarding() {
         navigation.navigate('GeneralContractorLicenseOnboarding');
       }
     } catch (err) {
-      Alert.alert('Error', formatAppSafeErrorMessage(err, 'Failed to save. Please try again.'));
+      Alert.alert('Could not save business profile', formatAppSafeErrorMessage(err, 'Please try again.'));
     } finally {
       setLoading(false);
     }

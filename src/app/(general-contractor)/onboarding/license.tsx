@@ -125,7 +125,7 @@ export default function GeneralContractorLicenseOnboarding() {
       if (error) throw error;
       navigation.navigate('GeneralContractorInsuranceOnboarding');
     } catch (err) {
-      Alert.alert('Error', formatAppSafeErrorMessage(err, 'Could not save license details.'));
+      Alert.alert('Could not save license details', formatAppSafeErrorMessage(err, 'Please try again.'));
     } finally {
       setLoading(false);
     }

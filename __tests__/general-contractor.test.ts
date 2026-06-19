@@ -132,7 +132,9 @@ describe('general contractor account type', () => {
     expect(businessOnboarding).toContain('setDefaultMarkup(data.default_markup_pct');
     expect(businessOnboarding).toContain('setConciergeEnabled(data.concierge_enabled === true)');
     expect(businessOnboarding).toContain("Alert.alert('Could not load business profile', formatAppSafeErrorMessage(err, 'Please try again.'))");
+    expect(businessOnboarding).toContain("Alert.alert('Could not save business profile', formatAppSafeErrorMessage(err, 'Please try again.'))");
     expect(businessOnboarding).not.toContain('loadExistingProfile().catch(() => undefined)');
+    expect(businessOnboarding).not.toContain("Alert.alert('Error'");
     expect(businessOnboarding).toContain('existing?.id');
     expect(businessOnboarding).toContain('returnToProfile');
     expect(businessOnboarding).toContain('Concierge marketplace');
@@ -206,6 +208,7 @@ describe('general contractor account type', () => {
     expect(licenseOnboarding).not.toContain('loadExistingLicense().catch(() => undefined)');
     expect(licenseOnboarding).toContain("launchImageLibrary");
     expect(licenseOnboarding).toContain("Alert.alert('Could not select document', formatAppSafeErrorMessage(err, 'Please try again.'))");
+    expect(licenseOnboarding).toContain("Alert.alert('Could not save license details', formatAppSafeErrorMessage(err, 'Please try again.'))");
     expect(licenseOnboarding).toContain("uploadFile('company-docs'");
     expect(licenseOnboarding).toContain('general-contractors/${user.id}/license-');
     expect(licenseOnboarding).toContain('License document required');
@@ -217,11 +220,14 @@ describe('general contractor account type', () => {
     expect(insuranceOnboarding).not.toContain('loadExistingInsurance().catch(() => undefined)');
     expect(insuranceOnboarding).toContain("launchImageLibrary");
     expect(insuranceOnboarding).toContain("Alert.alert('Could not select document', formatAppSafeErrorMessage(err, 'Please try again.'))");
+    expect(insuranceOnboarding).toContain("Alert.alert('Could not save insurance details', formatAppSafeErrorMessage(err, 'Please try again.'))");
     expect(insuranceOnboarding).toContain("uploadFile('company-docs'");
     expect(insuranceOnboarding).toContain('general-contractors/${user.id}/insurance-');
     expect(insuranceOnboarding).toContain('Invalid insurance document');
     expect(licenseOnboarding).not.toContain('until native upload is wired');
     expect(insuranceOnboarding).not.toContain('until native upload is wired');
+    expect(licenseOnboarding).not.toContain("Alert.alert('Error'");
+    expect(insuranceOnboarding).not.toContain("Alert.alert('Error'");
   });
 
   it('validates typed GC document references before setup can continue', () => {

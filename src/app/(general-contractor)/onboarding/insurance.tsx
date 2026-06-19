@@ -117,7 +117,7 @@ export default function GeneralContractorInsuranceOnboarding() {
       if (error) throw error;
       navigation.navigate('GeneralContractorTabs', { screen: 'GeneralContractorProfile' });
     } catch (err) {
-      Alert.alert('Error', formatAppSafeErrorMessage(err, 'Could not save insurance details.'));
+      Alert.alert('Could not save insurance details', formatAppSafeErrorMessage(err, 'Please try again.'));
     } finally {
       setLoading(false);
     }
