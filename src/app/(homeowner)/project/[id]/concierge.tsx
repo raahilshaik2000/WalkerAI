@@ -232,9 +232,21 @@ export default function ProjectConciergeScreen() {
   const [respondingId, setRespondingId] = useState<string | null>(null);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
+  const clearConciergeState = useCallback(() => {
+    setProjectHomeownerId(null);
+    setCurrentAssignment(null);
+    setGeneralContractors([]);
+    setApprovalRequests([]);
+    setPaymentRequests([]);
+    setBookingRequests([]);
+    setApprovalResponseNotes({});
+    setPaymentResponseNotes({});
+  }, []);
+
   const fetchData = useCallback(async () => {
     if (!projectId) {
       setErrorMessage('Project is missing. Reopen concierge from your project details.');
+      clearConciergeState();
       setLoading(false);
       setRefreshing(false);
       return;
@@ -243,6 +255,7 @@ export default function ProjectConciergeScreen() {
     const currentUser = user ?? (await supabase.auth.getUser()).data.user;
     if (!currentUser) {
       setErrorMessage('You need to be signed in to manage concierge support.');
+      clearConciergeState();
       setLoading(false);
       setRefreshing(false);
       return;
@@ -311,16 +324,12 @@ export default function ProjectConciergeScreen() {
       setBookingRequests((bookingResult.data ?? []) as ConciergeBookingWithGc[]);
     } catch (err) {
       setErrorMessage(formatAppSafeErrorMessage(err, 'Could not load concierge options.'));
-      setCurrentAssignment(null);
-      setGeneralContractors([]);
-      setApprovalRequests([]);
-      setPaymentRequests([]);
-      setBookingRequests([]);
+      clearConciergeState();
     } finally {
       setLoading(false);
       setRefreshing(false);
     }
-  }, [projectId, user]);
+  }, [clearConciergeState, projectId, user]);
 
   useFocusEffect(
     useCallback(() => {

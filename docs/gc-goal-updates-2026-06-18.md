@@ -970,3 +970,16 @@ Latest validation after project message stale-state hardening:
 - `npx tsc --noEmit`
 - `npm test -- --runInBand`
 - `git diff --check`
+
+Latest update after homeowner concierge authority-state hardening:
+
+- Hardened the homeowner concierge authority hub so missing-project, signed-out, or failed-load paths clear all project-specific context: current GC assignment, discoverable GCs, approval requests, GC payment requests, concierge bookings, cached homeowner id, and draft response notes.
+- This prevents stale approval/payment/booking context from surviving when the screen reloads under a different project or loses valid homeowner auth.
+- Added regression assertions in `__tests__/general-contractor.test.ts`.
+
+Latest validation after homeowner concierge authority-state hardening:
+
+- `npm test -- --runInBand __tests__/general-contractor.test.ts`
+- `npx tsc --noEmit`
+- `npm test -- --runInBand`
+- `git diff --check`
