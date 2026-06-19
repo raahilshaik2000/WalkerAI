@@ -61,7 +61,7 @@ describe('project creation flow guards', () => {
     );
 
     expect(questionnaireSource).toContain('const voiceAvailable = isProjectVoiceAvailable();');
-    expect(questionnaireSource).toContain('disabled={voiceBusy || !voiceAvailable || !!pendingVoiceMatch}');
+    expect(questionnaireSource).toContain('disabled={voiceBusy || !voiceAvailable || !!pendingVoiceMatch || voiceWalkthroughActive}');
     expect(questionnaireSource).toContain('Voice unavailable on this device');
     expect(questionnaireSource).toContain('Tap an answer manually to continue.');
 
@@ -86,13 +86,21 @@ describe('project creation flow guards', () => {
     );
 
     expect(questionnaireSource).toContain('analyzeTranscriptForQuestionOption');
-    expect(questionnaireSource).toContain('buildVoiceContextTerms(question)');
+    expect(questionnaireSource).toContain('buildVoiceContextTerms(activeQuestion)');
     expect(questionnaireSource).toContain('const transcript = await listenForProjectAnswer(9, voiceContextTerms);');
     expect(questionnaireSource).toContain('if (match.confidence >= 0.78) {');
-    expect(questionnaireSource).toContain('setAnswer(question.id, match.optionId);');
+    expect(questionnaireSource).toContain('setAnswer(activeQuestion.id, match.optionId);');
     expect(questionnaireSource).toContain("await speakProjectPrompt(`I heard ${transcript}. Should I choose ${spokenLabel}? Say yes or no.`);");
     expect(questionnaireSource).toContain('transcriptConfirmsSelection(confirmationTranscript)');
     expect(questionnaireSource).toContain('transcriptRejectsSelection(confirmationTranscript)');
+    expect(questionnaireSource).toContain('transcriptRequestsVoiceStop(transcript)');
+    expect(questionnaireSource).toContain('const startVoiceWalkthrough = async () => {');
+    expect(questionnaireSource).toContain('voiceWalkthroughRef.current = true;');
+    expect(questionnaireSource).toContain('while (voiceWalkthroughRef.current && safetyCount < questions.length + 2) {');
+    expect(questionnaireSource).toContain('const shouldContinue = advanceAfterVoiceAnswer(activeQuestion, result.optionId);');
+    expect(questionnaireSource).toContain('const stopVoiceWalkthrough = async () => {');
+    expect(questionnaireSource).toContain('Start voice walkthrough');
+    expect(questionnaireSource).toContain('Stop voice walkthrough');
     expect(questionnaireSource).not.toContain('const matchedOptionId = matchTranscriptToQuestionOption(transcript, question);');
 
     expect(nativeVoiceSource).toContain('request.contextualStrings = contextualStrings');
@@ -143,9 +151,11 @@ describe('project creation flow guards', () => {
     expect(analyzingSource).toContain("import { formatAppSafeErrorMessage, formatSupabaseFunctionError } from '@/lib/supabase/functions';");
     expect(analyzingSource).toContain("import { useNavigation, useRoute } from '@react-navigation/native';");
     expect(analyzingSource).toContain('const measurementsSkipped = route.params?.measurementsSkipped === true;');
+    expect(analyzingSource).toContain("await supabase.auth.refreshSession();");
     expect(analyzingSource).toContain("throw new Error(formatAppSafeErrorMessage(recoveryError ?? lastError, 'Project creation failed. Please try again.'))");
     expect(analyzingSource).toContain("'Project setup timed out after skipping measurements. Your photos are still selected; retry analysis.'");
     expect(analyzingSource).toContain("'Analysis failed. Please try again.'");
+    expect(analyzingSource).toContain('retryButtonText: { color: Colors.accentFg');
     expect(analyzingSource).not.toContain('Project creation failed: ${errorMessage');
     expect(analyzingSource).not.toContain('const msg = err?.message || err?.details || JSON.stringify(err);');
     expect(analyzingSource).not.toContain('setError(msg)');
@@ -208,11 +218,14 @@ describe('project creation flow guards', () => {
     );
 
     expect(analyzingSource).toContain('const PHOTO_SAVE_ATTEMPTS = 3;');
+    expect(analyzingSource).toContain('function isTransientPhotoSaveError(error: unknown)');
     expect(analyzingSource).toContain('async function saveProjectPhoto(params: {');
     expect(analyzingSource).toContain("uploadBase64(\n        'project-photos',");
     expect(analyzingSource).toContain('{ retries: 2 },');
     expect(analyzingSource).toContain('for (const [i, photo] of localPhotos.entries()) {');
     expect(analyzingSource).toContain('uploadedPhotoResults.push(await saveProjectPhoto({');
+    expect(analyzingSource).toContain('const canContinueWithLocalPhotos =');
+    expect(analyzingSource).toContain('[analyzing] continuing with local photo payload after transient photo persistence failures:');
     expect(analyzingSource).toContain("supabase.functions.invoke('analyze-photos'");
     expect(analyzingSource.indexOf('uploadedPhotoResults.push(await saveProjectPhoto({')).toBeLessThan(
       analyzingSource.indexOf("supabase.functions.invoke('analyze-photos'"),

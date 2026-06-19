@@ -23,6 +23,7 @@ import {
   stopProjectVoice,
   transcriptConfirmsSelection,
   transcriptRejectsSelection,
+  transcriptRequestsVoiceStop,
 } from '@/lib/project-voice';
 import { formatAppSafeErrorMessage } from '@/lib/supabase/functions';
 import { Colors, Radius, Spacing, Typography } from '@/constants/theme';
@@ -41,12 +42,15 @@ export default function QuestionnaireStep() {
   const fadeAnim = useRef(new Animated.Value(1)).current;
   const slideAnim = useRef(new Animated.Value(0)).current;
   const [voiceBusy, setVoiceBusy] = useState(false);
+  const [voiceWalkthroughActive, setVoiceWalkthroughActive] = useState(false);
   const [voiceTranscript, setVoiceTranscript] = useState('');
   const [pendingVoiceMatch, setPendingVoiceMatch] = useState<{ transcript: string; optionId: string; optionLabel: string; confidence: number } | null>(null);
   const [voiceError, setVoiceError] = useState<string | null>(null);
+  const voiceWalkthroughRef = useRef(false);
 
   const question = questions[currentQuestionIndex];
   const voiceAvailable = isProjectVoiceAvailable();
+  type ActiveQuestion = NonNullable<typeof question>;
 
   const resetVoiceFeedback = () => {
     setPendingVoiceMatch(null);
@@ -75,80 +79,168 @@ export default function QuestionnaireStep() {
 
   const shortOptionLabel = (label: string) => label.split('—')[0].trim();
 
+  const advanceAfterVoiceAnswer = (answeredQuestion: ActiveQuestion, optionId: string) => {
+    const selectedOptionForAdvance = answeredQuestion.options.find((o) => o.id === optionId);
+    const nextQuestionId = selectedOptionForAdvance?.next_question_id;
+    const latestState = useProjectWizardStore.getState();
+    const isLast = latestState.currentQuestionIndex >= latestState.questions.length - 1 || selectedOptionForAdvance?.next_question_id === null;
+
+    if (isLast) {
+      useProjectWizardStore.getState().setStep(5);
+      navigation.navigate('Renders');
+      return false;
+    }
+
+    nextQuestion(nextQuestionId ?? null);
+    return true;
+  };
+
+  const askQuestionByVoice = async (activeQuestion: ActiveQuestion) => {
+    await speakProjectQuestion(activeQuestion);
+    const voiceContextTerms = buildVoiceContextTerms(activeQuestion);
+    const transcript = await listenForProjectAnswer(9, voiceContextTerms);
+    setVoiceTranscript(transcript);
+
+    if (transcriptRequestsVoiceStop(transcript)) {
+      voiceWalkthroughRef.current = false;
+      setVoiceTranscript('Voice walkthrough paused.');
+      await speakProjectPrompt('Okay, I paused the voice walkthrough. You can answer manually or start again.');
+      return null;
+    }
+
+    const match = analyzeTranscriptForQuestionOption(transcript, activeQuestion);
+    if (!match) {
+      setVoiceError(
+        transcript
+          ? `Heard "${transcript}" but it did not match any option. Try again or tap an answer.`
+          : 'No speech detected. Try again or tap an answer.'
+      );
+      await speakProjectPrompt('I did not catch a matching option. Please try again or tap an answer.');
+      return null;
+    }
+
+    const matchedOption = activeQuestion.options.find((o) => o.id === match.optionId);
+    if (!matchedOption) {
+      setVoiceError('Match failed. Please tap an answer.');
+      return null;
+    }
+
+    const spokenLabel = shortOptionLabel(matchedOption.label);
+    if (match.confidence >= 0.78) {
+      ReactNativeHapticFeedback.trigger('notificationSuccess');
+      setAnswer(activeQuestion.id, match.optionId);
+      setVoiceTranscript(`Heard "${transcript}" and selected ${spokenLabel}.`);
+      await speakProjectPrompt(`Got it. I selected ${spokenLabel}.`);
+      return { optionId: match.optionId, optionLabel: matchedOption.label };
+    }
+
+    await speakProjectPrompt(`I heard ${transcript}. Should I choose ${spokenLabel}? Say yes or no.`);
+    const confirmationTranscript = await listenForProjectAnswer(5, ['yes', 'no', 'correct', 'wrong', 'stop', 'pause', spokenLabel]);
+    setVoiceTranscript(`${transcript}. Confirmation: ${confirmationTranscript}`);
+
+    if (transcriptRequestsVoiceStop(confirmationTranscript)) {
+      voiceWalkthroughRef.current = false;
+      setVoiceTranscript('Voice walkthrough paused.');
+      await speakProjectPrompt('Okay, I paused the voice walkthrough.');
+      return null;
+    }
+
+    if (transcriptConfirmsSelection(confirmationTranscript)) {
+      ReactNativeHapticFeedback.trigger('notificationSuccess');
+      setAnswer(activeQuestion.id, match.optionId);
+      await speakProjectPrompt(`Confirmed. I selected ${spokenLabel}.`);
+      return { optionId: match.optionId, optionLabel: matchedOption.label };
+    }
+
+    if (transcriptRejectsSelection(confirmationTranscript)) {
+      setVoiceError('Okay, I will not select that option. Try again or tap an answer.');
+      await speakProjectPrompt('Okay, I will not select that. Try again or tap an answer.');
+      return null;
+    }
+
+    ReactNativeHapticFeedback.trigger('impactLight');
+    setPendingVoiceMatch({
+      transcript,
+      optionId: match.optionId,
+      optionLabel: matchedOption.label,
+      confidence: match.confidence,
+    });
+    setVoiceError('I could not confirm that by voice. Please confirm below or try again.');
+    return null;
+  };
+
+  const ensureVoicePermissions = async () => {
+    const permissions = await requestProjectVoicePermissions();
+    if (!permissions.speech || !permissions.microphone) {
+      setVoiceError('Microphone and speech recognition permissions are required. Enable them in Settings to answer by voice.');
+      return false;
+    }
+    return true;
+  };
+
   const handleVoiceAnswer = async () => {
     if (!question || voiceBusy || !voiceAvailable) return;
 
     resetVoiceFeedback();
     setVoiceBusy(true);
     try {
-      const permissions = await requestProjectVoicePermissions();
-      if (!permissions.speech || !permissions.microphone) {
-        setVoiceError('Microphone and speech recognition permissions are required. Enable them in Settings to answer by voice.');
-        return;
-      }
-
-      await speakProjectQuestion(question);
-      const voiceContextTerms = buildVoiceContextTerms(question);
-      const transcript = await listenForProjectAnswer(9, voiceContextTerms);
-      setVoiceTranscript(transcript);
-
-      const match = analyzeTranscriptForQuestionOption(transcript, question);
-      if (!match) {
-        setVoiceError(
-          transcript
-            ? `Heard "${transcript}" but it did not match any option. Try again or tap an answer.`
-            : 'No speech detected. Try again or tap an answer.'
-        );
-        await speakProjectPrompt('I did not catch a matching option. Please try again or tap an answer.');
-        return;
-      }
-
-      const matchedOption = question.options.find((o) => o.id === match.optionId);
-      if (!matchedOption) {
-        setVoiceError('Match failed. Please tap an answer.');
-        return;
-      }
-
-      const spokenLabel = shortOptionLabel(matchedOption.label);
-      if (match.confidence >= 0.78) {
-        ReactNativeHapticFeedback.trigger('notificationSuccess');
-        setAnswer(question.id, match.optionId);
-        setVoiceTranscript(`Heard "${transcript}" and selected ${spokenLabel}.`);
-        await speakProjectPrompt(`Got it. I selected ${spokenLabel}.`);
-        return;
-      }
-
-      await speakProjectPrompt(`I heard ${transcript}. Should I choose ${spokenLabel}? Say yes or no.`);
-      const confirmationTranscript = await listenForProjectAnswer(5, ['yes', 'no', 'correct', 'wrong', spokenLabel]);
-      setVoiceTranscript(`${transcript}. Confirmation: ${confirmationTranscript}`);
-
-      if (transcriptConfirmsSelection(confirmationTranscript)) {
-        ReactNativeHapticFeedback.trigger('notificationSuccess');
-        setAnswer(question.id, match.optionId);
-        await speakProjectPrompt(`Confirmed. I selected ${spokenLabel}.`);
-        return;
-      }
-
-      if (transcriptRejectsSelection(confirmationTranscript)) {
-        setVoiceError('Okay, I will not select that option. Try again or tap an answer.');
-        await speakProjectPrompt('Okay, I will not select that. Try again or tap an answer.');
-        return;
-      }
-
-      ReactNativeHapticFeedback.trigger('impactLight');
-      setPendingVoiceMatch({
-        transcript,
-        optionId: match.optionId,
-        optionLabel: matchedOption.label,
-        confidence: match.confidence,
-      });
-      setVoiceError('I could not confirm that by voice. Please confirm below or try again.');
+      if (!(await ensureVoicePermissions())) return;
+      await askQuestionByVoice(question);
     } catch (err) {
       setVoiceError(formatAppSafeErrorMessage(err, 'Voice answer failed. Try again or answer manually.'));
     } finally {
       setVoiceBusy(false);
       await stopProjectVoice();
     }
+  };
+
+  const startVoiceWalkthrough = async () => {
+    if (voiceBusy || !voiceAvailable) return;
+
+    resetVoiceFeedback();
+    voiceWalkthroughRef.current = true;
+    setVoiceWalkthroughActive(true);
+    setVoiceBusy(true);
+
+    try {
+      if (!(await ensureVoicePermissions())) return;
+      await speakProjectPrompt('I will walk you through the questions. Answer naturally, or say stop to pause.');
+
+      let safetyCount = 0;
+      while (voiceWalkthroughRef.current && safetyCount < questions.length + 2) {
+        safetyCount += 1;
+        const latestState = useProjectWizardStore.getState();
+        const activeQuestion = latestState.questions[latestState.currentQuestionIndex];
+        if (!activeQuestion) {
+          useProjectWizardStore.getState().setStep(5);
+          navigation.navigate('Renders');
+          break;
+        }
+
+        const result = await askQuestionByVoice(activeQuestion);
+        if (!result || !voiceWalkthroughRef.current) break;
+
+        const shouldContinue = advanceAfterVoiceAnswer(activeQuestion, result.optionId);
+        if (!shouldContinue) break;
+
+        await new Promise((resolve) => setTimeout(resolve, 500));
+      }
+    } catch (err) {
+      setVoiceError(formatAppSafeErrorMessage(err, 'Voice walkthrough failed. Try again or answer manually.'));
+    } finally {
+      voiceWalkthroughRef.current = false;
+      setVoiceWalkthroughActive(false);
+      setVoiceBusy(false);
+      await stopProjectVoice();
+    }
+  };
+
+  const stopVoiceWalkthrough = async () => {
+    voiceWalkthroughRef.current = false;
+    setVoiceWalkthroughActive(false);
+    setVoiceBusy(false);
+    await stopProjectVoice();
+    setVoiceTranscript('Voice walkthrough paused.');
   };
 
   const confirmVoiceMatch = () => {
@@ -214,10 +306,26 @@ export default function QuestionnaireStep() {
             )}
 
             <TouchableOpacity
+              style={[styles.voiceWalkthroughButton, voiceWalkthroughActive && styles.voiceWalkthroughButtonActive, (!voiceAvailable || voiceBusy) && !voiceWalkthroughActive && styles.voiceCardDisabled]}
+              onPress={voiceWalkthroughActive ? stopVoiceWalkthrough : startVoiceWalkthrough}
+              activeOpacity={0.85}
+              disabled={!voiceAvailable || (voiceBusy && !voiceWalkthroughActive)}
+            >
+              <Ionicons
+                name={voiceWalkthroughActive ? 'stop-circle-outline' : 'sparkles-outline'}
+                size={18}
+                color={voiceWalkthroughActive ? '#000' : voiceAvailable ? Colors.accent : Colors.text.tertiary}
+              />
+              <Text style={[styles.voiceWalkthroughText, voiceWalkthroughActive && styles.voiceWalkthroughTextActive]}>
+                {voiceWalkthroughActive ? 'Stop voice walkthrough' : 'Start voice walkthrough'}
+              </Text>
+            </TouchableOpacity>
+
+            <TouchableOpacity
               style={[styles.voiceCard, voiceBusy && styles.voiceCardActive, !voiceAvailable && styles.voiceCardDisabled]}
               onPress={handleVoiceAnswer}
               activeOpacity={0.85}
-              disabled={voiceBusy || !voiceAvailable || !!pendingVoiceMatch}
+              disabled={voiceBusy || !voiceAvailable || !!pendingVoiceMatch || voiceWalkthroughActive}
             >
               <View style={[styles.voiceIcon, voiceBusy && styles.voiceIconActive, !voiceAvailable && styles.voiceIconDisabled]}>
                 <Ionicons
@@ -396,6 +504,25 @@ const styles = StyleSheet.create({
   voiceTextWrap: { flex: 1 },
   voiceTitle: { fontSize: 14, fontWeight: '700', color: Colors.text.primary, marginBottom: 3 },
   voiceSub: { ...Typography.caption, lineHeight: 17 },
+  voiceWalkthroughButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    alignSelf: 'flex-start',
+    gap: 8,
+    borderRadius: Radius.pill,
+    borderWidth: 1,
+    borderColor: 'rgba(255, 107, 0, 0.28)',
+    backgroundColor: 'rgba(255, 107, 0, 0.08)',
+    paddingHorizontal: 12,
+    paddingVertical: 9,
+    marginBottom: 10,
+  },
+  voiceWalkthroughButtonActive: {
+    backgroundColor: Colors.accent,
+    borderColor: Colors.accent,
+  },
+  voiceWalkthroughText: { fontSize: 13, fontWeight: '700', color: Colors.accent },
+  voiceWalkthroughTextActive: { color: '#000' },
   voiceConfirmRow: {
     flexDirection: 'row',
     alignItems: 'center',

@@ -4,6 +4,7 @@ import {
   matchTranscriptToQuestionOption,
   transcriptConfirmsSelection,
   transcriptRejectsSelection,
+  transcriptRequestsVoiceStop,
 } from '../src/lib/project-voice';
 import type { QuestionnaireQuestion } from '../src/types/database.types';
 
@@ -63,6 +64,8 @@ describe('project voice answer matching', () => {
     expect(transcriptConfirmsSelection('go ahead and select it')).toBe(true);
     expect(transcriptRejectsSelection('no try again')).toBe(true);
     expect(transcriptRejectsSelection('not that one')).toBe(true);
+    expect(transcriptRequestsVoiceStop('pause this for now')).toBe(true);
+    expect(transcriptRequestsVoiceStop('stop and let me tap manually')).toBe(true);
   });
 
   it('builds speech recognition context from option labels and positions', () => {

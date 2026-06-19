@@ -205,6 +205,11 @@ export function transcriptRejectsSelection(transcript: string) {
   return /\b(no|nope|wrong|try again|not that|different|cancel)\b/.test(normalizedTranscript);
 }
 
+export function transcriptRequestsVoiceStop(transcript: string) {
+  const normalizedTranscript = normalize(transcript);
+  return /\b(stop|pause|cancel|quit|exit|manual|tap manually)\b/.test(normalizedTranscript);
+}
+
 export function buildVoiceContextTerms(question: QuestionnaireQuestion) {
   const terms = new Set<string>();
   question.options.forEach((option, index) => {

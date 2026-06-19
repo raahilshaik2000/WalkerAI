@@ -59,6 +59,17 @@ function errorMessage(error: unknown, fallback = 'Something went wrong. Please t
   return err?.message || err?.details || err?.hint || err?.code || fallback;
 }
 
+function isTransientPhotoSaveError(error: unknown) {
+  const message = errorMessage(error).toLowerCase();
+  return message.includes('timed out')
+    || message.includes('timeout')
+    || message.includes('network')
+    || message.includes('fetch')
+    || message.includes('temporarily')
+    || message.includes('503')
+    || message.includes('504');
+}
+
 async function ensureDraftProjectId(params: {
   existingProjectId: string | null;
   userId: string;
@@ -109,7 +120,7 @@ async function saveProjectPhoto(params: {
   storagePath: string;
   base64: string;
   contentType: string;
-}) {
+}): Promise<{ saved: boolean; retryableFailure: boolean; message: string | null }> {
   const { projectId, storagePath, base64, contentType } = params;
   let lastError: unknown = null;
 
@@ -129,7 +140,7 @@ async function saveProjectPhoto(params: {
       });
 
       if (photoInsertError) throw photoInsertError;
-      return true;
+      return { saved: true, retryableFailure: false, message: null };
     } catch (err) {
       lastError = err;
       console.warn(`[analyzing] photo save attempt ${attempt} failed:`, errorMessage(err));
@@ -138,7 +149,11 @@ async function saveProjectPhoto(params: {
   }
 
   console.warn('[analyzing] photo save failed after retries:', errorMessage(lastError));
-  return false;
+  return {
+    saved: false,
+    retryableFailure: isTransientPhotoSaveError(lastError),
+    message: errorMessage(lastError),
+  };
 }
 
 export default function AnalyzingScreen() {
@@ -185,6 +200,12 @@ export default function AnalyzingScreen() {
 
     const runAnalysis = async () => {
       try {
+        try {
+          await supabase.auth.refreshSession();
+        } catch (refreshError) {
+          console.warn('[analyzing] session refresh skipped:', errorMessage(refreshError));
+        }
+
         const currentUserId = user?.id ?? (await getSession())?.user?.id ?? null;
         if (!currentUserId) {
           throw new Error('You need to be signed in to create a project.');
@@ -210,11 +231,11 @@ export default function AnalyzingScreen() {
           throw new Error('No photo data found. Please go back and re-select your photos.');
         }
 
-        const uploadedPhotoResults: boolean[] = [];
+        const uploadedPhotoResults: Array<{ saved: boolean; retryableFailure: boolean; message: string | null }> = [];
         const uploadRunId = Date.now();
         for (const [i, photo] of localPhotos.entries()) {
           if (!photo.base64) {
-            uploadedPhotoResults.push(false);
+            uploadedPhotoResults.push({ saved: false, retryableFailure: false, message: 'Missing local photo data.' });
             continue;
           }
 
@@ -229,8 +250,21 @@ export default function AnalyzingScreen() {
           }));
         }
 
-        if (!uploadedPhotoResults.some(Boolean)) {
-          throw new Error('Project photos could not be saved. Please check your connection and try uploading the photos again.');
+        const hasPersistedPhoto = uploadedPhotoResults.some((result) => result.saved);
+        const canContinueWithLocalPhotos =
+          photoBase64s.length > 0
+          && uploadedPhotoResults.length > 0
+          && uploadedPhotoResults.every((result) => result.retryableFailure);
+
+        if (!hasPersistedPhoto) {
+          if (!canContinueWithLocalPhotos) {
+            throw new Error('Project photos could not be saved. Please check your connection and try uploading the photos again.');
+          }
+
+          console.warn(
+            '[analyzing] continuing with local photo payload after transient photo persistence failures:',
+            uploadedPhotoResults.map((result) => result.message).filter(Boolean).join(' | '),
+          );
         }
 
         // Flatten to plain base64 strings so the request body works against both
@@ -484,7 +518,7 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     backgroundColor: Colors.accent,
   },
-  retryButtonText: { color: '#FFFFFF', fontSize: 15, fontWeight: '800' },
+  retryButtonText: { color: Colors.accentFg, fontSize: 15, fontWeight: '800' },
   backButton: {
     minHeight: 48,
     borderRadius: 14,
