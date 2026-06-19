@@ -11,7 +11,7 @@ General Contractor should be a separate app account type, not a company trade fa
 - Branch: `main`
 - Remote: `https://github.com/raahilshaik2000/WalkerAI`
 - Latest implementation commit when this doc was updated: `26842c8 Use safe auth entry error copy`
-- Live backend updates: `generate-material-orders`, `create-gc-concierge-payment-intent`, and `gc-concierge-payout` were deployed to Supabase project `wgbloslndalmocckrejw`.
+- Live backend updates: `generate-material-orders`, `create-gc-concierge-payment-intent`, `gc-concierge-payout`, and `refresh-connect-status` were deployed to Supabase project `wgbloslndalmocckrejw`.
 - Live backend migrations were later applied through `20260618132500_add_supplier_project_message_participants.sql` on Supabase project `wgbloslndalmocckrejw`.
 - Remote migration history was verified with `supabase migration list --linked`; local and remote migration versions match through `20260618132500`.
 - Four live QA accounts were reset/verified on Supabase and credentials were written to:
@@ -480,6 +480,7 @@ Runtime fixes made from this pass:
 - Homeowner project creation now uses app-safe copy for questionnaire voice failures, visual preview/render load failures, AI brief generation failures, material-detail save failures, and DIY guide generation failures.
 - Homeowner project overview and profile stats now use app-safe copy for project-list, milestone-progress, optional GC-context, and profile-stat load failures.
 - Supabase drift verification found the GC concierge payment functions were present locally and invoked by the app but missing remotely. `create-gc-concierge-payment-intent` and `gc-concierge-payout` were deployed and re-listed as ACTIVE on project `wgbloslndalmocckrejw`.
+- Remote-only Stripe Connect support functions `stripe-return` and `refresh-connect-status` were downloaded into `supabase/functions/` so the repo matches deployed backend surface area. `refresh-connect-status` now supports `general_contractor` and the GC profile refreshes Stripe payout readiness when the screen regains focus.
 
 Runtime findings still not treated as complete:
 
@@ -606,5 +607,16 @@ Latest validation after Supabase drift check and GC concierge function deploymen
 - `supabase functions list --project-ref wgbloslndalmocckrejw`
 - `npm test -- --runInBand __tests__/general-contractor.test.ts __tests__/supabase-functions.test.ts`
 - `npx tsc --noEmit`
+- `npm test -- --runInBand`
+- `git diff --check`
+
+Latest validation after Stripe Connect function source sync and GC payout refresh wiring:
+
+- `supabase functions download stripe-return --project-ref wgbloslndalmocckrejw --use-api`
+- `supabase functions download refresh-connect-status --project-ref wgbloslndalmocckrejw --use-api`
+- `npm test -- --runInBand __tests__/general-contractor.test.ts __tests__/supabase-functions.test.ts`
+- `npx tsc --noEmit`
+- `supabase functions deploy refresh-connect-status --project-ref wgbloslndalmocckrejw --use-api`
+- `supabase functions list --project-ref wgbloslndalmocckrejw`
 - `npm test -- --runInBand`
 - `git diff --check`

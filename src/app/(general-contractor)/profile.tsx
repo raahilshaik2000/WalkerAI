@@ -44,6 +44,9 @@ export default function GeneralContractorProfile() {
 
     try {
       setErrorMessage(null);
+      await supabase.functions.invoke('refresh-connect-status', {
+        body: { role: 'general_contractor' },
+      });
       const { data: profile, error } = await supabase
         .from('general_contractors')
         .select('*')

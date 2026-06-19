@@ -228,6 +228,24 @@ describe('create-connect-account source guards', () => {
   });
 });
 
+describe('refresh-connect-status source guards', () => {
+  it('syncs Stripe readiness for company, supplier, and GC payout accounts', () => {
+    const source = fs.readFileSync(
+      path.join(__dirname, '../supabase/functions/refresh-connect-status/index.ts'),
+      'utf8',
+    );
+
+    expect(source).toContain("table: 'companies' | 'suppliers' | 'general_contractors'");
+    expect(source).toContain("let requestedRole: 'company' | 'supplier' | 'general_contractor' = 'company';");
+    expect(source).toContain("body?.role === 'general_contractor'");
+    expect(source).toContain("'general_contractors'");
+    expect(source).toContain("'General contractor'");
+    expect(source).toContain("JSON.stringify({ error: `${roleLabel} not found` })");
+    expect(source).toContain('stripe.accounts.retrieve(accountId)');
+    expect(source).toContain('await updateStripeReadiness(adminClient, table, accountOwner.id, readiness)');
+  });
+});
+
 describe('Stripe payout readiness guards', () => {
   it('keeps Stripe readiness fields service-role maintained across account tables', () => {
     const source = fs.readFileSync(

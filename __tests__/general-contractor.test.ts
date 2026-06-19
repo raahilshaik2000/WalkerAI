@@ -2685,6 +2685,8 @@ describe('general contractor account type', () => {
     expect(gcProfile).toContain("Alert.alert('Finish GC setup'");
     expect(gcProfile).toContain('Set Up Payouts');
     expect(gcProfile).toContain('isStripePayoutLocallyReady(gc)');
+    expect(gcProfile).toContain("supabase.functions.invoke('refresh-connect-status'");
+    expect(gcProfile).toContain("body: { role: 'general_contractor' }");
   });
 
   it('releases paid GC concierge booking payouts only after homeowner completion confirmation', () => {
