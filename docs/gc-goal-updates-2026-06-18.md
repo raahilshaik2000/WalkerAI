@@ -858,3 +858,4 @@ Latest validation after GC approvals setup-lock UX:
 - `npx tsc --noEmit`
 - `npm test -- --runInBand`
 - `git diff --check`
+- `xcodebuild -workspace ios/WalkerAI.xcworkspace -scheme WalkerAI -configuration Debug -sdk iphonesimulator -destination 'generic/platform=iOS Simulator' build CODE_SIGNING_ALLOWED=NO`
