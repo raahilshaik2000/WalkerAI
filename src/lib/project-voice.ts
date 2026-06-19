@@ -66,6 +66,32 @@ function normalize(value: string) {
     .trim();
 }
 
+function expandNaturalAnswerPhrases(value: string) {
+  const expansions: string[] = [];
+
+  if (/\b(as soon as possible|right away|immediately)\b/.test(value)) {
+    expansions.push('asap');
+  }
+
+  if (/\b(mid range|middle range)\b/.test(value)) {
+    expansions.push('mid range');
+  }
+
+  if (/\b(high end|premium)\b/.test(value)) {
+    expansions.push('luxury');
+  }
+
+  if (/\b(don t|dont|do not|not)\s+(move|relocate|change)\b/.test(value) || /\bsame layout\b/.test(value)) {
+    expansions.push('no cosmetic refresh same layout keeping all fixtures in the same location');
+  }
+
+  if (/\bkeep(?:ing)?(?: the| my| all)?\s+(appliance|appliances|cabinet|cabinets|countertop|countertops|floor|flooring|tile|toilet|vanity)\b/.test(value)) {
+    expansions.push('keep existing');
+  }
+
+  return expansions.length ? `${value} ${expansions.join(' ')}` : value;
+}
+
 const STOP_WORDS = new Set([
   'and',
   'are',
@@ -95,6 +121,17 @@ function labelKeywords(label: string) {
       seen.add(token);
       return keep;
     });
+}
+
+function tokenMatchesKeyword(token: string, keyword: string) {
+  if (token === keyword) return true;
+  const shortest = Math.min(token.length, keyword.length);
+  return shortest >= 4 && (token.startsWith(keyword) || keyword.startsWith(token));
+}
+
+function transcriptHasKeyword(keyword: string, transcriptTokens: string[], normalizedTranscript: string) {
+  return normalizedTranscript.includes(keyword)
+    || transcriptTokens.some((token) => tokenMatchesKeyword(token, keyword));
 }
 
 const NUMBER_WORDS: Record<string, number> = {
@@ -156,13 +193,13 @@ export function analyzeTranscriptForQuestionOption(
   transcript: string,
   question: QuestionnaireQuestion,
 ): VoiceOptionMatch | null {
-  const normalizedTranscript = normalize(transcript);
+  const normalizedTranscript = expandNaturalAnswerPhrases(normalize(transcript));
   if (!normalizedTranscript) return null;
 
   const positional = optionPositionMatch(normalizedTranscript, question);
   if (positional) return positional;
 
-  const transcriptTokens = new Set(tokenList(normalizedTranscript));
+  const transcriptTokens = tokenList(normalizedTranscript);
   let best: VoiceOptionMatch | null = null;
 
   for (const option of question.options) {
@@ -182,9 +219,9 @@ export function analyzeTranscriptForQuestionOption(
     const keywords = labelKeywords(option.label);
     if (keywords.length === 0) continue;
 
-    const matchedKeywords = keywords.filter((keyword) => transcriptTokens.has(keyword) || normalizedTranscript.includes(keyword));
+    const matchedKeywords = keywords.filter((keyword) => transcriptHasKeyword(keyword, transcriptTokens, normalizedTranscript));
     const primaryTokens = tokenList(primaryLabel);
-    const primaryHits = primaryTokens.filter((token) => transcriptTokens.has(token) || normalizedTranscript.includes(token)).length;
+    const primaryHits = primaryTokens.filter((token) => transcriptHasKeyword(token, transcriptTokens, normalizedTranscript)).length;
     const score = (matchedKeywords.length / keywords.length) + (primaryHits / Math.max(1, primaryTokens.length)) * 0.45;
 
     if (matchedKeywords.length === 0 && primaryHits === 0) continue;

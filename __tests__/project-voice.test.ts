@@ -6,6 +6,7 @@ import {
   transcriptRejectsSelection,
   transcriptRequestsVoiceStop,
 } from '../src/lib/project-voice';
+import { KITCHEN_QUESTIONS } from '../src/data/fixed-questions';
 import type { QuestionnaireQuestion } from '../src/types/database.types';
 
 const question: QuestionnaireQuestion = {
@@ -44,6 +45,19 @@ describe('project voice answer matching', () => {
     expect(matchTranscriptToQuestionOption('marble would be best', question)).toBe('k_ct_marble');
     expect(matchTranscriptToQuestionOption('engineered stone low maintenance', question)).toBe('k_ct_quartz');
     expect(matchTranscriptToQuestionOption('natural stone unique pattern', question)).toBe('k_ct_granite');
+  });
+
+  it('matches natural homeowner phrases that do not repeat exact option labels', () => {
+    const kitchenQuestion = (id: string) => {
+      const found = KITCHEN_QUESTIONS.find((item) => item.id === id);
+      if (!found) throw new Error(`Missing kitchen question ${id}`);
+      return found;
+    };
+
+    expect(matchTranscriptToQuestionOption('as soon as possible', kitchenQuestion('k_timeline'))).toBe('k_time_asap');
+    expect(matchTranscriptToQuestionOption('do not move anything, same layout', kitchenQuestion('k_layout'))).toBe('k_lay_none');
+    expect(matchTranscriptToQuestionOption('keep the appliances', kitchenQuestion('k_appliances'))).toBe('k_app_none');
+    expect(matchTranscriptToQuestionOption('middle range finishes', kitchenQuestion('k_tier'))).toBe('k_tier_mid');
   });
 
   it('returns confidence metadata for direct and uncertain matches', () => {
@@ -91,5 +105,16 @@ describe('project voice answer matching', () => {
 
     expect(source).toContain('cancelListening?: () => Promise<{ cancelled: boolean }>;');
     expect(source).toContain('nativeVoice.cancelListening()');
+  });
+
+  it('asks again once before giving up on an unmatched voice answer', () => {
+    const source = require('fs').readFileSync(
+      require('path').join(__dirname, '../src/app/(homeowner)/project/create/questionnaire.tsx'),
+      'utf8',
+    );
+
+    expect(source).toContain('const maxAttempts = 2;');
+    expect(source).toContain('Let me try that again. You can say the option number, or say the answer in your own words.');
+    expect(source).toContain('Trying once more.');
   });
 });

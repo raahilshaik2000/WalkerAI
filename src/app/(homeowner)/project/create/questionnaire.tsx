@@ -98,74 +98,98 @@ export default function QuestionnaireStep() {
   const askQuestionByVoice = async (activeQuestion: ActiveQuestion) => {
     await speakProjectQuestion(activeQuestion);
     const voiceContextTerms = buildVoiceContextTerms(activeQuestion);
-    const transcript = await listenForProjectAnswer(9, voiceContextTerms);
-    setVoiceTranscript(transcript);
+    const maxAttempts = 2;
 
-    if (transcriptRequestsVoiceStop(transcript)) {
-      voiceWalkthroughRef.current = false;
-      setVoiceTranscript('Voice walkthrough paused.');
-      await speakProjectPrompt('Okay, I paused the voice walkthrough. You can answer manually or start again.');
+    for (let attempt = 0; attempt < maxAttempts; attempt += 1) {
+      if (attempt > 0) {
+        await speakProjectPrompt('Let me try that again. You can say the option number, or say the answer in your own words.');
+      }
+
+      const transcript = await listenForProjectAnswer(9, voiceContextTerms);
+      setVoiceTranscript(transcript);
+
+      if (transcriptRequestsVoiceStop(transcript)) {
+        voiceWalkthroughRef.current = false;
+        setVoiceTranscript('Voice walkthrough paused.');
+        await speakProjectPrompt('Okay, I paused the voice walkthrough. You can answer manually or start again.');
+        return null;
+      }
+
+      const match = analyzeTranscriptForQuestionOption(transcript, activeQuestion);
+      if (!match) {
+        if (attempt < maxAttempts - 1) {
+          setVoiceError(
+            transcript
+              ? `Heard "${transcript}" but it did not match any option. Trying once more.`
+              : 'No speech detected. Trying once more.'
+          );
+          continue;
+        }
+
+        setVoiceError(
+          transcript
+            ? `Heard "${transcript}" but it did not match any option. Try again or tap an answer.`
+            : 'No speech detected. Try again or tap an answer.'
+        );
+        await speakProjectPrompt('I did not catch a matching option. Please try again or tap an answer.');
+        return null;
+      }
+
+      const matchedOption = activeQuestion.options.find((o) => o.id === match.optionId);
+      if (!matchedOption) {
+        setVoiceError('Match failed. Please tap an answer.');
+        return null;
+      }
+
+      const spokenLabel = shortOptionLabel(matchedOption.label);
+      if (match.confidence >= 0.78) {
+        ReactNativeHapticFeedback.trigger('notificationSuccess');
+        setAnswer(activeQuestion.id, match.optionId);
+        setVoiceTranscript(`Heard "${transcript}" and selected ${spokenLabel}.`);
+        await speakProjectPrompt(`Got it. I selected ${spokenLabel}.`);
+        return { optionId: match.optionId, optionLabel: matchedOption.label };
+      }
+
+      await speakProjectPrompt(`I heard ${transcript}. Should I choose ${spokenLabel}? Say yes or no.`);
+      const confirmationTranscript = await listenForProjectAnswer(5, ['yes', 'no', 'correct', 'wrong', 'stop', 'pause', spokenLabel]);
+      setVoiceTranscript(`${transcript}. Confirmation: ${confirmationTranscript}`);
+
+      if (transcriptRequestsVoiceStop(confirmationTranscript)) {
+        voiceWalkthroughRef.current = false;
+        setVoiceTranscript('Voice walkthrough paused.');
+        await speakProjectPrompt('Okay, I paused the voice walkthrough.');
+        return null;
+      }
+
+      if (transcriptConfirmsSelection(confirmationTranscript)) {
+        ReactNativeHapticFeedback.trigger('notificationSuccess');
+        setAnswer(activeQuestion.id, match.optionId);
+        await speakProjectPrompt(`Confirmed. I selected ${spokenLabel}.`);
+        return { optionId: match.optionId, optionLabel: matchedOption.label };
+      }
+
+      if (transcriptRejectsSelection(confirmationTranscript)) {
+        if (attempt < maxAttempts - 1) {
+          setVoiceError('Okay, I will not select that option. Trying once more.');
+          continue;
+        }
+
+        setVoiceError('Okay, I will not select that option. Try again or tap an answer.');
+        await speakProjectPrompt('Okay, I will not select that. Try again or tap an answer.');
+        return null;
+      }
+
+      ReactNativeHapticFeedback.trigger('impactLight');
+      setPendingVoiceMatch({
+        transcript,
+        optionId: match.optionId,
+        optionLabel: matchedOption.label,
+        confidence: match.confidence,
+      });
+      setVoiceError('I could not confirm that by voice. Please confirm below or try again.');
       return null;
     }
 
-    const match = analyzeTranscriptForQuestionOption(transcript, activeQuestion);
-    if (!match) {
-      setVoiceError(
-        transcript
-          ? `Heard "${transcript}" but it did not match any option. Try again or tap an answer.`
-          : 'No speech detected. Try again or tap an answer.'
-      );
-      await speakProjectPrompt('I did not catch a matching option. Please try again or tap an answer.');
-      return null;
-    }
-
-    const matchedOption = activeQuestion.options.find((o) => o.id === match.optionId);
-    if (!matchedOption) {
-      setVoiceError('Match failed. Please tap an answer.');
-      return null;
-    }
-
-    const spokenLabel = shortOptionLabel(matchedOption.label);
-    if (match.confidence >= 0.78) {
-      ReactNativeHapticFeedback.trigger('notificationSuccess');
-      setAnswer(activeQuestion.id, match.optionId);
-      setVoiceTranscript(`Heard "${transcript}" and selected ${spokenLabel}.`);
-      await speakProjectPrompt(`Got it. I selected ${spokenLabel}.`);
-      return { optionId: match.optionId, optionLabel: matchedOption.label };
-    }
-
-    await speakProjectPrompt(`I heard ${transcript}. Should I choose ${spokenLabel}? Say yes or no.`);
-    const confirmationTranscript = await listenForProjectAnswer(5, ['yes', 'no', 'correct', 'wrong', 'stop', 'pause', spokenLabel]);
-    setVoiceTranscript(`${transcript}. Confirmation: ${confirmationTranscript}`);
-
-    if (transcriptRequestsVoiceStop(confirmationTranscript)) {
-      voiceWalkthroughRef.current = false;
-      setVoiceTranscript('Voice walkthrough paused.');
-      await speakProjectPrompt('Okay, I paused the voice walkthrough.');
-      return null;
-    }
-
-    if (transcriptConfirmsSelection(confirmationTranscript)) {
-      ReactNativeHapticFeedback.trigger('notificationSuccess');
-      setAnswer(activeQuestion.id, match.optionId);
-      await speakProjectPrompt(`Confirmed. I selected ${spokenLabel}.`);
-      return { optionId: match.optionId, optionLabel: matchedOption.label };
-    }
-
-    if (transcriptRejectsSelection(confirmationTranscript)) {
-      setVoiceError('Okay, I will not select that option. Try again or tap an answer.');
-      await speakProjectPrompt('Okay, I will not select that. Try again or tap an answer.');
-      return null;
-    }
-
-    ReactNativeHapticFeedback.trigger('impactLight');
-    setPendingVoiceMatch({
-      transcript,
-      optionId: match.optionId,
-      optionLabel: matchedOption.label,
-      confidence: match.confidence,
-    });
-    setVoiceError('I could not confirm that by voice. Please confirm below or try again.');
     return null;
   };
 
