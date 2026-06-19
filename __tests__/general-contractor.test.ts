@@ -2257,6 +2257,12 @@ describe('general contractor account type', () => {
     expect(gcTrades).toContain("from('project_slots')");
     expect(gcTrades).toContain("from('projects')");
     expect(gcTrades).toContain("select('ai_cost_min, ai_cost_max')");
+    expect(gcTrades).toContain('const clearTradeManagementState = useCallback(() => {');
+    expect(gcTrades).toContain("setErrorMessage('You need to be signed in to manage trades.');\n      clearTradeManagementState();");
+    expect(gcTrades).toContain("setErrorMessage(formatAppSafeErrorMessage(err, 'Could not load trade management.'));\n      clearTradeManagementState();");
+    expect(gcTrades).toContain('setSelectedSlotId(null);');
+    expect(gcTrades).toContain('setSelectedQuoteId(null);');
+    expect(gcTrades).toContain('setCancellingNegotiationId(null);');
     expect(gcTrades).toContain('const projectBudgetReady = (projectBudget?.ai_cost_min ?? 0) > 0 && (projectBudget?.ai_cost_max ?? 0) > 0;');
     expect(gcTrades).toContain("return 'Estimate pending';");
     expect(gcTrades).toContain("from('quotes')");

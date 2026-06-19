@@ -1131,3 +1131,18 @@ Latest validation after homeowner analysis database-error copy hardening:
 - `npm test -- --runInBand __tests__/project-creation-flow.test.ts`
 - `npx tsc --noEmit`
 - `npm test -- --runInBand`
+- `git diff --check`
+
+Latest update after GC trade-management stale-state hardening:
+
+- Verified the external trade workflow is already represented across migrations, GC trade UI, homeowner notices, scheduling, assistant risk summaries, and closeout logic.
+- Hardened the GC trade-management screen so signed-out auth context or load failures clear previously visible assignments, project budget, slots, quotes, quote negotiations, selected slot/quote state, draft recommendation fields, counteroffer fields, cancellation state, and GC readiness.
+- This prevents a verified GC account’s prior trade data from remaining visible if the app loses or switches account context.
+- Added regression assertions in `__tests__/general-contractor.test.ts`.
+
+Latest validation after GC trade-management stale-state hardening:
+
+- `npm test -- --runInBand __tests__/general-contractor.test.ts`
+- `npx tsc --noEmit`
+- `npm test -- --runInBand`
+- `git diff --check`

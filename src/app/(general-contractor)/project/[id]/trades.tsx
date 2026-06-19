@@ -133,6 +133,25 @@ export default function GeneralContractorTradesScreen() {
   const [gcReady, setGcReady] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
+  const clearTradeManagementState = useCallback(() => {
+    setAssignment(null);
+    setProjectBudget(null);
+    setSlots([]);
+    setQuotes([]);
+    setNegotiations([]);
+    setSelectedSlotId(null);
+    setSelectedQuoteId(null);
+    setRecommendedTradeName('');
+    setRecommendedCompany('');
+    setRecommendedContact('');
+    setCostDelta('');
+    setRecommendationNote('');
+    setCounterAmount('');
+    setCounterNote('');
+    setCancellingNegotiationId(null);
+    setGcReady(false);
+  }, []);
+
   const quotesBySlot = useMemo(() => {
     const grouped = new Map<string, Quote[]>();
     for (const quote of quotes) {
@@ -174,6 +193,7 @@ export default function GeneralContractorTradesScreen() {
     const currentUser = (await supabase.auth.getUser()).data.user;
     if (!currentUser?.id) {
       setErrorMessage('You need to be signed in to manage trades.');
+      clearTradeManagementState();
       setLoading(false);
       setRefreshing(false);
       return;
@@ -236,17 +256,12 @@ export default function GeneralContractorTradesScreen() {
       setNegotiations((negotiationResult.data ?? []) as GcTradeQuoteNegotiation[]);
     } catch (err) {
       setErrorMessage(formatAppSafeErrorMessage(err, 'Could not load trade management.'));
-      setAssignment(null);
-      setProjectBudget(null);
-      setSlots([]);
-      setQuotes([]);
-      setNegotiations([]);
-      setGcReady(false);
+      clearTradeManagementState();
     } finally {
       setLoading(false);
       setRefreshing(false);
     }
-  }, [projectId]);
+  }, [clearTradeManagementState, projectId]);
 
   useFocusEffect(
     useCallback(() => {
