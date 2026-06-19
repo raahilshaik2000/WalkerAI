@@ -112,7 +112,9 @@ describe('project creation flow guards', () => {
     );
 
     expect(analyzingSource).toContain("import { formatAppSafeErrorMessage, formatSupabaseFunctionError } from '@/lib/supabase/functions';");
+    expect(analyzingSource).toContain("throw new Error(formatAppSafeErrorMessage(recoveryError ?? lastError, 'Project creation failed. Please try again.'))");
     expect(analyzingSource).toContain("setError(formatAppSafeErrorMessage(err, 'Analysis failed. Please try again.'))");
+    expect(analyzingSource).not.toContain('Project creation failed: ${errorMessage');
     expect(analyzingSource).not.toContain('const msg = err?.message || err?.details || JSON.stringify(err);');
     expect(analyzingSource).not.toContain('setError(msg)');
 

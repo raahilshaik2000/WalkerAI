@@ -1117,3 +1117,17 @@ Latest validation after homeowner GC review target polish:
 - `npx tsc --noEmit`
 - `npm test -- --runInBand`
 - `git diff --check`
+
+Latest update after homeowner analysis database-error copy hardening:
+
+- Hardened the shared Supabase error formatter so it checks `message`, `details`, `hint`, and `code` fields before showing copy in the app. If any field contains transient infrastructure wording or database-internal details, the UI falls back to polished app-safe copy.
+- Hardened the homeowner project analysis draft-project creation path so final project-create failures no longer wrap raw Supabase text into the visible error body.
+- This directly protects the screenshot case where the analysis screen could show database timeout wording under the `Analysis failed` title.
+- Added regression assertions in `__tests__/supabase-functions.test.ts` and `__tests__/project-creation-flow.test.ts`.
+
+Latest validation after homeowner analysis database-error copy hardening:
+
+- `npm test -- --runInBand __tests__/supabase-functions.test.ts`
+- `npm test -- --runInBand __tests__/project-creation-flow.test.ts`
+- `npx tsc --noEmit`
+- `npm test -- --runInBand`

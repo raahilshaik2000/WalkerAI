@@ -34,6 +34,14 @@ describe('Supabase function error formatting', () => {
     expect(formatAppSafeErrorMessage(new Error('The connection to the database timed out'), 'Could not load notifications.')).toBe(
       'Could not load notifications.',
     );
+    expect(formatAppSafeErrorMessage(
+      new Error('Project creation failed: The connection to the database timed out'),
+      'Analysis failed. Please try again.',
+    )).toBe('Analysis failed. Please try again.');
+    expect(formatAppSafeErrorMessage(
+      { message: 'Project creation failed', details: 'canceling statement due to statement timeout' },
+      'Analysis failed. Please try again.',
+    )).toBe('Analysis failed. Please try again.');
   });
 
   it('falls back to polished copy for database-internal errors', async () => {
@@ -45,6 +53,14 @@ describe('Supabase function error formatting', () => {
       { message: 'column general_contractor_projects.markup_percent does not exist' },
       'Could not load project management context.',
     )).toBe('Could not load project management context.');
+    expect(formatAppSafeErrorMessage(
+      { message: 'Project creation failed', details: 'relation "projects" does not exist' },
+      'Analysis failed. Please try again.',
+    )).toBe('Analysis failed. Please try again.');
+    expect(formatAppSafeErrorMessage(
+      { message: 'Upload failed', hint: 'violates row-level security policy for table "project_photos"' },
+      'Upload failed. Please try again.',
+    )).toBe('Upload failed. Please try again.');
     await expect(formatSupabaseFunctionError({
       message: 'Edge Function returned a non-2xx status code',
       context: new Response(JSON.stringify({ error: 'duplicate key value violates unique constraint "notifications_pkey"' })),

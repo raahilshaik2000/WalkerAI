@@ -99,7 +99,7 @@ async function ensureDraftProjectId(params: {
 
   if (!recoveryError && recoveredProject?.id) return recoveredProject.id as string;
 
-  throw new Error(`Project creation failed: ${errorMessage(recoveryError ?? lastError, 'The database did not confirm the draft project.')}`);
+  throw new Error(formatAppSafeErrorMessage(recoveryError ?? lastError, 'Project creation failed. Please try again.'));
 }
 
 export default function AnalyzingScreen() {
