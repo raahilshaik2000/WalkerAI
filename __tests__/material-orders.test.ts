@@ -262,6 +262,8 @@ describe('supplier material order payout math', () => {
 
     expect(homeownerMaterialsSource).toContain("import { formatAppSafeErrorMessage, formatSupabaseFunctionError } from '@/lib/supabase/functions'");
     expect(homeownerMaterialsSource).toContain("setErrorMessage(formatAppSafeErrorMessage(error, 'Could not load material orders.'))");
+    expect(homeownerMaterialsSource).toContain("setErrorMessage(formatAppSafeErrorMessage(err, 'Could not load material orders.'))");
+    expect(homeownerMaterialsSource).toContain("} finally {\n      setLoading(false);");
     expect(homeownerMaterialsSource).toContain("Alert.alert('Release failed', await formatSupabaseFunctionError(err, 'Please try again.'))");
     expect(homeownerMaterialsSource).not.toContain('setErrorMessage(error.message)');
     expect(homeownerMaterialsSource).not.toContain("Alert.alert('Error', await formatSupabaseFunctionError(err, 'Failed to release payment.'))");
