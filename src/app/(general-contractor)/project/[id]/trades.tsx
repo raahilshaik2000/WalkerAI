@@ -521,23 +521,28 @@ export default function GeneralContractorTradesScreen() {
           style: 'destructive',
           onPress: async () => {
             setCancellingNegotiationId(negotiation.id);
-            const { error } = await supabase
-              .from('gc_trade_quote_negotiations')
-              .update({
-                status: 'cancelled',
-                cancelled_at: new Date().toISOString(),
-              })
-              .eq('id', negotiation.id)
-              .eq('project_id', projectId)
-              .eq('general_contractor_id', assignment.general_contractor_id)
-              .eq('status', 'pending');
+            try {
+              const { error } = await supabase
+                .from('gc_trade_quote_negotiations')
+                .update({
+                  status: 'cancelled',
+                  cancelled_at: new Date().toISOString(),
+                })
+                .eq('id', negotiation.id)
+                .eq('project_id', projectId)
+                .eq('general_contractor_id', assignment.general_contractor_id)
+                .eq('status', 'pending');
 
-            if (error) {
-              Alert.alert('Could not cancel negotiation', formatAppSafeErrorMessage(error, 'Please try again.'));
-            } else {
+              if (error) {
+                Alert.alert('Could not cancel negotiation', formatAppSafeErrorMessage(error, 'Please try again.'));
+                return;
+              }
               await fetchData();
+            } catch (err) {
+              Alert.alert('Could not cancel negotiation', formatAppSafeErrorMessage(err, 'Please try again.'));
+            } finally {
+              setCancellingNegotiationId(null);
             }
-            setCancellingNegotiationId(null);
           },
         },
       ],

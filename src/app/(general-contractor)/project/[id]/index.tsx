@@ -311,15 +311,20 @@ export default function GeneralContractorProjectDetail() {
           text: 'Accept',
           onPress: async () => {
             setAccepting(true);
-            const { error } = await supabase.rpc('accept_gc_management_invite', {
-              p_assignment_id: assignment.id,
-            });
-            if (error) {
-              Alert.alert('Could not accept invite', formatAppSafeErrorMessage(error, 'Please try again.'));
-            } else {
+            try {
+              const { error } = await supabase.rpc('accept_gc_management_invite', {
+                p_assignment_id: assignment.id,
+              });
+              if (error) {
+                Alert.alert('Could not accept invite', formatAppSafeErrorMessage(error, 'Please try again.'));
+                return;
+              }
               await fetchData();
+            } catch (err) {
+              Alert.alert('Could not accept invite', formatAppSafeErrorMessage(err, 'Please try again.'));
+            } finally {
+              setAccepting(false);
             }
-            setAccepting(false);
           },
         },
       ],
@@ -436,20 +441,25 @@ export default function GeneralContractorProjectDetail() {
           style: 'destructive',
           onPress: async () => {
             setCancellingApprovalId(request.id);
-            const { error } = await supabase
-              .from('project_approval_requests')
-              .update({ status: 'cancelled' })
-              .eq('id', request.id)
-              .eq('project_id', projectId)
-              .eq('requested_by_gc_id', assignment.general_contractor_id)
-              .eq('status', 'pending');
+            try {
+              const { error } = await supabase
+                .from('project_approval_requests')
+                .update({ status: 'cancelled' })
+                .eq('id', request.id)
+                .eq('project_id', projectId)
+                .eq('requested_by_gc_id', assignment.general_contractor_id)
+                .eq('status', 'pending');
 
-            if (error) {
-              Alert.alert('Could not cancel request', formatAppSafeErrorMessage(error, 'Please try again.'));
-            } else {
+              if (error) {
+                Alert.alert('Could not cancel request', formatAppSafeErrorMessage(error, 'Please try again.'));
+                return;
+              }
               await fetchData();
+            } catch (err) {
+              Alert.alert('Could not cancel request', formatAppSafeErrorMessage(err, 'Please try again.'));
+            } finally {
+              setCancellingApprovalId(null);
             }
-            setCancellingApprovalId(null);
           },
         },
       ],

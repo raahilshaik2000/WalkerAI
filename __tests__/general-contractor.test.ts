@@ -438,6 +438,7 @@ describe('general contractor account type', () => {
     expect(gcProjectDetail).toContain('Accept Management Invite');
     expect(gcProjectDetail).toContain("supabase.rpc('accept_gc_management_invite'");
     expect(gcProjectDetail).toContain('p_assignment_id: assignment.id');
+    expect(gcProjectDetail).toContain("} catch (err) {\n              Alert.alert('Could not accept invite', formatAppSafeErrorMessage(err, 'Please try again.'));\n            } finally {\n              setAccepting(false);");
     expect(gcProjectDetail).not.toContain("update({ status: 'active' })");
     expect(gcProjectDetail).toContain('GC management terms');
     expect(gcProjectDetail).toContain('setGcReady(isGeneralContractorReadyForProjectControls(gc))');
@@ -446,6 +447,7 @@ describe('general contractor account type', () => {
     expect(gcProjectDetail).toContain('Controls unlock after homeowner confirmation');
     expect(gcProjectDetail).toContain('Schedule, permit, payment, material, trade, discovery, assistant, and completion tools become available once GC management is active.');
     expect(gcProjectDetail).toContain('Coordinate with the homeowner while management approval is pending');
+    expect(gcProjectDetail).toContain("} catch (err) {\n              Alert.alert('Could not cancel request', formatAppSafeErrorMessage(err, 'Please try again.'));\n            } finally {\n              setCancellingApprovalId(null);");
     expect(activationMigration).toContain('DROP POLICY IF EXISTS "gc_projects_participant_update"');
     expect(activationMigration).toContain('CREATE POLICY "gc_projects_homeowner_update"');
     expect(activationMigration).toContain('CREATE OR REPLACE FUNCTION public.accept_gc_management_invite');
@@ -2273,6 +2275,7 @@ describe('general contractor account type', () => {
     expect(gcApprovals).toContain('WalkerAI verification, concierge marketplace access, and complete business, license, and insurance setup are required before this request can be accepted.');
     expect(gcApprovals).toContain('disabled={!canAcceptConciergeBookings || !!respondingBookingId}');
     expect(gcApprovals).toContain('disabled={!!respondingBookingId}');
+    expect(gcApprovals).toContain("} catch (err) {\n              Alert.alert('Could not respond', formatAppSafeErrorMessage(err, 'Please try again.'));\n            } finally {\n              setRespondingBookingId(null);");
     expect(homeownerConcierge).toContain('license_number, license_doc_url, insurance_doc_url');
     expect(homeownerConcierge).toContain('function hasCompleteGcConciergeProfile');
     expect(homeownerConcierge).toContain('const assignedGcConciergeEligible = hasCompleteGcConciergeProfile(assignedGc)');
@@ -2556,6 +2559,7 @@ describe('general contractor account type', () => {
     expect(gcTrades).toContain('It does not change the homeowner-facing quote.');
     expect(gcTrades).toContain("const canManageTradeRequests = assignment?.status === 'active' && gcReady;");
     expect(gcTrades).toContain('disabled={!canManageTradeRequests || !!cancellingNegotiationId}');
+    expect(gcTrades).toContain("} catch (err) {\n              Alert.alert('Could not cancel negotiation', formatAppSafeErrorMessage(err, 'Please try again.'));\n            } finally {\n              setCancellingNegotiationId(null);");
     expect(gcTrades).toContain('Counteroffer / revision request');
     expect(companyJob).toContain("from('gc_trade_quote_negotiations')");
     expect(companyJob).toContain("import { formatAppSafeErrorMessage, formatSupabaseFunctionError } from '@/lib/supabase/functions'");

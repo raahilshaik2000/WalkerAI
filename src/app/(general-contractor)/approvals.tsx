@@ -256,22 +256,27 @@ export default function GeneralContractorApprovals() {
           style: status === 'rejected' ? 'destructive' : 'default',
           onPress: async () => {
             setRespondingBookingId(booking.id);
-            const { error } = await supabase.rpc('respond_to_gc_concierge_booking', {
-              p_booking_id: booking.id,
-              p_status: status,
-              p_response_note: responseNote || null,
-            });
-            if (error) {
-              Alert.alert('Could not respond', formatAppSafeErrorMessage(error, 'Please try again.'));
-            } else {
+            try {
+              const { error } = await supabase.rpc('respond_to_gc_concierge_booking', {
+                p_booking_id: booking.id,
+                p_status: status,
+                p_response_note: responseNote || null,
+              });
+              if (error) {
+                Alert.alert('Could not respond', formatAppSafeErrorMessage(error, 'Please try again.'));
+                return;
+              }
               setBookingResponseNotes((current) => {
                 const next = { ...current };
                 delete next[booking.id];
                 return next;
               });
               await fetchData();
+            } catch (err) {
+              Alert.alert('Could not respond', formatAppSafeErrorMessage(err, 'Please try again.'));
+            } finally {
+              setRespondingBookingId(null);
             }
-            setRespondingBookingId(null);
           },
         },
       ],
