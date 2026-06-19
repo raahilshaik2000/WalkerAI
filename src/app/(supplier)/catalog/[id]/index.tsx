@@ -4,6 +4,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { useNavigation, useRoute } from '@react-navigation/native';
 import Ionicons from 'react-native-vector-icons/Ionicons';
 import { supabase } from '@/lib/supabase/client';
+import { getCurrentUser } from '@/lib/supabase/auth';
 import { formatAppSafeErrorMessage } from '@/lib/supabase/functions';
 import { getRequiredStringParam } from '@/lib/navigation-params';
 import { useAuthStore } from '@/stores/auth.store';
@@ -41,74 +42,86 @@ export default function EditCatalogItem() {
   const [availableCategories, setAvailableCategories] = useState<SupplierCategory[]>([]);
 
   useEffect(() => {
+    let mounted = true;
     (async () => {
-      if (!itemId) {
-        Alert.alert('Missing item', 'Reopen this catalog item and try again.');
-        navigation.goBack();
-        return;
-      }
-      if (!user?.id) {
-        Alert.alert('Sign in required', 'Please sign in again before editing catalog items.');
-        navigation.goBack();
-        return;
-      }
+      try {
+        if (!itemId) {
+          Alert.alert('Missing item', 'Reopen this catalog item and try again.');
+          navigation.goBack();
+          return;
+        }
 
-      const [supplierResult, itemResult] = await Promise.all([
-        supabase
-          .from('suppliers')
-          .select('id, categories')
-          .eq('user_id', user.id)
-          .order('created_at', { ascending: false })
-          .limit(1)
-          .maybeSingle(),
-        supabase
-          .from('supplier_catalog')
-          .select('*')
-          .eq('id', itemId)
-          .maybeSingle(),
-      ]);
+        const currentUserId = user?.id ?? (await getCurrentUser())?.id ?? null;
+        if (!currentUserId) {
+          Alert.alert('Sign in required', 'Please sign in again before editing catalog items.');
+          navigation.goBack();
+          return;
+        }
 
-      if (supplierResult.error) {
-        Alert.alert('Could not load supplier profile', formatAppSafeErrorMessage(supplierResult.error, 'Please try again.'));
-        navigation.goBack();
-        return;
-      }
-      if (!supplierResult.data) {
-        Alert.alert('Supplier setup required', 'Complete supplier setup before editing catalog items.');
-        navigation.goBack();
-        return;
-      }
+        const [supplierResult, itemResult] = await Promise.all([
+          supabase
+            .from('suppliers')
+            .select('id, categories')
+            .eq('user_id', currentUserId)
+            .order('created_at', { ascending: false })
+            .limit(1)
+            .maybeSingle(),
+          supabase
+            .from('supplier_catalog')
+            .select('*')
+            .eq('id', itemId)
+            .maybeSingle(),
+        ]);
 
-      const { data, error } = itemResult;
-      if (error || !data) {
-        Alert.alert('Could not load catalog item', formatAppSafeErrorMessage(error, 'Please try again.'));
-        navigation.goBack();
-        return;
-      }
-      if (data.supplier_id !== supplierResult.data.id) {
-        Alert.alert('Item unavailable', 'This catalog item does not belong to your supplier profile.');
-        navigation.goBack();
-        return;
-      }
+        if (!mounted) return;
+        if (supplierResult.error) {
+          Alert.alert('Could not load supplier profile', formatAppSafeErrorMessage(supplierResult.error, 'Please try again.'));
+          navigation.goBack();
+          return;
+        }
+        if (!supplierResult.data) {
+          Alert.alert('Supplier setup required', 'Complete supplier setup before editing catalog items.');
+          navigation.goBack();
+          return;
+        }
 
-      const categories = selectedSupplierCategories(supplierResult.data.categories);
-      if (categories.length === 0) {
-        Alert.alert('Supply categories required', 'Select supply categories before editing catalog items.');
+        const { data, error } = itemResult;
+        if (error || !data) {
+          Alert.alert('Could not load catalog item', formatAppSafeErrorMessage(error, 'Please try again.'));
+          navigation.goBack();
+          return;
+        }
+        if (data.supplier_id !== supplierResult.data.id) {
+          Alert.alert('Item unavailable', 'This catalog item does not belong to your supplier profile.');
+          navigation.goBack();
+          return;
+        }
+
+        const categories = selectedSupplierCategories(supplierResult.data.categories);
+        if (categories.length === 0) {
+          Alert.alert('Supply categories required', 'Select supply categories before editing catalog items.');
+          navigation.goBack();
+          return;
+        }
+        setAvailableCategories(categories);
+        setName(data.name);
+        setDescription(data.description ?? '');
+        setCategory(data.category as SupplierCategory);
+        setSku(data.sku ?? '');
+        setUnit(data.unit);
+        setPriceStr((data.price_per_unit / 100).toFixed(2));
+        setBrand(data.brand ?? '');
+        setQualityTier(data.quality_tier as QualityTier);
+        setLeadTime(String(data.lead_time_days ?? 3));
+      } catch (err) {
+        if (!mounted) return;
+        Alert.alert('Could not load catalog item', formatAppSafeErrorMessage(err, 'Please try again.'));
         navigation.goBack();
-        return;
+      } finally {
+        if (mounted) setLoading(false);
       }
-      setAvailableCategories(categories);
-      setName(data.name);
-      setDescription(data.description ?? '');
-      setCategory(data.category as SupplierCategory);
-      setSku(data.sku ?? '');
-      setUnit(data.unit);
-      setPriceStr((data.price_per_unit / 100).toFixed(2));
-      setBrand(data.brand ?? '');
-      setQualityTier(data.quality_tier as QualityTier);
-      setLeadTime(String(data.lead_time_days ?? 3));
-      setLoading(false);
     })();
+    return () => { mounted = false; };
   }, [itemId, navigation, user?.id]);
 
   const handleSave = async () => {

@@ -4,6 +4,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { useNavigation, useFocusEffect } from '@react-navigation/native';
 import Ionicons from 'react-native-vector-icons/Ionicons';
 import { supabase } from '@/lib/supabase/client';
+import { getCurrentUser } from '@/lib/supabase/auth';
 import { formatAppSafeErrorMessage } from '@/lib/supabase/functions';
 import { useAuthStore } from '@/stores/auth.store';
 import { Colors, Radius, Spacing, Typography } from '@/constants/theme';
@@ -22,56 +23,61 @@ export default function SupplierCatalog() {
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
   const fetchData = useCallback(async () => {
-    if (!user) {
-      setItems([]);
-      setHasSupplierProfile(false);
-      setSetupRoute('SupplierBusinessOnboarding');
-      setErrorMessage('You need to be signed in to manage your catalog.');
-      setLoading(false);
-      return;
-    }
-
     setErrorMessage(null);
-    const { data: sup, error: supplierError } = await supabase
-      .from('suppliers')
-      .select('id, license_number, categories')
-      .eq('user_id', user.id)
-      .order('created_at', { ascending: false })
-      .limit(1)
-      .maybeSingle();
-    if (supplierError) {
+    try {
+      const currentUserId = user?.id ?? (await getCurrentUser())?.id ?? null;
+      if (!currentUserId) {
+        setItems([]);
+        setHasSupplierProfile(false);
+        setSetupRoute('SupplierBusinessOnboarding');
+        setErrorMessage('You need to be signed in to manage your catalog.');
+        return;
+      }
+
+      const { data: sup, error: supplierError } = await supabase
+        .from('suppliers')
+        .select('id, license_number, categories')
+        .eq('user_id', currentUserId)
+        .order('created_at', { ascending: false })
+        .limit(1)
+        .maybeSingle();
+      if (supplierError) {
+        setItems([]);
+        setHasSupplierProfile(false);
+        setSetupRoute(null);
+        setErrorMessage(formatAppSafeErrorMessage(supplierError, 'Could not load catalog.'));
+        return;
+      }
+      if (!sup) {
+        setItems([]);
+        setHasSupplierProfile(false);
+        setSetupRoute('SupplierBusinessOnboarding');
+        return;
+      }
+
+      setHasSupplierProfile(true);
+      setSetupRoute(nextCatalogSetupRoute(sup as Pick<Supplier, 'categories' | 'license_number'>));
+      const { data, error } = await supabase
+        .from('supplier_catalog')
+        .select('*')
+        .eq('supplier_id', sup.id)
+        .order('created_at', { ascending: false });
+      if (error) {
+        setItems([]);
+        setErrorMessage(formatAppSafeErrorMessage(error, 'Could not load catalog.'));
+        return;
+      }
+
+      setItems((data as SupplierCatalogItem[]) ?? []);
+    } catch (err) {
       setItems([]);
       setHasSupplierProfile(false);
       setSetupRoute(null);
-      setErrorMessage(formatAppSafeErrorMessage(supplierError, 'Could not load catalog.'));
+      setErrorMessage(formatAppSafeErrorMessage(err, 'Could not load catalog.'));
+    } finally {
       setLoading(false);
-      return;
     }
-    if (!sup) {
-      setItems([]);
-      setHasSupplierProfile(false);
-      setSetupRoute('SupplierBusinessOnboarding');
-      setLoading(false);
-      return;
-    }
-
-    setHasSupplierProfile(true);
-    setSetupRoute(nextCatalogSetupRoute(sup as Pick<Supplier, 'categories' | 'license_number'>));
-    const { data, error } = await supabase
-      .from('supplier_catalog')
-      .select('*')
-      .eq('supplier_id', sup.id)
-      .order('created_at', { ascending: false });
-    if (error) {
-      setItems([]);
-      setErrorMessage(formatAppSafeErrorMessage(error, 'Could not load catalog.'));
-      setLoading(false);
-      return;
-    }
-
-    setItems((data as SupplierCatalogItem[]) ?? []);
-    setLoading(false);
-  }, [user]);
+  }, [user?.id]);
 
   useFocusEffect(useCallback(() => { fetchData(); }, [fetchData]));
 

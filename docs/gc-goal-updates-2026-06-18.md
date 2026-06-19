@@ -1365,3 +1365,18 @@ Latest validation after shared notification auth fallback hardening:
 - `npx tsc --noEmit`
 - `npm test -- --runInBand`
 - `git diff --check`
+
+Latest update after supplier catalog auth fallback hardening:
+
+- Hardened the supplier catalog list so it falls back to the active Supabase session before deciding a supplier is signed out.
+- Hardened supplier catalog add/edit setup checks so verified suppliers can continue adding and editing products after app refresh/navigation even if the local auth store has not hydrated yet.
+- Added guarded catch/finally cleanup around supplier catalog profile and item loading so catalog screens do not stay stuck loading after unexpected auth/session failures.
+- Kept the existing catalog prerequisite flow unchanged: suppliers still need a supplier profile, license, and supply categories before adding catalog items.
+- Added regression assertions in `__tests__/supplier-catalog.test.ts`.
+
+Latest validation after supplier catalog auth fallback hardening:
+
+- `npm test -- --runInBand __tests__/supplier-catalog.test.ts __tests__/supplier-onboarding.test.ts`
+- `npx tsc --noEmit`
+- `npm test -- --runInBand`
+- `git diff --check`
