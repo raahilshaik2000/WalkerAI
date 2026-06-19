@@ -274,12 +274,12 @@ export default function CompanyProfileScreen() {
     setConnectLoading(true);
     try {
       const { data, error } = await supabase.functions.invoke('create-connect-account');
-      if (error) throw error;
+      if (error) throw new Error(await formatSupabaseFunctionError(error));
       if (data?.url) {
         await Linking.openURL(data.url);
       }
     } catch (err) {
-      Alert.alert('Error', await formatSupabaseFunctionError(err, 'Could not start payout setup. Please try again.'));
+      Alert.alert('Could not start payout setup', await formatSupabaseFunctionError(err, 'Please try again.'));
     } finally {
       setConnectLoading(false);
     }
