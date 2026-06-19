@@ -269,6 +269,7 @@ export default function QuoteBuilderScreen() {
             pendingQuoteQuery = slotId ? pendingQuoteQuery.eq('slot_id', slotId) : pendingQuoteQuery.is('slot_id', null);
 
             const pendingQuoteResult = await pendingQuoteQuery.maybeSingle();
+            if (cancelled) return;
             if (pendingQuoteResult.error) throw pendingQuoteResult.error;
             if (!cancelled && pendingQuoteResult.data) {
               const quote = pendingQuoteResult.data as ExistingQuote;
@@ -285,6 +286,7 @@ export default function QuoteBuilderScreen() {
                   .order('sort_order', { ascending: true }),
               ]);
 
+              if (cancelled) return;
               if (itemsResult.error) throw itemsResult.error;
               if (milestonesResult.error) throw milestonesResult.error;
 

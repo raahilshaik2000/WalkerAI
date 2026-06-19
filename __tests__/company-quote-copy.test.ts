@@ -169,6 +169,21 @@ describe('company quote copy', () => {
     expect(quoteBuilder).not.toContain('!pendingQuoteResult.error && pendingQuoteResult.data');
   });
 
+  it('does not update quote loading state after pending quote loads are cancelled', () => {
+    const repoRoot = path.resolve(__dirname, '..');
+    const quoteBuilder = fs.readFileSync(
+      path.join(repoRoot, 'src/app/(company)/job/[id]/quote-builder.tsx'),
+      'utf8'
+    );
+
+    expect(quoteBuilder).toMatch(
+      /const pendingQuoteResult = await pendingQuoteQuery\.maybeSingle\(\);[\s\S]*?if \(cancelled\) return;[\s\S]*?if \(pendingQuoteResult\.error\) throw pendingQuoteResult\.error;/
+    );
+    expect(quoteBuilder).toMatch(
+      /const \[itemsResult, milestonesResult\] = await Promise\.all\([\s\S]*?if \(cancelled\) return;[\s\S]*?if \(itemsResult\.error\) throw itemsResult\.error;/
+    );
+  });
+
   it('does not show duplicate legacy active jobs when a slot assignment exists for the same project', () => {
     const repoRoot = path.resolve(__dirname, '..');
     const source = fs.readFileSync(

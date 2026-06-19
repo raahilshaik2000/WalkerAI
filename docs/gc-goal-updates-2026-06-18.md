@@ -807,3 +807,10 @@ Latest validation after live notification preference routing:
 - `npx tsc --noEmit`
 - `npm test -- --runInBand`
 - `git diff --check`
+
+Latest validation after company quote pending-load cancellation hardening:
+
+- `npm test -- --runInBand __tests__/company-quote-copy.test.ts`
+- `npx tsc --noEmit`
+- `npm test -- --runInBand`
+- `git diff --check`
