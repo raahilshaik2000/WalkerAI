@@ -48,6 +48,7 @@ describe('supplier catalog helpers', () => {
   it('uses app-safe copy for supplier catalog, earnings, and profile failures', () => {
     const catalog = fs.readFileSync(path.join(__dirname, '../src/app/(supplier)/catalog/index.tsx'), 'utf8');
     const addCatalog = fs.readFileSync(path.join(__dirname, '../src/app/(supplier)/catalog/add.tsx'), 'utf8');
+    const editCatalog = fs.readFileSync(path.join(__dirname, '../src/app/(supplier)/catalog/[id]/index.tsx'), 'utf8');
     const earnings = fs.readFileSync(path.join(__dirname, '../src/app/(supplier)/earnings/index.tsx'), 'utf8');
     const profile = fs.readFileSync(path.join(__dirname, '../src/app/(supplier)/profile/index.tsx'), 'utf8');
 
@@ -64,6 +65,16 @@ describe('supplier catalog helpers', () => {
     expect(addCatalog).toContain("Alert.alert('Could not save catalog item', formatAppSafeErrorMessage(err, 'Please try again.'))");
     expect(addCatalog).not.toContain("Alert.alert('Could not load supplier profile', error.message)");
     expect(addCatalog).not.toContain("Alert.alert('Error', err instanceof Error ? err.message : 'Failed to save.')");
+
+    expect(editCatalog).toContain("import { formatAppSafeErrorMessage } from '@/lib/supabase/functions';");
+    expect(editCatalog).toContain("Alert.alert('Could not load supplier profile', formatAppSafeErrorMessage(supplierResult.error, 'Please try again.'))");
+    expect(editCatalog).toContain("Alert.alert('Could not load catalog item', formatAppSafeErrorMessage(error, 'Please try again.'))");
+    expect(editCatalog).toContain("Alert.alert('Could not save catalog item', formatAppSafeErrorMessage(err, 'Please try again.'))");
+    expect(editCatalog).toContain("Alert.alert('Could not delete catalog item', formatAppSafeErrorMessage(error, 'Please try again.'))");
+    expect(editCatalog).not.toContain("Alert.alert('Error', supplierResult.error.message)");
+    expect(editCatalog).not.toContain("Alert.alert('Error', error?.message ?? 'Could not load item.')");
+    expect(editCatalog).not.toContain("Alert.alert('Error', err instanceof Error ? err.message : 'Failed to save.')");
+    expect(editCatalog).not.toContain("Alert.alert('Error', error.message)");
 
     expect(earnings).toContain("import { formatAppSafeErrorMessage, formatSupabaseFunctionError } from '@/lib/supabase/functions';");
     expect(earnings).toContain("setErrorMessage(formatAppSafeErrorMessage(supplierError, 'Could not load earnings.'))");

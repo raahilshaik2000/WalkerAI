@@ -5,6 +5,7 @@ import { useNavigation } from '@react-navigation/native';
 import Ionicons from 'react-native-vector-icons/Ionicons';
 import { launchImageLibrary } from 'react-native-image-picker';
 import { supabase } from '@/lib/supabase/client';
+import { formatAppSafeErrorMessage } from '@/lib/supabase/functions';
 import { getUploadMetadata, uploadFile } from '@/lib/supabase/storage';
 import { useAuthStore } from '@/stores/auth.store';
 import { Colors, Radius, Spacing, Typography } from '@/constants/theme';
@@ -86,7 +87,7 @@ export default function SupplierLicenseOnboarding() {
       if (!updateResult.data) throw new Error('Supplier license was not saved.');
       navigation.navigate('SupplierCategoriesOnboarding');
     } catch (err) {
-      Alert.alert('Error', err instanceof Error ? err.message : 'Failed to save. Try again.');
+      Alert.alert('Could not save license', formatAppSafeErrorMessage(err, 'Please try again.'));
     } finally {
       setLoading(false);
     }

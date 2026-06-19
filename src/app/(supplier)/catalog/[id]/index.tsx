@@ -4,6 +4,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { useNavigation, useRoute } from '@react-navigation/native';
 import Ionicons from 'react-native-vector-icons/Ionicons';
 import { supabase } from '@/lib/supabase/client';
+import { formatAppSafeErrorMessage } from '@/lib/supabase/functions';
 import { getRequiredStringParam } from '@/lib/navigation-params';
 import { useAuthStore } from '@/stores/auth.store';
 import { Colors, Spacing, Typography } from '@/constants/theme';
@@ -68,7 +69,7 @@ export default function EditCatalogItem() {
       ]);
 
       if (supplierResult.error) {
-        Alert.alert('Error', supplierResult.error.message);
+        Alert.alert('Could not load supplier profile', formatAppSafeErrorMessage(supplierResult.error, 'Please try again.'));
         navigation.goBack();
         return;
       }
@@ -80,7 +81,7 @@ export default function EditCatalogItem() {
 
       const { data, error } = itemResult;
       if (error || !data) {
-        Alert.alert('Error', error?.message ?? 'Could not load item.');
+        Alert.alert('Could not load catalog item', formatAppSafeErrorMessage(error, 'Please try again.'));
         navigation.goBack();
         return;
       }
@@ -148,7 +149,7 @@ export default function EditCatalogItem() {
       if (!data) throw new Error('Catalog item was not saved.');
       navigation.goBack();
     } catch (err) {
-      Alert.alert('Error', err instanceof Error ? err.message : 'Failed to save.');
+      Alert.alert('Could not save catalog item', formatAppSafeErrorMessage(err, 'Please try again.'));
     } finally {
       setSaving(false);
     }
@@ -173,10 +174,10 @@ export default function EditCatalogItem() {
             .select('id')
             .maybeSingle();
           if (error) {
-            Alert.alert('Error', error.message);
+            Alert.alert('Could not delete catalog item', formatAppSafeErrorMessage(error, 'Please try again.'));
             setDeleting(false);
           } else if (!data) {
-            Alert.alert('Error', 'This catalog item is no longer available.');
+            Alert.alert('Catalog item unavailable', 'This catalog item is no longer available.');
             setDeleting(false);
           } else {
             navigation.goBack();
