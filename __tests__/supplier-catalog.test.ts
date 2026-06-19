@@ -55,7 +55,9 @@ describe('supplier catalog helpers', () => {
     expect(catalog).toContain("import { formatAppSafeErrorMessage } from '@/lib/supabase/functions';");
     expect(catalog).toContain("setErrorMessage(formatAppSafeErrorMessage(supplierError, 'Could not load catalog.'))");
     expect(catalog).toContain("setErrorMessage(formatAppSafeErrorMessage(error, 'Could not load catalog.'))");
-    expect(catalog).toContain("Alert.alert('Could not update stock', formatAppSafeErrorMessage(error, 'Please try again.'))");
+    expect(catalog).toContain("if (error) throw error;");
+    expect(catalog).toContain("Alert.alert('Could not update stock', formatAppSafeErrorMessage(err, 'Please try again.'))");
+    expect(catalog).toContain("setItems((prev) => prev.map((i) => i.id === item.id ? { ...i, in_stock: item.in_stock } : i));");
     expect(catalog).not.toContain('setErrorMessage(supplierError.message)');
     expect(catalog).not.toContain('setErrorMessage(error.message)');
     expect(catalog).not.toContain("Alert.alert('Could not update stock', error.message)");

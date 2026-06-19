@@ -83,18 +83,21 @@ export default function SupplierCatalog() {
 
   const toggleStock = async (item: SupplierCatalogItem) => {
     setItems((prev) => prev.map((i) => i.id === item.id ? { ...i, in_stock: !i.in_stock } : i));
-    const { data, error } = await supabase
-      .from('supplier_catalog')
-      .update({ in_stock: !item.in_stock })
-      .eq('id', item.id)
-      .select('id')
-      .maybeSingle();
-    if (error) {
+    try {
+      const { data, error } = await supabase
+        .from('supplier_catalog')
+        .update({ in_stock: !item.in_stock })
+        .eq('id', item.id)
+        .select('id')
+        .maybeSingle();
+      if (error) throw error;
+      if (!data) {
+        setItems((prev) => prev.map((i) => i.id === item.id ? { ...i, in_stock: item.in_stock } : i));
+        Alert.alert('Could not update stock', 'This catalog item is no longer available.');
+      }
+    } catch (err) {
       setItems((prev) => prev.map((i) => i.id === item.id ? { ...i, in_stock: item.in_stock } : i));
-      Alert.alert('Could not update stock', formatAppSafeErrorMessage(error, 'Please try again.'));
-    } else if (!data) {
-      setItems((prev) => prev.map((i) => i.id === item.id ? { ...i, in_stock: item.in_stock } : i));
-      Alert.alert('Could not update stock', 'This catalog item is no longer available.');
+      Alert.alert('Could not update stock', formatAppSafeErrorMessage(err, 'Please try again.'));
     }
   };
 
