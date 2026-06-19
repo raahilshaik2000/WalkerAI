@@ -43,4 +43,14 @@ describe('supplier onboarding helpers', () => {
     expect(profile).toContain('await supabase.auth.signOut(); clearSession();');
     expect(profile).not.toContain('setSession(null)');
   });
+
+  it('falls back to the active Supabase session on supplier profile load', () => {
+    const profile = fs.readFileSync(path.join(__dirname, '../src/app/(supplier)/profile/index.tsx'), 'utf8');
+
+    expect(profile).toContain("import { getCurrentUser } from '@/lib/supabase/auth';");
+    expect(profile).toContain('user?.id ?? (await getCurrentUser())?.id ?? null');
+    expect(profile).toContain("setErrorMessage(formatAppSafeErrorMessage(err, 'Could not load supplier profile.'))");
+    expect(profile).not.toContain(".eq('user_id', user.id)");
+    expect(profile).toContain('}, [user?.id]);');
+  });
 });

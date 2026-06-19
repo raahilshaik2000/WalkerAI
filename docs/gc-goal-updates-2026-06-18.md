@@ -1336,3 +1336,18 @@ Latest validation after homeowner project-generation auth fallback hardening:
 - `npx tsc --noEmit`
 - `npm test -- --runInBand`
 - `git diff --check`
+
+Latest update after supplier profile and earnings auth fallback hardening:
+
+- Hardened supplier earnings so paid/confirmed material-order payout history and Stripe readiness reload through the active Supabase session instead of relying only on the local auth store.
+- Hardened supplier payout setup so auth lookup failures show app-safe copy instead of throwing out of the Connect button handler.
+- Hardened supplier profile loading with the same active-session fallback and guarded catch/finally cleanup.
+- This keeps supplier setup, payout readiness, and order payment history reachable after app refresh/navigation in GC material-sourcing workflows.
+- Added regression assertions in `__tests__/material-orders.test.ts` and `__tests__/supplier-onboarding.test.ts`.
+
+Latest validation after supplier profile and earnings auth fallback hardening:
+
+- `npm test -- --runInBand __tests__/material-orders.test.ts __tests__/supplier-onboarding.test.ts`
+- `npx tsc --noEmit`
+- `npm test -- --runInBand`
+- `git diff --check`

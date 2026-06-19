@@ -185,6 +185,21 @@ describe('supplier material order payout math', () => {
     expect(detailSource).toContain('setCanClaimOpenOrder(false);');
   });
 
+  it('falls back to the active Supabase session on supplier earnings and payout setup', () => {
+    const earningsSource = fs.readFileSync(
+      path.join(__dirname, '../src/app/(supplier)/earnings/index.tsx'),
+      'utf8',
+    );
+
+    expect(earningsSource).toContain("import { getCurrentUser } from '@/lib/supabase/auth';");
+    expect(earningsSource).toContain('user?.id ?? (await getCurrentUser())?.id ?? null');
+    expect(earningsSource).toContain("setErrorMessage(formatAppSafeErrorMessage(err, 'Could not load earnings.'))");
+    expect(earningsSource).toContain("Alert.alert('Could not start payout setup', formatAppSafeErrorMessage(err, 'Please try again.'))");
+    expect(earningsSource).not.toContain(".eq('user_id', user.id)");
+    expect(earningsSource).not.toContain('if (!user?.id || !supplier?.id)');
+    expect(earningsSource).toContain('}, [user?.id]);');
+  });
+
   it('uses explicit material relationship names on company supplier-delivery queries', () => {
     const companyMaterialsSource = fs.readFileSync(
       path.join(__dirname, '../src/app/(company)/job/[id]/materials.tsx'),

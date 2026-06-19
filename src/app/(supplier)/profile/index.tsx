@@ -4,6 +4,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { useFocusEffect, useNavigation } from '@react-navigation/native';
 import Ionicons from 'react-native-vector-icons/Ionicons';
 import { supabase } from '@/lib/supabase/client';
+import { getCurrentUser } from '@/lib/supabase/auth';
 import { formatAppSafeErrorMessage } from '@/lib/supabase/functions';
 import { isStripePayoutLocallyReady } from '@/lib/payouts';
 import { useAuthStore } from '@/stores/auth.store';
@@ -32,32 +33,35 @@ export default function SupplierProfile() {
 
   const loadSupplierProfile = useCallback(async ({ showSpinner = false } = {}) => {
     if (showSpinner) setLoading(true);
-    if (!user) {
+    try {
+      const currentUserId = user?.id ?? (await getCurrentUser())?.id ?? null;
+      if (!currentUserId) {
+        setSupplier(null);
+        setErrorMessage('You need to be signed in to view your supplier profile.');
+        return;
+      }
+      const { data, error } = await supabase
+        .from('suppliers')
+        .select('*')
+        .eq('user_id', currentUserId)
+        .order('created_at', { ascending: false })
+        .limit(1)
+        .maybeSingle();
+      if (error) {
+        setSupplier(null);
+        setErrorMessage(formatAppSafeErrorMessage(error, 'Could not load supplier profile.'));
+        return;
+      }
+      setSupplier(data);
+      setErrorMessage(null);
+    } catch (err) {
       setSupplier(null);
-      setErrorMessage('You need to be signed in to view your supplier profile.');
+      setErrorMessage(formatAppSafeErrorMessage(err, 'Could not load supplier profile.'));
+    } finally {
       setLoading(false);
       setRefreshing(false);
-      return;
     }
-    const { data, error } = await supabase
-      .from('suppliers')
-      .select('*')
-      .eq('user_id', user.id)
-      .order('created_at', { ascending: false })
-      .limit(1)
-      .maybeSingle();
-    if (error) {
-      setSupplier(null);
-      setErrorMessage(formatAppSafeErrorMessage(error, 'Could not load supplier profile.'));
-      setLoading(false);
-      setRefreshing(false);
-      return;
-    }
-    setSupplier(data);
-    setErrorMessage(null);
-    setLoading(false);
-    setRefreshing(false);
-  }, [user]);
+  }, [user?.id]);
 
   useFocusEffect(
     useCallback(() => {
