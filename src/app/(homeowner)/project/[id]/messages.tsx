@@ -46,6 +46,7 @@ export default function MessagesScreen() {
   useEffect(() => {
     if (!projectId) {
       setErrorMessage('Project is missing. Reopen messages from the project page.');
+      setMessages([]);
       return;
     }
 
@@ -58,12 +59,14 @@ export default function MessagesScreen() {
           .order('sent_at', { ascending: true });
         if (error) {
           setErrorMessage(formatAppSafeErrorMessage(error, 'Could not load messages.'));
+          setMessages([]);
           return;
         }
         setErrorMessage(null);
         setMessages(data ?? []);
       } catch (err) {
         setErrorMessage(formatAppSafeErrorMessage(err, 'Could not load messages.'));
+        setMessages([]);
       }
     };
     loadMessages();

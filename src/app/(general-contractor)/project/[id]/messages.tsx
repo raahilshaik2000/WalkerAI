@@ -54,6 +54,7 @@ export default function GeneralContractorMessagesScreen() {
 
     if (!projectId) {
       setErrorMessage('Project is missing. Reopen messages from the GC project page.');
+      setMessages([]);
       setCanSendMessages(false);
       setComposeLockMessage('Project is missing. Reopen messages from the GC project page.');
       return;
@@ -66,6 +67,7 @@ export default function GeneralContractorMessagesScreen() {
           if (!cancelled) {
             setCurrentUserId(null);
             setErrorMessage('You need to be signed in to view project messages.');
+            setMessages([]);
             setCanSendMessages(false);
             setComposeLockMessage('Sign in to send project messages.');
           }
@@ -90,6 +92,7 @@ export default function GeneralContractorMessagesScreen() {
 
         if (messageResult.error) {
           setErrorMessage(`Could not load messages: ${formatAppSafeErrorMessage(messageResult.error, 'Please try again.')}`);
+          setMessages([]);
         } else {
           setErrorMessage(null);
           setMessages((messageResult.data ?? []) as Message[]);
@@ -136,6 +139,7 @@ export default function GeneralContractorMessagesScreen() {
       } catch (err) {
         if (!cancelled) {
           setErrorMessage(formatAppSafeErrorMessage(err, 'Could not load messages.'));
+          setMessages([]);
           setCanSendMessages(false);
           setComposeLockMessage('Messages are unavailable right now. Try again shortly.');
         }

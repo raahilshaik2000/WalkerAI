@@ -48,6 +48,8 @@ describe('project messages', () => {
     expect(homeownerProjectMessages).toContain("import { formatAppSafeErrorMessage } from '@/lib/supabase/functions';");
     expect(homeownerProjectMessages).toContain("setErrorMessage(formatAppSafeErrorMessage(error, 'Could not load messages.'))");
     expect(homeownerProjectMessages).toContain("setErrorMessage(formatAppSafeErrorMessage(err, 'Could not load messages.'))");
+    expect(homeownerProjectMessages).toContain("setMessages([]);\n          return;");
+    expect(homeownerProjectMessages).toContain("setMessages([]);\n      }");
     expect(homeownerProjectMessages).toContain("Alert.alert('Message not sent', formatAppSafeErrorMessage(err, 'Please try again.'))");
     expect(homeownerProjectMessages).toContain('setBody(trimmed); // restore on error');
     expect(homeownerProjectMessages).toContain('} finally {\n      setSending(false);');
@@ -57,6 +59,8 @@ describe('project messages', () => {
     expect(gcMessages).toContain("import { formatAppSafeErrorMessage } from '@/lib/supabase/functions';");
     expect(gcMessages).toContain("formatAppSafeErrorMessage(messageResult.error, 'Please try again.')");
     expect(gcMessages).toContain("setErrorMessage(formatAppSafeErrorMessage(err, 'Could not load messages.'))");
+    expect(gcMessages).toContain("setErrorMessage('You need to be signed in to view project messages.');\n            setMessages([]);");
+    expect(gcMessages).toContain("setErrorMessage(`Could not load messages: ${formatAppSafeErrorMessage(messageResult.error, 'Please try again.')}`);\n          setMessages([]);");
     expect(gcMessages).toContain("setComposeLockMessage('Messages are unavailable right now. Try again shortly.')");
     expect(gcMessages).toContain('if (error) throw error;');
     expect(gcMessages).toContain("Alert.alert('Message not sent', formatAppSafeErrorMessage(err, 'Please try again.'))");

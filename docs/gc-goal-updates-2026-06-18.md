@@ -957,3 +957,16 @@ Latest validation after public four-role auth entry polish:
 - `npx tsc --noEmit`
 - `npm test -- --runInBand`
 - `git diff --check`
+
+Latest update after project message stale-state hardening:
+
+- Hardened the shared project message thread for homeowner, company/trade, and general contractor participants. If the project id is missing, message loading fails, the signed-in GC user disappears, or a message query throws, the screen now clears the visible local message list instead of leaving stale messages from a previous project/thread on screen.
+- Added exception handling to the company/trade message send path so a thrown client error restores the draft message, shows app-safe copy, and always releases the sending state.
+- Added regression assertions in `__tests__/messages.test.ts`.
+
+Latest validation after project message stale-state hardening:
+
+- `npm test -- --runInBand __tests__/messages.test.ts`
+- `npx tsc --noEmit`
+- `npm test -- --runInBand`
+- `git diff --check`

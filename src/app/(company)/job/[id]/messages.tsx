@@ -46,21 +46,28 @@ export default function CompanyMessagesScreen() {
   useEffect(() => {
     if (!projectId) {
       setErrorMessage('Project is missing. Reopen messages from the job page.');
+      setMessages([]);
       return;
     }
 
     const load = async () => {
-      const { data, error } = await supabase
-        .from('messages')
-        .select('id, body, sender_id, sent_at, attachment_url')
-        .eq('project_id', projectId)
-        .order('sent_at', { ascending: true });
-      if (error) {
-        setErrorMessage(formatAppSafeErrorMessage(error, 'Could not load messages.'));
-        return;
+      try {
+        const { data, error } = await supabase
+          .from('messages')
+          .select('id, body, sender_id, sent_at, attachment_url')
+          .eq('project_id', projectId)
+          .order('sent_at', { ascending: true });
+        if (error) {
+          setErrorMessage(formatAppSafeErrorMessage(error, 'Could not load messages.'));
+          setMessages([]);
+          return;
+        }
+        setErrorMessage(null);
+        setMessages(data ?? []);
+      } catch (err) {
+        setErrorMessage(formatAppSafeErrorMessage(err, 'Could not load messages.'));
+        setMessages([]);
       }
-      setErrorMessage(null);
-      setMessages(data ?? []);
     };
     load();
 
@@ -88,19 +95,25 @@ export default function CompanyMessagesScreen() {
     const trimmed = body.trim();
     setBody('');
 
-    const { error } = await supabase.from('messages').insert({
-      project_id: projectId,
-      sender_id: user.id,
-      body: trimmed,
-    });
+    try {
+      const { error } = await supabase.from('messages').insert({
+        project_id: projectId,
+        sender_id: user.id,
+        body: trimmed,
+      });
 
-    if (error) {
+      if (error) {
+        setBody(trimmed);
+        Alert.alert('Message not sent', formatAppSafeErrorMessage(error, 'Please try again.'));
+      } else {
+        ReactNativeHapticFeedback.trigger('impactLight');
+      }
+    } catch (err) {
       setBody(trimmed);
-      Alert.alert('Message not sent', formatAppSafeErrorMessage(error, 'Please try again.'));
-    } else {
-      ReactNativeHapticFeedback.trigger('impactLight');
+      Alert.alert('Message not sent', formatAppSafeErrorMessage(err, 'Please try again.'));
+    } finally {
+      setSending(false);
     }
-    setSending(false);
   };
 
   const openAttachment = async (url: string) => {
