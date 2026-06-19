@@ -1022,3 +1022,17 @@ Latest validation after warranty closeout stale-state hardening:
 - `npx tsc --noEmit`
 - `npm test -- --runInBand`
 - `git diff --check`
+
+Latest update after GC materials and discovery stale-state hardening:
+
+- Hardened the GC materials sourcing screen so missing project ids, signed-out auth state, or load failures clear assignment context, material rows, supplier orders, catalog suggestions, selected material, draft substitution fields, and GC readiness before showing an error.
+- Hardened the GC discovery/change-order screen so missing project ids, signed-out auth state, or load failures clear assignment context, visible discovery requests, draft approval request fields, and GC readiness before showing an error.
+- This prevents a General Contractor from seeing or acting on stale material/discovery project data after switching accounts, reopening a bad route, or losing auth.
+- Added regression assertions in `__tests__/general-contractor.test.ts`.
+
+Latest validation after GC materials and discovery stale-state hardening:
+
+- `npm test -- --runInBand __tests__/general-contractor.test.ts`
+- `npx tsc --noEmit`
+- `npm test -- --runInBand`
+- `git diff --check`

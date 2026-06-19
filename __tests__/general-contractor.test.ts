@@ -607,6 +607,33 @@ describe('general contractor account type', () => {
     expect(projectDetail).toContain('{assignmentIsActive ? (');
   });
 
+  it('clears GC material and discovery state when project context becomes unavailable', () => {
+    const gcMaterials = fs.readFileSync(
+      path.join(repoRoot, 'src/app/(general-contractor)/project/[id]/materials.tsx'),
+      'utf8',
+    );
+    const gcDiscovery = fs.readFileSync(
+      path.join(repoRoot, 'src/app/(general-contractor)/project/[id]/discovery.tsx'),
+      'utf8',
+    );
+
+    expect(gcMaterials).toContain('const clearMaterialsState = useCallback(() => {');
+    expect(gcMaterials).toContain('setSelectedMaterialId(null);');
+    expect(gcMaterials).toContain("setProductName('');");
+    expect(gcMaterials).toContain("setErrorMessage('Project is missing. Reopen materials from the GC project page.');\n      clearMaterialsState();");
+    expect(gcMaterials).toContain("setErrorMessage('You need to be signed in to source materials.');\n      clearMaterialsState();");
+    expect(gcMaterials).toContain("setErrorMessage(formatAppSafeErrorMessage(err, 'Could not load materials.'));\n      clearMaterialsState();");
+    expect(gcMaterials).toContain('}, [clearMaterialsState, projectId]);');
+
+    expect(gcDiscovery).toContain('const clearDiscoveryState = useCallback(() => {');
+    expect(gcDiscovery).toContain("setRequestType('change_order');");
+    expect(gcDiscovery).toContain("setTitle('');");
+    expect(gcDiscovery).toContain("setErrorMessage('Project is missing. Reopen discoveries from the GC project page.');\n      clearDiscoveryState();");
+    expect(gcDiscovery).toContain("setErrorMessage('You need to be signed in to manage discoveries.');\n      clearDiscoveryState();");
+    expect(gcDiscovery).toContain("setErrorMessage(formatAppSafeErrorMessage(err, 'Could not load discoveries.'));\n      clearDiscoveryState();");
+    expect(gcDiscovery).toContain('}, [clearDiscoveryState, projectId]);');
+  });
+
   it('adds generic homeowner approval requests for GC recommendations', () => {
     const migration = fs.readFileSync(
       path.join(repoRoot, 'supabase/migrations/20260615000300_add_project_approval_requests.sql'),

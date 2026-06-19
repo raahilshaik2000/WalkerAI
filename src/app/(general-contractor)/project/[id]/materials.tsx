@@ -114,10 +114,35 @@ export default function GeneralContractorMaterialsScreen() {
   const [gcReady, setGcReady] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
+  const clearMaterialsState = useCallback(() => {
+    setAssignment(null);
+    setMaterials([]);
+    setOrders([]);
+    setCatalogSuggestions([]);
+    setSelectedMaterialId(null);
+    setProductName('');
+    setSupplier('');
+    setColorFinish('');
+    setQuotedPrice('');
+    setCostDelta('');
+    setLeadTimeDays('');
+    setQuoteNote('');
+    setGcReady(false);
+  }, []);
+
   const fetchData = useCallback(async () => {
+    if (!projectId) {
+      setErrorMessage('Project is missing. Reopen materials from the GC project page.');
+      clearMaterialsState();
+      setLoading(false);
+      setRefreshing(false);
+      return;
+    }
+
     const currentUser = (await supabase.auth.getUser()).data.user;
     if (!currentUser?.id) {
       setErrorMessage('You need to be signed in to source materials.');
+      clearMaterialsState();
       setLoading(false);
       setRefreshing(false);
       return;
@@ -170,16 +195,12 @@ export default function GeneralContractorMaterialsScreen() {
       setCatalogSuggestions((catalogResult.data ?? []) as CatalogSuggestion[]);
     } catch (err) {
       setErrorMessage(formatAppSafeErrorMessage(err, 'Could not load materials.'));
-      setAssignment(null);
-      setMaterials([]);
-      setOrders([]);
-      setCatalogSuggestions([]);
-      setGcReady(false);
+      clearMaterialsState();
     } finally {
       setLoading(false);
       setRefreshing(false);
     }
-  }, [projectId]);
+  }, [clearMaterialsState, projectId]);
 
   useFocusEffect(
     useCallback(() => {
