@@ -483,6 +483,7 @@ Runtime fixes made from this pass:
 - Remote-only Stripe Connect support functions `stripe-return` and `refresh-connect-status` were downloaded into `supabase/functions/` so the repo matches deployed backend surface area. `refresh-connect-status` now supports `general_contractor` and the GC profile refreshes Stripe payout readiness when the screen regains focus.
 - Stripe Connect onboarding now uses the repo-owned public `stripe-return` Edge Function for both return and expired-link refresh paths instead of hardcoded undeclared `walkerai.app` routes. `create-connect-account` derives those URLs from `SUPABASE_URL`, and `stripe-return` was redeployed with JWT verification disabled so Stripe/Safari can open it.
 - Company and supplier payout surfaces now also call `refresh-connect-status` before loading profile/earnings data, so Stripe Connect completion refreshes consistently across company, supplier, and GC account types.
+- Stripe Connect status refresh is now centralized and best-effort. Company, supplier, and GC account screens still load their local profile data if the refresh function or network fails.
 
 Runtime findings still not treated as complete:
 
@@ -636,6 +637,13 @@ Latest validation after Stripe Connect return URL hardening:
 Latest validation after company/supplier payout readiness refresh wiring:
 
 - `npm test -- --runInBand __tests__/company-profile-services.test.ts __tests__/supplier-catalog.test.ts __tests__/general-contractor.test.ts __tests__/supabase-functions.test.ts`
+- `npx tsc --noEmit`
+- `npm test -- --runInBand`
+- `git diff --check`
+
+Latest validation after best-effort Stripe Connect refresh hardening:
+
+- `npm test -- --runInBand __tests__/payouts.test.ts __tests__/company-profile-services.test.ts __tests__/supplier-catalog.test.ts __tests__/general-contractor.test.ts`
 - `npx tsc --noEmit`
 - `npm test -- --runInBand`
 - `git diff --check`

@@ -16,6 +16,7 @@ import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
 import { supabase } from '@/lib/supabase/client';
 import { formatAppSafeErrorMessage, formatSupabaseFunctionError } from '@/lib/supabase/functions';
 import { isStripePayoutLocallyReady } from '@/lib/payouts';
+import { refreshStripeConnectStatus } from '@/lib/stripe-connect';
 import { useAuthStore } from '@/stores/auth.store';
 import { Colors, Spacing, Typography } from '@/constants/theme';
 import { GlassButton, GlassCard, GradientBackground, StatusBadge } from '@/components/ui';
@@ -148,7 +149,7 @@ export default function CompanyProfileScreen() {
       return;
     }
     setErrorMessage(null);
-    await supabase.functions.invoke('refresh-connect-status');
+    await refreshStripeConnectStatus();
 
     let co: Company | null = null;
     try {

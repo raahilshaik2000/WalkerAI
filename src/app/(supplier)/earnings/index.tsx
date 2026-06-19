@@ -7,6 +7,7 @@ import { supabase } from '@/lib/supabase/client';
 import { formatAppSafeErrorMessage, formatSupabaseFunctionError } from '@/lib/supabase/functions';
 import { joinedMaterialItemName } from '@/lib/material-orders';
 import { isStripePayoutLocallyReady } from '@/lib/payouts';
+import { refreshStripeConnectStatus } from '@/lib/stripe-connect';
 import { useAuthStore } from '@/stores/auth.store';
 import { Colors, Spacing, Typography } from '@/constants/theme';
 import { GlassCard, GradientBackground } from '@/components/ui';
@@ -31,9 +32,7 @@ export default function SupplierEarnings() {
       setRefreshing(false);
       return;
     }
-    await supabase.functions.invoke('refresh-connect-status', {
-      body: { role: 'supplier' },
-    });
+    await refreshStripeConnectStatus('supplier');
     const { data: sup, error: supplierError } = await supabase
       .from('suppliers')
       .select('*')

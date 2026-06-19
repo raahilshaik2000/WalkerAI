@@ -15,6 +15,7 @@ import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
 import { supabase } from '@/lib/supabase/client';
 import { formatAppSafeErrorMessage, formatSupabaseFunctionError } from '@/lib/supabase/functions';
 import { isStripePayoutLocallyReady } from '@/lib/payouts';
+import { refreshStripeConnectStatus } from '@/lib/stripe-connect';
 import { useAuthStore } from '@/stores/auth.store';
 import type { GeneralContractor } from '@/types/database.types';
 import { nextGeneralContractorOnboardingRoute } from '@/lib/general-contractor';
@@ -44,9 +45,7 @@ export default function GeneralContractorProfile() {
 
     try {
       setErrorMessage(null);
-      await supabase.functions.invoke('refresh-connect-status', {
-        body: { role: 'general_contractor' },
-      });
+      await refreshStripeConnectStatus('general_contractor');
       const { data: profile, error } = await supabase
         .from('general_contractors')
         .select('*')

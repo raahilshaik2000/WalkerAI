@@ -77,8 +77,8 @@ describe('supplier catalog helpers', () => {
     expect(editCatalog).not.toContain("Alert.alert('Error', error.message)");
 
     expect(earnings).toContain("import { formatAppSafeErrorMessage, formatSupabaseFunctionError } from '@/lib/supabase/functions';");
-    expect(earnings).toContain("supabase.functions.invoke('refresh-connect-status'");
-    expect(earnings).toContain("body: { role: 'supplier' }");
+    expect(earnings).toContain("import { refreshStripeConnectStatus } from '@/lib/stripe-connect';");
+    expect(earnings).toContain("await refreshStripeConnectStatus('supplier');");
     expect(earnings).toContain("setErrorMessage(formatAppSafeErrorMessage(supplierError, 'Could not load earnings.'))");
     expect(earnings).toContain("setErrorMessage(formatAppSafeErrorMessage(error, 'Could not load earnings.'))");
     expect(earnings).toContain("Alert.alert('Could not start payout setup', error ? await formatSupabaseFunctionError(error, 'Please try again.') : 'Please try again.')");
