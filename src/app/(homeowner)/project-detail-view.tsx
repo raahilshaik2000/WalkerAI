@@ -364,7 +364,7 @@ export default function ProjectDetailViewScreen() {
         }),
       });
     } catch (err) {
-      Alert.alert('Share failed', err instanceof Error ? err.message : 'Could not open the share sheet.');
+      Alert.alert('Share failed', formatAppSafeErrorMessage(err, 'Could not open the share sheet.'));
     }
   };
 

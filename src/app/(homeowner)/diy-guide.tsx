@@ -11,6 +11,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { useNavigation, useRoute } from '@react-navigation/native';
 import Ionicons from 'react-native-vector-icons/Ionicons';
 import { supabase } from '@/lib/supabase/client';
+import { formatAppSafeErrorMessage } from '@/lib/supabase/functions';
 import { useDIYWizardStore } from '@/stores/diy-wizard.store';
 import { GradientBackground } from '@/components/ui';
 import { Colors, Radius, Spacing } from '@/constants/theme';
@@ -53,8 +54,8 @@ export default function DIYGuideScreen() {
         store.reset();
         navigation.navigate('HomeownerTabs', { screen: 'Projects' });
       }, 600);
-    } catch (err: any) {
-      Alert.alert('Error', err?.message ?? 'Failed to save guide.');
+    } catch (err) {
+      Alert.alert('Error', formatAppSafeErrorMessage(err, 'Failed to save guide.'));
       setSaving(false);
     }
   };
@@ -78,8 +79,8 @@ export default function DIYGuideScreen() {
               if (error) throw error;
               store.reset();
               navigation.navigate('HomeownerTabs', { screen: 'Projects' });
-            } catch (err: any) {
-              Alert.alert('Error', err?.message ?? 'Failed to convert project.');
+            } catch (err) {
+              Alert.alert('Error', formatAppSafeErrorMessage(err, 'Failed to convert project.'));
             } finally {
               setConverting(false);
             }

@@ -12,6 +12,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { useNavigation } from '@react-navigation/native';
 import Ionicons from 'react-native-vector-icons/Ionicons';
 import { supabase } from '@/lib/supabase/client';
+import { formatAppSafeErrorMessage } from '@/lib/supabase/functions';
 import {
   isProjectVoiceAvailable,
   listenForProjectAnswer,
@@ -67,7 +68,7 @@ export default function AddressStep() {
       setVoiceQueryKey((current) => current + 1);
       setAddressResult(null);
     } catch (err) {
-      Alert.alert('Voice address failed', err instanceof Error ? err.message : 'Please try again or type your address manually.');
+      Alert.alert('Voice address failed', formatAppSafeErrorMessage(err, 'Please try again or type your address manually.'));
     } finally {
       setVoiceBusy(false);
       await stopProjectVoice();
@@ -125,9 +126,8 @@ export default function AddressStep() {
       );
       useProjectWizardStore.getState().setStep(7);
       navigation.navigate('Brief');
-    } catch (err: any) {
-      const msg = err?.message || err?.details || err?.hint || 'Something went wrong. Please try again.';
-      Alert.alert('Error', msg);
+    } catch (err) {
+      Alert.alert('Error', formatAppSafeErrorMessage(err, 'Could not save the project address. Please try again.'));
     } finally {
       setLoading(false);
     }

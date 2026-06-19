@@ -20,3 +20,18 @@ describe('DIY guide photo persistence', () => {
     expect(source).not.toContain(".then(({ error }) =>");
   });
 });
+
+describe('DIY guide error handling', () => {
+  it('uses app-safe copy when saving or converting a DIY guide fails', () => {
+    const source = fs.readFileSync(
+      path.join(__dirname, '../src/app/(homeowner)/diy-guide.tsx'),
+      'utf8',
+    );
+
+    expect(source).toContain("import { formatAppSafeErrorMessage } from '@/lib/supabase/functions';");
+    expect(source).toContain("Alert.alert('Error', formatAppSafeErrorMessage(err, 'Failed to save guide.'))");
+    expect(source).toContain("Alert.alert('Error', formatAppSafeErrorMessage(err, 'Failed to convert project.'))");
+    expect(source).not.toContain("Alert.alert('Error', err?.message ?? 'Failed to save guide.')");
+    expect(source).not.toContain("Alert.alert('Error', err?.message ?? 'Failed to convert project.')");
+  });
+});

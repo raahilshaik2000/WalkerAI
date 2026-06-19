@@ -10,6 +10,7 @@ import { useProfileStore } from '@/stores/profile.store';
 import { useAuthStore } from '@/stores/auth.store';
 import { signOut } from '@/lib/supabase/auth';
 import { supabase } from '@/lib/supabase/client';
+import { formatAppSafeErrorMessage } from '@/lib/supabase/functions';
 
 type LocalPreferenceKey =
   | 'pushEnabled'
@@ -64,7 +65,7 @@ export default function HomeownerSettings() {
       if (prefsResult.error) {
         const message = prefsResult.error.message?.toLowerCase() ?? '';
         if (!message.includes('notification_preferences')) {
-          setPreferenceError(prefsResult.error.message);
+          setPreferenceError(formatAppSafeErrorMessage(prefsResult.error, 'Could not load notification preferences.'));
         }
         return;
       }
@@ -92,7 +93,7 @@ export default function HomeownerSettings() {
         .from('device_tokens')
         .update({ is_active: value, last_seen_at: new Date().toISOString() })
         .eq('user_id', user.id);
-      if (error) setPreferenceError(error.message);
+      if (error) setPreferenceError(formatAppSafeErrorMessage(error, 'Could not sync notification preferences.'));
       else setPreferenceError(null);
       return;
     }
@@ -108,7 +109,7 @@ export default function HomeownerSettings() {
         updated_at: new Date().toISOString(),
       }, { onConflict: 'user_id' });
 
-    if (error) setPreferenceError(error.message);
+    if (error) setPreferenceError(formatAppSafeErrorMessage(error, 'Could not sync notification preferences.'));
     else setPreferenceError(null);
   };
 
@@ -153,7 +154,7 @@ export default function HomeownerSettings() {
                     } catch (err) {
                       Alert.alert(
                         'Request not saved',
-                        err instanceof Error ? err.message : 'Could not request account deletion. Please try again.'
+                        formatAppSafeErrorMessage(err, 'Could not request account deletion. Please try again.')
                       );
                     }
                   },
@@ -186,7 +187,7 @@ export default function HomeownerSettings() {
           } catch (err) {
             Alert.alert(
               'Request not saved',
-              err instanceof Error ? err.message : 'Could not request a data export. Please try again.'
+              formatAppSafeErrorMessage(err, 'Could not request a data export. Please try again.')
             );
           }
         },
@@ -234,7 +235,7 @@ export default function HomeownerSettings() {
           <GlassCard padding={0}>
             <LinkRow icon="lock-closed-outline" iconColor="#EF4444" label="Change Password" onPress={async () => {
               const { error } = await supabase.auth.resetPasswordForEmail(email);
-              if (error) Alert.alert('Error', error.message);
+              if (error) Alert.alert('Error', formatAppSafeErrorMessage(error, 'Could not send password reset email.'));
               else Alert.alert('Password Reset', `A reset link has been sent to ${email}. Check your inbox.`);
             }} />
             <Divider />

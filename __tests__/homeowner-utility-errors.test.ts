@@ -30,4 +30,19 @@ describe('homeowner utility screens', () => {
     expect(search).toContain("setErrorMessage(formatAppSafeErrorMessage(error, 'Could not load projects.'))");
     expect(search).not.toContain('setErrorMessage(error.message)');
   });
+
+  it('uses app-safe copy for homeowner settings failures', () => {
+    const settings = fs.readFileSync(path.join(__dirname, '../src/app/(homeowner)/settings.tsx'), 'utf8');
+
+    expect(settings).toContain("import { formatAppSafeErrorMessage } from '@/lib/supabase/functions';");
+    expect(settings).toContain("setPreferenceError(formatAppSafeErrorMessage(prefsResult.error, 'Could not load notification preferences.'))");
+    expect(settings).toContain("setPreferenceError(formatAppSafeErrorMessage(error, 'Could not sync notification preferences.'))");
+    expect(settings).toContain("Alert.alert('Error', formatAppSafeErrorMessage(error, 'Could not send password reset email.'))");
+    expect(settings).toContain("formatAppSafeErrorMessage(err, 'Could not request account deletion. Please try again.')");
+    expect(settings).toContain("formatAppSafeErrorMessage(err, 'Could not request a data export. Please try again.')");
+    expect(settings).not.toContain('setPreferenceError(error.message)');
+    expect(settings).not.toContain("if (error) Alert.alert('Error', error.message)");
+    expect(settings).not.toContain("err instanceof Error ? err.message : 'Could not request account deletion. Please try again.'");
+    expect(settings).not.toContain("err instanceof Error ? err.message : 'Could not request a data export. Please try again.'");
+  });
 });

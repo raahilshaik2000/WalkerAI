@@ -10,6 +10,7 @@ import { useNavigation } from '@react-navigation/native';
 import Ionicons from 'react-native-vector-icons/Ionicons';
 import ReactNativeHapticFeedback from 'react-native-haptic-feedback';
 import { restartProjectDispatch } from '@/lib/project-dispatch';
+import { formatAppSafeErrorMessage } from '@/lib/supabase/functions';
 import { useProjectWizardStore } from '@/stores/project-wizard.store';
 import { Colors, Spacing, Typography } from '@/constants/theme';
 import { GlassButton, GlassCard, GradientBackground } from '@/components/ui';
@@ -43,7 +44,7 @@ export default function ConfirmStep() {
       reset();
       navigation.reset({ index: 0, routes: [{ name: 'HomeownerTabs' }] });
     } catch (err) {
-      Alert.alert('Dispatch failed', err instanceof Error ? err.message : 'Please try again.');
+      Alert.alert('Dispatch failed', formatAppSafeErrorMessage(err, 'Could not send this project to contractors. Please try again.'));
     } finally {
       setLoading(false);
     }

@@ -70,4 +70,26 @@ describe('project creation flow guards', () => {
     expect(addressSource).toContain('Voice unavailable on this device');
     expect(addressSource).toContain('Type your address and select a suggested match.');
   });
+
+  it('uses app-safe copy for voice address, address save, and dispatch failures', () => {
+    const addressSource = fs.readFileSync(
+      path.join(__dirname, '../src/app/(homeowner)/project/create/address.tsx'),
+      'utf8',
+    );
+    const confirmSource = fs.readFileSync(
+      path.join(__dirname, '../src/app/(homeowner)/project/create/confirm.tsx'),
+      'utf8',
+    );
+
+    expect(addressSource).toContain("import { formatAppSafeErrorMessage } from '@/lib/supabase/functions';");
+    expect(addressSource).toContain("Alert.alert('Voice address failed', formatAppSafeErrorMessage(err, 'Please try again or type your address manually.'))");
+    expect(addressSource).toContain("Alert.alert('Error', formatAppSafeErrorMessage(err, 'Could not save the project address. Please try again.'))");
+    expect(addressSource).not.toContain("Alert.alert('Voice address failed', err instanceof Error ? err.message : 'Please try again or type your address manually.')");
+    expect(addressSource).not.toContain("Alert.alert('Error', msg)");
+    expect(addressSource).not.toContain('err?.details || err?.hint');
+
+    expect(confirmSource).toContain("import { formatAppSafeErrorMessage } from '@/lib/supabase/functions';");
+    expect(confirmSource).toContain("Alert.alert('Dispatch failed', formatAppSafeErrorMessage(err, 'Could not send this project to contractors. Please try again.'))");
+    expect(confirmSource).not.toContain("Alert.alert('Dispatch failed', err instanceof Error ? err.message : 'Please try again.')");
+  });
 });
