@@ -1,4 +1,5 @@
 import { canUseRoomScanMeasurements, getRoomScanMeasurementBlocker } from '../src/lib/room-scan';
+import { distancePointToSegment, findNearestWallSegment } from '../src/lib/room-scan/floorPlanGeometry';
 import { normalizeFloorPlan } from '../src/lib/room-scan/normalizeFloorPlan';
 
 declare const require: (moduleName: string) => any;
@@ -53,5 +54,16 @@ describe('room scan measurement helpers', () => {
     expect(top?.x1).toBeCloseTo(0);
     expect(top?.x2).toBeCloseTo(4);
     expect(top?.length).toBeCloseTo(4);
+  });
+
+  it('attaches 2D door and window openings to the nearest wall line, not the nearest midpoint', () => {
+    const topWall = { id: 'top', x1: 0, y1: 0, x2: 10, y2: 0 };
+    const leftWall = { id: 'left', x1: 0, y1: 0, x2: 0, y2: 3 };
+
+    expect(distancePointToSegment({ x: 1, y: 0 }, topWall)).toBeCloseTo(0);
+    expect(findNearestWallSegment(
+      { center: { x: 1, z: 0 } },
+      [topWall, leftWall],
+    )?.id).toBe('top');
   });
 });

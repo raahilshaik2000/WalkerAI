@@ -1077,3 +1077,17 @@ Latest validation after company quote-builder stale draft hardening:
 - `npx tsc --noEmit`
 - `npm test -- --runInBand`
 - `git diff --check`
+
+Latest update after 2D room model opening attachment hardening:
+
+- Fixed the 2D floor-plan renderer so doors and windows attach to the nearest wall segment by perpendicular distance to the wall line, not by distance to the wall midpoint.
+- This prevents openings near the end of a long wall from snapping to a shorter perpendicular wall whose midpoint happens to be closer.
+- Added reusable room-scan geometry helpers in `src/lib/room-scan/floorPlanGeometry.ts`.
+- Added regression assertions in `__tests__/room-scan.test.ts`.
+
+Latest validation after 2D room model opening attachment hardening:
+
+- `npm test -- --runInBand __tests__/room-scan.test.ts`
+- `npx tsc --noEmit`
+- `npm test -- --runInBand`
+- `git diff --check`

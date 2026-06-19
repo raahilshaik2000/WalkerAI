@@ -9,6 +9,7 @@ import Svg, {
   Polygon,
 } from 'react-native-svg';
 import { normalizeFloorPlan, type NormalizedSegment } from '@/lib/room-scan/normalizeFloorPlan';
+import { findNearestWallSegment } from '@/lib/room-scan/floorPlanGeometry';
 
 interface WallData {
   id: string;
@@ -168,7 +169,7 @@ export function FloorPlanView({ walls, doors, windows, size }: FloorPlanViewProp
 
         {/* Doors — gap in wall + swing arc */}
         {doors.map((door) => {
-          const seg = findNearestWall(door, segments);
+          const seg = findNearestWallSegment(door, segments);
           if (!seg) return null;
           const dw = door.width;
           const cx = door.center.x;
@@ -231,7 +232,7 @@ export function FloorPlanView({ walls, doors, windows, size }: FloorPlanViewProp
 
         {/* Windows — three parallel lines */}
         {windows.map((win) => {
-          const seg = findNearestWall(win, segments);
+          const seg = findNearestWallSegment(win, segments);
           if (!seg) return null;
           const ww = win.width;
           const cx = win.center.x;
@@ -441,22 +442,6 @@ function GridPattern({ bounds, scale }: { bounds: any; scale: number }) {
     );
   }
   return <G>{lines}</G>;
-}
-
-// Find nearest wall segment to a door/window
-function findNearestWall(item: { center: { x: number; z: number } }, segments: WallSegment[]): WallSegment | null {
-  let best: WallSegment | null = null;
-  let bestDist = Infinity;
-  for (const seg of segments) {
-    const midX = (seg.x1 + seg.x2) / 2;
-    const midY = (seg.y1 + seg.y2) / 2;
-    const dist = Math.hypot(item.center.x - midX, item.center.z - midY);
-    if (dist < bestDist) {
-      bestDist = dist;
-      best = seg;
-    }
-  }
-  return best;
 }
 
 const styles = StyleSheet.create({
