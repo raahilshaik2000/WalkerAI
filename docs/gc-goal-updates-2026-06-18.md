@@ -472,6 +472,7 @@ Runtime fixes made from this pass:
 - Company/trade job feed plus business, license, and insurance onboarding now use app-safe copy for load/save/verification submission failures across the verified trade setup and accepted-job entry path.
 - Supplier catalog, catalog item creation, earnings, and profile screens now use app-safe copy for supplier profile, catalog, stock toggle, payout setup, and earnings load/save failures across the material-sourcing account workflow.
 - Supplier business, license, and category onboarding plus catalog-item editing/deletion now use app-safe copy for profile load, setup save, catalog item load, save, and delete failures.
+- Homeowner/company warranty screens and the company-to-homeowner review screen now use app-safe copy for closeout warranty load/upload and review load/submit failures.
 
 Runtime findings still not treated as complete:
 
@@ -546,6 +547,13 @@ Latest validation after supplier runtime error-copy hardening:
 Latest validation after supplier onboarding/catalog-detail error-copy hardening:
 
 - `npm test -- --runInBand __tests__/supplier-onboarding.test.ts __tests__/supplier-catalog.test.ts __tests__/material-orders.test.ts`
+- `npx tsc --noEmit`
+- `npm test -- --runInBand`
+- `git diff --check`
+
+Latest validation after closeout warranty/review error-copy hardening:
+
+- `npm test -- --runInBand __tests__/warranty-upload.test.ts __tests__/project-review.test.ts __tests__/general-contractor.test.ts`
 - `npx tsc --noEmit`
 - `npm test -- --runInBand`
 - `git diff --check`

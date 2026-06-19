@@ -13,6 +13,7 @@ import { useNavigation, useRoute } from '@react-navigation/native';
 import Ionicons from 'react-native-vector-icons/Ionicons';
 import ReactNativeHapticFeedback from 'react-native-haptic-feedback';
 import { supabase } from '@/lib/supabase/client';
+import { formatAppSafeErrorMessage } from '@/lib/supabase/functions';
 import { getRequiredStringParam } from '@/lib/navigation-params';
 import { useAuthStore } from '@/stores/auth.store';
 import { Colors, Radius, Spacing, Typography } from '@/constants/theme';
@@ -98,7 +99,7 @@ export default function CompanyHomeownerReviewScreen() {
     }
 
     if (projectResult.error) {
-      Alert.alert('Error', projectResult.error.message);
+      Alert.alert('Could not load review', formatAppSafeErrorMessage(projectResult.error, 'Please try again.'));
       setLoading(false);
       return;
     }
@@ -127,7 +128,7 @@ export default function CompanyHomeownerReviewScreen() {
       .maybeSingle();
 
     if (existingResult.error) {
-      Alert.alert('Error', existingResult.error.message);
+      Alert.alert('Could not load review', formatAppSafeErrorMessage(existingResult.error, 'Please try again.'));
     } else {
       setExistingReviewId(existingResult.data?.id ?? null);
     }
@@ -194,7 +195,7 @@ export default function CompanyHomeownerReviewScreen() {
         { text: 'Done', onPress: () => navigation.goBack() },
       ]);
     } catch (err) {
-      Alert.alert('Error', err instanceof Error ? err.message : 'Failed to submit review.');
+      Alert.alert('Could not submit review', formatAppSafeErrorMessage(err, 'Please try again.'));
     } finally {
       setSubmitting(false);
     }

@@ -79,4 +79,19 @@ describe('project review closeout screens', () => {
     expect(source).not.toContain('setErrorMessage(error.message)');
     expect(source).not.toContain('setErrorMessage(companiesError.message)');
   });
+
+  it('uses app-safe copy for company homeowner review failures', () => {
+    const source = fs.readFileSync(
+      path.join(__dirname, '../src/app/(company)/job/[id]/review.tsx'),
+      'utf8',
+    );
+
+    expect(source).toContain("import { formatAppSafeErrorMessage } from '@/lib/supabase/functions';");
+    expect(source).toContain("Alert.alert('Could not load review', formatAppSafeErrorMessage(projectResult.error, 'Please try again.'))");
+    expect(source).toContain("Alert.alert('Could not load review', formatAppSafeErrorMessage(existingResult.error, 'Please try again.'))");
+    expect(source).toContain("Alert.alert('Could not submit review', formatAppSafeErrorMessage(err, 'Please try again.'))");
+    expect(source).not.toContain("Alert.alert('Error', projectResult.error.message)");
+    expect(source).not.toContain("Alert.alert('Error', existingResult.error.message)");
+    expect(source).not.toContain("Alert.alert('Error', err instanceof Error ? err.message : 'Failed to submit review.')");
+  });
 });

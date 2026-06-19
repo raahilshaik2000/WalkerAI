@@ -15,6 +15,7 @@ import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
 import Ionicons from 'react-native-vector-icons/Ionicons';
 import { supabase } from '@/lib/supabase/client';
 import { documentKindFromPath } from '@/lib/document-preview';
+import { formatAppSafeErrorMessage } from '@/lib/supabase/functions';
 import { getSignedUrl } from '@/lib/supabase/storage';
 import { Colors, Radius, Spacing, Typography } from '@/constants/theme';
 import { getRequiredStringParam } from '@/lib/navigation-params';
@@ -72,7 +73,7 @@ export default function ProjectWarrantiesScreen() {
     if (error) {
       setWarranties([]);
       setPreviewUrls({});
-      setErrorMessage(error.message);
+      setErrorMessage(formatAppSafeErrorMessage(error, 'Could not load warranties.'));
       setLoading(false);
       return;
     }

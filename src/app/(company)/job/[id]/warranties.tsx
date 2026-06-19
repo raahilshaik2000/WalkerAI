@@ -19,6 +19,7 @@ import ReactNativeHapticFeedback from 'react-native-haptic-feedback';
 import { supabase } from '@/lib/supabase/client';
 import { documentKindFromPath } from '@/lib/document-preview';
 import { normalizeOptionalIsoDate } from '@/lib/dates';
+import { formatAppSafeErrorMessage } from '@/lib/supabase/functions';
 import { getSignedUrl, getUploadMetadata, uploadFile } from '@/lib/supabase/storage';
 import { Colors, Radius, Spacing, Typography } from '@/constants/theme';
 import { getRequiredStringParam } from '@/lib/navigation-params';
@@ -73,7 +74,7 @@ export default function CompanyWarrantiesScreen() {
     if (error) {
       setWarranties([]);
       setPreviewUrls({});
-      setErrorMessage(error.message);
+      setErrorMessage(formatAppSafeErrorMessage(error, 'Could not load warranties.'));
       setLoading(false);
       return;
     }
@@ -156,7 +157,7 @@ export default function CompanyWarrantiesScreen() {
       setExpiryDate('');
       await fetchWarranties();
     } catch (err) {
-      Alert.alert('Upload failed', err instanceof Error ? err.message : 'Please try again.');
+      Alert.alert('Upload failed', formatAppSafeErrorMessage(err, 'Please try again.'));
     } finally {
       setUploading(false);
     }
