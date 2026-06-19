@@ -13,6 +13,7 @@ import { AnimatedPressable, GradientBackground } from '@/components/ui';
 import { Colors, Radius } from '@/constants/theme';
 import { formatGcProjectType } from '@/lib/gc-project-type';
 import { supabase } from '@/lib/supabase/client';
+import { formatAppSafeErrorMessage } from '@/lib/supabase/functions';
 import { useAuthStore } from '@/stores/auth.store';
 
 interface Project {
@@ -43,7 +44,7 @@ export default function SearchScreen() {
       .then(({ data, error }) => {
         if (error) {
           setProjects([]);
-          setErrorMessage(error.message);
+          setErrorMessage(formatAppSafeErrorMessage(error, 'Could not load projects.'));
           return;
         }
         setProjects((data as Project[]) ?? []);

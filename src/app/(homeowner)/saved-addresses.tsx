@@ -7,6 +7,7 @@ import { AnimatedPressable, GlassButton, GlassCard, GradientBackground } from '@
 import { Colors } from '@/constants/theme';
 import { formatGcProjectType } from '@/lib/gc-project-type';
 import { supabase } from '@/lib/supabase/client';
+import { formatAppSafeErrorMessage } from '@/lib/supabase/functions';
 import { useAuthStore } from '@/stores/auth.store';
 
 interface ProjectAddressRow {
@@ -63,7 +64,7 @@ export default function SavedAddressesScreen() {
 
     if (error) {
       setProjects([]);
-      setErrorMessage(error.message);
+      setErrorMessage(formatAppSafeErrorMessage(error, 'Could not load addresses.'));
     } else {
       setProjects((data as ProjectAddressRow[]) ?? []);
     }

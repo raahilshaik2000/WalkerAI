@@ -19,6 +19,7 @@ import { Colors } from '@/constants/theme';
 import { useProfileStore } from '@/stores/profile.store';
 import { useAuthStore } from '@/stores/auth.store';
 import { supabase } from '@/lib/supabase/client';
+import { formatAppSafeErrorMessage } from '@/lib/supabase/functions';
 import { getUploadMetadata, uploadFile, type StorageUploadAsset } from '@/lib/supabase/storage';
 
 export default function EditProfileScreen() {
@@ -53,7 +54,7 @@ export default function EditProfileScreen() {
       updateProfile({ [field]: value });
       showSaved(field);
     } catch (err) {
-      Alert.alert('Save failed', err instanceof Error ? err.message : 'Could not save profile changes.');
+      Alert.alert('Save failed', formatAppSafeErrorMessage(err, 'Could not save profile changes.'));
     }
   };
 
@@ -88,7 +89,7 @@ export default function EditProfileScreen() {
       updateProfile(nextAddress);
       showSaved('address');
     } catch (err) {
-      Alert.alert('Save failed', err instanceof Error ? err.message : 'Could not save profile address.');
+      Alert.alert('Save failed', formatAppSafeErrorMessage(err, 'Could not save profile address.'));
     }
   };
 
@@ -107,7 +108,7 @@ export default function EditProfileScreen() {
       setAvatar(null);
       ReactNativeHapticFeedback.trigger('impactLight');
     } catch (err) {
-      Alert.alert('Remove failed', err instanceof Error ? err.message : 'Could not remove profile photo.');
+      Alert.alert('Remove failed', formatAppSafeErrorMessage(err, 'Could not remove profile photo.'));
     }
   };
 
@@ -149,8 +150,8 @@ export default function EditProfileScreen() {
       }
       setAvatar(publicUrl);
       ReactNativeHapticFeedback.trigger('impactMedium');
-    } catch (err: any) {
-      Alert.alert('Upload failed', err?.message ?? 'Could not upload photo.');
+    } catch (err) {
+      Alert.alert('Upload failed', formatAppSafeErrorMessage(err, 'Could not upload photo.'));
     }
   };
 
