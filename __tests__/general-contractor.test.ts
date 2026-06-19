@@ -1381,6 +1381,10 @@ describe('general contractor account type', () => {
       'utf8',
     );
 
+    expect(dashboard).toContain('const clearDashboardState = useCallback(() => {');
+    expect(dashboard).toContain("setErrorMessage('You need to be signed in to view GC projects.');\n      clearDashboardState();");
+    expect(dashboard).toContain("setErrorMessage(formatAppSafeErrorMessage(err, 'Could not load GC dashboard.'));\n      clearDashboardState();");
+    expect(dashboard).toContain('}, [clearDashboardState, user]);');
     expect(dashboard).toContain('if (!loading && errorMessage)');
     expect(dashboard).toContain('Could not load GC desk');
     expect(dashboard).toContain('<Text style={styles.pendingSubtitle}>{errorMessage}</Text>');

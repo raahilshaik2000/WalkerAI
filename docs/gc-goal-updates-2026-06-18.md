@@ -1146,3 +1146,16 @@ Latest validation after GC trade-management stale-state hardening:
 - `npx tsc --noEmit`
 - `npm test -- --runInBand`
 - `git diff --check`
+
+Latest update after GC dashboard stale-state hardening:
+
+- Hardened the GC dashboard so signed-out auth context or dashboard load failures clear the cached GC profile, managed-project cards, and pending-approval metric before showing the error state.
+- This prevents one GC account's dashboard data from remaining in memory if the app loses or switches the active account.
+- Added regression assertions in `__tests__/general-contractor.test.ts`.
+
+Latest validation after GC dashboard stale-state hardening:
+
+- `npm test -- --runInBand __tests__/general-contractor.test.ts`
+- `npx tsc --noEmit`
+- `npm test -- --runInBand`
+- `git diff --check`
