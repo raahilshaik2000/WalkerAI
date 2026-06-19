@@ -4,6 +4,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { useNavigation, useFocusEffect } from '@react-navigation/native';
 import Ionicons from 'react-native-vector-icons/Ionicons';
 import { supabase } from '@/lib/supabase/client';
+import { formatAppSafeErrorMessage } from '@/lib/supabase/functions';
 import { useAuthStore } from '@/stores/auth.store';
 import { Colors, Radius, Spacing, Typography } from '@/constants/theme';
 import { GradientBackground } from '@/components/ui';
@@ -42,7 +43,7 @@ export default function SupplierCatalog() {
       setItems([]);
       setHasSupplierProfile(false);
       setSetupRoute(null);
-      setErrorMessage(supplierError.message);
+      setErrorMessage(formatAppSafeErrorMessage(supplierError, 'Could not load catalog.'));
       setLoading(false);
       return;
     }
@@ -63,7 +64,7 @@ export default function SupplierCatalog() {
       .order('created_at', { ascending: false });
     if (error) {
       setItems([]);
-      setErrorMessage(error.message);
+      setErrorMessage(formatAppSafeErrorMessage(error, 'Could not load catalog.'));
       setLoading(false);
       return;
     }
@@ -90,7 +91,7 @@ export default function SupplierCatalog() {
       .maybeSingle();
     if (error) {
       setItems((prev) => prev.map((i) => i.id === item.id ? { ...i, in_stock: item.in_stock } : i));
-      Alert.alert('Could not update stock', error.message);
+      Alert.alert('Could not update stock', formatAppSafeErrorMessage(error, 'Please try again.'));
     } else if (!data) {
       setItems((prev) => prev.map((i) => i.id === item.id ? { ...i, in_stock: item.in_stock } : i));
       Alert.alert('Could not update stock', 'This catalog item is no longer available.');

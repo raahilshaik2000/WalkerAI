@@ -4,6 +4,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { useNavigation } from '@react-navigation/native';
 import Ionicons from 'react-native-vector-icons/Ionicons';
 import { supabase } from '@/lib/supabase/client';
+import { formatAppSafeErrorMessage } from '@/lib/supabase/functions';
 import { useAuthStore } from '@/stores/auth.store';
 import { Colors, Spacing, Typography } from '@/constants/theme';
 import { GlassButton, GlassCard, GlassInput, GradientBackground } from '@/components/ui';
@@ -58,7 +59,7 @@ export default function AddCatalogItem() {
 
       if (!mounted) return;
       if (error) {
-        Alert.alert('Could not load supplier profile', error.message);
+        Alert.alert('Could not load supplier profile', formatAppSafeErrorMessage(error, 'Please try again.'));
         navigation.goBack();
         return;
       }
@@ -119,7 +120,7 @@ export default function AddCatalogItem() {
       if (!inserted) throw new Error('Catalog item was not saved.');
       navigation.goBack();
     } catch (err) {
-      Alert.alert('Error', err instanceof Error ? err.message : 'Failed to save.');
+      Alert.alert('Could not save catalog item', formatAppSafeErrorMessage(err, 'Please try again.'));
     } finally {
       setLoading(false);
     }

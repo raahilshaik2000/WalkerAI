@@ -4,7 +4,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { useFocusEffect, useNavigation } from '@react-navigation/native';
 import Ionicons from 'react-native-vector-icons/Ionicons';
 import { supabase } from '@/lib/supabase/client';
-import { formatSupabaseFunctionError } from '@/lib/supabase/functions';
+import { formatAppSafeErrorMessage, formatSupabaseFunctionError } from '@/lib/supabase/functions';
 import { joinedMaterialItemName } from '@/lib/material-orders';
 import { isStripePayoutLocallyReady } from '@/lib/payouts';
 import { useAuthStore } from '@/stores/auth.store';
@@ -41,7 +41,7 @@ export default function SupplierEarnings() {
     if (supplierError) {
       setSupplier(null);
       setOrders([]);
-      setErrorMessage(supplierError.message);
+      setErrorMessage(formatAppSafeErrorMessage(supplierError, 'Could not load earnings.'));
       setLoading(false);
       setRefreshing(false);
       return;
@@ -62,7 +62,7 @@ export default function SupplierEarnings() {
       .order('confirmed_at', { ascending: false });
     if (error) {
       setOrders([]);
-      setErrorMessage(error.message);
+      setErrorMessage(formatAppSafeErrorMessage(error, 'Could not load earnings.'));
       setLoading(false);
       setRefreshing(false);
       return;
@@ -109,7 +109,7 @@ export default function SupplierEarnings() {
       body: { role: 'supplier' },
     });
     if (error || !data?.url) {
-      Alert.alert('Error', error ? await formatSupabaseFunctionError(error) : 'Could not start Stripe onboarding. Please try again.');
+      Alert.alert('Could not start payout setup', error ? await formatSupabaseFunctionError(error, 'Please try again.') : 'Please try again.');
       return;
     }
     Linking.openURL(data.url);
