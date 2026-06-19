@@ -1159,3 +1159,17 @@ Latest validation after GC dashboard stale-state hardening:
 - `npx tsc --noEmit`
 - `npm test -- --runInBand`
 - `git diff --check`
+
+Latest update after GC profile and approvals stale-state hardening:
+
+- Hardened the GC profile screen so signed-out account context or profile load failures clear the cached GC profile, managed count, completed count, and in-flight payout setup state before showing the error.
+- Hardened the GC approvals inbox so signed-out account context, missing GC profiles, incomplete GC setup, or approval load failures clear homeowner approval rows, payment requests, concierge booking requests, booking response draft notes, active booking response state, and concierge eligibility.
+- This prevents one GC account's profile metrics, inbox rows, or concierge response drafts from remaining visible if the app loses or switches account context.
+- Added regression assertions in `__tests__/general-contractor.test.ts`.
+
+Latest validation after GC profile and approvals stale-state hardening:
+
+- `npm test -- --runInBand __tests__/general-contractor.test.ts`
+- `npx tsc --noEmit`
+- `npm test -- --runInBand`
+- `git diff --check`

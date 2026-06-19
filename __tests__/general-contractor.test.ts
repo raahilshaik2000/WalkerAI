@@ -158,6 +158,19 @@ describe('general contractor account type', () => {
     expect(businessOnboarding).toContain("navigation.navigate('GeneralContractorTabs', { screen: 'GeneralContractorProfile' })");
   });
 
+  it('clears stale GC profile state when account context is unavailable', () => {
+    const gcProfile = fs.readFileSync(
+      path.join(repoRoot, 'src/app/(general-contractor)/profile.tsx'),
+      'utf8',
+    );
+
+    expect(gcProfile).toContain('const clearProfileState = useCallback(() => {');
+    expect(gcProfile).toContain("setErrorMessage('You need to be signed in to view your GC profile.');\n      clearProfileState();");
+    expect(gcProfile).toContain("setErrorMessage(formatAppSafeErrorMessage(err, 'Could not load GC profile.'));\n      clearProfileState();");
+    expect(gcProfile).toContain('setStartingPayoutSetup(false);');
+    expect(gcProfile).toContain('}, [clearProfileState, user]);');
+  });
+
   it('keeps the GC account role out of company trade onboarding defaults', () => {
     const companyBusinessOnboarding = fs.readFileSync(
       path.join(repoRoot, 'src/app/(company)/onboarding/business.tsx'),
@@ -2358,6 +2371,12 @@ describe('general contractor account type', () => {
     expect(migration).toContain('GRANT EXECUTE ON FUNCTION public.respond_to_gc_concierge_booking(UUID, TEXT, TEXT) TO authenticated');
     expect(gcApprovals).toContain("import { isGeneralContractorReadyForProjectControls } from '@/lib/general-contractor';");
     expect(gcApprovals).toContain(".select('id, verified, concierge_enabled, business_name, city, province, lat, lng, license_number, license_doc_url, insurance_doc_url')");
+    expect(gcApprovals).toContain('const clearApprovalsState = useCallback(() => {');
+    expect(gcApprovals).toContain("setErrorMessage('You need to be signed in to view approvals.');\n      setSetupLockMessage(null);\n      clearApprovalsState();");
+    expect(gcApprovals).toContain("setErrorMessage(formatAppSafeErrorMessage(err, 'Could not load approvals.'));\n      clearApprovalsState();");
+    expect(gcApprovals).toContain('setRespondingBookingId(null);');
+    expect(gcApprovals).toContain('setBookingResponseNotes({});');
+    expect(gcApprovals).toContain('}, [clearApprovalsState, user]);');
     expect(gcApprovals).toContain('setCanAcceptConciergeBookings(hasCompleteGcConciergeProfile(gc))');
     expect(gcApprovals).toContain('isGeneralContractorReadyForProjectControls(gc)');
     expect(gcApprovals).toContain('const gcReadyForProjectControls = isGeneralContractorReadyForProjectControls(gc);');

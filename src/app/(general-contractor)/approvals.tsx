@@ -105,11 +105,22 @@ export default function GeneralContractorApprovals() {
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [setupLockMessage, setSetupLockMessage] = useState<string | null>(null);
 
+  const clearApprovalsState = useCallback(() => {
+    setApprovals([]);
+    setRecommendationRequests([]);
+    setPaymentRequests([]);
+    setBookingRequests([]);
+    setCanAcceptConciergeBookings(false);
+    setRespondingBookingId(null);
+    setBookingResponseNotes({});
+  }, []);
+
   const fetchData = useCallback(async () => {
     const currentUser = user ?? (await supabase.auth.getUser()).data.user;
     if (!currentUser) {
       setErrorMessage('You need to be signed in to view approvals.');
       setSetupLockMessage(null);
+      clearApprovalsState();
       setLoading(false);
       setRefreshing(false);
       return;
@@ -125,11 +136,7 @@ export default function GeneralContractorApprovals() {
         .maybeSingle();
       if (profileError) throw profileError;
       if (!gc?.id) {
-        setApprovals([]);
-        setRecommendationRequests([]);
-        setPaymentRequests([]);
-        setBookingRequests([]);
-        setCanAcceptConciergeBookings(false);
+        clearApprovalsState();
         setSetupLockMessage('Create your GC business profile before approvals, payment requests, and concierge bookings can be reviewed.');
         return;
       }
@@ -137,10 +144,7 @@ export default function GeneralContractorApprovals() {
       setCanAcceptConciergeBookings(hasCompleteGcConciergeProfile(gc));
 
       if (!gcReadyForProjectControls) {
-        setApprovals([]);
-        setRecommendationRequests([]);
-        setPaymentRequests([]);
-        setBookingRequests([]);
+        clearApprovalsState();
         setSetupLockMessage('Complete verified GC setup is required before approvals, payment requests, and concierge bookings can be reviewed.');
         return;
       }
@@ -219,17 +223,13 @@ export default function GeneralContractorApprovals() {
       })));
     } catch (err) {
       setErrorMessage(formatAppSafeErrorMessage(err, 'Could not load approvals.'));
-      setApprovals([]);
-      setRecommendationRequests([]);
-      setPaymentRequests([]);
-      setBookingRequests([]);
-      setCanAcceptConciergeBookings(false);
+      clearApprovalsState();
       setSetupLockMessage(null);
     } finally {
       setLoading(false);
       setRefreshing(false);
     }
-  }, [user]);
+  }, [clearApprovalsState, user]);
 
   useFocusEffect(
     useCallback(() => {
