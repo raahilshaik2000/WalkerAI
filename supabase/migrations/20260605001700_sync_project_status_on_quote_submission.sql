@@ -9,10 +9,21 @@ SET search_path = public
 AS $$
 BEGIN
   IF NEW.status = 'pending' THEN
-    UPDATE public.projects
+    UPDATE public.projects project
     SET status = 'quoting'
-    WHERE id = NEW.project_id
-      AND status IN ('dispatching', 'accepted', 'scheduling');
+    WHERE project.id = NEW.project_id
+      AND (
+        project.status IN ('accepted', 'scheduling')
+        OR (
+          project.status = 'dispatching'
+          AND NOT EXISTS (
+            SELECT 1
+            FROM public.project_slots slot
+            WHERE slot.project_id = project.id
+              AND slot.status NOT IN ('filled', 'scheduled')
+          )
+        )
+      );
   END IF;
 
   RETURN NEW;

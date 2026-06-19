@@ -902,3 +902,16 @@ Latest no-code payment and closeout audit:
 - Project completion: verified the GC closeout binder assembles permits, warranties, material receipts, approvals, payment requests, change orders, trade negotiations, quotes, and milestones from project records. Completion is sent as a homeowner approval request with `metadata.action = complete_project`; it does not release escrow funds.
 - Completion database guards: verified final completion still requires active complete verified GC management, an active project with an approved budget, no pending GC payment requests, no pending approval/change-order decisions, no open/unscheduled trade slots, no active permits/material orders, no pending trade negotiations/quotes, and no unpaid milestones before completion can apply.
 - GC-created project note: GC-created projects start as draft homeowner projects. Homeowner confirmation activates the GC assignment; project-level active status still comes from approved budget/trade workflow state, which matches the current closeout guard rather than silently completing a draft project.
+
+Latest update after partial trade quote dispatch fix:
+
+- Found a real multi-trade pricing/acceptance blocker: when the first accepted trade submitted a pending quote, `sync_project_status_on_quote_submission` moved the whole project from `dispatching` to `quoting`. The company accept flow requires the project to remain `dispatching` while other dispatched slots are still open, so remaining trades could be blocked from accepting their portions of the job.
+- Updated the original quote-status sync migration and added corrective migration `20260619001000_keep_partial_trade_projects_dispatching_on_quote.sql`. Pending quotes still move legacy accepted projects and fully filled/scheduling trade projects into `quoting`, but partially filled trade-slot projects stay `dispatching` until every slot is filled or scheduled.
+- Added a regression assertion in `__tests__/supabase-functions.test.ts` so this partial-slot quote path cannot silently regress.
+
+Latest validation after partial trade quote dispatch fix:
+
+- `npm test -- --runInBand __tests__/supabase-functions.test.ts`
+- `npx tsc --noEmit`
+- `npm test -- --runInBand`
+- `git diff --check`

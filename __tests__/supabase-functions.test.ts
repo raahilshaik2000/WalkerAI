@@ -531,13 +531,28 @@ describe('quote submission status sync migration', () => {
 
     expect(source).toContain('CREATE OR REPLACE FUNCTION public.sync_project_status_on_quote_submission()');
     expect(source).toContain("IF NEW.status = 'pending' THEN");
-    expect(source).toContain('UPDATE public.projects');
+    expect(source).toContain('UPDATE public.projects project');
     expect(source).toContain("SET status = 'quoting'");
-    expect(source).toContain("AND status IN ('dispatching', 'accepted', 'scheduling')");
+    expect(source).toContain("project.status IN ('accepted', 'scheduling')");
+    expect(source).toContain("project.status = 'dispatching'");
+    expect(source).toContain('slot.status NOT IN (\'filled\', \'scheduled\')');
     expect(source).toContain('CREATE TRIGGER sync_project_status_on_quote_submission_trigger');
     expect(source).toContain('AFTER INSERT OR UPDATE OF status ON public.quotes');
     expect(source).toContain("WHEN (NEW.status = 'pending')");
     expect(source).toContain('EXECUTE FUNCTION public.sync_project_status_on_quote_submission()');
+  });
+
+  it('keeps partially accepted trade-slot projects dispatching after the first quote', () => {
+    const source = fs.readFileSync(
+      path.join(__dirname, '../supabase/migrations/20260619001000_keep_partial_trade_projects_dispatching_on_quote.sql'),
+      'utf8',
+    );
+
+    expect(source).toContain('CREATE OR REPLACE FUNCTION public.sync_project_status_on_quote_submission()');
+    expect(source).toContain("project.status = 'dispatching'");
+    expect(source).toContain('NOT EXISTS (');
+    expect(source).toContain('FROM public.project_slots slot');
+    expect(source).toContain('slot.status NOT IN (\'filled\', \'scheduled\')');
   });
 
   it('submits company quote packages atomically with server-side ownership checks', () => {
