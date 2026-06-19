@@ -159,6 +159,32 @@ describe('supplier material order payout math', () => {
     expect(activeSource).not.toContain("Alert.alert('Error', err instanceof Error ? err.message : 'Failed to mark order delivered.')");
   });
 
+  it('falls back to the active Supabase session on supplier material order screens', () => {
+    const feedSource = fs.readFileSync(
+      path.join(__dirname, '../src/app/(supplier)/orders/index.tsx'),
+      'utf8',
+    );
+    const detailSource = fs.readFileSync(
+      path.join(__dirname, '../src/app/(supplier)/orders/[id]/index.tsx'),
+      'utf8',
+    );
+    const activeSource = fs.readFileSync(
+      path.join(__dirname, '../src/app/(supplier)/orders/active.tsx'),
+      'utf8',
+    );
+
+    [feedSource, detailSource, activeSource].forEach((source) => {
+      expect(source).toContain("import { getCurrentUser } from '@/lib/supabase/auth';");
+      expect(source).toContain('user?.id ?? (await getCurrentUser())?.id ?? null');
+      expect(source).not.toContain(".eq('user_id', user.id)");
+    });
+    expect(feedSource).toContain("const currentUserId = user?.id ?? (await getCurrentUser())?.id ?? null;");
+    expect(activeSource).toContain('const [hasActiveSession, setHasActiveSession] = useState(false);');
+    expect(activeSource).toContain('setHasActiveSession(true);');
+    expect(activeSource).toContain(') : !hasActiveSession ? (');
+    expect(detailSource).toContain('setCanClaimOpenOrder(false);');
+  });
+
   it('uses explicit material relationship names on company supplier-delivery queries', () => {
     const companyMaterialsSource = fs.readFileSync(
       path.join(__dirname, '../src/app/(company)/job/[id]/materials.tsx'),

@@ -18,6 +18,7 @@ import { formatCadCents } from '@/lib/currency';
 import { formatAppSafeErrorMessage, formatSupabaseFunctionError } from '@/lib/supabase/functions';
 import { joinedMaterialItemName } from '@/lib/material-orders';
 import { isStripePayoutLocallyReady } from '@/lib/payouts';
+import { getCurrentUser } from '@/lib/supabase/auth';
 import { useAuthStore } from '@/stores/auth.store';
 import { Colors, Radius, Spacing, Typography } from '@/constants/theme';
 import { NotificationButton } from '@/components/notifications/NotificationButton';
@@ -83,7 +84,8 @@ export default function SupplierOrderFeed() {
 
   const fetchData = useCallback(async () => {
     try {
-      if (!user) {
+      const currentUserId = user?.id ?? (await getCurrentUser())?.id ?? null;
+      if (!currentUserId) {
         setSupplier(null);
         setOrders([]);
         setErrorMessage('You need to be signed in to view supplier orders.');
@@ -93,7 +95,7 @@ export default function SupplierOrderFeed() {
       const { data: sup, error: supplierError } = await supabase
         .from('suppliers')
         .select('*')
-        .eq('user_id', user.id)
+        .eq('user_id', currentUserId)
         .order('created_at', { ascending: false })
         .limit(1)
         .maybeSingle();
@@ -137,7 +139,7 @@ export default function SupplierOrderFeed() {
     } finally {
       setLoading(false);
     }
-  }, [user]);
+  }, [user?.id]);
 
   useFocusEffect(
     useCallback(() => {

@@ -21,6 +21,7 @@ import { formatCadCents } from '@/lib/currency';
 import { formatAppSafeErrorMessage } from '@/lib/supabase/functions';
 import { joinedMaterialItemName } from '@/lib/material-orders';
 import { getUploadMetadata, uploadFile } from '@/lib/supabase/storage';
+import { getCurrentUser } from '@/lib/supabase/auth';
 import { useAuthStore } from '@/stores/auth.store';
 import { Colors, Radius, Spacing, Typography } from '@/constants/theme';
 import { GlassButton, GradientBackground } from '@/components/ui';
@@ -69,23 +70,27 @@ export default function SupplierActiveOrders() {
   const [updating, setUpdating] = useState<string | null>(null);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [hasSupplierProfile, setHasSupplierProfile] = useState(false);
+  const [hasActiveSession, setHasActiveSession] = useState(false);
   const [supplierId, setSupplierId] = useState<string | null>(null);
 
   const fetchData = useCallback(async () => {
     try {
-      if (!user) {
+      const currentUserId = user?.id ?? (await getCurrentUser())?.id ?? null;
+      if (!currentUserId) {
         setOrders([]);
         setHasSupplierProfile(false);
+        setHasActiveSession(false);
         setSupplierId(null);
         setErrorMessage('You need to be signed in to view supplier orders.');
         return;
       }
 
+      setHasActiveSession(true);
       setErrorMessage(null);
       const { data: sup, error: supplierError } = await supabase
         .from('suppliers')
         .select('*')
-        .eq('user_id', user.id)
+        .eq('user_id', currentUserId)
         .order('created_at', { ascending: false })
         .limit(1)
         .maybeSingle();
@@ -93,6 +98,7 @@ export default function SupplierActiveOrders() {
       if (supplierError) {
         setOrders([]);
         setHasSupplierProfile(false);
+        setHasActiveSession(true);
         setSupplierId(null);
         setErrorMessage(formatAppSafeErrorMessage(supplierError, 'Could not load supplier profile.'));
         return;
@@ -101,6 +107,7 @@ export default function SupplierActiveOrders() {
       if (!sup) {
         setOrders([]);
         setHasSupplierProfile(false);
+        setHasActiveSession(true);
         setSupplierId(null);
         setErrorMessage(null);
         return;
@@ -125,12 +132,13 @@ export default function SupplierActiveOrders() {
     } catch (err) {
       setOrders([]);
       setHasSupplierProfile(false);
+      setHasActiveSession(false);
       setSupplierId(null);
       setErrorMessage(formatAppSafeErrorMessage(err, 'Could not load active supplier orders.'));
     } finally {
       setLoading(false);
     }
-  }, [user]);
+  }, [user?.id]);
 
   useFocusEffect(
     useCallback(() => {
@@ -264,7 +272,7 @@ export default function SupplierActiveOrders() {
               <Text style={styles.retryBtnText}>Try Again</Text>
             </TouchableOpacity>
           </View>
-        ) : !user ? (
+        ) : !hasActiveSession ? (
           <View style={styles.empty}>
             <Ionicons name="person-circle-outline" size={48} color={Colors.text.tertiary} />
             <Text style={styles.emptyTitle}>Sign in required</Text>

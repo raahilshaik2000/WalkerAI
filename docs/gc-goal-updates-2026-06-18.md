@@ -1292,3 +1292,18 @@ Latest validation after company GC quote auth fallback hardening:
 - `npx tsc --noEmit`
 - `npm test -- --runInBand`
 - `git diff --check`
+
+Latest update after supplier material-order auth fallback hardening:
+
+- Hardened the supplier open-order feed, active-order list, and order-detail screen so a stale in-memory auth store no longer hides material orders or shows a false signed-out state when the Supabase session is still valid.
+- Active supplier orders now track the actual session state separately from the auth store so a supplier with a valid session and no profile is sent to setup instead of being told to sign in again.
+- Supplier order detail now clears stale claim eligibility when the order is missing, unavailable, or the supplier profile cannot be loaded.
+- This protects the GC material-sourcing workflow because supplier fulfillment, shipment, delivery proof, and GC material notifications depend on those screens staying reachable after app refresh/navigation.
+- Added regression assertions in `__tests__/material-orders.test.ts`.
+
+Latest validation after supplier material-order auth fallback hardening:
+
+- `npm test -- --runInBand __tests__/material-orders.test.ts`
+- `npx tsc --noEmit`
+- `npm test -- --runInBand`
+- `git diff --check`

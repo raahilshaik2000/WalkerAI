@@ -8,6 +8,7 @@ import { formatAppSafeErrorMessage, formatSupabaseFunctionError } from '@/lib/su
 import { joinedMaterialItemName } from '@/lib/material-orders';
 import { getRequiredStringParam } from '@/lib/navigation-params';
 import { isStripePayoutLocallyReady } from '@/lib/payouts';
+import { getCurrentUser } from '@/lib/supabase/auth';
 import { useAuthStore } from '@/stores/auth.store';
 import { Colors, Spacing, Typography } from '@/constants/theme';
 import { GlassButton, GlassCard, GradientBackground } from '@/components/ui';
@@ -64,20 +65,23 @@ export default function SupplierOrderDetail() {
     try {
       if (!orderId) {
         setOrder(null);
+        setSupplier(null);
+        setCanClaimOpenOrder(false);
         setErrorMessage('Order is missing. Reopen it from the order feed.');
         return;
       }
+      const currentUserId = user?.id ?? (await getCurrentUser())?.id ?? null;
       const [orderResult, supplierResult] = await Promise.all([
         supabase
             .from('material_orders')
             .select('*, material:materials!material_orders_material_id_fkey(*)')
             .eq('id', orderId)
             .maybeSingle(),
-        user?.id
+        currentUserId
           ? supabase
               .from('suppliers')
               .select('*')
-              .eq('user_id', user.id)
+              .eq('user_id', currentUserId)
               .order('created_at', { ascending: false })
               .limit(1)
               .maybeSingle()
@@ -87,14 +91,17 @@ export default function SupplierOrderDetail() {
       if (orderResult.error) {
         setOrder(null);
         setSupplier(null);
+        setCanClaimOpenOrder(false);
         setErrorMessage(formatAppSafeErrorMessage(orderResult.error, 'Could not load material order.'));
       } else if (!orderResult.data) {
         setOrder(null);
         setSupplier(null);
+        setCanClaimOpenOrder(false);
         setErrorMessage('This order may have been claimed, cancelled, or removed.');
       } else if (supplierResult.error) {
         setOrder(orderResult.data as MaterialOrder);
         setSupplier(null);
+        setCanClaimOpenOrder(false);
         setErrorMessage(formatAppSafeErrorMessage(supplierResult.error, 'Could not load supplier profile.'));
       } else {
         const fetchedOrder = orderResult.data as MaterialOrder;
