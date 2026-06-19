@@ -229,6 +229,8 @@ Completed work:
 - GC notifications route to GC project surfaces.
 - Homeowner/company/supplier notification routes stay role-appropriate.
 - Notification payloads can fall back to parsing WalkerAI deep links if structured IDs are missing.
+- Audited APNs/native push tap payloads and confirmed `send-push` forwards canonical `project_id`, `slot_id`, `order_id`, and `deep_link` keys directly through iOS `userInfo`.
+- Cleaned up a stale push client comment that referenced nonexistent `related_*` payload keys and added a regression guard for the actual payload contract.
 
 Changed files:
 

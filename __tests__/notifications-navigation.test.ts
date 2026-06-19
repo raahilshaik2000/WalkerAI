@@ -326,4 +326,22 @@ describe('notification navigation', () => {
       rootNavigator.indexOf('const currentUserId = session?.user?.id ?? null;'),
     );
   });
+
+  it('keeps push tap handling aligned with canonical APNs payload ids', () => {
+    const pushModule = fs.readFileSync(
+      path.join(__dirname, '../src/lib/push/index.ts'),
+      'utf8',
+    );
+    const sendPushFunction = fs.readFileSync(
+      path.join(__dirname, '../supabase/functions/send-push/index.ts'),
+      'utf8',
+    );
+
+    expect(sendPushFunction).toContain('type,');
+    expect(sendPushFunction).toContain('...payload,');
+    expect(pushModule).toContain('canonical project_id/slot_id/order_id keys');
+    expect(pushModule).not.toContain('related_project_id');
+    expect(pushModule).not.toContain('related_slot_id');
+    expect(pushModule).not.toContain('related_order_id');
+  });
 });

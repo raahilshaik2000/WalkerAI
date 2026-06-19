@@ -155,9 +155,9 @@ async function saveDeviceToken(userId: string, token: string): Promise<void> {
 function handleNotificationTap(data: Record<string, unknown>): void {
   const type = typeof data.type === 'string' ? data.type : null;
   if (!type) return;
-  // resolveNotificationRoute expects the raw payload object; the backend
-  // attaches related_project_id/slot_id/etc directly to the notification
-  // userInfo, so we can hand it through unchanged.
+  // resolveNotificationRoute expects the raw notification payload. The
+  // send-push function forwards canonical project_id/slot_id/order_id keys
+  // and deep_link directly in APNs userInfo, so we can hand data through.
   const route = resolveNotificationRoute(type, data, currentRole);
   onDeepLink(route);
 }
