@@ -93,7 +93,11 @@ describe('project creation flow guards', () => {
     expect(confirmSource).not.toContain("Alert.alert('Dispatch failed', err instanceof Error ? err.message : 'Please try again.')");
   });
 
-  it('uses app-safe copy for project creation voice, render, and brief failures', () => {
+  it('uses app-safe copy for project creation analysis, voice, render, and brief failures', () => {
+    const analyzingSource = fs.readFileSync(
+      path.join(__dirname, '../src/app/(homeowner)/project/create/analyzing.tsx'),
+      'utf8',
+    );
     const questionnaireSource = fs.readFileSync(
       path.join(__dirname, '../src/app/(homeowner)/project/create/questionnaire.tsx'),
       'utf8',
@@ -106,6 +110,11 @@ describe('project creation flow guards', () => {
       path.join(__dirname, '../src/app/(homeowner)/project/create/brief.tsx'),
       'utf8',
     );
+
+    expect(analyzingSource).toContain("import { formatAppSafeErrorMessage, formatSupabaseFunctionError } from '@/lib/supabase/functions';");
+    expect(analyzingSource).toContain("setError(formatAppSafeErrorMessage(err, 'Analysis failed. Please try again.'))");
+    expect(analyzingSource).not.toContain('const msg = err?.message || err?.details || JSON.stringify(err);');
+    expect(analyzingSource).not.toContain('setError(msg)');
 
     expect(questionnaireSource).toContain("import { formatAppSafeErrorMessage } from '@/lib/supabase/functions';");
     expect(questionnaireSource).toContain("setVoiceError(formatAppSafeErrorMessage(err, 'Voice answer failed. Try again or answer manually.'))");

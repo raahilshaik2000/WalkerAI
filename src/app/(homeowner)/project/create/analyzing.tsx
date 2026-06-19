@@ -11,7 +11,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { useNavigation } from '@react-navigation/native';
 import Ionicons from 'react-native-vector-icons/Ionicons';
 import { supabase } from '@/lib/supabase/client';
-import { formatSupabaseFunctionError } from '@/lib/supabase/functions';
+import { formatAppSafeErrorMessage, formatSupabaseFunctionError } from '@/lib/supabase/functions';
 import { uploadBase64 } from '@/lib/supabase/storage';
 import {
   buildPhotoAnalysisPayload,
@@ -279,8 +279,7 @@ export default function AnalyzingScreen() {
         useProjectWizardStore.getState().setStep(4);
         navigation.navigate('Questionnaire');
       } catch (err: any) {
-        const msg = err?.message || err?.details || JSON.stringify(err);
-        setError(msg);
+        setError(formatAppSafeErrorMessage(err, 'Analysis failed. Please try again.'));
       }
     };
 
