@@ -13,6 +13,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { useNavigation } from '@react-navigation/native';
 import Ionicons from 'react-native-vector-icons/Ionicons';
 import { supabase } from '@/lib/supabase/client';
+import { formatAppSafeErrorMessage } from '@/lib/supabase/functions';
 import { useAuthStore } from '@/stores/auth.store';
 import { Colors, Spacing, Typography } from '@/constants/theme';
 import { GlassButton, GlassCard, GlassInput, GradientBackground } from '@/components/ui';
@@ -160,7 +161,7 @@ export default function BusinessOnboardingScreen() {
       if (!data) throw new Error('Company profile was not saved.');
       navigation.navigate('LicenseOnboarding');
     } catch (err) {
-      Alert.alert('Error', err instanceof Error ? err.message : 'Failed to save. Please try again.');
+      Alert.alert('Could not save business info', formatAppSafeErrorMessage(err, 'Please try again.'));
     } finally {
       setLoading(false);
     }

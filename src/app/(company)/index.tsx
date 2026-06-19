@@ -17,6 +17,7 @@ import { useAuthStore } from '@/stores/auth.store';
 import { formatCad, formatStatusLabel } from '@/lib/formatters';
 import { formatGcProjectType, gcProjectTypeIcon } from '@/lib/gc-project-type';
 import { isMissingSupabaseSchemaObjectError } from '@/lib/supabase/errors';
+import { formatAppSafeErrorMessage } from '@/lib/supabase/functions';
 import { formatTradeLabel } from '@/lib/trade-labels';
 import { Colors, Radius, Spacing, Typography } from '@/constants/theme';
 import { AnimatedPressable, GradientBackground, ListItemSkeleton, StatusBadge } from '@/components/ui';
@@ -298,7 +299,7 @@ export default function CompanyJobFeed() {
       setJobs(pendingDispatchRows.map(enrichDispatchProject));
       setActiveJobs(Array.from(byKey.values()));
     } catch (err) {
-      setErrorMessage(err instanceof Error ? err.message : 'Could not load jobs.');
+      setErrorMessage(formatAppSafeErrorMessage(err, 'Could not load jobs.'));
       setJobs([]);
       setActiveJobs([]);
     } finally {

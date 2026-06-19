@@ -469,6 +469,7 @@ Runtime fixes made from this pass:
 - Homeowner message list, homeowner project chat, and company job chat now use app-safe copy for message participant, message load, and message-send failures, matching the already-safe GC project chat behavior.
 - Company/trade earnings and profile screens now use app-safe copy for company profile, accepted-project, paid-milestone, and earnings load failures while keeping commission-derived payout math hidden from the app UI.
 - Homeowner and company/trade change-order screens now use app-safe copy for change-order load, submit, sign, approve, and reject failures while preserving the explicit disclaimer that signed cost changes do not automatically alter funded escrow or milestone payments.
+- Company/trade job feed plus business, license, and insurance onboarding now use app-safe copy for load/save/verification submission failures across the verified trade setup and accepted-job entry path.
 
 Runtime findings still not treated as complete:
 
@@ -522,6 +523,13 @@ Latest validation after company earnings/profile error-copy hardening:
 Latest validation after change-order error-copy hardening:
 
 - `npm test -- --runInBand __tests__/change-orders.test.ts __tests__/project-activation.test.ts __tests__/general-contractor.test.ts`
+- `npx tsc --noEmit`
+- `npm test -- --runInBand`
+- `git diff --check`
+
+Latest validation after company entry/onboarding error-copy hardening:
+
+- `npm test -- --runInBand __tests__/company-entry-errors.test.ts __tests__/company-calendar.test.ts __tests__/general-contractor.test.ts`
 - `npx tsc --noEmit`
 - `npm test -- --runInBand`
 - `git diff --check`

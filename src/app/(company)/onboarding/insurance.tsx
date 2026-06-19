@@ -12,6 +12,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { useNavigation } from '@react-navigation/native';
 import { launchImageLibrary } from 'react-native-image-picker';
 import { supabase } from '@/lib/supabase/client';
+import { formatAppSafeErrorMessage } from '@/lib/supabase/functions';
 import { getUploadMetadata, uploadFile } from '@/lib/supabase/storage';
 import { useAuthStore } from '@/stores/auth.store';
 import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
@@ -107,7 +108,7 @@ export default function InsuranceOnboardingScreen() {
       // Navigate to pending verification screen
       navigation.reset({ index: 0, routes: [{ name: 'PendingVerification' }] });
     } catch (err) {
-      Alert.alert('Error', err instanceof Error ? err.message : 'Failed to save. Please try again.');
+      Alert.alert('Could not submit verification', formatAppSafeErrorMessage(err, 'Please try again.'));
     } finally {
       setSubmitting(false);
     }

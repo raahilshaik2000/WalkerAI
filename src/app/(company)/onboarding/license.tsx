@@ -12,6 +12,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { useNavigation } from '@react-navigation/native';
 import { launchImageLibrary } from 'react-native-image-picker';
 import { supabase } from '@/lib/supabase/client';
+import { formatAppSafeErrorMessage } from '@/lib/supabase/functions';
 import { getUploadMetadata, uploadFile, type StorageUploadAsset } from '@/lib/supabase/storage';
 import { useAuthStore } from '@/stores/auth.store';
 import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
@@ -106,7 +107,7 @@ export default function LicenseOnboardingScreen() {
       if (!updateResult.data) throw new Error('Company license was not saved.');
       navigation.navigate('InsuranceOnboarding');
     } catch (err) {
-      Alert.alert('Error', err instanceof Error ? err.message : 'Failed to save. Please try again.');
+      Alert.alert('Could not save license', formatAppSafeErrorMessage(err, 'Please try again.'));
     } finally {
       setLoading(false);
     }
