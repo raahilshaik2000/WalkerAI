@@ -931,3 +931,16 @@ Latest validation after company material verification stale-state hardening:
 - `npx tsc --noEmit`
 - `npm test -- --runInBand`
 - `git diff --check`
+
+Latest update after homeowner closeout review auth hardening:
+
+- Hardened the homeowner review screen used during project closeout. The submit path now verifies a signed-in homeowner before checking duplicate reviews or inserting a review, avoiding a crash from stale/missing auth state.
+- Replaced the generic review submission `Error` alert with a specific `Could not submit review` title.
+- Added regression assertions in `__tests__/project-review.test.ts` to keep `user!.id` out of the review submit path.
+
+Latest validation after homeowner closeout review auth hardening:
+
+- `npm test -- --runInBand __tests__/project-review.test.ts`
+- `npx tsc --noEmit`
+- `npm test -- --runInBand`
+- `git diff --check`

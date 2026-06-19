@@ -20,10 +20,15 @@ describe('project review closeout screens', () => {
     expect(source).toContain("setTargetError(formatAppSafeErrorMessage(loadError, 'Could not load contractor review targets.'))");
     expect(source).toContain('Could not load contractors');
     expect(source).toContain("disabled={!!targetError || !selectedTarget || projectStatus !== 'completed'}");
+    expect(source).toContain("Alert.alert('Sign in required', 'Please sign in again before submitting a contractor review.')");
+    expect(source).toContain(".eq('reviewer_id', user.id)");
+    expect(source).toContain('reviewer_id: user.id');
     expect(source).toContain("throw new Error(formatAppSafeErrorMessage(existingError, 'Could not check existing reviews.'))");
-    expect(source).toContain("Alert.alert('Error', formatAppSafeErrorMessage(err, 'Please try again.'))");
+    expect(source).toContain("Alert.alert('Could not submit review', formatAppSafeErrorMessage(err, 'Please try again.'))");
     expect(source).not.toContain('setTargetError(loadError.message)');
     expect(source).not.toContain('existingError.message');
+    expect(source).not.toContain('user!.id');
+    expect(source).not.toContain("Alert.alert('Error', formatAppSafeErrorMessage(err, 'Please try again.'))");
     expect(source).not.toContain("err instanceof Error ? err.message : 'Please try again.'");
   });
 

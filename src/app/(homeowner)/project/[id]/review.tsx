@@ -229,6 +229,11 @@ export default function ReviewScreen() {
       return;
     }
 
+    if (!user?.id) {
+      Alert.alert('Sign in required', 'Please sign in again before submitting a contractor review.');
+      return;
+    }
+
     setSubmitting(true);
     try {
       // Duplicate guard
@@ -236,7 +241,7 @@ export default function ReviewScreen() {
         .from('reviews')
         .select('id')
         .eq('project_id', projectId)
-        .eq('reviewer_id', user!.id)
+        .eq('reviewer_id', user.id)
         .eq('reviewee_id', selectedTarget.user_id)
         .maybeSingle();
       if (existingError) {
@@ -250,7 +255,7 @@ export default function ReviewScreen() {
 
       const { error: insertError } = await supabase.from('reviews').insert({
         project_id: projectId,
-        reviewer_id: user!.id,
+        reviewer_id: user.id,
         reviewee_id: selectedTarget.user_id,
         rating: overallRating,
         quality_rating: ratings.quality_rating,
@@ -287,7 +292,7 @@ export default function ReviewScreen() {
         [{ text: 'Done', onPress: () => navigation.goBack() }]
       );
     } catch (err) {
-      Alert.alert('Error', formatAppSafeErrorMessage(err, 'Please try again.'));
+      Alert.alert('Could not submit review', formatAppSafeErrorMessage(err, 'Please try again.'));
     } finally {
       setSubmitting(false);
     }
