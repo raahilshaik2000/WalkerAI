@@ -269,6 +269,19 @@ describe('company quote copy', () => {
     expect(jobDetail).not.toContain('const slotId: string | undefined = route.params?.slot;');
   });
 
+  it('scopes GC trade negotiations to the active quote slot', () => {
+    const repoRoot = path.resolve(__dirname, '..');
+    const jobDetail = fs.readFileSync(
+      path.join(repoRoot, 'src/app/(company)/job/[id]/index.tsx'),
+      'utf8'
+    );
+
+    expect(jobDetail).toContain("pendingQuoteQuery = slotId ? pendingQuoteQuery.eq('slot_id', slotId) : pendingQuoteQuery.is('slot_id', null);");
+    expect(jobDetail).toContain("const negotiationResult = slotId");
+    expect(jobDetail).toContain("await negotiationQuery.eq('slot_id', slotId)");
+    expect(jobDetail).toContain("await negotiationQuery.is('slot_id', null)");
+  });
+
   it('locks GC counteroffer acceptance after quote approval or payment start', () => {
     const repoRoot = path.resolve(__dirname, '..');
     const jobDetail = fs.readFileSync(

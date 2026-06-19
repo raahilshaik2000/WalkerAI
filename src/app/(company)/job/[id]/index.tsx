@@ -319,7 +319,7 @@ export default function JobBriefScreen() {
         .order('created_at', { ascending: false });
       const negotiationResult = slotId
         ? await negotiationQuery.eq('slot_id', slotId)
-        : await negotiationQuery;
+        : await negotiationQuery.is('slot_id', null);
       if (negotiationResult.error) throw negotiationResult.error;
       const negotiations = (negotiationResult.data ?? []) as TradeNegotiation[];
       setTradeNegotiations(
