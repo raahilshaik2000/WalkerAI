@@ -252,7 +252,7 @@ export default function JobBriefScreen() {
       const slotData = slotResult.data;
 
       setJob(projectData as JobBrief);
-      if (slotData) setSlot(slotData as Slot);
+      setSlot(slotData ? (slotData as Slot) : null);
       setPayoutReady(isStripePayoutLocallyReady(companyData));
       const companyId = companyData?.id;
       const slotInfo = slotData as Slot | null;

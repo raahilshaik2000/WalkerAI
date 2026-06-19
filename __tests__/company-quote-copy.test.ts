@@ -301,6 +301,17 @@ describe('company quote copy', () => {
     expect(jobDetail).toContain("await negotiationQuery.is('slot_id', null)");
   });
 
+  it('clears stale slot state when a reused job detail screen opens project-level pricing', () => {
+    const repoRoot = path.resolve(__dirname, '..');
+    const jobDetail = fs.readFileSync(
+      path.join(repoRoot, 'src/app/(company)/job/[id]/index.tsx'),
+      'utf8'
+    );
+
+    expect(jobDetail).toContain('setSlot(slotData ? (slotData as Slot) : null);');
+    expect(jobDetail).not.toContain('if (slotData) setSlot(slotData as Slot);');
+  });
+
   it('locks GC counteroffer acceptance after quote approval or payment start', () => {
     const repoRoot = path.resolve(__dirname, '..');
     const jobDetail = fs.readFileSync(

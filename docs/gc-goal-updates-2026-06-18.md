@@ -491,6 +491,7 @@ Runtime fixes made from this pass:
 - Homeowner quote funding now uses app-safe copy for project, quote, and quote-line-item load failures before Stripe payment starts, while keeping the existing PaymentSheet and escrow funding flow intact.
 - Homeowner message list, homeowner project chat, and company job chat now use app-safe copy for message participant, message load, and message-send failures, matching the already-safe GC project chat behavior.
 - Company/trade earnings and profile screens now use app-safe copy for company profile, accepted-project, paid-milestone, and earnings load failures while keeping commission-derived payout math hidden from the app UI.
+- Company/trade job detail now clears stale slot state when the route is reused for a project-level job, preventing old trade-slot context from appearing on the project-level quote/pricing path.
 - Homeowner and company/trade change-order screens now use app-safe copy for change-order load, submit, sign, approve, and reject failures while preserving the explicit disclaimer that signed cost changes do not automatically alter funded escrow or milestone payments.
 - Homeowner change-order approvals now catch thrown load, approve, and reject failures, clear loading/responding state reliably, and show both approval buttons as in-progress while a response is being submitted.
 - Company/trade job feed plus business, license, and insurance onboarding now use app-safe copy for load/save/verification submission failures across the verified trade setup and accepted-job entry path.
