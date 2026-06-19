@@ -241,6 +241,11 @@ export default function ProjectConciergeScreen() {
     setBookingRequests([]);
     setApprovalResponseNotes({});
     setPaymentResponseNotes({});
+    setInvitingId(null);
+    setBookingId(null);
+    setPayingBookingId(null);
+    setReleasingBookingId(null);
+    setRespondingId(null);
   }, []);
 
   const fetchData = useCallback(async () => {
@@ -252,17 +257,15 @@ export default function ProjectConciergeScreen() {
       return;
     }
 
-    const currentUser = user ?? (await supabase.auth.getUser()).data.user;
-    if (!currentUser) {
-      setErrorMessage('You need to be signed in to manage concierge support.');
-      clearConciergeState();
-      setLoading(false);
-      setRefreshing(false);
-      return;
-    }
-
     try {
       setErrorMessage(null);
+      const currentUser = user ?? (await supabase.auth.getUser()).data.user;
+      if (!currentUser) {
+        setErrorMessage('You need to be signed in to manage concierge support.');
+        clearConciergeState();
+        return;
+      }
+
       const [projectResult, assignmentResult, gcList, approvalResult, paymentResult, bookingResult] = await Promise.all([
         supabase
           .from('projects')

@@ -101,8 +101,14 @@ describe('general contractor account type', () => {
     expect(homeownerConcierge).toContain('setProjectHomeownerId(null);');
     expect(homeownerConcierge).toContain('setApprovalResponseNotes({});');
     expect(homeownerConcierge).toContain('setPaymentResponseNotes({});');
+    expect(homeownerConcierge).toContain('setInvitingId(null);');
+    expect(homeownerConcierge).toContain('setBookingId(null);');
+    expect(homeownerConcierge).toContain('setPayingBookingId(null);');
+    expect(homeownerConcierge).toContain('setReleasingBookingId(null);');
+    expect(homeownerConcierge).toContain('setRespondingId(null);');
     expect(homeownerConcierge).toContain("setErrorMessage('Project is missing. Reopen concierge from your project details.');\n      clearConciergeState();");
-    expect(homeownerConcierge).toContain("setErrorMessage('You need to be signed in to manage concierge support.');\n      clearConciergeState();");
+    expect(homeownerConcierge).toContain("try {\n      setErrorMessage(null);\n      const currentUser = user ?? (await supabase.auth.getUser()).data.user;");
+    expect(homeownerConcierge).toContain("setErrorMessage('You need to be signed in to manage concierge support.');\n        clearConciergeState();");
     expect(homeownerConcierge).toContain("setErrorMessage(formatAppSafeErrorMessage(err, 'Could not load concierge options.'))");
     expect(homeownerConcierge).toContain("setErrorMessage(formatAppSafeErrorMessage(err, 'Could not load concierge options.'));\n      clearConciergeState();");
     expect(homeownerConcierge).toContain("Alert.alert('Could not invite GC', formatAppSafeErrorMessage(error, 'Please try again.'))");

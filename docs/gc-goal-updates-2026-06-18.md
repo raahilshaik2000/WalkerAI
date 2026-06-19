@@ -1265,3 +1265,16 @@ Latest validation after GC live request-profile recheck:
 - `npx tsc --noEmit`
 - `npm test -- --runInBand`
 - `git diff --check`
+
+Latest update after homeowner GC concierge load-state hardening:
+
+- Hardened the homeowner Concierge GC screen so auth/session lookup during load runs inside the same app-safe catch/finally path as project, assignment, approval, payment, and concierge booking queries.
+- The shared concierge reset now also clears invite, booking request, booking payment, payout release, and approval/payment response in-flight ids so stale homeowner GC action state cannot remain visible after losing valid project or account context.
+- Added regression assertions in `__tests__/general-contractor.test.ts` for the protected homeowner concierge auth lookup and expanded reset path.
+
+Latest validation after homeowner GC concierge load-state hardening:
+
+- `npm test -- --runInBand __tests__/general-contractor.test.ts __tests__/dashboard-data.test.ts`
+- `npx tsc --noEmit`
+- `npm test -- --runInBand`
+- `git diff --check`
