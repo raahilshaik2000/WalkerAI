@@ -944,3 +944,16 @@ Latest validation after homeowner closeout review auth hardening:
 - `npx tsc --noEmit`
 - `npm test -- --runInBand`
 - `git diff --check`
+
+Latest update after public four-role auth entry polish:
+
+- Tightened register/login validation alerts on the public entry screens used by homeowner, company, supplier, and general contractor accounts. Validation failures now use specific titles instead of generic `Error` titles while keeping existing app-safe Supabase error formatting for auth failures.
+- Confirmed the public registration test still covers `general_contractor` as a self-service signup role.
+- Added regression assertions in `__tests__/auth.test.ts`.
+
+Latest validation after public four-role auth entry polish:
+
+- `npm test -- --runInBand __tests__/auth.test.ts`
+- `npx tsc --noEmit`
+- `npm test -- --runInBand`
+- `git diff --check`

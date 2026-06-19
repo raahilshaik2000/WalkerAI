@@ -29,15 +29,15 @@ export default function RegisterScreen() {
   const handleRegister = async () => {
     const normalizedEmail = email.trim().toLowerCase();
     if (!normalizedEmail || !password) {
-      Alert.alert('Error', 'Please fill in all fields.');
+      Alert.alert('Account details required', 'Please fill in all fields.');
       return;
     }
     if (password !== confirmPassword) {
-      Alert.alert('Error', 'Passwords do not match.');
+      Alert.alert('Passwords do not match', 'Enter the same password in both password fields.');
       return;
     }
     if (password.length < 8) {
-      Alert.alert('Error', 'Password must be at least 8 characters.');
+      Alert.alert('Password too short', 'Password must be at least 8 characters.');
       return;
     }
     setLoading(true);

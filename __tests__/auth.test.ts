@@ -114,12 +114,20 @@ describe('Supabase auth helpers', () => {
     const login = fs.readFileSync(path.join(__dirname, '../src/app/(auth)/login.tsx'), 'utf8');
 
     expect(register).toContain("import { formatAppSafeErrorMessage } from '@/lib/supabase/functions';");
+    expect(register).toContain("Alert.alert('Account details required', 'Please fill in all fields.')");
+    expect(register).toContain("Alert.alert('Passwords do not match', 'Enter the same password in both password fields.')");
+    expect(register).toContain("Alert.alert('Password too short', 'Password must be at least 8 characters.')");
     expect(register).toContain("Alert.alert('Registration failed', formatAppSafeErrorMessage(error, 'Could not create your account. Please try again.'))");
+    expect(register).not.toContain("Alert.alert('Error', 'Please fill in all fields.')");
+    expect(register).not.toContain("Alert.alert('Error', 'Passwords do not match.')");
+    expect(register).not.toContain("Alert.alert('Error', 'Password must be at least 8 characters.')");
     expect(register).not.toContain('JSON.stringify(error)');
     expect(register).not.toContain('? error.message');
 
     expect(login).toContain("import { formatAppSafeErrorMessage } from '@/lib/supabase/functions';");
+    expect(login).toContain("Alert.alert('Sign in details required', 'Please enter your email and password.')");
     expect(login).toContain("Alert.alert('Login failed', formatAppSafeErrorMessage(error, 'Could not sign in. Please try again.'))");
+    expect(login).not.toContain("Alert.alert('Error', 'Please enter your email and password.')");
     expect(login).not.toContain('JSON.stringify(error)');
     expect(login).not.toContain('? error.message');
   });

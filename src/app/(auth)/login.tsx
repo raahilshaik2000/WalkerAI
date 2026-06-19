@@ -24,7 +24,7 @@ export default function LoginScreen() {
   const handleLogin = async () => {
     const normalizedEmail = email.trim().toLowerCase();
     if (!normalizedEmail || !password) {
-      Alert.alert('Error', 'Please enter your email and password.');
+      Alert.alert('Sign in details required', 'Please enter your email and password.');
       return;
     }
     setLoading(true);
