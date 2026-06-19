@@ -123,4 +123,16 @@ describe('Supabase auth helpers', () => {
     expect(login).not.toContain('JSON.stringify(error)');
     expect(login).not.toContain('? error.message');
   });
+
+  it('does not misclassify temporary profile load failures as missing account roles', () => {
+    const rootNavigator = fs.readFileSync(path.join(__dirname, '../src/navigation/RootNavigator.tsx'), 'utf8');
+
+    expect(rootNavigator).toContain("import { formatAppSafeErrorMessage } from '@/lib/supabase/functions';");
+    expect(rootNavigator).toContain('const [authErrorMessage, setAuthErrorMessage] = useState<string | null>(null);');
+    expect(rootNavigator).toContain("setAuthErrorMessage(formatAppSafeErrorMessage(userResult.error, 'Could not load your account. Please try again.'))");
+    expect(rootNavigator).toContain('Account temporarily unavailable');
+    expect(rootNavigator).toContain('onPress={() => applySession(session)}');
+    expect(rootNavigator).toContain('Try Again');
+    expect(rootNavigator).toContain('Account setup incomplete');
+  });
 });
