@@ -1984,6 +1984,8 @@ describe('general contractor account type', () => {
     expect(navigator).toContain('GeneralContractorMessages');
     expect(gcProjectDetail).toContain("navigation.navigate('GeneralContractorMessages'");
     expect(gcMessages).toContain("from('messages').insert");
+    expect(gcMessages).toContain("setErrorMessage(formatAppSafeErrorMessage(err, 'Could not load messages.'))");
+    expect(gcMessages).toContain("setComposeLockMessage('Messages are unavailable right now. Try again shortly.')");
     expect(gcMessages).toContain("let trimmed = '';");
     expect(gcMessages).toContain('if (error) throw error;');
     expect(gcMessages).toContain("if (trimmed) setBody(trimmed);");

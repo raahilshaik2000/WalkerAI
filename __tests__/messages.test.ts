@@ -47,6 +47,8 @@ describe('project messages', () => {
 
     expect(gcMessages).toContain("import { formatAppSafeErrorMessage } from '@/lib/supabase/functions';");
     expect(gcMessages).toContain("formatAppSafeErrorMessage(messageResult.error, 'Please try again.')");
+    expect(gcMessages).toContain("setErrorMessage(formatAppSafeErrorMessage(err, 'Could not load messages.'))");
+    expect(gcMessages).toContain("setComposeLockMessage('Messages are unavailable right now. Try again shortly.')");
     expect(gcMessages).toContain('if (error) throw error;');
     expect(gcMessages).toContain("Alert.alert('Message not sent', formatAppSafeErrorMessage(err, 'Please try again.'))");
     expect(gcMessages).not.toContain('setErrorMessage(`Could not load messages: ${messageResult.error.message}`)');

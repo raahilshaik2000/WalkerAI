@@ -60,78 +60,86 @@ export default function GeneralContractorMessagesScreen() {
     }
 
     const load = async () => {
-      const currentUser = user ?? (await supabase.auth.getUser()).data.user;
-      if (!currentUser?.id) {
-        if (!cancelled) {
-          setCurrentUserId(null);
-          setErrorMessage('You need to be signed in to view project messages.');
-          setCanSendMessages(false);
-          setComposeLockMessage('Sign in to send project messages.');
+      try {
+        const currentUser = user ?? (await supabase.auth.getUser()).data.user;
+        if (!currentUser?.id) {
+          if (!cancelled) {
+            setCurrentUserId(null);
+            setErrorMessage('You need to be signed in to view project messages.');
+            setCanSendMessages(false);
+            setComposeLockMessage('Sign in to send project messages.');
+          }
+          return;
         }
-        return;
-      }
-      setCurrentUserId(currentUser.id);
+        setCurrentUserId(currentUser.id);
 
-      const [messageResult, gcResult] = await Promise.all([
-        supabase
-          .from('messages')
-          .select('id, body, sender_id, sent_at, attachment_url')
+        const [messageResult, gcResult] = await Promise.all([
+          supabase
+            .from('messages')
+            .select('id, body, sender_id, sent_at, attachment_url')
+            .eq('project_id', projectId)
+            .order('sent_at', { ascending: true }),
+          supabase
+            .from('general_contractors')
+            .select(GENERAL_CONTRACTOR_READINESS_SELECT)
+            .eq('user_id', currentUser.id)
+            .maybeSingle(),
+        ]);
+
+        if (cancelled) return;
+
+        if (messageResult.error) {
+          setErrorMessage(`Could not load messages: ${formatAppSafeErrorMessage(messageResult.error, 'Please try again.')}`);
+        } else {
+          setErrorMessage(null);
+          setMessages((messageResult.data ?? []) as Message[]);
+        }
+
+        if (gcResult.error || !gcResult.data?.id) {
+          setCanSendMessages(false);
+          setComposeLockMessage('GC profile is required before project messages can be sent.');
+          return;
+        }
+
+        const { data: assignment, error: assignmentError } = await supabase
+          .from('general_contractor_projects')
+          .select('status')
           .eq('project_id', projectId)
-          .order('sent_at', { ascending: true }),
-        supabase
-          .from('general_contractors')
-          .select(GENERAL_CONTRACTOR_READINESS_SELECT)
-          .eq('user_id', currentUser.id)
-          .maybeSingle(),
-      ]);
+          .eq('general_contractor_id', gcResult.data.id)
+          .in('status', ['invited', 'active', 'completed'])
+          .order('created_at', { ascending: false })
+          .limit(1)
+          .maybeSingle();
 
-      if (cancelled) return;
+        if (cancelled) return;
 
-      if (messageResult.error) {
-        setErrorMessage(`Could not load messages: ${formatAppSafeErrorMessage(messageResult.error, 'Please try again.')}`);
-      } else {
-        setErrorMessage(null);
-        setMessages((messageResult.data ?? []) as Message[]);
+        if (assignmentError || !assignment) {
+          setCanSendMessages(false);
+          setComposeLockMessage('GC project assignment is required before messages can be sent.');
+          return;
+        }
+
+        if (!isGeneralContractorReadyForProjectControls(gcResult.data)) {
+          setCanSendMessages(false);
+          setComposeLockMessage('Complete verified GC setup is required before GC project messages can be sent.');
+          return;
+        }
+
+        if (!['invited', 'active'].includes(assignment.status)) {
+          setCanSendMessages(false);
+          setComposeLockMessage('This project message thread is read-only for completed GC assignments.');
+          return;
+        }
+
+        setCanSendMessages(true);
+        setComposeLockMessage('');
+      } catch (err) {
+        if (!cancelled) {
+          setErrorMessage(formatAppSafeErrorMessage(err, 'Could not load messages.'));
+          setCanSendMessages(false);
+          setComposeLockMessage('Messages are unavailable right now. Try again shortly.');
+        }
       }
-
-      if (gcResult.error || !gcResult.data?.id) {
-        setCanSendMessages(false);
-        setComposeLockMessage('GC profile is required before project messages can be sent.');
-        return;
-      }
-
-      const { data: assignment, error: assignmentError } = await supabase
-        .from('general_contractor_projects')
-        .select('status')
-        .eq('project_id', projectId)
-        .eq('general_contractor_id', gcResult.data.id)
-        .in('status', ['invited', 'active', 'completed'])
-        .order('created_at', { ascending: false })
-        .limit(1)
-        .maybeSingle();
-
-      if (cancelled) return;
-
-      if (assignmentError || !assignment) {
-        setCanSendMessages(false);
-        setComposeLockMessage('GC project assignment is required before messages can be sent.');
-        return;
-      }
-
-      if (!isGeneralContractorReadyForProjectControls(gcResult.data)) {
-        setCanSendMessages(false);
-        setComposeLockMessage('Complete verified GC setup is required before GC project messages can be sent.');
-        return;
-      }
-
-      if (!['invited', 'active'].includes(assignment.status)) {
-        setCanSendMessages(false);
-        setComposeLockMessage('This project message thread is read-only for completed GC assignments.');
-        return;
-      }
-
-      setCanSendMessages(true);
-      setComposeLockMessage('');
     };
     load();
 
