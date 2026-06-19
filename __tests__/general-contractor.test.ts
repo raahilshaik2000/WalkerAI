@@ -200,6 +200,8 @@ describe('general contractor account type', () => {
     expect(licenseOnboarding).toContain("select('license_number, license_doc_url')");
     expect(licenseOnboarding).toContain("setLicenseNumber(data.license_number ?? '')");
     expect(licenseOnboarding).toContain("setDocumentUrl(data.license_doc_url ?? '')");
+    expect(licenseOnboarding).toContain("Alert.alert('Could not load license details', formatAppSafeErrorMessage(err, 'Please try again.'))");
+    expect(licenseOnboarding).not.toContain('loadExistingLicense().catch(() => undefined)');
     expect(licenseOnboarding).toContain("launchImageLibrary");
     expect(licenseOnboarding).toContain("Alert.alert('Could not select document', formatAppSafeErrorMessage(err, 'Please try again.'))");
     expect(licenseOnboarding).toContain("uploadFile('company-docs'");
@@ -209,6 +211,8 @@ describe('general contractor account type', () => {
     expect(licenseOnboarding).toContain('License Document URL');
     expect(insuranceOnboarding).toContain("select('insurance_doc_url')");
     expect(insuranceOnboarding).toContain("setDocumentUrl(data.insurance_doc_url ?? '')");
+    expect(insuranceOnboarding).toContain("Alert.alert('Could not load insurance details', formatAppSafeErrorMessage(err, 'Please try again.'))");
+    expect(insuranceOnboarding).not.toContain('loadExistingInsurance().catch(() => undefined)');
     expect(insuranceOnboarding).toContain("launchImageLibrary");
     expect(insuranceOnboarding).toContain("Alert.alert('Could not select document', formatAppSafeErrorMessage(err, 'Please try again.'))");
     expect(insuranceOnboarding).toContain("uploadFile('company-docs'");

@@ -39,11 +39,16 @@ export default function GeneralContractorInsuranceOnboarding() {
         .select('insurance_doc_url')
         .eq('user_id', user.id)
         .maybeSingle();
-      if (cancelled || error || !data) return;
+      if (error) throw error;
+      if (cancelled || !data) return;
       setDocumentUrl(data.insurance_doc_url ?? '');
     };
 
-    loadExistingInsurance().catch(() => undefined);
+    loadExistingInsurance().catch((err) => {
+      if (!cancelled) {
+        Alert.alert('Could not load insurance details', formatAppSafeErrorMessage(err, 'Please try again.'));
+      }
+    });
 
     return () => {
       cancelled = true;

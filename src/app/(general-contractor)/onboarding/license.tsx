@@ -40,12 +40,17 @@ export default function GeneralContractorLicenseOnboarding() {
         .select('license_number, license_doc_url')
         .eq('user_id', user.id)
         .maybeSingle();
-      if (cancelled || error || !data) return;
+      if (error) throw error;
+      if (cancelled || !data) return;
       setLicenseNumber(data.license_number ?? '');
       setDocumentUrl(data.license_doc_url ?? '');
     };
 
-    loadExistingLicense().catch(() => undefined);
+    loadExistingLicense().catch((err) => {
+      if (!cancelled) {
+        Alert.alert('Could not load license details', formatAppSafeErrorMessage(err, 'Please try again.'));
+      }
+    });
 
     return () => {
       cancelled = true;
