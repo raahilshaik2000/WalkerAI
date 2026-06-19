@@ -12,6 +12,7 @@ import { useNavigation } from '@react-navigation/native';
 import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
 import { supabase } from '@/lib/supabase/client';
 import { formatAppSafeErrorMessage } from '@/lib/supabase/functions';
+import { getCurrentUser } from '@/lib/supabase/auth';
 import { useAuthStore } from '@/stores/auth.store';
 import { formatCad } from '@/lib/formatters';
 import { Colors, Spacing, Typography } from '@/constants/theme';
@@ -36,72 +37,72 @@ export default function EarningsScreen() {
   const [hasCompanyProfile, setHasCompanyProfile] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const fetchData = useCallback(async () => {
-    if (!user) {
+    try {
+      const currentUserId = user?.id ?? (await getCurrentUser())?.id ?? null;
+      if (!currentUserId) {
+        setMilestones([]);
+        setHasCompanyProfile(false);
+        setErrorMessage('You need to be signed in to view earnings.');
+        return;
+      }
+
+      setErrorMessage(null);
+      const { data: co, error: companyError } = await supabase
+        .from('companies')
+        .select('id')
+        .eq('user_id', currentUserId)
+        .order('created_at', { ascending: false })
+        .limit(1)
+        .maybeSingle();
+
+      if (companyError) {
+        setMilestones([]);
+        setHasCompanyProfile(false);
+        setErrorMessage(formatAppSafeErrorMessage(companyError, 'Could not load earnings.'));
+        return;
+      }
+
+      if (!co) {
+        setMilestones([]);
+        setHasCompanyProfile(false);
+        return;
+      }
+
+      setHasCompanyProfile(true);
+      const { data, error } = await supabase
+        .from('milestones')
+        .select(`
+          id, title, amount, completed_at, stripe_transfer_id,
+          quotes!inner(company_id, project:projects(address, city))
+        `)
+        .eq('status', 'paid')
+        .eq('quotes.company_id', co.id)
+        .order('completed_at', { ascending: false });
+      if (error) {
+        setMilestones([]);
+        setErrorMessage(formatAppSafeErrorMessage(error, 'Could not load earnings.'));
+        return;
+      }
+
+      const mapped = (data ?? []).map((m: any) => ({
+        id: m.id,
+        title: m.title,
+        amount: m.amount,
+        completed_at: m.completed_at,
+        stripe_transfer_id: m.stripe_transfer_id,
+        project: m.quotes?.project ?? { address: 'Unknown', city: '' },
+      }));
+
+      setMilestones(mapped as PaidMilestone[]);
+    } catch (err) {
       setMilestones([]);
       setHasCompanyProfile(false);
-      setErrorMessage('You need to be signed in to view earnings.');
+      setErrorMessage(formatAppSafeErrorMessage(err, 'Could not load earnings.'));
+    } finally {
       setLoading(false);
       setRefreshing(false);
-      return;
     }
-
-    setErrorMessage(null);
-    const { data: co, error: companyError } = await supabase
-      .from('companies')
-      .select('id')
-      .eq('user_id', user.id)
-      .order('created_at', { ascending: false })
-      .limit(1)
-      .maybeSingle();
-
-    if (companyError) {
-      setMilestones([]);
-      setHasCompanyProfile(false);
-      setErrorMessage(formatAppSafeErrorMessage(companyError, 'Could not load earnings.'));
-      setLoading(false);
-      setRefreshing(false);
-      return;
-    }
-
-    if (!co) {
-      setMilestones([]);
-      setHasCompanyProfile(false);
-      setLoading(false);
-      setRefreshing(false);
-      return;
-    }
-
-    setHasCompanyProfile(true);
-    const { data, error } = await supabase
-      .from('milestones')
-      .select(`
-        id, title, amount, completed_at, stripe_transfer_id,
-        quotes!inner(company_id, project:projects(address, city))
-      `)
-      .eq('status', 'paid')
-      .eq('quotes.company_id', co.id)
-      .order('completed_at', { ascending: false });
-    if (error) {
-      setMilestones([]);
-      setErrorMessage(formatAppSafeErrorMessage(error, 'Could not load earnings.'));
-      setLoading(false);
-      setRefreshing(false);
-      return;
-    }
-
-    const mapped = (data ?? []).map((m: any) => ({
-      id: m.id,
-      title: m.title,
-      amount: m.amount,
-      completed_at: m.completed_at,
-      stripe_transfer_id: m.stripe_transfer_id,
-      project: m.quotes?.project ?? { address: 'Unknown', city: '' },
-    }));
-
-    setMilestones(mapped as PaidMilestone[]);
-    setLoading(false);
-    setRefreshing(false);
-  }, [user]);
+  }, [user?.id]);
 
   useEffect(() => { fetchData(); }, [fetchData]);
 

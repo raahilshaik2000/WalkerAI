@@ -1307,3 +1307,18 @@ Latest validation after supplier material-order auth fallback hardening:
 - `npx tsc --noEmit`
 - `npm test -- --runInBand`
 - `git diff --check`
+
+Latest update after company core-screen auth fallback hardening:
+
+- Hardened the company job feed, company calendar, and company earnings screens so a stale in-memory auth store no longer hides dispatched jobs, accepted jobs, approved-quote milestones, or paid milestone history when the Supabase session is still valid.
+- The company job feed now clears stale company, pending-job, and active-job rows when the user is genuinely signed out or a load fails.
+- The calendar and earnings screens now route auth/session failures through guarded catch/finally paths so they clear stale rows and cannot stay stuck loading after a session lookup error.
+- This protects the company side of the GC workflow after a trade accepts work, submits pricing, tracks approved milestones, and sees paid milestone history.
+- Added regression assertions in `__tests__/company-entry-errors.test.ts`.
+
+Latest validation after company core-screen auth fallback hardening:
+
+- `npm test -- --runInBand __tests__/company-entry-errors.test.ts __tests__/company-calendar.test.ts __tests__/company-profile-services.test.ts`
+- `npx tsc --noEmit`
+- `npm test -- --runInBand`
+- `git diff --check`

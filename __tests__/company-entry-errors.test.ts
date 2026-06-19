@@ -53,4 +53,30 @@ describe('company entry and onboarding errors', () => {
     expect(jobDetail).not.toContain("Alert.alert('Error', err instanceof Error ? err.message");
     expect(jobDetail).not.toContain("Alert.alert('Error', msg)");
   });
+
+  it('falls back to the active Supabase session on core company screens', () => {
+    const jobFeed = fs.readFileSync(
+      path.join(__dirname, '../src/app/(company)/index.tsx'),
+      'utf8',
+    );
+    const calendar = fs.readFileSync(
+      path.join(__dirname, '../src/app/(company)/calendar.tsx'),
+      'utf8',
+    );
+    const earnings = fs.readFileSync(
+      path.join(__dirname, '../src/app/(company)/earnings.tsx'),
+      'utf8',
+    );
+
+    [jobFeed, calendar, earnings].forEach((source) => {
+      expect(source).toContain("import { getCurrentUser");
+      expect(source).toContain('user?.id ?? (await getCurrentUser())?.id ?? null');
+      expect(source).not.toContain(".eq('user_id', user.id)");
+      expect(source).toContain('}, [user?.id]);');
+    });
+    expect(jobFeed).toContain("setErrorMessage('You need to be signed in to view jobs.');");
+    expect(jobFeed).toContain("setCompany(null);\n      setErrorMessage(formatAppSafeErrorMessage(err, 'Could not load jobs.'))");
+    expect(calendar).toContain("setErrorMessage(formatAppSafeErrorMessage(err, 'Could not load calendar.'))");
+    expect(earnings).toContain("setErrorMessage(formatAppSafeErrorMessage(err, 'Could not load earnings.'))");
+  });
 });
