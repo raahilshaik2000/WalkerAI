@@ -68,6 +68,8 @@ export function resolveNotificationRoute(
 
   if (role === 'supplier') {
     switch (type) {
+      case 'new_message':
+        return projectId ? { name: 'SupplierProjectMessages', params: { id: projectId } } : { name: 'SupplierTabs' };
       case 'new_material_order':
         return { name: 'SupplierTabs', params: { screen: 'SupplierOrders' } };
       case 'supplier_paid':

@@ -51,6 +51,17 @@ describe('notification navigation', () => {
     });
   });
 
+  it('routes supplier project message notifications to the shared project thread', () => {
+    expect(resolveNotificationRoute('new_message', { project_id: 'project-1' }, 'supplier')).toEqual({
+      name: 'SupplierProjectMessages',
+      params: { id: 'project-1' },
+    });
+
+    expect(resolveNotificationRoute('new_message', {}, 'supplier')).toEqual({
+      name: 'SupplierTabs',
+    });
+  });
+
   it('routes homeowner delivery notifications to project materials', () => {
     expect(resolveNotificationRoute('order_delivered', { project_id: 'project-1', order_id: 'order-1' }, 'homeowner')).toEqual({
       name: 'ProjectDetail',
@@ -298,6 +309,15 @@ describe('notification navigation', () => {
           screen: 'JobDetailMain',
           params: { id: 'project-1', slot: 'slot-1' },
         },
+      },
+    });
+
+    const supplierRoute = resolveNotificationRoute('new_message', { project_id: 'project-1' }, 'supplier');
+    expect(toRootNotificationRoute(supplierRoute, 'supplier')).toEqual({
+      name: 'Supplier',
+      params: {
+        screen: 'SupplierProjectMessages',
+        params: { id: 'project-1' },
       },
     });
   });

@@ -487,6 +487,7 @@ Runtime fixes made from this pass:
 - Company payout setup failures now use the same specific app-safe alert pattern as supplier and GC payout setup, instead of a generic `Error` title on the trade account surface.
 - Root account fallback sign-out now explicitly clears local session, role, profile, and fallback error state after attempting Supabase sign-out, so temporary profile failures or missing-role states cannot leave stale role routing behind.
 - Root account role resolution now clears the persisted profile store when the auth session exists but no `public.users` profile row is returned, preventing stale display/profile data from a previous homeowner, company, supplier, or GC account while the setup-incomplete fallback is shown.
+- Supplier `new_message` notification taps now open the shared project message thread when the backend sends a `project_id`, matching the supplier project participant policy and the existing `SupplierProjectMessages` route.
 - GC project text-message sends now restore the typed draft and clear the sending state if auth lookup or message insert throws, and GC photo attachments now catch auth/client failures in the attachment error path.
 - GC project message-thread loading now catches thrown auth/client/query failures, shows app-safe load copy, and locks the composer with retry guidance instead of leaving the effect unhandled.
 - Homeowner schedule confirmation now uses app-safe copy for schedule load and confirmation failures, while preserving quote/payment-aware project activation behavior.
@@ -773,6 +774,13 @@ Latest validation after root fallback sign-out cleanup:
 Latest validation after missing-role profile cleanup:
 
 - `npm test -- --runInBand __tests__/auth.test.ts`
+- `npx tsc --noEmit`
+- `npm test -- --runInBand`
+- `git diff --check`
+
+Latest validation after supplier message notification routing:
+
+- `npm test -- --runInBand __tests__/notifications-navigation.test.ts`
 - `npx tsc --noEmit`
 - `npm test -- --runInBand`
 - `git diff --check`
