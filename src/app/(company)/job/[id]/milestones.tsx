@@ -117,9 +117,15 @@ export default function CompanyMilestonesScreen() {
   const [loading, setLoading] = useState(true);
   const [updating, setUpdating] = useState<string | null>(null);
 
+  const clearMilestoneState = useCallback(() => {
+    setMilestones([]);
+    setUpdating(null);
+  }, []);
+
   const fetchMilestones = useCallback(async () => {
+    setLoading(true);
     if (!projectId || !user?.id) {
-      setMilestones([]);
+      clearMilestoneState();
       setLoading(false);
       return;
     }
@@ -134,12 +140,13 @@ export default function CompanyMilestonesScreen() {
 
     if (companyError) {
       Alert.alert('Could not load milestones', formatAppSafeErrorMessage(companyError, 'Please try again.'));
+      clearMilestoneState();
       setLoading(false);
       return;
     }
 
     if (!company) {
-      setMilestones([]);
+      clearMilestoneState();
       setLoading(false);
       return;
     }
@@ -162,6 +169,7 @@ export default function CompanyMilestonesScreen() {
 
     if (quoteResult.error) {
       Alert.alert('Could not load milestones', formatAppSafeErrorMessage(quoteResult.error, 'Please try again.'));
+      clearMilestoneState();
       setLoading(false);
       return;
     }
@@ -174,7 +182,7 @@ export default function CompanyMilestonesScreen() {
     const quoteData = scopedQuotes.find((q) => q.status === 'approved');
 
     if (!quoteData) {
-      setMilestones([]);
+      clearMilestoneState();
       setLoading(false);
       return;
     }
@@ -187,13 +195,14 @@ export default function CompanyMilestonesScreen() {
 
     if (error) {
       Alert.alert('Could not load milestones', formatAppSafeErrorMessage(error, 'Please try again.'));
+      clearMilestoneState();
       setLoading(false);
       return;
     }
 
     setMilestones((data ?? []) as Milestone[]);
     setLoading(false);
-  }, [projectId, slotId, user?.id]);
+  }, [clearMilestoneState, projectId, slotId, user?.id]);
 
   useEffect(() => {
     fetchMilestones();

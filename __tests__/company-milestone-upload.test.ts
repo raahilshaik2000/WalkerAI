@@ -54,4 +54,22 @@ describe('company milestone proof uploads', () => {
     expect(source).not.toContain("Alert.alert('Error', err instanceof Error ? err.message : 'Failed to update milestone.')");
     expect(source).not.toContain("Alert.alert('Upload failed', err instanceof Error ? err.message : 'Please try again.')");
   });
+
+  it('clears stale milestone totals when company milestone context cannot load', () => {
+    const source = fs.readFileSync(
+      path.join(__dirname, '../src/app/(company)/job/[id]/milestones.tsx'),
+      'utf8',
+    );
+
+    expect(source).toContain('const clearMilestoneState = useCallback(() => {');
+    expect(source).toContain('setMilestones([]);');
+    expect(source).toContain('setUpdating(null);');
+    expect(source).toContain('if (!projectId || !user?.id) {\n      clearMilestoneState();');
+    expect(source).toContain("Alert.alert('Could not load milestones', formatAppSafeErrorMessage(companyError, 'Please try again.'));\n      clearMilestoneState();");
+    expect(source).toContain('if (!company) {\n      clearMilestoneState();');
+    expect(source).toContain("Alert.alert('Could not load milestones', formatAppSafeErrorMessage(quoteResult.error, 'Please try again.'));\n      clearMilestoneState();");
+    expect(source).toContain('if (!quoteData) {\n      clearMilestoneState();');
+    expect(source).toContain("Alert.alert('Could not load milestones', formatAppSafeErrorMessage(error, 'Please try again.'));\n      clearMilestoneState();");
+    expect(source).toContain('}, [clearMilestoneState, projectId, slotId, user?.id]);');
+  });
 });

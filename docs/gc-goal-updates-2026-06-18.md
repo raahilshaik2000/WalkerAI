@@ -1050,3 +1050,16 @@ Latest validation after change-order stale-state hardening:
 - `npx tsc --noEmit`
 - `npm test -- --runInBand`
 - `git diff --check`
+
+Latest update after company milestone stale-state hardening:
+
+- Hardened the company/trade milestone screen so missing project/user context, company profile load failures, missing company onboarding, quote load failures, missing approved quote context, or milestone load failures clear visible milestones and any active milestone update state.
+- This prevents stale milestone payment totals and release progress from remaining visible after the trade account loses valid job context.
+- Added regression assertions in `__tests__/company-milestone-upload.test.ts`.
+
+Latest validation after company milestone stale-state hardening:
+
+- `npm test -- --runInBand __tests__/company-milestone-upload.test.ts`
+- `npx tsc --noEmit`
+- `npm test -- --runInBand`
+- `git diff --check`
