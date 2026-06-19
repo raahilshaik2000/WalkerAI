@@ -670,7 +670,9 @@ describe('general contractor account type', () => {
     expect(gcProjectDetail).toContain('Send for Homeowner Approval');
     expect(gcProjectDetail).toContain("from('project_approval_requests').insert");
     expect(gcProjectDetail).toContain("request_type: 'general_recommendation'");
-    expect(gcProjectDetail).toContain("setSubmittingApproval(true);\n    try {\n      const currentUser = (await supabase.auth.getUser()).data.user;");
+    expect(gcProjectDetail).toContain('const requireCurrentGcRequestProfile = async () => {');
+    expect(gcProjectDetail).toContain("if (assignment?.general_contractor_id && gc.id !== assignment.general_contractor_id) {\n      throw new Error('Refresh this project before sending approval requests.');");
+    expect(gcProjectDetail).toContain("setSubmittingApproval(true);\n    try {\n      const gcId = await requireCurrentGcRequestProfile();");
     expect(gcProjectDetail).toContain("Alert.alert('Could not submit approval request', formatAppSafeErrorMessage(err, 'Please try again.'));\n    } finally {\n      setSubmittingApproval(false);");
     expect(gcProjectDetail).toContain('Use this only for general recommendations that do not need schedule, trade, material, discovery, payment, or completion metadata.');
     expect(gcProjectDetail).toContain('Use the dedicated project-control screens for workflow changes so homeowner approval has the required data to apply cleanly.');
@@ -1463,6 +1465,8 @@ describe('general contractor account type', () => {
     expect(gcProjectDetail).toContain('Terms request pending');
     expect(gcProjectDetail).toContain("Alert.alert('Could not request terms update', formatAppSafeErrorMessage(err, 'Please try again.'))");
     expect(gcProjectDetail).toContain("Alert.alert('Could not request budget update', formatAppSafeErrorMessage(err, 'Please try again.'))");
+    expect(gcProjectDetail).toContain("setSubmittingTerms(true);\n    try {\n      await requireCurrentGcRequestProfile();");
+    expect(gcProjectDetail).toContain("setSubmittingBudget(true);\n    try {\n      await requireCurrentGcRequestProfile();");
     expect(gcProjectDetail).not.toContain("Alert.alert('Could not request terms update', err instanceof Error ? err.message : 'Please try again.')");
     expect(gcProjectDetail).not.toContain("Alert.alert('Could not request budget update', err instanceof Error ? err.message : 'Please try again.')");
     expect(gcProjectDetail).toContain("from('project_approval_requests').insert");

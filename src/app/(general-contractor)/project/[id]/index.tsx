@@ -311,6 +311,25 @@ export default function GeneralContractorProjectDetail() {
   const pendingDecisionApprovalRequests = pendingApprovalRequests.slice(0, 5);
   const pendingDecisionChangeOrders = pendingChangeOrders.slice(0, Math.max(0, 5 - pendingDecisionApprovalRequests.length));
 
+  const requireCurrentGcRequestProfile = async () => {
+    const currentUser = (await supabase.auth.getUser()).data.user;
+    if (!currentUser?.id) throw new Error('Please sign in again before submitting approval requests.');
+
+    const { data: gc, error: gcError } = await supabase
+      .from('general_contractors')
+      .select(GENERAL_CONTRACTOR_READINESS_SELECT)
+      .eq('user_id', currentUser.id)
+      .maybeSingle();
+    if (gcError) throw gcError;
+    if (!gc?.id) throw new Error('GC profile not found.');
+    if (assignment?.general_contractor_id && gc.id !== assignment.general_contractor_id) {
+      throw new Error('Refresh this project before sending approval requests.');
+    }
+    if (gc.verified !== true) throw new Error('WalkerAI must verify your GC profile before approval requests can be sent.');
+    if (nextGeneralContractorOnboardingRoute(gc)) throw new Error('Complete your GC business, license, and insurance setup before sending approval requests.');
+    return gc.id;
+  };
+
   const handleAcceptInvite = async () => {
     if (!assignment?.id) return;
     if (!gcVerified) {
@@ -393,21 +412,7 @@ export default function GeneralContractorProjectDetail() {
 
     setSubmittingApproval(true);
     try {
-      const currentUser = (await supabase.auth.getUser()).data.user;
-      if (!currentUser?.id) {
-        Alert.alert('Sign in required', 'Please sign in again before submitting approval requests.');
-        return;
-      }
-
-      const { data: gc, error: gcError } = await supabase
-        .from('general_contractors')
-        .select(GENERAL_CONTRACTOR_READINESS_SELECT)
-        .eq('user_id', currentUser.id)
-        .maybeSingle();
-      if (gcError) throw gcError;
-      if (!gc?.id) throw new Error('GC profile not found.');
-      if (gc.verified !== true) throw new Error('WalkerAI must verify your GC profile before approval requests can be sent.');
-      if (nextGeneralContractorOnboardingRoute(gc)) throw new Error('Complete your GC business, license, and insurance setup before sending approval requests.');
+      const gcId = await requireCurrentGcRequestProfile();
       if (!project?.id) throw new Error('Project not loaded.');
 
       const { data: projectRow, error: projectError } = await supabase
@@ -420,7 +425,7 @@ export default function GeneralContractorProjectDetail() {
 
       const { error } = await supabase.from('project_approval_requests').insert({
         project_id: project.id,
-        requested_by_gc_id: gc.id,
+        requested_by_gc_id: gcId,
         homeowner_id: projectRow.homeowner_id,
         request_type: 'general_recommendation',
         title: approvalTitle.trim(),
@@ -617,6 +622,7 @@ export default function GeneralContractorProjectDetail() {
 
     setSubmittingTerms(true);
     try {
+      await requireCurrentGcRequestProfile();
       const { error } = await supabase.from('project_approval_requests').insert({
         project_id: projectId,
         requested_by_gc_id: assignment.general_contractor_id,
@@ -670,6 +676,7 @@ export default function GeneralContractorProjectDetail() {
 
     setSubmittingBudget(true);
     try {
+      await requireCurrentGcRequestProfile();
       const { error } = await supabase.from('project_approval_requests').insert({
         project_id: projectId,
         requested_by_gc_id: assignment.general_contractor_id,
