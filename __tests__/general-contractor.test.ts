@@ -2171,6 +2171,10 @@ describe('general contractor account type', () => {
     expect(gcCompletion).toContain(".neq('status', 'removed')");
     expect(gcCompletion).toContain("if (!['active', 'completed'].includes(assignmentRow.status))");
     expect(gcCompletion).toContain('Active or completed GC management is required before the completion binder is available.');
+    expect(gcCompletion).toContain('const clearCompletionState = useCallback(() => {');
+    expect(gcCompletion).toContain("setErrorMessage(formatAppSafeErrorMessage(err, 'Could not load completion binder.'));\n      clearCompletionState();");
+    expect(gcCompletion).toContain('setSubmittingCompletion(false);');
+    expect(gcCompletion).toContain('}, [clearCompletionState, projectId]);');
     expect(gcCompletion).toContain(".eq('requested_by_gc_id', gc.id)");
     expect(gcCompletion).toContain("from('gc_payment_requests')");
     expect(gcCompletion).toContain(".eq('general_contractor_id', gc.id)");

@@ -1186,3 +1186,16 @@ Latest validation after GC project detail stale-draft hardening:
 - `npx tsc --noEmit`
 - `npm test -- --runInBand`
 - `git diff --check`
+
+Latest update after GC completion binder stale-state hardening:
+
+- Hardened the GC completion binder so load failures clear project summary, assignment context, permits, warranties, material orders, trade slots, trade negotiations, quotes, approvals, payment requests, change orders, the completion-submit flag, and GC readiness through a single reset path.
+- This prevents stale closeout readiness data or a stuck completion-submit state from remaining visible if a GC loses auth context or opens an unavailable completion binder.
+- Added regression assertions in `__tests__/general-contractor.test.ts`.
+
+Latest validation after GC completion binder stale-state hardening:
+
+- `npm test -- --runInBand __tests__/general-contractor.test.ts`
+- `npx tsc --noEmit`
+- `npm test -- --runInBand`
+- `git diff --check`
