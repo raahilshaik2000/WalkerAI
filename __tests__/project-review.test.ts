@@ -14,6 +14,11 @@ describe('project review closeout screens', () => {
     );
 
     expect(source).toContain('const [targetError, setTargetError]');
+    expect(source).toContain('const clearReviewTargets = useCallback(() => {');
+    expect(source).toContain('setTargets([]);');
+    expect(source).toContain('setSelectedTargetKey(null);');
+    expect(source).toContain('setProjectStatus(null);');
+    expect(source).toContain('if (!projectId) {\n      clearReviewTargets();');
     expect(source).toContain("isMissingSupabaseSchemaObjectError(gcRes.error, 'general_contractor_projects')");
     expect(source).toContain('const loadError = quotesRes.error ?? slotsRes.error ?? legacyRes.error ?? (gcContextUnavailable ? null : gcRes.error)');
     expect(source).toContain("import { formatAppSafeErrorMessage } from '@/lib/supabase/functions'");
@@ -49,6 +54,9 @@ describe('project review closeout screens', () => {
     expect(source).toContain("general_contractor:general_contractors(id, user_id, business_name)");
     expect(source).toContain("target_type: 'general_contractor'");
     expect(source).toContain('for (const assignment of gcContextUnavailable ? [] : gcRes.data ?? [])');
+    expect(source).toContain("import { formatGcProjectType } from '@/lib/gc-project-type';");
+    expect(source).toContain('trade_type: `GC management · ${formatGcProjectType((assignment as any).project_type)}`');
+    expect(source).not.toContain("trade_type: (assignment as any).project_type ? `GC management · ${(assignment as any).project_type}` : 'GC management'");
     expect(source).toContain("selectedTarget.target_type === 'company'");
     expect(source).toContain("p_company_id: selectedTarget.target_id");
 

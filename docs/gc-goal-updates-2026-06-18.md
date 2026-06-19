@@ -1104,3 +1104,16 @@ Latest validation after Stripe Connect refresh role-boundary hardening:
 - `npx tsc --noEmit`
 - `npm test -- --runInBand`
 - `git diff --check`
+
+Latest update after homeowner GC review target polish:
+
+- Hardened the homeowner project review closeout screen so missing project ids clear contractor review targets, selected target state, and project completion state instead of leaving stale recipients visible.
+- Updated GC review target labels to use the shared GC project type formatter, so homeowners see labels like `GC management · Flooring` instead of raw stored values like `GC management · flooring`.
+- Added regression assertions in `__tests__/project-review.test.ts`.
+
+Latest validation after homeowner GC review target polish:
+
+- `npm test -- --runInBand __tests__/project-review.test.ts`
+- `npx tsc --noEmit`
+- `npm test -- --runInBand`
+- `git diff --check`
