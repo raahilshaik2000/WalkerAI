@@ -530,16 +530,16 @@ export default function GeneralContractorProjectDetail() {
       return;
     }
 
-    const result = await launchImageLibrary({
-      mediaType: 'photo',
-      quality: 0.8,
-      selectionLimit: 1,
-      assetRepresentationMode: 'compatible',
-    });
-    if (result.didCancel || !result.assets?.[0]) return;
-
-    setUploadingExternalDocSlotId(slot.id);
     try {
+      const result = await launchImageLibrary({
+        mediaType: 'photo',
+        quality: 0.8,
+        selectionLimit: 1,
+        assetRepresentationMode: 'compatible',
+      });
+      if (result.didCancel || !result.assets?.[0]) return;
+
+      setUploadingExternalDocSlotId(slot.id);
       const currentUser = (await supabase.auth.getUser()).data.user;
       if (!currentUser?.id) throw new Error('Please sign in again before uploading trade documents.');
 

@@ -472,6 +472,7 @@ Runtime fixes made from this pass:
 - Supplier catalog stock toggles now roll back their optimistic UI update when the catalog update throws from a network/client failure, not only when Supabase returns an error object.
 - GC management invite acceptance, approval-request cancellation, trade-negotiation cancellation, and concierge booking responses now clear their in-progress state even if the RPC/update/fetch path throws.
 - GC payment-request cancellation now clears its in-progress state if the update or refresh throws, and GC permit status updates now show app-safe failure copy for thrown client/network errors.
+- GC native picker failures for license documents, insurance documents, permit uploads, project message attachments, and external-trade documents now route through app-safe alerts instead of bypassing upload error handling.
 - Homeowner schedule confirmation now uses app-safe copy for schedule load and confirmation failures, while preserving quote/payment-aware project activation behavior.
 - Homeowner permit/inspection records now use app-safe copy for permit load and upload failures while preserving signed document previews.
 - Homeowner and company milestone/payment workflows now use app-safe copy for milestone load, dispute, update, upload, and release failures; shared Supabase error formatting also hides database policy/schema/internal wording behind polished fallback copy.

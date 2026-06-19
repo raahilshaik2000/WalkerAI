@@ -196,17 +196,17 @@ export default function GeneralContractorMessagesScreen() {
       return;
     }
 
-    const result = await launchImageLibrary({
-      mediaType: 'photo',
-      quality: 0.8,
-      selectionLimit: 1,
-      assetRepresentationMode: 'compatible',
-    });
-    if (result.didCancel || !result.assets?.[0]) return;
-
-    const caption = body.trim();
-    setUploadingAttachment(true);
     try {
+      const result = await launchImageLibrary({
+        mediaType: 'photo',
+        quality: 0.8,
+        selectionLimit: 1,
+        assetRepresentationMode: 'compatible',
+      });
+      if (result.didCancel || !result.assets?.[0]) return;
+
+      const caption = body.trim();
+      setUploadingAttachment(true);
       const upload = getUploadMetadata(result.assets[0]);
       const path = `${projectId}/messages/${currentUser.id}-${Date.now()}.${upload.extension}`;
       const { publicUrl } = await uploadFile('project-photos', path, upload.uri, upload.contentType);

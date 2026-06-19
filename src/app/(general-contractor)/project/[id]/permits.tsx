@@ -214,16 +214,16 @@ export default function GeneralContractorPermitsScreen() {
       Alert.alert('Complete setup required', 'Complete verified GC setup is required before permit documents can be uploaded.');
       return;
     }
-    const result = await launchImageLibrary({
-      mediaType: 'photo',
-      quality: 0.8,
-      selectionLimit: 1,
-      assetRepresentationMode: 'compatible',
-    });
-    if (result.didCancel || !result.assets?.[0]) return;
-
-    setUploadingId(permit.id);
     try {
+      const result = await launchImageLibrary({
+        mediaType: 'photo',
+        quality: 0.8,
+        selectionLimit: 1,
+        assetRepresentationMode: 'compatible',
+      });
+      if (result.didCancel || !result.assets?.[0]) return;
+
+      setUploadingId(permit.id);
       const upload = getUploadMetadata(result.assets[0]);
       const path = `${projectId}/${permit.id}-${Date.now()}.${upload.extension}`;
       const { storagePath } = await uploadFile('permits', path, upload.uri, upload.contentType);

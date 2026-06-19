@@ -51,14 +51,18 @@ export default function GeneralContractorInsuranceOnboarding() {
   }, [user?.id]);
 
   const pickDocument = async () => {
-    const result = await launchImageLibrary({
-      mediaType: 'photo',
-      quality: 0.8,
-      selectionLimit: 1,
-      assetRepresentationMode: 'compatible',
-    });
-    if (!result.didCancel && result.assets?.[0]) {
-      setSelectedDocument(result.assets[0]);
+    try {
+      const result = await launchImageLibrary({
+        mediaType: 'photo',
+        quality: 0.8,
+        selectionLimit: 1,
+        assetRepresentationMode: 'compatible',
+      });
+      if (!result.didCancel && result.assets?.[0]) {
+        setSelectedDocument(result.assets[0]);
+      }
+    } catch (err) {
+      Alert.alert('Could not select document', formatAppSafeErrorMessage(err, 'Please try again.'));
     }
   };
 

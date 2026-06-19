@@ -201,6 +201,7 @@ describe('general contractor account type', () => {
     expect(licenseOnboarding).toContain("setLicenseNumber(data.license_number ?? '')");
     expect(licenseOnboarding).toContain("setDocumentUrl(data.license_doc_url ?? '')");
     expect(licenseOnboarding).toContain("launchImageLibrary");
+    expect(licenseOnboarding).toContain("Alert.alert('Could not select document', formatAppSafeErrorMessage(err, 'Please try again.'))");
     expect(licenseOnboarding).toContain("uploadFile('company-docs'");
     expect(licenseOnboarding).toContain('general-contractors/${user.id}/license-');
     expect(licenseOnboarding).toContain('License document required');
@@ -209,6 +210,7 @@ describe('general contractor account type', () => {
     expect(insuranceOnboarding).toContain("select('insurance_doc_url')");
     expect(insuranceOnboarding).toContain("setDocumentUrl(data.insurance_doc_url ?? '')");
     expect(insuranceOnboarding).toContain("launchImageLibrary");
+    expect(insuranceOnboarding).toContain("Alert.alert('Could not select document', formatAppSafeErrorMessage(err, 'Please try again.'))");
     expect(insuranceOnboarding).toContain("uploadFile('company-docs'");
     expect(insuranceOnboarding).toContain('general-contractors/${user.id}/insurance-');
     expect(insuranceOnboarding).toContain('Invalid insurance document');
@@ -1551,6 +1553,8 @@ describe('general contractor account type', () => {
     expect(pathRestrictionMigration).toContain("v_document_parts[4] NOT LIKE v_slot.id::TEXT || '-%'");
     expect(pathRestrictionMigration).toContain('External trade document path does not match this GC project slot');
     expect(gcProjectDetail).toContain("uploadFile('company-docs'");
+    expect(gcProjectDetail).toContain("try {\n      const result = await launchImageLibrary({");
+    expect(gcProjectDetail).toContain("Alert.alert('Upload failed', formatAppSafeErrorMessage(err, 'Please try again.'))");
     expect(gcProjectDetail).toContain('Please sign in again before uploading trade documents.');
     expect(gcProjectDetail).toContain('external-trades/${currentUser.id}/${projectId}/${slot.id}-');
     expect(gcProjectDetail).toContain("supabase.rpc('add_external_trade_document'");
@@ -1715,6 +1719,8 @@ describe('general contractor account type', () => {
     expect(gcPermits).toContain("from('permits').insert");
     expect(gcPermits).toContain("assignment?.status !== 'active'");
     expect(gcPermits).toContain("} catch (err) {\n      Alert.alert('Could not update status', formatAppSafeErrorMessage(err, 'Please try again.'));\n    }");
+    expect(gcPermits).toContain("try {\n      const result = await launchImageLibrary({");
+    expect(gcPermits).toContain("Alert.alert('Upload failed', formatAppSafeErrorMessage(err, 'Please try again.'))");
     expect(gcPermits).toContain('Upload Document');
     expect(gcPermits).toContain('inspection_scheduled');
     expect(gcPermits).toContain('handleOpenDocument(previewUrl)');
@@ -1970,8 +1976,10 @@ describe('general contractor account type', () => {
     expect(gcMessages).toContain("import { launchImageLibrary } from 'react-native-image-picker'");
     expect(gcMessages).toContain("const [uploadingAttachment, setUploadingAttachment] = useState(false)");
     expect(gcMessages).toContain('const sendPhotoAttachment = async () =>');
+    expect(gcMessages).toContain("try {\n      const result = await launchImageLibrary({");
     expect(gcMessages).toContain("const path = `${projectId}/messages/${currentUser.id}-${Date.now()}.${upload.extension}`");
     expect(gcMessages).toContain("await uploadFile('project-photos', path, upload.uri, upload.contentType)");
+    expect(gcMessages).toContain("Alert.alert('Attachment not sent', formatAppSafeErrorMessage(err, 'Please try again.'))");
     expect(gcMessages).toContain('attachment_url: publicUrl');
     expect(gcMessages).toContain('body: caption || null');
     expect(gcMessages).toContain('const [currentUserId, setCurrentUserId] = useState<string | null>(user?.id ?? null)');
