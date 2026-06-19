@@ -96,17 +96,15 @@ export default function GeneralContractorDashboard() {
   }, []);
 
   const fetchData = useCallback(async () => {
-    const currentUser = user ?? (await supabase.auth.getUser()).data.user;
-    if (!currentUser) {
-      setErrorMessage('You need to be signed in to view GC projects.');
-      clearDashboardState();
-      setLoading(false);
-      setRefreshing(false);
-      return;
-    }
-
     try {
       setErrorMessage(null);
+      const currentUser = user ?? (await supabase.auth.getUser()).data.user;
+      if (!currentUser) {
+        setErrorMessage('You need to be signed in to view GC projects.');
+        clearDashboardState();
+        return;
+      }
+
       const { data: profile, error: profileError } = await supabase
         .from('general_contractors')
         .select('*')

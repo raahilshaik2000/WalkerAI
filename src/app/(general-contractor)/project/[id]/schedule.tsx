@@ -99,17 +99,15 @@ export default function GeneralContractorScheduleScreen() {
       return;
     }
 
-    const currentUser = (await supabase.auth.getUser()).data.user;
-    if (!currentUser?.id) {
-      setErrorMessage('You need to be signed in to view scheduling.');
-      clearScheduleState();
-      setLoading(false);
-      setRefreshing(false);
-      return;
-    }
-
     try {
       setErrorMessage(null);
+      const currentUser = (await supabase.auth.getUser()).data.user;
+      if (!currentUser?.id) {
+        setErrorMessage('You need to be signed in to view scheduling.');
+        clearScheduleState();
+        return;
+      }
+
       const { data: gc, error: gcError } = await supabase
         .from('general_contractors')
         .select(GENERAL_CONTRACTOR_READINESS_SELECT)

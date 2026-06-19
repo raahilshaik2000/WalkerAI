@@ -165,7 +165,8 @@ describe('general contractor account type', () => {
     );
 
     expect(gcProfile).toContain('const clearProfileState = useCallback(() => {');
-    expect(gcProfile).toContain("setErrorMessage('You need to be signed in to view your GC profile.');\n      clearProfileState();");
+    expect(gcProfile).toContain("try {\n      setErrorMessage(null);\n      const currentUser = user ?? (await supabase.auth.getUser()).data.user;");
+    expect(gcProfile).toContain("setErrorMessage('You need to be signed in to view your GC profile.');\n        clearProfileState();");
     expect(gcProfile).toContain("setErrorMessage(formatAppSafeErrorMessage(err, 'Could not load GC profile.'));\n      clearProfileState();");
     expect(gcProfile).toContain('setStartingPayoutSetup(false);');
     expect(gcProfile).toContain('}, [clearProfileState, user]);');
@@ -634,7 +635,8 @@ describe('general contractor account type', () => {
     expect(gcMaterials).toContain('setSelectedMaterialId(null);');
     expect(gcMaterials).toContain("setProductName('');");
     expect(gcMaterials).toContain("setErrorMessage('Project is missing. Reopen materials from the GC project page.');\n      clearMaterialsState();");
-    expect(gcMaterials).toContain("setErrorMessage('You need to be signed in to source materials.');\n      clearMaterialsState();");
+    expect(gcMaterials).toContain("try {\n      setErrorMessage(null);\n      const currentUser = (await supabase.auth.getUser()).data.user;");
+    expect(gcMaterials).toContain("setErrorMessage('You need to be signed in to source materials.');\n        clearMaterialsState();");
     expect(gcMaterials).toContain("setErrorMessage(formatAppSafeErrorMessage(err, 'Could not load materials.'));\n      clearMaterialsState();");
     expect(gcMaterials).toContain('}, [clearMaterialsState, projectId]);');
 
@@ -642,7 +644,8 @@ describe('general contractor account type', () => {
     expect(gcDiscovery).toContain("setRequestType('change_order');");
     expect(gcDiscovery).toContain("setTitle('');");
     expect(gcDiscovery).toContain("setErrorMessage('Project is missing. Reopen discoveries from the GC project page.');\n      clearDiscoveryState();");
-    expect(gcDiscovery).toContain("setErrorMessage('You need to be signed in to manage discoveries.');\n      clearDiscoveryState();");
+    expect(gcDiscovery).toContain("try {\n      setErrorMessage(null);\n      const currentUser = (await supabase.auth.getUser()).data.user;");
+    expect(gcDiscovery).toContain("setErrorMessage('You need to be signed in to manage discoveries.');\n        clearDiscoveryState();");
     expect(gcDiscovery).toContain("setErrorMessage(formatAppSafeErrorMessage(err, 'Could not load discoveries.'));\n      clearDiscoveryState();");
     expect(gcDiscovery).toContain('}, [clearDiscoveryState, projectId]);');
   });
@@ -1395,7 +1398,8 @@ describe('general contractor account type', () => {
     );
 
     expect(dashboard).toContain('const clearDashboardState = useCallback(() => {');
-    expect(dashboard).toContain("setErrorMessage('You need to be signed in to view GC projects.');\n      clearDashboardState();");
+    expect(dashboard).toContain("try {\n      setErrorMessage(null);\n      const currentUser = user ?? (await supabase.auth.getUser()).data.user;");
+    expect(dashboard).toContain("setErrorMessage('You need to be signed in to view GC projects.');\n        clearDashboardState();");
     expect(dashboard).toContain("setErrorMessage(formatAppSafeErrorMessage(err, 'Could not load GC dashboard.'));\n      clearDashboardState();");
     expect(dashboard).toContain('}, [clearDashboardState, user]);');
     expect(dashboard).toContain('if (!loading && errorMessage)');
@@ -1717,7 +1721,8 @@ describe('general contractor account type', () => {
     expect(gcSchedule).toContain("slot.external_trade_name ?? slot.external_trade_company ?? 'External trade'");
     expect(gcSchedule).toContain('const clearScheduleState = useCallback(() => {');
     expect(gcSchedule).toContain("setErrorMessage('Project is missing. Reopen scheduling from the GC project page.');\n      clearScheduleState();");
-    expect(gcSchedule).toContain("setErrorMessage('You need to be signed in to view scheduling.');\n      clearScheduleState();");
+    expect(gcSchedule).toContain("try {\n      setErrorMessage(null);\n      const currentUser = (await supabase.auth.getUser()).data.user;");
+    expect(gcSchedule).toContain("setErrorMessage('You need to be signed in to view scheduling.');\n        clearScheduleState();");
     expect(gcSchedule).toContain("setErrorMessage(formatAppSafeErrorMessage(err, 'Could not load schedule.'));\n      clearScheduleState();");
     expect(gcSchedule).toContain('Assign a WalkerAI trade or mark this scope externally managed before recommending schedule dates.');
     expect(gcSchedule).toContain("request_type: 'schedule_change'");
@@ -1856,7 +1861,8 @@ describe('general contractor account type', () => {
     expect(gcPayments).toContain('handleCancelRequest');
     expect(gcPayments).toContain('const clearPaymentRequestState = useCallback(() => {');
     expect(gcPayments).toContain("setErrorMessage('Project is missing. Reopen payment requests from the GC project page.');\n      clearPaymentRequestState();");
-    expect(gcPayments).toContain("setErrorMessage('You need to be signed in to manage payment requests.');\n      clearPaymentRequestState();");
+    expect(gcPayments).toContain("try {\n      setErrorMessage(null);\n      const currentUser = (await supabase.auth.getUser()).data.user;");
+    expect(gcPayments).toContain("setErrorMessage('You need to be signed in to manage payment requests.');\n        clearPaymentRequestState();");
     expect(gcPayments).toContain("setErrorMessage(formatAppSafeErrorMessage(err, 'Could not load payment requests.'));\n      clearPaymentRequestState();");
     expect(gcPayments).toContain("const canManagePaymentRequests = assignment?.status === 'active' && gcReady;");
     expect(gcPayments).toContain("status: 'cancelled'");
@@ -2294,7 +2300,8 @@ describe('general contractor account type', () => {
     expect(gcTrades).toContain("from('projects')");
     expect(gcTrades).toContain("select('ai_cost_min, ai_cost_max')");
     expect(gcTrades).toContain('const clearTradeManagementState = useCallback(() => {');
-    expect(gcTrades).toContain("setErrorMessage('You need to be signed in to manage trades.');\n      clearTradeManagementState();");
+    expect(gcTrades).toContain("try {\n      setErrorMessage(null);\n      const currentUser = (await supabase.auth.getUser()).data.user;");
+    expect(gcTrades).toContain("setErrorMessage('You need to be signed in to manage trades.');\n        clearTradeManagementState();");
     expect(gcTrades).toContain("setErrorMessage(formatAppSafeErrorMessage(err, 'Could not load trade management.'));\n      clearTradeManagementState();");
     expect(gcTrades).toContain('setSelectedSlotId(null);');
     expect(gcTrades).toContain('setSelectedQuoteId(null);');
@@ -2391,7 +2398,8 @@ describe('general contractor account type', () => {
     expect(gcApprovals).toContain("import { isGeneralContractorReadyForProjectControls } from '@/lib/general-contractor';");
     expect(gcApprovals).toContain(".select('id, verified, concierge_enabled, business_name, city, province, lat, lng, license_number, license_doc_url, insurance_doc_url')");
     expect(gcApprovals).toContain('const clearApprovalsState = useCallback(() => {');
-    expect(gcApprovals).toContain("setErrorMessage('You need to be signed in to view approvals.');\n      setSetupLockMessage(null);\n      clearApprovalsState();");
+    expect(gcApprovals).toContain("try {\n      setErrorMessage(null);\n      setSetupLockMessage(null);\n      const currentUser = user ?? (await supabase.auth.getUser()).data.user;");
+    expect(gcApprovals).toContain("setErrorMessage('You need to be signed in to view approvals.');\n        clearApprovalsState();");
     expect(gcApprovals).toContain("setErrorMessage(formatAppSafeErrorMessage(err, 'Could not load approvals.'));\n      clearApprovalsState();");
     expect(gcApprovals).toContain('setRespondingBookingId(null);');
     expect(gcApprovals).toContain('setBookingResponseNotes({});');

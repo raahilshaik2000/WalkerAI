@@ -116,19 +116,16 @@ export default function GeneralContractorApprovals() {
   }, []);
 
   const fetchData = useCallback(async () => {
-    const currentUser = user ?? (await supabase.auth.getUser()).data.user;
-    if (!currentUser) {
-      setErrorMessage('You need to be signed in to view approvals.');
-      setSetupLockMessage(null);
-      clearApprovalsState();
-      setLoading(false);
-      setRefreshing(false);
-      return;
-    }
-
     try {
       setErrorMessage(null);
       setSetupLockMessage(null);
+      const currentUser = user ?? (await supabase.auth.getUser()).data.user;
+      if (!currentUser) {
+        setErrorMessage('You need to be signed in to view approvals.');
+        clearApprovalsState();
+        return;
+      }
+
       const { data: gc, error: profileError } = await supabase
         .from('general_contractors')
         .select('id, verified, concierge_enabled, business_name, city, province, lat, lng, license_number, license_doc_url, insurance_doc_url')

@@ -42,17 +42,15 @@ export default function GeneralContractorProfile() {
   }, []);
 
   const fetchData = useCallback(async () => {
-    const currentUser = user ?? (await supabase.auth.getUser()).data.user;
-    if (!currentUser) {
-      setErrorMessage('You need to be signed in to view your GC profile.');
-      clearProfileState();
-      setLoading(false);
-      setRefreshing(false);
-      return;
-    }
-
     try {
       setErrorMessage(null);
+      const currentUser = user ?? (await supabase.auth.getUser()).data.user;
+      if (!currentUser) {
+        setErrorMessage('You need to be signed in to view your GC profile.');
+        clearProfileState();
+        return;
+      }
+
       await refreshStripeConnectStatus('general_contractor');
       const { data: profile, error } = await supabase
         .from('general_contractors')

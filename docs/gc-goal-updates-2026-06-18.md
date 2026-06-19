@@ -423,7 +423,6 @@ Latest validation after the completed-project screen update:
 - `npx tsc --noEmit`
 - `npm test -- --runInBand`
 - `git diff --check`
-- `git diff --check`
 
 Latest validation after notification/error-copy hardening:
 
@@ -1226,3 +1225,17 @@ Latest validation after GC messages fail-closed state hardening:
 - `npm test -- --runInBand __tests__/general-contractor.test.ts`
 - `npx tsc --noEmit`
 - `npm test -- --runInBand`
+- `git diff --check`
+
+Latest update after GC auth-loader stale-state hardening:
+
+- Hardened the GC dashboard, GC profile, GC approvals inbox, trade management, schedule, discovery, materials, and payment request loaders so `supabase.auth.getUser()` failures now run through the same app-safe catch/finally paths as backend load failures.
+- Signed-out states still show the existing account-specific lock copy, but thrown auth/session failures now clear stale GC dashboard data, profile metrics, approval rows, trade state, scheduling drafts, discovery drafts, material recommendation drafts, and payment request drafts instead of bypassing reset logic.
+- Added regression assertions in `__tests__/general-contractor.test.ts` to keep auth lookup inside the guarded loader path for each affected GC screen.
+
+Latest validation after GC auth-loader stale-state hardening:
+
+- `npm test -- --runInBand __tests__/general-contractor.test.ts`
+- `npx tsc --noEmit`
+- `npm test -- --runInBand`
+- `git diff --check`

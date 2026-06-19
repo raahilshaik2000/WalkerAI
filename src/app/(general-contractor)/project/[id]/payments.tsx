@@ -97,17 +97,15 @@ export default function GeneralContractorPaymentsScreen() {
       return;
     }
 
-    const currentUser = (await supabase.auth.getUser()).data.user;
-    if (!currentUser?.id) {
-      setErrorMessage('You need to be signed in to manage payment requests.');
-      clearPaymentRequestState();
-      setLoading(false);
-      setRefreshing(false);
-      return;
-    }
-
     try {
       setErrorMessage(null);
+      const currentUser = (await supabase.auth.getUser()).data.user;
+      if (!currentUser?.id) {
+        setErrorMessage('You need to be signed in to manage payment requests.');
+        clearPaymentRequestState();
+        return;
+      }
+
       const { data: gc, error: gcError } = await supabase
         .from('general_contractors')
         .select(GENERAL_CONTRACTOR_READINESS_SELECT)
