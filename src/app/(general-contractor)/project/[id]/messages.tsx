@@ -192,13 +192,13 @@ export default function GeneralContractorMessagesScreen() {
       Alert.alert('Messages locked', composeLockMessage || 'Project messages are currently read-only.');
       return;
     }
-    const currentUser = user ?? (await supabase.auth.getUser()).data.user;
-    if (!projectId || !currentUser?.id) {
-      Alert.alert('Unable to attach photo', 'Please reopen this project and try again.');
-      return;
-    }
 
     try {
+      const currentUser = user ?? (await supabase.auth.getUser()).data.user;
+      if (!projectId || !currentUser?.id) {
+        Alert.alert('Unable to attach photo', 'Please reopen this project and try again.');
+        return;
+      }
       const result = await launchImageLibrary({
         mediaType: 'photo',
         quality: 0.8,

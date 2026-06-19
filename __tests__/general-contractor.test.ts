@@ -1993,7 +1993,8 @@ describe('general contractor account type', () => {
     expect(gcMessages).toContain("import { launchImageLibrary } from 'react-native-image-picker'");
     expect(gcMessages).toContain("const [uploadingAttachment, setUploadingAttachment] = useState(false)");
     expect(gcMessages).toContain('const sendPhotoAttachment = async () =>');
-    expect(gcMessages).toContain("try {\n      const result = await launchImageLibrary({");
+    expect(gcMessages).toContain("try {\n      const currentUser = user ?? (await supabase.auth.getUser()).data.user;\n      if (!projectId || !currentUser?.id) {\n        Alert.alert('Unable to attach photo', 'Please reopen this project and try again.');");
+    expect(gcMessages).toContain("const result = await launchImageLibrary({");
     expect(gcMessages).toContain("const path = `${projectId}/messages/${currentUser.id}-${Date.now()}.${upload.extension}`");
     expect(gcMessages).toContain("await uploadFile('project-photos', path, upload.uri, upload.contentType)");
     expect(gcMessages).toContain("Alert.alert('Attachment not sent', formatAppSafeErrorMessage(err, 'Please try again.'))");
