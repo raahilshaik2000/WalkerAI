@@ -56,8 +56,12 @@ describe('change-order workflow copy', () => {
     expect(companyChangeOrders).toContain("setErrorMessage(formatAppSafeErrorMessage(companyResult.error, 'Could not load company profile.'))");
     expect(companyChangeOrders).toContain("setErrorMessage(formatAppSafeErrorMessage(legacyResult.error, 'Could not load change orders.'))");
     expect(companyChangeOrders).toContain("setErrorMessage(formatAppSafeErrorMessage(error, 'Could not load change orders.'))");
+    expect(companyChangeOrders).toContain("setErrorMessage(formatAppSafeErrorMessage(err, 'Could not load change orders.'))");
     expect(companyChangeOrders).toContain("Alert.alert('Could not submit change order', formatAppSafeErrorMessage(insertError, 'Please try again.'))");
+    expect(companyChangeOrders).toContain("Alert.alert('Could not submit change order', formatAppSafeErrorMessage(err, 'Please try again.'))");
+    expect(companyChangeOrders).toContain("} finally {\n      setSubmitting(false);");
     expect(companyChangeOrders).toContain("Alert.alert('Could not sign change order', formatAppSafeErrorMessage(error, 'Please try again.'))");
+    expect(companyChangeOrders).toContain("Alert.alert('Could not sign change order', formatAppSafeErrorMessage(err, 'Please try again.'))");
     expect(companyChangeOrders).not.toContain('setErrorMessage(`Could not load company profile: ${companyResult.error.message}`)');
     expect(companyChangeOrders).not.toContain('setErrorMessage(`Could not load change orders: ${legacyResult.error.message}`)');
     expect(companyChangeOrders).not.toContain('setErrorMessage(`Could not load change orders: ${error.message}`)');

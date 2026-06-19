@@ -503,6 +503,7 @@ Runtime fixes made from this pass:
 - Homeowner change-order approvals now catch thrown load, approve, and reject failures, clear loading/responding state reliably, and show both approval buttons as in-progress while a response is being submitted.
 - Company/trade job feed plus business, license, and insurance onboarding now use app-safe copy for load/save/verification submission failures across the verified trade setup and accepted-job entry path.
 - Company/trade license onboarding no longer has a `Skip for now` bypass into insurance submission. Marketplace contractors must enter the required license number before continuing to verification, matching the verified-company job gate.
+- Company/trade change-order loading, submission, and contractor signature actions now catch thrown client/network failures as well as Supabase error objects, preventing stuck submitting states and raw backend error copy.
 - Supplier catalog, catalog item creation, earnings, and profile screens now use app-safe copy for supplier profile, catalog, stock toggle, payout setup, and earnings load/save failures across the material-sourcing account workflow.
 - Supplier business, license, and category onboarding plus catalog-item editing/deletion now use app-safe copy for profile load, setup save, catalog item load, save, and delete failures.
 - Homeowner/company warranty screens and the company-to-homeowner review screen now use app-safe copy for closeout warranty load/upload and review load/submit failures.
@@ -833,6 +834,13 @@ Latest validation after 2D floor-plan snapped dimension correction:
 Latest validation after company license onboarding bypass removal:
 
 - `npm test -- --runInBand __tests__/company-entry-errors.test.ts`
+- `npx tsc --noEmit`
+- `npm test -- --runInBand`
+- `git diff --check`
+
+Latest validation after company change-order thrown-failure hardening:
+
+- `npm test -- --runInBand __tests__/change-orders.test.ts`
 - `npx tsc --noEmit`
 - `npm test -- --runInBand`
 - `git diff --check`
