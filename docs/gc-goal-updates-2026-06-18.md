@@ -894,3 +894,11 @@ Latest validation after 3D customizer material reapply hardening:
 - `npx tsc --noEmit`
 - `npm test -- --runInBand`
 - `git diff --check`
+
+Latest no-code payment and closeout audit:
+
+- GC payment requests: verified the GC payment screen only allows deposits/progress/final payment requests while the assignment is active and the GC profile is complete/verified. The UI copy states that requests record homeowner authorization only and do not move escrow or milestone funds. Pending request cancellation is also scoped to the active verified GC assignment.
+- Homeowner payment authority: verified the homeowner concierge screen requires project ownership before approving/rejecting GC payment requests, locks approval to the active complete verified GC assignment, and states that approval does not bypass milestone escrow release.
+- Project completion: verified the GC closeout binder assembles permits, warranties, material receipts, approvals, payment requests, change orders, trade negotiations, quotes, and milestones from project records. Completion is sent as a homeowner approval request with `metadata.action = complete_project`; it does not release escrow funds.
+- Completion database guards: verified final completion still requires active complete verified GC management, an active project with an approved budget, no pending GC payment requests, no pending approval/change-order decisions, no open/unscheduled trade slots, no active permits/material orders, no pending trade negotiations/quotes, and no unpaid milestones before completion can apply.
+- GC-created project note: GC-created projects start as draft homeowner projects. Homeowner confirmation activates the GC assignment; project-level active status still comes from approved budget/trade workflow state, which matches the current closeout guard rather than silently completing a draft project.
