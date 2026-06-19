@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import {
   Alert,
   FlatList,
@@ -49,14 +49,22 @@ export default function GeneralContractorMessagesScreen() {
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const flatListRef = useRef<FlatList>(null);
 
+  const clearMessageState = useCallback((lockMessage: string, currentUser: string | null = null) => {
+    setMessages([]);
+    setBody('');
+    setSending(false);
+    setUploadingAttachment(false);
+    setCurrentUserId(currentUser);
+    setCanSendMessages(false);
+    setComposeLockMessage(lockMessage);
+  }, []);
+
   useEffect(() => {
     let cancelled = false;
 
     if (!projectId) {
       setErrorMessage('Project is missing. Reopen messages from the GC project page.');
-      setMessages([]);
-      setCanSendMessages(false);
-      setComposeLockMessage('Project is missing. Reopen messages from the GC project page.');
+      clearMessageState('Project is missing. Reopen messages from the GC project page.');
       return;
     }
 
@@ -65,11 +73,8 @@ export default function GeneralContractorMessagesScreen() {
         const currentUser = user ?? (await supabase.auth.getUser()).data.user;
         if (!currentUser?.id) {
           if (!cancelled) {
-            setCurrentUserId(null);
             setErrorMessage('You need to be signed in to view project messages.');
-            setMessages([]);
-            setCanSendMessages(false);
-            setComposeLockMessage('Sign in to send project messages.');
+            clearMessageState('Sign in to send project messages.');
           }
           return;
         }
@@ -92,7 +97,8 @@ export default function GeneralContractorMessagesScreen() {
 
         if (messageResult.error) {
           setErrorMessage(`Could not load messages: ${formatAppSafeErrorMessage(messageResult.error, 'Please try again.')}`);
-          setMessages([]);
+          clearMessageState('Messages are unavailable right now. Try again shortly.', currentUser.id);
+          return;
         } else {
           setErrorMessage(null);
           setMessages((messageResult.data ?? []) as Message[]);
@@ -139,9 +145,7 @@ export default function GeneralContractorMessagesScreen() {
       } catch (err) {
         if (!cancelled) {
           setErrorMessage(formatAppSafeErrorMessage(err, 'Could not load messages.'));
-          setMessages([]);
-          setCanSendMessages(false);
-          setComposeLockMessage('Messages are unavailable right now. Try again shortly.');
+          clearMessageState('Messages are unavailable right now. Try again shortly.');
         }
       }
     };
@@ -164,7 +168,7 @@ export default function GeneralContractorMessagesScreen() {
       cancelled = true;
       supabase.removeChannel(channel);
     };
-  }, [projectId, user]);
+  }, [clearMessageState, projectId, user]);
 
   const sendMessage = async () => {
     if (!body.trim() || sending) return;

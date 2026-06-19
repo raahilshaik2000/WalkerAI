@@ -57,11 +57,14 @@ describe('project messages', () => {
     expect(homeownerProjectMessages).not.toContain("Alert.alert('Message not sent', error.message)");
 
     expect(gcMessages).toContain("import { formatAppSafeErrorMessage } from '@/lib/supabase/functions';");
+    expect(gcMessages).toContain('const clearMessageState = useCallback((lockMessage: string, currentUser: string | null = null) => {');
     expect(gcMessages).toContain("formatAppSafeErrorMessage(messageResult.error, 'Please try again.')");
     expect(gcMessages).toContain("setErrorMessage(formatAppSafeErrorMessage(err, 'Could not load messages.'))");
-    expect(gcMessages).toContain("setErrorMessage('You need to be signed in to view project messages.');\n            setMessages([]);");
-    expect(gcMessages).toContain("setErrorMessage(`Could not load messages: ${formatAppSafeErrorMessage(messageResult.error, 'Please try again.')}`);\n          setMessages([]);");
-    expect(gcMessages).toContain("setComposeLockMessage('Messages are unavailable right now. Try again shortly.')");
+    expect(gcMessages).toContain("setErrorMessage('You need to be signed in to view project messages.');\n            clearMessageState('Sign in to send project messages.');");
+    expect(gcMessages).toContain("setErrorMessage(`Could not load messages: ${formatAppSafeErrorMessage(messageResult.error, 'Please try again.')}`);\n          clearMessageState('Messages are unavailable right now. Try again shortly.', currentUser.id);\n          return;");
+    expect(gcMessages).toContain('setBody(\'\');');
+    expect(gcMessages).toContain('setSending(false);');
+    expect(gcMessages).toContain('setUploadingAttachment(false);');
     expect(gcMessages).toContain('if (error) throw error;');
     expect(gcMessages).toContain("Alert.alert('Message not sent', formatAppSafeErrorMessage(err, 'Please try again.'))");
     expect(gcMessages).not.toContain('setErrorMessage(`Could not load messages: ${messageResult.error.message}`)');

@@ -423,6 +423,7 @@ Latest validation after the completed-project screen update:
 - `npx tsc --noEmit`
 - `npm test -- --runInBand`
 - `git diff --check`
+- `git diff --check`
 
 Latest validation after notification/error-copy hardening:
 
@@ -1212,3 +1213,16 @@ Latest validation after GC permits stale-state hardening:
 - `npx tsc --noEmit`
 - `npm test -- --runInBand`
 - `git diff --check`
+
+Latest update after GC messages fail-closed state hardening:
+
+- Hardened the GC project messages screen so missing project context, signed-out auth context, message load failures, and thrown load failures clear stale messages, compose text, sending state, attachment upload state, current user marker, and send permissions through a shared reset helper.
+- Message load failures now return immediately after locking the composer, preventing the later GC assignment checks from re-enabling message sending while the message list failed to load.
+- Added regression assertions in `__tests__/general-contractor.test.ts` and updated `__tests__/messages.test.ts` to cover the new helper-based reset.
+
+Latest validation after GC messages fail-closed state hardening:
+
+- `npm test -- --runInBand __tests__/messages.test.ts`
+- `npm test -- --runInBand __tests__/general-contractor.test.ts`
+- `npx tsc --noEmit`
+- `npm test -- --runInBand`

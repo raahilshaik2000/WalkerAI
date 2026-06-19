@@ -2066,8 +2066,15 @@ describe('general contractor account type', () => {
     expect(navigator).toContain('GeneralContractorMessages');
     expect(gcProjectDetail).toContain("navigation.navigate('GeneralContractorMessages'");
     expect(gcMessages).toContain("from('messages').insert");
+    expect(gcMessages).toContain('const clearMessageState = useCallback((lockMessage: string, currentUser: string | null = null) => {');
+    expect(gcMessages).toContain("setErrorMessage('Project is missing. Reopen messages from the GC project page.');\n      clearMessageState('Project is missing. Reopen messages from the GC project page.');");
+    expect(gcMessages).toContain("setErrorMessage('You need to be signed in to view project messages.');\n            clearMessageState('Sign in to send project messages.');");
     expect(gcMessages).toContain("setErrorMessage(formatAppSafeErrorMessage(err, 'Could not load messages.'))");
-    expect(gcMessages).toContain("setComposeLockMessage('Messages are unavailable right now. Try again shortly.')");
+    expect(gcMessages).toContain("clearMessageState('Messages are unavailable right now. Try again shortly.', currentUser.id);\n          return;");
+    expect(gcMessages).toContain('setBody(\'\');');
+    expect(gcMessages).toContain('setSending(false);');
+    expect(gcMessages).toContain('setUploadingAttachment(false);');
+    expect(gcMessages).toContain('}, [clearMessageState, projectId, user]);');
     expect(gcMessages).toContain("let trimmed = '';");
     expect(gcMessages).toContain('if (error) throw error;');
     expect(gcMessages).toContain("if (trimmed) setBody(trimmed);");
