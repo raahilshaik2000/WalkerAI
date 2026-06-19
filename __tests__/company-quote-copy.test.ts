@@ -150,6 +150,25 @@ describe('company quote copy', () => {
     expect(jobDetail).toContain("hasEditablePendingQuote ? 'Edit pending' : 'Build quote'");
   });
 
+  it('blocks quote editing when pricing state cannot be safely loaded', () => {
+    const repoRoot = path.resolve(__dirname, '..');
+    const quoteBuilder = fs.readFileSync(
+      path.join(repoRoot, 'src/app/(company)/job/[id]/quote-builder.tsx'),
+      'utf8'
+    );
+
+    expect(quoteBuilder).toContain('const [quoteLoadError, setQuoteLoadError] = useState<string | null>(null);');
+    expect(quoteBuilder).toContain("setQuoteLoadError(formatAppSafeErrorMessage(err, 'Could not load quote pricing.'))");
+    expect(quoteBuilder).toContain('if (quoteLoadError) {');
+    expect(quoteBuilder).toContain('Quote Unavailable');
+    expect(quoteBuilder).toContain('Pricing is locked until WalkerAI can confirm whether this job already has an editable, approved, or funded quote.');
+    expect(quoteBuilder).toContain('setQuoteReloadKey((current) => current + 1);');
+    expect(quoteBuilder).toContain('if (pendingQuoteResult.error) throw pendingQuoteResult.error;');
+    expect(quoteBuilder).toContain('if (itemsResult.error) throw itemsResult.error;');
+    expect(quoteBuilder).toContain('if (milestonesResult.error) throw milestonesResult.error;');
+    expect(quoteBuilder).not.toContain('!pendingQuoteResult.error && pendingQuoteResult.data');
+  });
+
   it('does not show duplicate legacy active jobs when a slot assignment exists for the same project', () => {
     const repoRoot = path.resolve(__dirname, '..');
     const source = fs.readFileSync(
