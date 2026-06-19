@@ -1199,3 +1199,16 @@ Latest validation after GC completion binder stale-state hardening:
 - `npx tsc --noEmit`
 - `npm test -- --runInBand`
 - `git diff --check`
+
+Latest update after GC permits stale-state hardening:
+
+- Hardened the GC permits and inspections screen so signed-out auth context, assignment lock states, or permit load failures clear stale permit rows, preview URLs, add-permit draft text, save state, upload state, and GC readiness through explicit reset helpers.
+- The reset is split so unsupported assignment states can clear permit records and draft controls without erasing the current assignment lock message.
+- Added regression assertions in `__tests__/general-contractor.test.ts`.
+
+Latest validation after GC permits stale-state hardening:
+
+- `npm test -- --runInBand __tests__/general-contractor.test.ts`
+- `npx tsc --noEmit`
+- `npm test -- --runInBand`
+- `git diff --check`

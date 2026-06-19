@@ -1792,6 +1792,14 @@ describe('general contractor account type', () => {
     expect(completeDirectToolsMigration).toContain("NULLIF(TRIM(gc.insurance_doc_url), '') IS NOT NULL");
     expect(navigator).toContain('GeneralContractorPermits');
     expect(gcProjectDetail).toContain("navigation.navigate('GeneralContractorPermits'");
+    expect(gcPermits).toContain('const clearPermitRecordState = useCallback(() => {');
+    expect(gcPermits).toContain('const clearPermitState = useCallback(() => {');
+    expect(gcPermits).toContain("if (!currentUser?.id) {\n        clearPermitState();\n        setErrorMessage('You need to be signed in to manage permits.');");
+    expect(gcPermits).toContain("setErrorMessage(formatAppSafeErrorMessage(err, 'Could not load permits.'))");
+    expect(gcPermits).toContain('setPermitType(\'\');');
+    expect(gcPermits).toContain('setSaving(false);');
+    expect(gcPermits).toContain('setUploadingId(null);');
+    expect(gcPermits).toContain('}, [clearPermitRecordState, clearPermitState, projectId]);');
     expect(gcPermits).toContain("select('id, status')");
     expect(gcPermits).toContain("const canViewPermits = assignment?.status === 'active' || assignment?.status === 'completed';");
     expect(gcPermits).toContain("!['active', 'completed'].includes(assignmentRow?.status ?? '')");

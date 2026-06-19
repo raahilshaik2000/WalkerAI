@@ -70,15 +70,26 @@ export default function GeneralContractorPermitsScreen() {
   const [gcReady, setGcReady] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
+  const clearPermitRecordState = useCallback(() => {
+    setPermits([]);
+    setPreviewUrls({});
+    setPermitType('');
+    setSaving(false);
+    setUploadingId(null);
+  }, []);
+
+  const clearPermitState = useCallback(() => {
+    setAssignment(null);
+    clearPermitRecordState();
+    setGcReady(false);
+  }, [clearPermitRecordState]);
+
   const fetchPermits = useCallback(async () => {
     try {
       setErrorMessage(null);
       const currentUser = (await supabase.auth.getUser()).data.user;
       if (!currentUser?.id) {
-        setAssignment(null);
-        setPermits([]);
-        setPreviewUrls({});
-        setGcReady(false);
+        clearPermitState();
         setErrorMessage('You need to be signed in to manage permits.');
         return;
       }
@@ -102,8 +113,7 @@ export default function GeneralContractorPermitsScreen() {
 
       setAssignment(assignmentRow as Assignment | null);
       if (!['active', 'completed'].includes(assignmentRow?.status ?? '')) {
-        setPermits([]);
-        setPreviewUrls({});
+        clearPermitRecordState();
         return;
       }
 
@@ -131,16 +141,13 @@ export default function GeneralContractorPermitsScreen() {
       }));
       setPreviewUrls(previews);
     } catch (err) {
-      setAssignment(null);
-      setPermits([]);
-      setPreviewUrls({});
-      setGcReady(false);
+      clearPermitState();
       setErrorMessage(formatAppSafeErrorMessage(err, 'Could not load permits.'));
     } finally {
       setLoading(false);
       setRefreshing(false);
     }
-  }, [projectId]);
+  }, [clearPermitRecordState, clearPermitState, projectId]);
 
   useFocusEffect(
     useCallback(() => {
