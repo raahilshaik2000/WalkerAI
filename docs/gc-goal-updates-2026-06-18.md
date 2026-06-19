@@ -711,6 +711,7 @@ Latest validation after GC action response-state hardening:
 - `npx tsc --noEmit`
 - `npm test -- --runInBand`
 - `git diff --check`
+- `git diff --check`
 
 Latest validation after GC payment and permit action hardening:
 
@@ -1234,6 +1235,19 @@ Latest update after GC auth-loader stale-state hardening:
 - Added regression assertions in `__tests__/general-contractor.test.ts` to keep auth lookup inside the guarded loader path for each affected GC screen.
 
 Latest validation after GC auth-loader stale-state hardening:
+
+- `npm test -- --runInBand __tests__/general-contractor.test.ts`
+- `npx tsc --noEmit`
+- `npm test -- --runInBand`
+- `git diff --check`
+
+Latest update after GC project approval submission hardening:
+
+- Hardened the GC managed-project detail screen so generic homeowner approval request submission enters the protected submit/finally path before checking the current auth session.
+- If the auth lookup throws or the session disappears during submit, the screen now shows app-safe error copy and clears `submittingApproval` instead of bypassing the reset path.
+- Added a regression assertion in `__tests__/general-contractor.test.ts` for the protected auth lookup and submit-state cleanup.
+
+Latest validation after GC project approval submission hardening:
 
 - `npm test -- --runInBand __tests__/general-contractor.test.ts`
 - `npx tsc --noEmit`

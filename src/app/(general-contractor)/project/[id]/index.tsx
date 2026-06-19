@@ -391,14 +391,14 @@ export default function GeneralContractorProjectDetail() {
       }
     }
 
-    const currentUser = (await supabase.auth.getUser()).data.user;
-    if (!currentUser?.id) {
-      Alert.alert('Sign in required', 'Please sign in again before submitting approval requests.');
-      return;
-    }
-
     setSubmittingApproval(true);
     try {
+      const currentUser = (await supabase.auth.getUser()).data.user;
+      if (!currentUser?.id) {
+        Alert.alert('Sign in required', 'Please sign in again before submitting approval requests.');
+        return;
+      }
+
       const { data: gc, error: gcError } = await supabase
         .from('general_contractors')
         .select(GENERAL_CONTRACTOR_READINESS_SELECT)

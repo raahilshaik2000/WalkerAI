@@ -670,6 +670,8 @@ describe('general contractor account type', () => {
     expect(gcProjectDetail).toContain('Send for Homeowner Approval');
     expect(gcProjectDetail).toContain("from('project_approval_requests').insert");
     expect(gcProjectDetail).toContain("request_type: 'general_recommendation'");
+    expect(gcProjectDetail).toContain("setSubmittingApproval(true);\n    try {\n      const currentUser = (await supabase.auth.getUser()).data.user;");
+    expect(gcProjectDetail).toContain("Alert.alert('Could not submit approval request', formatAppSafeErrorMessage(err, 'Please try again.'));\n    } finally {\n      setSubmittingApproval(false);");
     expect(gcProjectDetail).toContain('Use this only for general recommendations that do not need schedule, trade, material, discovery, payment, or completion metadata.');
     expect(gcProjectDetail).toContain('Use the dedicated project-control screens for workflow changes so homeowner approval has the required data to apply cleanly.');
     expect(gcProjectDetail).not.toContain('const APPROVAL_TYPES');
