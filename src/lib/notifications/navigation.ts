@@ -26,7 +26,7 @@ function firstDeepLinkMatch(value: unknown, pattern: RegExp): string | undefined
 }
 
 function projectIdFromDeepLink(value: unknown): string | undefined {
-  return firstDeepLinkMatch(value, /\/(?:\(homeowner\)\/project|\(company\)\/job|\(general-contractor\)\/project)\/([^/?#]+)/);
+  return firstDeepLinkMatch(value, /\/(?:project|\(homeowner\)\/project|\(company\)\/job|\(general-contractor\)\/project)\/([^/?#]+)/);
 }
 
 function slotIdFromDeepLink(value: unknown): string | undefined {

@@ -218,6 +218,15 @@ describe('notification navigation', () => {
 
   it('falls back to WalkerAI deep links when GC push payload ids are missing', () => {
     expect(resolveNotificationRoute(
+      'new_message',
+      { deep_link: '/project/project-1/messages' },
+      'supplier',
+    )).toEqual({
+      name: 'SupplierProjectMessages',
+      params: { id: 'project-1' },
+    });
+
+    expect(resolveNotificationRoute(
       'order_delivered',
       { deep_link: '/(general-contractor)/project/project-1/materials' },
       'general_contractor',

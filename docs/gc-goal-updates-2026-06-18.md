@@ -489,6 +489,7 @@ Runtime fixes made from this pass:
 - Root account role resolution now clears the persisted profile store when the auth session exists but no `public.users` profile row is returned, preventing stale display/profile data from a previous homeowner, company, supplier, or GC account while the setup-incomplete fallback is shown.
 - Supplier `new_message` notification taps now open the shared project message thread when the backend sends a `project_id`, matching the supplier project participant policy and the existing `SupplierProjectMessages` route.
 - Shared project message threads now catch thrown load/send failures and restore the typed draft while clearing the sending state, covering the homeowner project message surface and the supplier project-message route that reuses it.
+- Notification deep-link fallback parsing now recognizes generic `/project/:id/...` links emitted by project-message participant notifications, so supplier/homeowner/company/GC message notifications can still route when payload ids are missing.
 - GC project text-message sends now restore the typed draft and clear the sending state if auth lookup or message insert throws, and GC photo attachments now catch auth/client failures in the attachment error path.
 - GC project message-thread loading now catches thrown auth/client/query failures, shows app-safe load copy, and locks the composer with retry guidance instead of leaving the effect unhandled.
 - Homeowner schedule confirmation now uses app-safe copy for schedule load and confirmation failures, while preserving quote/payment-aware project activation behavior.
@@ -789,6 +790,13 @@ Latest validation after supplier message notification routing:
 Latest validation after shared project message failure hardening:
 
 - `npm test -- --runInBand __tests__/messages.test.ts`
+- `npx tsc --noEmit`
+- `npm test -- --runInBand`
+- `git diff --check`
+
+Latest validation after generic project message deep-link parsing:
+
+- `npm test -- --runInBand __tests__/notifications-navigation.test.ts`
 - `npx tsc --noEmit`
 - `npm test -- --runInBand`
 - `git diff --check`
