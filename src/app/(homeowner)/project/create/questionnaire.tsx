@@ -13,12 +13,16 @@ import { useNavigation } from '@react-navigation/native';
 import ReactNativeHapticFeedback from 'react-native-haptic-feedback';
 import { useProjectWizardStore } from '@/stores/project-wizard.store';
 import {
+  analyzeTranscriptForQuestionOption,
+  buildVoiceContextTerms,
   isProjectVoiceAvailable,
   listenForProjectAnswer,
-  matchTranscriptToQuestionOption,
   requestProjectVoicePermissions,
   speakProjectQuestion,
+  speakProjectPrompt,
   stopProjectVoice,
+  transcriptConfirmsSelection,
+  transcriptRejectsSelection,
 } from '@/lib/project-voice';
 import { formatAppSafeErrorMessage } from '@/lib/supabase/functions';
 import { Colors, Radius, Spacing, Typography } from '@/constants/theme';
@@ -38,10 +42,7 @@ export default function QuestionnaireStep() {
   const slideAnim = useRef(new Animated.Value(0)).current;
   const [voiceBusy, setVoiceBusy] = useState(false);
   const [voiceTranscript, setVoiceTranscript] = useState('');
-  // pendingVoiceMatch lets the user confirm before we apply a recognized
-  // answer. Without it, a misrecognition silently selects the wrong option
-  // and the user has to notice + correct it themselves.
-  const [pendingVoiceMatch, setPendingVoiceMatch] = useState<{ transcript: string; optionId: string; optionLabel: string } | null>(null);
+  const [pendingVoiceMatch, setPendingVoiceMatch] = useState<{ transcript: string; optionId: string; optionLabel: string; confidence: number } | null>(null);
   const [voiceError, setVoiceError] = useState<string | null>(null);
 
   const question = questions[currentQuestionIndex];
@@ -72,6 +73,8 @@ export default function QuestionnaireStep() {
     setAnswer(question.id, optionId);
   };
 
+  const shortOptionLabel = (label: string) => label.split('—')[0].trim();
+
   const handleVoiceAnswer = async () => {
     if (!question || voiceBusy || !voiceAvailable) return;
 
@@ -85,35 +88,61 @@ export default function QuestionnaireStep() {
       }
 
       await speakProjectQuestion(question);
-      const transcript = await listenForProjectAnswer();
+      const voiceContextTerms = buildVoiceContextTerms(question);
+      const transcript = await listenForProjectAnswer(9, voiceContextTerms);
       setVoiceTranscript(transcript);
 
-      const matchedOptionId = matchTranscriptToQuestionOption(transcript, question);
-      if (!matchedOptionId) {
+      const match = analyzeTranscriptForQuestionOption(transcript, question);
+      if (!match) {
         setVoiceError(
           transcript
             ? `Heard "${transcript}" but it did not match any option. Try again or tap an answer.`
             : 'No speech detected. Try again or tap an answer.'
         );
+        await speakProjectPrompt('I did not catch a matching option. Please try again or tap an answer.');
         return;
       }
 
-      const matchedOption = question.options.find((o) => o.id === matchedOptionId);
+      const matchedOption = question.options.find((o) => o.id === match.optionId);
       if (!matchedOption) {
         setVoiceError('Match failed. Please tap an answer.');
         return;
       }
 
-      // Confirmation step: don't silently apply a recognition match. Show
-      // the user what we heard and what we'd select, let them confirm or
-      // retry. This is the single biggest reliability improvement for voice
-      // because misrecognitions become recoverable instead of silent.
+      const spokenLabel = shortOptionLabel(matchedOption.label);
+      if (match.confidence >= 0.78) {
+        ReactNativeHapticFeedback.trigger('notificationSuccess');
+        setAnswer(question.id, match.optionId);
+        setVoiceTranscript(`Heard "${transcript}" and selected ${spokenLabel}.`);
+        await speakProjectPrompt(`Got it. I selected ${spokenLabel}.`);
+        return;
+      }
+
+      await speakProjectPrompt(`I heard ${transcript}. Should I choose ${spokenLabel}? Say yes or no.`);
+      const confirmationTranscript = await listenForProjectAnswer(5, ['yes', 'no', 'correct', 'wrong', spokenLabel]);
+      setVoiceTranscript(`${transcript}. Confirmation: ${confirmationTranscript}`);
+
+      if (transcriptConfirmsSelection(confirmationTranscript)) {
+        ReactNativeHapticFeedback.trigger('notificationSuccess');
+        setAnswer(question.id, match.optionId);
+        await speakProjectPrompt(`Confirmed. I selected ${spokenLabel}.`);
+        return;
+      }
+
+      if (transcriptRejectsSelection(confirmationTranscript)) {
+        setVoiceError('Okay, I will not select that option. Try again or tap an answer.');
+        await speakProjectPrompt('Okay, I will not select that. Try again or tap an answer.');
+        return;
+      }
+
       ReactNativeHapticFeedback.trigger('impactLight');
       setPendingVoiceMatch({
         transcript,
-        optionId: matchedOptionId,
+        optionId: match.optionId,
         optionLabel: matchedOption.label,
+        confidence: match.confidence,
       });
+      setVoiceError('I could not confirm that by voice. Please confirm below or try again.');
     } catch (err) {
       setVoiceError(formatAppSafeErrorMessage(err, 'Voice answer failed. Try again or answer manually.'));
     } finally {
@@ -200,11 +229,11 @@ export default function QuestionnaireStep() {
               <View style={styles.voiceTextWrap}>
                 <Text style={styles.voiceTitle}>
                   {voiceBusy
-                    ? 'Listening for your answer…'
+                    ? 'Talking with you…'
                     : pendingVoiceMatch
                       ? 'Confirm your answer'
                       : voiceAvailable
-                        ? 'Answer with voice'
+                        ? 'Talk through this answer'
                         : 'Voice unavailable on this device'}
                 </Text>
                 <Text style={styles.voiceSub} numberOfLines={2}>
@@ -215,7 +244,7 @@ export default function QuestionnaireStep() {
                       : voiceTranscript
                         ? `Heard: ${voiceTranscript}`
                         : voiceAvailable
-                          ? 'WalkerAI will read the question and select the closest matching option.'
+                          ? 'WalkerAI reads the question, listens, and selects confident matches for you.'
                           : 'Tap an answer manually to continue.'}
                 </Text>
               </View>

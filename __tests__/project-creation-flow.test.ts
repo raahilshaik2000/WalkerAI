@@ -71,6 +71,35 @@ describe('project creation flow guards', () => {
     expect(addressSource).toContain('Type your address and select a suggested match.');
   });
 
+  it('uses conversational voice matching to select confident questionnaire answers', () => {
+    const questionnaireSource = fs.readFileSync(
+      path.join(__dirname, '../src/app/(homeowner)/project/create/questionnaire.tsx'),
+      'utf8',
+    );
+    const nativeVoiceSource = fs.readFileSync(
+      path.join(__dirname, '../ios/WalkerAI/Voice/WalkerVoiceAssistant.swift'),
+      'utf8',
+    );
+    const nativeVoiceBridge = fs.readFileSync(
+      path.join(__dirname, '../ios/WalkerAI/Voice/WalkerVoiceAssistant.m'),
+      'utf8',
+    );
+
+    expect(questionnaireSource).toContain('analyzeTranscriptForQuestionOption');
+    expect(questionnaireSource).toContain('buildVoiceContextTerms(question)');
+    expect(questionnaireSource).toContain('const transcript = await listenForProjectAnswer(9, voiceContextTerms);');
+    expect(questionnaireSource).toContain('if (match.confidence >= 0.78) {');
+    expect(questionnaireSource).toContain('setAnswer(question.id, match.optionId);');
+    expect(questionnaireSource).toContain("await speakProjectPrompt(`I heard ${transcript}. Should I choose ${spokenLabel}? Say yes or no.`);");
+    expect(questionnaireSource).toContain('transcriptConfirmsSelection(confirmationTranscript)');
+    expect(questionnaireSource).toContain('transcriptRejectsSelection(confirmationTranscript)');
+    expect(questionnaireSource).not.toContain('const matchedOptionId = matchTranscriptToQuestionOption(transcript, question);');
+
+    expect(nativeVoiceSource).toContain('request.contextualStrings = contextualStrings');
+    expect(nativeVoiceSource).toContain('private func preferredVoice() -> AVSpeechSynthesisVoice?');
+    expect(nativeVoiceBridge).toContain('contextualStrings:(NSArray *)contextualStrings');
+  });
+
   it('uses app-safe copy for voice address, address save, and dispatch failures', () => {
     const addressSource = fs.readFileSync(
       path.join(__dirname, '../src/app/(homeowner)/project/create/address.tsx'),

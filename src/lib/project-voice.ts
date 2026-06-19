@@ -5,10 +5,16 @@ type WalkerVoiceAssistantModule = {
   requestPermissions: () => Promise<{ speech: boolean; microphone: boolean }>;
   speak: (text: string) => Promise<{ spoken: boolean }>;
   stopSpeaking: () => Promise<{ stopped: boolean }>;
-  listenOnce: (locale: string, durationSeconds: number) => Promise<{ transcript: string }>;
+  listenOnce: (locale: string, durationSeconds: number, contextualStrings: string[]) => Promise<{ transcript: string }>;
 };
 
 const nativeVoice = NativeModules.WalkerVoiceAssistant as WalkerVoiceAssistantModule | undefined;
+
+export interface VoiceOptionMatch {
+  optionId: string;
+  confidence: number;
+  reason: 'position' | 'exact' | 'primary' | 'keywords';
+}
 
 export function isProjectVoiceAvailable() {
   return Platform.OS === 'ios'
@@ -34,11 +40,11 @@ export async function speakProjectPrompt(text: string) {
   await nativeVoice.speak(text);
 }
 
-export async function listenForProjectAnswer(durationSeconds = 7) {
+export async function listenForProjectAnswer(durationSeconds = 7, contextTerms: string[] = []) {
   if (!nativeVoice?.listenOnce) {
     throw new Error('Voice answers are not available on this device.');
   }
-  const result = await nativeVoice.listenOnce('en-CA', durationSeconds);
+  const result = await nativeVoice.listenOnce('en-CA', durationSeconds, contextTerms);
   return result.transcript.trim();
 }
 
@@ -51,10 +57,30 @@ export async function stopProjectVoice() {
 function normalize(value: string) {
   return value
     .toLowerCase()
+    .replace(/&/g, ' and ')
     .replace(/[^\w\s]/g, ' ')
     .replace(/\s+/g, ' ')
     .trim();
 }
+
+const STOP_WORDS = new Set([
+  'and',
+  'are',
+  'but',
+  'for',
+  'from',
+  'have',
+  'like',
+  'only',
+  'option',
+  'that',
+  'the',
+  'then',
+  'this',
+  'want',
+  'with',
+  'would',
+]);
 
 function labelKeywords(label: string) {
   const beforeDash = label.split('—')[0];
@@ -62,7 +88,7 @@ function labelKeywords(label: string) {
   return normalize(`${beforeDash} ${label}`)
     .split(' ')
     .filter((token) => {
-      const keep = token.length > 2 && !seen.has(token);
+      const keep = token.length > 2 && !STOP_WORDS.has(token) && !seen.has(token);
       seen.add(token);
       return keep;
     });
@@ -105,42 +131,95 @@ function optionIdFromPosition(value: string, question: QuestionnaireQuestion) {
   return question.options[number - 1]?.id ?? null;
 }
 
+function optionPositionMatch(transcript: string, question: QuestionnaireQuestion): VoiceOptionMatch | null {
+  const spokenOptionMatch = transcript.match(/\b(?:option|number|choice|answer)\s+(\d+|[a-z]+)\b/)
+    ?? transcript.match(/\b(?:pick|select|choose)\s+(?:option|number|choice|answer)?\s*(\d+|[a-z]+|last|final)\b/)
+    ?? transcript.match(/\b(?:the\s+)?(\d+|[a-z]+)\s+(?:one|option|choice|answer)\b/)
+    ?? transcript.match(/\b(?:go\s+with|use|take)\s+(?:the\s+)?(\d+|[a-z]+|last|final)\b/)
+    ?? transcript.match(/^(\d+|[a-z]+|last|final)$/);
+  if (!spokenOptionMatch) return null;
+
+  const optionId = optionIdFromPosition(spokenOptionMatch[1], question);
+  return optionId ? { optionId, confidence: 1, reason: 'position' } : null;
+}
+
+function tokenList(value: string) {
+  return normalize(value)
+    .split(' ')
+    .filter((token) => token.length > 2 && !STOP_WORDS.has(token));
+}
+
+export function analyzeTranscriptForQuestionOption(
+  transcript: string,
+  question: QuestionnaireQuestion,
+): VoiceOptionMatch | null {
+  const normalizedTranscript = normalize(transcript);
+  if (!normalizedTranscript) return null;
+
+  const positional = optionPositionMatch(normalizedTranscript, question);
+  if (positional) return positional;
+
+  const transcriptTokens = new Set(tokenList(normalizedTranscript));
+  let best: VoiceOptionMatch | null = null;
+
+  for (const option of question.options) {
+    const normalizedLabel = normalize(option.label);
+    const primaryLabel = normalize(option.label.split('—')[0]);
+    if (normalizedTranscript === normalizedLabel || normalizedTranscript === primaryLabel) {
+      return { optionId: option.id, confidence: 0.98, reason: 'exact' };
+    }
+
+    if (normalizedTranscript.includes(primaryLabel) && primaryLabel.length > 2) {
+      const confidence = primaryLabel.split(' ').length > 1 ? 0.94 : 0.88;
+      const candidate = { optionId: option.id, confidence, reason: 'primary' as const };
+      if (!best || candidate.confidence > best.confidence) best = candidate;
+      continue;
+    }
+
+    const keywords = labelKeywords(option.label);
+    if (keywords.length === 0) continue;
+
+    const matchedKeywords = keywords.filter((keyword) => transcriptTokens.has(keyword) || normalizedTranscript.includes(keyword));
+    const primaryTokens = tokenList(primaryLabel);
+    const primaryHits = primaryTokens.filter((token) => transcriptTokens.has(token) || normalizedTranscript.includes(token)).length;
+    const score = (matchedKeywords.length / keywords.length) + (primaryHits / Math.max(1, primaryTokens.length)) * 0.45;
+
+    if (matchedKeywords.length === 0 && primaryHits === 0) continue;
+
+    const confidence = Math.min(0.9, score);
+    if (!best || confidence > best.confidence) {
+      best = { optionId: option.id, confidence, reason: 'keywords' };
+    }
+  }
+
+  return best && best.confidence >= 0.34 ? best : null;
+}
+
+export function transcriptConfirmsSelection(transcript: string) {
+  const normalizedTranscript = normalize(transcript);
+  return /\b(yes|yeah|yep|correct|confirm|right|that one|sounds good|go ahead|select it|pick it)\b/.test(normalizedTranscript);
+}
+
+export function transcriptRejectsSelection(transcript: string) {
+  const normalizedTranscript = normalize(transcript);
+  return /\b(no|nope|wrong|try again|not that|different|cancel)\b/.test(normalizedTranscript);
+}
+
+export function buildVoiceContextTerms(question: QuestionnaireQuestion) {
+  const terms = new Set<string>();
+  question.options.forEach((option, index) => {
+    terms.add(`${index + 1}`);
+    terms.add(`option ${index + 1}`);
+    terms.add(option.label);
+    terms.add(option.label.split('—')[0].trim());
+    labelKeywords(option.label).forEach((keyword) => terms.add(keyword));
+  });
+  return Array.from(terms).filter((term) => term.length > 0);
+}
+
 export function matchTranscriptToQuestionOption(
   transcript: string,
   question: QuestionnaireQuestion,
 ): string | null {
-  const normalizedTranscript = normalize(transcript);
-  if (!normalizedTranscript) return null;
-
-  const spokenOptionMatch = normalizedTranscript.match(/\b(?:option|number|choice)\s+(\d+|[a-z]+)\b/)
-    ?? normalizedTranscript.match(/\b(?:the\s+)?(\d+|[a-z]+)\s+(?:one|option|choice)\b/)
-    ?? normalizedTranscript.match(/^(\d+|[a-z]+)$/);
-  if (spokenOptionMatch) {
-    const optionId = optionIdFromPosition(spokenOptionMatch[1], question);
-    if (optionId) return optionId;
-  }
-
-  let best: { id: string; score: number } | null = null;
-  for (const option of question.options) {
-    const optionLabel = normalize(option.label);
-    if (normalizedTranscript.includes(optionLabel) || optionLabel.includes(normalizedTranscript)) {
-      return option.id;
-    }
-
-    const primaryLabelTokens = normalize(option.label.split('—')[0])
-      .split(' ')
-      .filter((token) => token.length > 2);
-    if (primaryLabelTokens.some((token) => normalizedTranscript.includes(token))) {
-      return option.id;
-    }
-
-    const keywords = labelKeywords(option.label);
-    const matched = keywords.filter((keyword) => normalizedTranscript.includes(keyword));
-    const score = matched.length / Math.max(1, keywords.length);
-    if (!best || score > best.score) {
-      best = { id: option.id, score };
-    }
-  }
-
-  return best && best.score >= 0.25 ? best.id : null;
+  return analyzeTranscriptForQuestionOption(transcript, question)?.optionId ?? null;
 }

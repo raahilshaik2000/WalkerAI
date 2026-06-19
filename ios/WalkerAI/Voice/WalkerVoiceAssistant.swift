@@ -73,9 +73,9 @@ class WalkerVoiceAssistant: NSObject, AVSpeechSynthesizerDelegate {
       }
 
       let utterance = AVSpeechUtterance(string: trimmedText)
-      utterance.voice = AVSpeechSynthesisVoice(language: "en-CA") ?? AVSpeechSynthesisVoice(language: "en-US")
-      utterance.rate = AVSpeechUtteranceDefaultSpeechRate * 0.92
-      utterance.pitchMultiplier = 1.0
+      utterance.voice = self.preferredVoice()
+      utterance.rate = AVSpeechUtteranceDefaultSpeechRate * 0.88
+      utterance.pitchMultiplier = 1.04
       utterance.volume = 1.0
       self.speechSynthesizer.speak(utterance)
     }
@@ -94,6 +94,7 @@ class WalkerVoiceAssistant: NSObject, AVSpeechSynthesizerDelegate {
   @objc func listenOnce(
     _ locale: String,
     durationSeconds: NSNumber,
+    contextualStrings: [String],
     resolver resolve: @escaping RCTPromiseResolveBlock,
     rejecter reject: @escaping RCTPromiseRejectBlock
   ) {
@@ -123,6 +124,9 @@ class WalkerVoiceAssistant: NSObject, AVSpeechSynthesizerDelegate {
 
       let request = SFSpeechAudioBufferRecognitionRequest()
       request.shouldReportPartialResults = true
+      request.contextualStrings = contextualStrings
+        .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
+        .filter { !$0.isEmpty }
       self.recognitionRequest = request
 
       let inputNode = self.audioEngine.inputNode
@@ -176,6 +180,22 @@ class WalkerVoiceAssistant: NSObject, AVSpeechSynthesizerDelegate {
     let resolve = speechResolve
     speechResolve = nil
     resolve?(["spoken": spoken])
+  }
+
+  private func preferredVoice() -> AVSpeechSynthesisVoice? {
+    let preferredLanguages = ["en-CA", "en-US", "en-GB"]
+    let voices = AVSpeechSynthesisVoice.speechVoices()
+
+    for language in preferredLanguages {
+      let languageVoices = voices
+        .filter { $0.language == language }
+        .sorted { $0.quality.rawValue > $1.quality.rawValue }
+      if let voice = languageVoices.first {
+        return voice
+      }
+    }
+
+    return AVSpeechSynthesisVoice(language: "en-CA") ?? AVSpeechSynthesisVoice(language: "en-US")
   }
 
   private func cancelActiveSpeech() {
