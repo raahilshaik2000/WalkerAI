@@ -49,6 +49,7 @@ export default function RendersStep() {
   const [renders, setRenders] = useState<Render[]>([]);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
+  const [savingSelection, setSavingSelection] = useState(false);
   const [renderError, setRenderError] = useState<string | null>(null);
   const hasRoomModel = !!roomScanData;
   const subtitle = hasRoomModel
@@ -109,6 +110,8 @@ export default function RendersStep() {
   };
 
   const handleNext = async () => {
+    if (savingSelection) return;
+
     if (!projectId) {
       setSelectedRender(null);
       useProjectWizardStore.getState().setStep(6);
@@ -118,45 +121,53 @@ export default function RendersStep() {
 
     if (!roomScanData && !selectedId && renders.length > 0) return;
 
-    if (!roomScanData && selectedId) {
-      const { error: clearError } = await supabase
-        .from('renders')
-        .update({ selected: false })
-        .eq('project_id', projectId);
-      if (clearError) {
-        setRenderError(`Could not update render selection: ${clearError.message}`);
-        return;
+    setSavingSelection(true);
+    try {
+      if (!roomScanData && selectedId) {
+        const { error: clearError } = await supabase
+          .from('renders')
+          .update({ selected: false })
+          .eq('project_id', projectId);
+        if (clearError) {
+          setRenderError(formatAppSafeErrorMessage(clearError, 'Could not update render selection.'));
+          return;
+        }
+
+        const { data: selectedRender, error: selectError } = await supabase
+          .from('renders')
+          .update({ selected: true })
+          .eq('id', selectedId)
+          .eq('project_id', projectId)
+          .select('id')
+          .maybeSingle();
+        if (selectError) {
+          setRenderError(formatAppSafeErrorMessage(selectError, 'Could not save selected render.'));
+          return;
+        }
+        if (!selectedRender) {
+          setRenderError('Selected render could not be found for this project.');
+          return;
+        }
+
+        const { error: projectUpdateError } = await supabase
+          .from('projects')
+          .update({ selected_render_id: selectedId })
+          .eq('id', projectId);
+        if (projectUpdateError) {
+          setRenderError(formatAppSafeErrorMessage(projectUpdateError, 'Could not save project render selection.'));
+          return;
+        }
       }
 
-      const { data: selectedRender, error: selectError } = await supabase
-        .from('renders')
-        .update({ selected: true })
-        .eq('id', selectedId)
-        .eq('project_id', projectId)
-        .select('id')
-        .maybeSingle();
-      if (selectError) {
-        setRenderError(`Could not save selected render: ${selectError.message}`);
-        return;
-      }
-      if (!selectedRender) {
-        setRenderError('Selected render could not be found for this project.');
-        return;
-      }
-
-      const { error: projectUpdateError } = await supabase
-        .from('projects')
-        .update({ selected_render_id: selectedId })
-        .eq('id', projectId);
-      if (projectUpdateError) {
-        setRenderError(`Could not save project render selection: ${projectUpdateError.message}`);
-        return;
-      }
+      setRenderError(null);
+      setSelectedRender(roomScanData ? null : selectedId);
+      useProjectWizardStore.getState().setStep(6);
+      navigation.navigate('Address');
+    } catch (err) {
+      setRenderError(formatAppSafeErrorMessage(err, 'Could not save render selection.'));
+    } finally {
+      setSavingSelection(false);
     }
-
-    setSelectedRender(roomScanData ? null : selectedId);
-    useProjectWizardStore.getState().setStep(6);
-    navigation.navigate('Address');
   };
 
   if (loading) {
@@ -277,6 +288,7 @@ export default function RendersStep() {
             label={primaryLabel}
             onPress={handleNext}
             disabled={renders.length > 0 && !hasRoomModel && !selectedId}
+            loading={savingSelection}
             fullWidth
             size="lg"
           />

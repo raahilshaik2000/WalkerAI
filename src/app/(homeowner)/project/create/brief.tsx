@@ -132,7 +132,7 @@ export default function BriefStep() {
           .select('url')
           .eq('id', selectedRenderId)
           .maybeSingle();
-        if (renderError) throw new Error(`Selected render could not be loaded: ${renderError.message}`);
+        if (renderError) throw new Error(formatAppSafeErrorMessage(renderError, 'Selected render could not be loaded.'));
         if (!render) throw new Error('Selected render could not be found.');
         if (render) setRenderUrl(render.url);
       }
@@ -286,7 +286,7 @@ RULES:
           .update({ ai_confidence_score: briefData.confidence_score })
           .eq('id', projectId);
         if (confidenceError && !isMissingColumnError(confidenceError.message)) {
-          throw new Error(`Brief saved but confidence score update failed: ${confidenceError.message}`);
+          throw new Error(formatAppSafeErrorMessage(confidenceError, 'Brief saved but confidence score update failed.'));
         }
       }
 
@@ -329,7 +329,10 @@ RULES:
           .maybeSingle();
         if (updateError) {
           if (isMissingColumnError(updateError.message)) continue;
-          throw new Error(`Could not save ${brief?.materials[sortOrder]?.item ?? 'material'} details: ${updateError.message}`);
+          throw new Error(formatAppSafeErrorMessage(
+            updateError,
+            `Could not save ${brief?.materials[sortOrder]?.item ?? 'material'} details.`,
+          ));
         }
         if (!data) {
           throw new Error(`Could not save ${brief?.materials[sortOrder]?.item ?? 'material'} details because the material row is no longer available.`);

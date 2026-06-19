@@ -122,11 +122,26 @@ describe('project creation flow guards', () => {
 
     expect(rendersSource).toContain("import { formatAppSafeErrorMessage } from '@/lib/supabase/functions';");
     expect(rendersSource).toContain("setRenderError(visualPreviewUnavailableMessage(formatAppSafeErrorMessage(err, 'Render generation failed.')))");
+    expect(rendersSource).toContain("setRenderError(formatAppSafeErrorMessage(clearError, 'Could not update render selection.'))");
+    expect(rendersSource).toContain("setRenderError(formatAppSafeErrorMessage(selectError, 'Could not save selected render.'))");
+    expect(rendersSource).toContain("setRenderError(formatAppSafeErrorMessage(projectUpdateError, 'Could not save project render selection.'))");
+    expect(rendersSource).toContain("setRenderError(formatAppSafeErrorMessage(err, 'Could not save render selection.'))");
+    expect(rendersSource).toContain('const [savingSelection, setSavingSelection] = useState(false);');
+    expect(rendersSource).toContain('loading={savingSelection}');
     expect(rendersSource).not.toContain("visualPreviewUnavailableMessage(err instanceof Error ? err.message : 'Render generation failed.')");
+    expect(rendersSource).not.toContain('setRenderError(`Could not update render selection: ${clearError.message}`)');
+    expect(rendersSource).not.toContain('setRenderError(`Could not save selected render: ${selectError.message}`)');
+    expect(rendersSource).not.toContain('setRenderError(`Could not save project render selection: ${projectUpdateError.message}`)');
 
     expect(briefSource).toContain("import { formatAppSafeErrorMessage, formatSupabaseFunctionError } from '@/lib/supabase/functions';");
+    expect(briefSource).toContain("throw new Error(formatAppSafeErrorMessage(renderError, 'Selected render could not be loaded.'))");
+    expect(briefSource).toContain("throw new Error(formatAppSafeErrorMessage(confidenceError, 'Brief saved but confidence score update failed.'))");
+    expect(briefSource).toContain("formatAppSafeErrorMessage(\n            updateError,\n            `Could not save ${brief?.materials[sortOrder]?.item ?? 'material'} details.`,\n          )");
     expect(briefSource).toContain("setError(formatAppSafeErrorMessage(err, 'Failed to generate brief.'))");
     expect(briefSource).toContain("setError(formatAppSafeErrorMessage(err, 'Failed to save material details.'))");
+    expect(briefSource).not.toContain('Selected render could not be loaded: ${renderError.message}');
+    expect(briefSource).not.toContain('Brief saved but confidence score update failed: ${confidenceError.message}');
+    expect(briefSource).not.toContain("details: ${updateError.message}");
     expect(briefSource).not.toContain("setError(err instanceof Error ? err.message : 'Failed to generate brief.')");
     expect(briefSource).not.toContain("setError(err instanceof Error ? err.message : 'Failed to save material details.')");
   });
