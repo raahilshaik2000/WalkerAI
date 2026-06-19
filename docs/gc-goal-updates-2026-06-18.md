@@ -473,6 +473,7 @@ Runtime fixes made from this pass:
 - Supplier material order detail and active fulfillment screens now also catch thrown load failures and clear loading state reliably, so GC-managed material order views do not hang on transient client/network failures.
 - Homeowner material receipt and supplier-payment release now use app-safe copy for material order load failures and payout release failures, while keeping delivery-proof gating intact.
 - Homeowner material receipt now also catches thrown material-order load failures and clears loading state reliably before the homeowner reviews delivery proof or releases supplier payout.
+- Homeowner quote funding now catches thrown project/quote/line-item load failures and clears loading state reliably before payment start, while preserving existing Stripe PaymentSheet behavior.
 - Homeowner GC approval/rejection and GC payment authorization responses now clear their in-progress state even if the RPC throws from a network/client failure.
 - Homeowner project photo analysis now formats outer project-creation and upload failures through app-safe copy, so transient database timeouts no longer show raw backend wording on the analysis failure screen.
 - Supplier catalog stock toggles now roll back their optimistic UI update when the catalog update throws from a network/client failure, not only when Supabase returns an error object.

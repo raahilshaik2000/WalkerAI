@@ -73,6 +73,8 @@ describe('homeowner quote status copy', () => {
     expect(source).toContain("setErrorMessage(formatAppSafeErrorMessage(projectError, 'Could not load quote.'))");
     expect(source).toContain("setErrorMessage(formatAppSafeErrorMessage(quoteError, 'Could not load quote.'))");
     expect(source).toContain("setErrorMessage(formatAppSafeErrorMessage(itemsError, 'Could not load quote details.'))");
+    expect(source).toContain("setErrorMessage(formatAppSafeErrorMessage(err, 'Could not load quote.'))");
+    expect(source).toContain("} finally {\n      setLoading(false);");
     expect(source).not.toContain('setErrorMessage(projectError.message)');
     expect(source).not.toContain('setErrorMessage(quoteError.message)');
     expect(source).not.toContain('setErrorMessage(itemsError.message)');

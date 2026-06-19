@@ -135,106 +135,108 @@ export default function CostBreakdownScreen() {
   const fetchData = useCallback(async () => {
     setLoading(true);
     setErrorMessage(null);
-    if (!projectId) {
-      setProject(null);
-      setQuotes([]);
-      setQuote(null);
-      setLineItems([]);
-      setErrorMessage('Project is missing. Reopen the quote from the project page.');
-      setLoading(false);
-      return;
-    }
-    const projectPromise = supabase
-      .from('projects')
-      .select('ai_cost_min, ai_cost_max, status, room_type, ai_analysis')
-      .eq('id', projectId)
-      .maybeSingle();
-    const quotesPromise = supabase
-      .from('quotes')
-      .select('id, slot_id, total_amount, status, submitted_at, stripe_payment_intent_id, companies(name), project_slots(trade_type), milestones ( title, amount, sort_order, status )')
-      .eq('project_id', projectId)
-      .order('submitted_at', { ascending: false });
-
-    const [projectResult, initialQuoteResult] = await Promise.all([
-      projectPromise,
-      quotesPromise,
-    ]);
-    const { data: proj, error: projectError } = projectResult;
-    let quotes: any[] | null = initialQuoteResult.data as any[] | null;
-    let quoteError = initialQuoteResult.error;
-
-    if (isMissingQuoteSlotSelectError(quoteError)) {
-      const legacyQuotes = await supabase
-        .from('quotes')
-        .select('id, total_amount, status, submitted_at, stripe_payment_intent_id, companies(name), milestones ( title, amount, sort_order, status )')
-        .eq('project_id', projectId)
-        .order('submitted_at', { ascending: false });
-      quotes = legacyQuotes.data;
-      quoteError = legacyQuotes.error;
-    }
-    if (projectError) {
-      setErrorMessage(formatAppSafeErrorMessage(projectError, 'Could not load quote.'));
-      setProject(null);
-      setQuotes([]);
-      setQuote(null);
-      setLineItems([]);
-      setLoading(false);
-      return;
-    }
-    if (!proj) {
-      setErrorMessage('Project not found.');
-      setProject(null);
-      setQuotes([]);
-      setQuote(null);
-      setLineItems([]);
-      setLoading(false);
-      return;
-    }
-    if (quoteError) {
-      setErrorMessage(formatAppSafeErrorMessage(quoteError, 'Could not load quote.'));
-      setProject(proj as any);
-      setQuotes([]);
-      setQuote(null);
-      setLineItems([]);
-      setLoading(false);
-      return;
-    }
-
-    const quoteRows = ((quotes ?? []) as any[]).map(normalizeQuote);
-    const quoteData = quoteRows.find((q) => q.id === selectedQuoteId)
-      ?? quoteRows.find((q) => q.status === 'pending')
-      ?? quoteRows.find((q) => q.status === 'approved')
-      ?? quoteRows[0]
-      ?? null;
-    setProject(proj as any);
-    setQuotes(quoteRows);
-    setQuote(quoteData);
-    setSelectedQuoteId(quoteData?.id ?? null);
-
-    // Fetch line items if quote exists
-    if (quoteData?.id) {
-      const { data: items, error: itemsError } = await supabase
-        .from('quote_line_items')
-        .select('id, type, description, quantity, unit, unit_cost, total_cost, sort_order')
-        .eq('quote_id', quoteData.id)
-        .order('sort_order', { ascending: true });
-      if (itemsError) {
-        if (isMissingLineItemsError(itemsError)) {
-          setLineItems([]);
-          setLoading(false);
-          return;
-        }
-        setErrorMessage(formatAppSafeErrorMessage(itemsError, 'Could not load quote details.'));
+    try {
+      if (!projectId) {
+        setProject(null);
+        setQuotes([]);
+        setQuote(null);
         setLineItems([]);
-        setLoading(false);
+        setErrorMessage('Project is missing. Reopen the quote from the project page.');
         return;
       }
-      setLineItems((items as LineItem[]) ?? []);
-    } else {
-      setLineItems([]);
-    }
+      const projectPromise = supabase
+        .from('projects')
+        .select('ai_cost_min, ai_cost_max, status, room_type, ai_analysis')
+        .eq('id', projectId)
+        .maybeSingle();
+      const quotesPromise = supabase
+        .from('quotes')
+        .select('id, slot_id, total_amount, status, submitted_at, stripe_payment_intent_id, companies(name), project_slots(trade_type), milestones ( title, amount, sort_order, status )')
+        .eq('project_id', projectId)
+        .order('submitted_at', { ascending: false });
 
-    setLoading(false);
+      const [projectResult, initialQuoteResult] = await Promise.all([
+        projectPromise,
+        quotesPromise,
+      ]);
+      const { data: proj, error: projectError } = projectResult;
+      let quotes: any[] | null = initialQuoteResult.data as any[] | null;
+      let quoteError = initialQuoteResult.error;
+
+      if (isMissingQuoteSlotSelectError(quoteError)) {
+        const legacyQuotes = await supabase
+          .from('quotes')
+          .select('id, total_amount, status, submitted_at, stripe_payment_intent_id, companies(name), milestones ( title, amount, sort_order, status )')
+          .eq('project_id', projectId)
+          .order('submitted_at', { ascending: false });
+        quotes = legacyQuotes.data;
+        quoteError = legacyQuotes.error;
+      }
+      if (projectError) {
+        setErrorMessage(formatAppSafeErrorMessage(projectError, 'Could not load quote.'));
+        setProject(null);
+        setQuotes([]);
+        setQuote(null);
+        setLineItems([]);
+        return;
+      }
+      if (!proj) {
+        setErrorMessage('Project not found.');
+        setProject(null);
+        setQuotes([]);
+        setQuote(null);
+        setLineItems([]);
+        return;
+      }
+      if (quoteError) {
+        setErrorMessage(formatAppSafeErrorMessage(quoteError, 'Could not load quote.'));
+        setProject(proj as any);
+        setQuotes([]);
+        setQuote(null);
+        setLineItems([]);
+        return;
+      }
+
+      const quoteRows = ((quotes ?? []) as any[]).map(normalizeQuote);
+      const quoteData = quoteRows.find((q) => q.id === selectedQuoteId)
+        ?? quoteRows.find((q) => q.status === 'pending')
+        ?? quoteRows.find((q) => q.status === 'approved')
+        ?? quoteRows[0]
+        ?? null;
+      setProject(proj as any);
+      setQuotes(quoteRows);
+      setQuote(quoteData);
+      setSelectedQuoteId(quoteData?.id ?? null);
+
+      // Fetch line items if quote exists
+      if (quoteData?.id) {
+        const { data: items, error: itemsError } = await supabase
+          .from('quote_line_items')
+          .select('id, type, description, quantity, unit, unit_cost, total_cost, sort_order')
+          .eq('quote_id', quoteData.id)
+          .order('sort_order', { ascending: true });
+        if (itemsError) {
+          if (isMissingLineItemsError(itemsError)) {
+            setLineItems([]);
+            return;
+          }
+          setErrorMessage(formatAppSafeErrorMessage(itemsError, 'Could not load quote details.'));
+          setLineItems([]);
+          return;
+        }
+        setLineItems((items as LineItem[]) ?? []);
+      } else {
+        setLineItems([]);
+      }
+    } catch (err) {
+      setErrorMessage(formatAppSafeErrorMessage(err, 'Could not load quote.'));
+      setProject(null);
+      setQuotes([]);
+      setQuote(null);
+      setLineItems([]);
+    } finally {
+      setLoading(false);
+    }
   }, [projectId, selectedQuoteId]);
 
   useFocusEffect(
