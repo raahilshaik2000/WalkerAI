@@ -49,6 +49,18 @@ describe('project creation visual preview copy', () => {
     expect(source).toContain('<RoomMaterialCustomizer');
     expect(source).not.toContain("supabase.functions.invoke('generate-render'");
   });
+
+  it('re-applies 3D material selections after the native customizer lays out', () => {
+    const source = fs.readFileSync(
+      path.join(__dirname, '../src/components/project/RoomCustomizer3D.tsx'),
+      'utf8',
+    );
+
+    expect(source).toContain('const [nativeLayoutVersion, setNativeLayoutVersion] = useState(0);');
+    expect(source).toContain('setNativeLayoutVersion((version) => version + 1);');
+    expect(source).toContain('onLayout={handleNativeLayout}');
+    expect(source).toContain('}, [surfaces, mergedSelections, nativeLayoutVersion, applyMaterialToNative]);');
+  });
 });
 
 describe('visualPreviewUnavailableMessage', () => {

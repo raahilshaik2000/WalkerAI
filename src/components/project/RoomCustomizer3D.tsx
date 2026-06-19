@@ -13,6 +13,7 @@ import {
   TouchableOpacity,
   UIManager,
   View,
+  ViewProps,
   ViewStyle,
 } from 'react-native';
 import Ionicons from 'react-native-vector-icons/Ionicons';
@@ -30,6 +31,7 @@ interface NativeRoomCustomizerProps {
   measurementData?: string;
   roomType?: string;
   onSurfaceTap?: (e: NativeSyntheticEvent<{ surfaceId: string }>) => void;
+  onLayout?: ViewProps['onLayout'];
   style?: StyleProp<ViewStyle>;
 }
 
@@ -74,6 +76,7 @@ export function RoomCustomizer3D({ roomType, scanData, selections, answers = {},
   const sheetAnim = useRef(new Animated.Value(0)).current;
   const [activeSurfaceId, setActiveSurfaceId] = useState<string | null>(null);
   const [sheetOpen, setSheetOpen] = useState(false);
+  const [nativeLayoutVersion, setNativeLayoutVersion] = useState(0);
 
   const surfaces = useMemo(() => getCustomizableSurfaces(roomType), [roomType]);
   const mergedSelections = useMemo(
@@ -106,7 +109,12 @@ export function RoomCustomizer3D({ roomType, scanData, selections, answers = {},
     }
   }, []);
 
-  // Push initial / merged selections to native so the scene matches state on mount + on changes
+  const handleNativeLayout = useCallback(() => {
+    setNativeLayoutVersion((version) => version + 1);
+  }, []);
+
+  // Push initial / merged selections to native so the scene matches state on
+  // mount, after native layout, and whenever selections change.
   useEffect(() => {
     surfaces.forEach((surface) => {
       const sel = mergedSelections[surface.id];
@@ -118,7 +126,7 @@ export function RoomCustomizer3D({ roomType, scanData, selections, answers = {},
         answerId: sel.answerId,
       });
     });
-  }, [surfaces, mergedSelections, applyMaterialToNative]);
+  }, [surfaces, mergedSelections, nativeLayoutVersion, applyMaterialToNative]);
 
   const openSheet = useCallback((surfaceId: string) => {
     setActiveSurfaceId(surfaceId);
@@ -186,6 +194,7 @@ export function RoomCustomizer3D({ roomType, scanData, selections, answers = {},
             measurementData={measurementJSON}
             roomType={roomType ?? ''}
             onSurfaceTap={handleNativeTap}
+            onLayout={handleNativeLayout}
             style={styles.viewer}
           />
         </View>

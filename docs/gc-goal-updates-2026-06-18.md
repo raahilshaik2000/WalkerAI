@@ -881,3 +881,16 @@ Latest no-code audit pass:
 - Supplier workflow: verified order claiming requires verified supplier setup, category/service-area eligibility, and Stripe payout readiness. Fulfillment updates are scoped to the accepted supplier and current order status, and delivery proof is required before homeowner payout release.
 - Voice project creation: verified the iOS native `WalkerVoiceAssistant` module is present in the Xcode target with microphone and speech usage descriptions. The app disables voice controls when unavailable, confirms recognized questionnaire answers before applying them, and uses voice address input only as an address-search query.
 - Kitchen/bathroom customization: verified the optional visual-preview step uses the measured room model on iOS when scan data exists, falls back to the 2D finish customizer otherwise, and persists only homeowner-intent finish selections into pricing answers and the project brief. Current scope is a V1 finish/surface customizer, not a guaranteed semantic cabinet/countertop reconstruction from every LiDAR mesh.
+
+Latest update after 3D customizer material reapply hardening:
+
+- Found a native timing gap in `RoomCustomizer3D`: initial merged finish selections were dispatched immediately, but if the iOS native view had not laid out yet the first `findNodeHandle` path could drop those material commands.
+- Added native layout tracking so the 3D customizer re-applies questionnaire/default/selected materials after the native model view lays out, keeping the measured kitchen/bathroom preview aligned with wizard state on first display.
+- Added a regression assertion in `__tests__/visual-preview.test.ts`.
+
+Latest validation after 3D customizer material reapply hardening:
+
+- `npm test -- --runInBand __tests__/visual-preview.test.ts __tests__/room-customizer.test.ts`
+- `npx tsc --noEmit`
+- `npm test -- --runInBand`
+- `git diff --check`
