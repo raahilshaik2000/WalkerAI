@@ -996,3 +996,16 @@ Latest validation after permit and schedule stale-state hardening:
 - `npx tsc --noEmit`
 - `npm test -- --runInBand`
 - `git diff --check`
+
+Latest update after GC payment request stale-state hardening:
+
+- Hardened the GC payment request screen so missing project ids, signed-out auth state, or load failures clear assignment, visible payment requests, draft request fields, pending cancellation state, and GC readiness before showing the payment error state.
+- This keeps payment authorization controls fail-closed if the screen reloads under a stale project or invalid GC session.
+- Added regression assertions in `__tests__/general-contractor.test.ts`.
+
+Latest validation after GC payment request stale-state hardening:
+
+- `npm test -- --runInBand __tests__/general-contractor.test.ts`
+- `npx tsc --noEmit`
+- `npm test -- --runInBand`
+- `git diff --check`

@@ -1802,6 +1802,10 @@ describe('general contractor account type', () => {
     expect((gcPayments.match(/\.eq\('general_contractor_id', gc\.id\)/g) ?? []).length).toBeGreaterThanOrEqual(2);
     expect(gcPayments).toContain("from('gc_payment_requests').insert");
     expect(gcPayments).toContain('handleCancelRequest');
+    expect(gcPayments).toContain('const clearPaymentRequestState = useCallback(() => {');
+    expect(gcPayments).toContain("setErrorMessage('Project is missing. Reopen payment requests from the GC project page.');\n      clearPaymentRequestState();");
+    expect(gcPayments).toContain("setErrorMessage('You need to be signed in to manage payment requests.');\n      clearPaymentRequestState();");
+    expect(gcPayments).toContain("setErrorMessage(formatAppSafeErrorMessage(err, 'Could not load payment requests.'));\n      clearPaymentRequestState();");
     expect(gcPayments).toContain("const canManagePaymentRequests = assignment?.status === 'active' && gcReady;");
     expect(gcPayments).toContain("status: 'cancelled'");
     expect(gcPayments).toContain('cancelled_at: new Date().toISOString()');

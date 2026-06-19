@@ -78,10 +78,29 @@ export default function GeneralContractorPaymentsScreen() {
   const [gcReady, setGcReady] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
+  const clearPaymentRequestState = useCallback(() => {
+    setAssignment(null);
+    setRequests([]);
+    setAmount('');
+    setTitle('');
+    setDescription('');
+    setCancellingRequestId(null);
+    setGcReady(false);
+  }, []);
+
   const fetchData = useCallback(async () => {
+    if (!projectId) {
+      setErrorMessage('Project is missing. Reopen payment requests from the GC project page.');
+      clearPaymentRequestState();
+      setLoading(false);
+      setRefreshing(false);
+      return;
+    }
+
     const currentUser = (await supabase.auth.getUser()).data.user;
     if (!currentUser?.id) {
       setErrorMessage('You need to be signed in to manage payment requests.');
+      clearPaymentRequestState();
       setLoading(false);
       setRefreshing(false);
       return;
@@ -119,14 +138,12 @@ export default function GeneralContractorPaymentsScreen() {
       setRequests((requestResult.data ?? []) as GcPaymentRequest[]);
     } catch (err) {
       setErrorMessage(formatAppSafeErrorMessage(err, 'Could not load payment requests.'));
-      setAssignment(null);
-      setRequests([]);
-      setGcReady(false);
+      clearPaymentRequestState();
     } finally {
       setLoading(false);
       setRefreshing(false);
     }
-  }, [projectId]);
+  }, [clearPaymentRequestState, projectId]);
 
   useFocusEffect(
     useCallback(() => {
