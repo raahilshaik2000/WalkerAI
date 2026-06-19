@@ -10,6 +10,7 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useNavigation } from '@react-navigation/native';
 import { supabase } from '@/lib/supabase/client';
+import { getCurrentUser } from '@/lib/supabase/auth';
 import { formatAppSafeErrorMessage } from '@/lib/supabase/functions';
 import { notificationDisplayMeta } from '@/lib/notifications/meta';
 import { navigateToNotification } from '@/lib/notifications/navigation';
@@ -43,50 +44,55 @@ export default function NotificationsScreen() {
   const [refreshing, setRefreshing] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
-  const fetchNotifications = useCallback(async (mode: 'initial' | 'refresh' | 'background' = 'initial') => {
-    if (!user?.id) {
-      setNotifications([]);
-      setErrorMessage('Sign in to view notifications.');
-      setLoading(false);
-      setRefreshing(false);
-      return;
-    }
+  const currentUserId = user?.id ?? null;
 
+  const fetchNotifications = useCallback(async (mode: 'initial' | 'refresh' | 'background' = 'initial') => {
     if (mode === 'refresh') setRefreshing(true);
     else if (mode === 'initial') setLoading(true);
-    setErrorMessage(null);
 
-    const { data, error } = await supabase
-      .from('notifications')
-      .select('id, type, payload, read, created_at')
-      .eq('user_id', user.id)
-      .order('created_at', { ascending: false })
-      .limit(50);
+    try {
+      const activeUserId = currentUserId ?? (await getCurrentUser())?.id ?? null;
+      if (!activeUserId) {
+        setNotifications([]);
+        setErrorMessage('Sign in to view notifications.');
+        return;
+      }
 
-    if (error) {
+      setErrorMessage(null);
+      const { data, error } = await supabase
+        .from('notifications')
+        .select('id, type, payload, read, created_at')
+        .eq('user_id', activeUserId)
+        .order('created_at', { ascending: false })
+        .limit(50);
+
+      if (error) {
+        setNotifications([]);
+        setErrorMessage(formatAppSafeErrorMessage(error, 'Could not load notifications.'));
+        return;
+      }
+
+      setNotifications((data as Notification[] | null) ?? []);
+      setErrorMessage(null);
+    } catch (err) {
       setNotifications([]);
-      setErrorMessage(formatAppSafeErrorMessage(error, 'Could not load notifications.'));
+      setErrorMessage(formatAppSafeErrorMessage(err, 'Could not load notifications.'));
+    } finally {
       setLoading(false);
       setRefreshing(false);
-      return;
     }
-
-    setNotifications((data as Notification[] | null) ?? []);
-    setErrorMessage(null);
-    setLoading(false);
-    setRefreshing(false);
-  }, [user?.id]);
+  }, [currentUserId]);
 
   useEffect(() => {
     fetchNotifications();
 
-    if (!user?.id) return;
+    if (!currentUserId) return;
 
     const channel = supabase
-      .channel('user-notifications')
+      .channel(`user-notifications-${currentUserId}`)
       .on('postgres_changes', {
         event: 'INSERT', schema: 'public', table: 'notifications',
-        filter: `user_id=eq.${user.id}`,
+        filter: `user_id=eq.${currentUserId}`,
       }, (payload) => {
         setNotifications((prev) => [payload.new as Notification, ...prev]);
         setErrorMessage(null);
@@ -94,7 +100,7 @@ export default function NotificationsScreen() {
       .subscribe();
 
     return () => { supabase.removeChannel(channel); };
-  }, [fetchNotifications, user?.id]);
+  }, [currentUserId, fetchNotifications]);
 
   const handlePress = async (notification: Notification) => {
     if (!notification.read) {
@@ -110,19 +116,24 @@ export default function NotificationsScreen() {
   };
 
   const markAllRead = async () => {
-    if (!user?.id) {
-      setErrorMessage('Sign in to update notifications.');
-      return;
-    }
+    try {
+      const activeUserId = currentUserId ?? (await getCurrentUser())?.id ?? null;
+      if (!activeUserId) {
+        setErrorMessage('Sign in to update notifications.');
+        return;
+      }
 
-    const { error } = await supabase.from('notifications').update({ read: true }).eq('user_id', user.id).eq('read', false);
-    if (error) {
-      setErrorMessage(formatAppSafeErrorMessage(error, 'Could not mark notifications as read.'));
-      return;
-    }
+      const { error } = await supabase.from('notifications').update({ read: true }).eq('user_id', activeUserId).eq('read', false);
+      if (error) {
+        setErrorMessage(formatAppSafeErrorMessage(error, 'Could not mark notifications as read.'));
+        return;
+      }
 
-    setNotifications((prev) => prev.map((n) => ({ ...n, read: true })));
-    setErrorMessage(null);
+      setNotifications((prev) => prev.map((n) => ({ ...n, read: true })));
+      setErrorMessage(null);
+    } catch (err) {
+      setErrorMessage(formatAppSafeErrorMessage(err, 'Could not mark notifications as read.'));
+    }
   };
 
   const unreadCount = notifications.filter((n) => !n.read).length;

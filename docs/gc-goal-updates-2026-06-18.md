@@ -1351,3 +1351,17 @@ Latest validation after supplier profile and earnings auth fallback hardening:
 - `npx tsc --noEmit`
 - `npm test -- --runInBand`
 - `git diff --check`
+
+Latest update after shared notification auth fallback hardening:
+
+- Hardened the shared notifications screen so notification loads and bulk "mark all read" updates fall back to the active Supabase session before deciding the user is signed out.
+- Hardened the notification bell badge so unread-count loads and realtime subscriptions use the active session id and avoid stale count updates after unmount.
+- Kept notification routing unchanged; existing GC approval, concierge, material, and trade-negotiation routes remain covered by the notification routing tests.
+- Added regression assertions in `__tests__/notifications-navigation.test.ts`.
+
+Latest validation after shared notification auth fallback hardening:
+
+- `npm test -- --runInBand __tests__/notifications-navigation.test.ts __tests__/notifications-meta.test.ts`
+- `npx tsc --noEmit`
+- `npm test -- --runInBand`
+- `git diff --check`

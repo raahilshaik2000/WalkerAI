@@ -7,11 +7,34 @@ describe('notification navigation', () => {
   it('keeps shared notification load and read failures app-safe', () => {
     const source = fs.readFileSync(path.join(__dirname, '../src/app/notifications.tsx'), 'utf8');
 
+    expect(source).toContain("import { getCurrentUser } from '@/lib/supabase/auth';");
     expect(source).toContain("import { formatAppSafeErrorMessage } from '@/lib/supabase/functions';");
     expect(source).toContain("setErrorMessage(formatAppSafeErrorMessage(error, 'Could not load notifications.'))");
+    expect(source).toContain("setErrorMessage(formatAppSafeErrorMessage(err, 'Could not load notifications.'))");
     expect(source).toContain("setErrorMessage(formatAppSafeErrorMessage(error, 'Could not mark notification as read.'))");
     expect(source).toContain("setErrorMessage(formatAppSafeErrorMessage(error, 'Could not mark notifications as read.'))");
+    expect(source).toContain("setErrorMessage(formatAppSafeErrorMessage(err, 'Could not mark notifications as read.'))");
     expect(source).not.toContain('setErrorMessage(error.message)');
+  });
+
+  it('falls back to the active Supabase session for notification loads and bulk read updates', () => {
+    const source = fs.readFileSync(path.join(__dirname, '../src/app/notifications.tsx'), 'utf8');
+    const button = fs.readFileSync(path.join(__dirname, '../src/components/notifications/NotificationButton.tsx'), 'utf8');
+
+    expect(source).toContain('const currentUserId = user?.id ?? null;');
+    expect(source).toContain('const activeUserId = currentUserId ?? (await getCurrentUser())?.id ?? null;');
+    expect(source).toContain(".eq('user_id', activeUserId)");
+    expect(source).toContain("filter: `user_id=eq.${currentUserId}`");
+    expect(source).not.toContain(".eq('user_id', user.id)");
+    expect(source).not.toContain("filter: `user_id=eq.${user.id}`");
+
+    expect(button).toContain("import { getCurrentUser } from '@/lib/supabase/auth';");
+    expect(button).toContain('const activeUserId = user?.id ?? (await getCurrentUser())?.id ?? null;');
+    expect(button).toContain(".eq('user_id', activeUserId)");
+    expect(button).toContain("filter: `user_id=eq.${activeUserId}`");
+    expect(button).toContain('if (!cancelled) setUnreadCount(count ?? 0);');
+    expect(button).not.toContain(".eq('user_id', user.id)");
+    expect(button).not.toContain("filter: `user_id=eq.${user.id}`");
   });
 
   it('routes homeowner quote notifications to the quote screen', () => {
