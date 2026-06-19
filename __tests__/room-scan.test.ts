@@ -1,4 +1,5 @@
 import { canUseRoomScanMeasurements, getRoomScanMeasurementBlocker } from '../src/lib/room-scan';
+import { normalizeFloorPlan } from '../src/lib/room-scan/normalizeFloorPlan';
 
 declare const require: (moduleName: string) => any;
 declare const __dirname: string;
@@ -38,5 +39,19 @@ describe('room scan measurement helpers', () => {
     expect(source).toContain('let roomLength = hasWallBounds ? max(0, maxX - minX) : 0');
     expect(source).toContain('let roomWidth = hasWallBounds ? max(0, maxZ - minZ) : 0');
     expect(source).not.toContain("let roomWidth = (allZ.max() ?? 0) - (allZ.min() ?? 0) + Double(room.walls.first?.dimensions.x ?? 0)");
+  });
+
+  it('updates 2D floor-plan dimensions after snapping wall endpoints to room corners', () => {
+    const plan = normalizeFloorPlan([
+      { id: 'top', width: 3.8, height: 2.5, angle: 0, center: { x: 2, z: 0 } },
+      { id: 'bottom', width: 4, height: 2.5, angle: 0, center: { x: 2, z: 3 } },
+      { id: 'left', width: 3, height: 2.5, angle: Math.PI / 2, center: { x: 0, z: 1.5 } },
+      { id: 'right', width: 3, height: 2.5, angle: Math.PI / 2, center: { x: 4, z: 1.5 } },
+    ]);
+
+    const top = plan.segments.find((segment) => segment.id === 'top');
+    expect(top?.x1).toBeCloseTo(0);
+    expect(top?.x2).toBeCloseTo(4);
+    expect(top?.length).toBeCloseTo(4);
   });
 });

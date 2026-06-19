@@ -821,3 +821,10 @@ Latest validation after visual preview copy polish:
 - `npx tsc --noEmit`
 - `npm test -- --runInBand`
 - `git diff --check`
+
+Latest validation after 2D floor-plan snapped dimension correction:
+
+- `npm test -- --runInBand __tests__/room-scan.test.ts`
+- `npx tsc --noEmit`
+- `npm test -- --runInBand`
+- `git diff --check`
