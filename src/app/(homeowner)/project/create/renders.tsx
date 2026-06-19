@@ -262,7 +262,7 @@ export default function RendersStep() {
               <Text style={styles.emptyNote}>
                 {renderError
                   ? `${renderError}. The project brief can still continue from photos, measurements, and material preferences.`
-                  : 'Generated image previews are skipped for now. Use the finish customizer below to capture cabinet, countertop, tile, fixture, and color preferences.'}
+                  : 'Cabinet, countertop, tile, fixture, and color preferences will be included in your project brief.'}
               </Text>
             </GlassCard>
           )}

@@ -37,15 +37,15 @@ describe('project creation visual preview copy', () => {
     expect(source).not.toContain("'See Renders'");
   });
 
-  it('uses the finish customizer without auto-invoking the render provider', () => {
+  it('uses product-ready finish customizer copy without auto-invoking the render provider', () => {
     const source = fs.readFileSync(
       path.join(__dirname, '../src/app/(homeowner)/project/create/renders.tsx'),
       'utf8',
     );
 
     expect(source).toContain('shouldLoadExistingImagePreviews');
-    expect(source).toContain('Generated image previews are skipped for now.');
-    expect(source).toContain('Use the finish customizer below');
+    expect(source).toContain('Cabinet, countertop, tile, fixture, and color preferences will be included in your project brief.');
+    expect(source).not.toContain('skipped for now');
     expect(source).toContain('<RoomMaterialCustomizer');
     expect(source).not.toContain("supabase.functions.invoke('generate-render'");
   });

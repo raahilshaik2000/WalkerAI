@@ -814,3 +814,10 @@ Latest validation after company quote pending-load cancellation hardening:
 - `npx tsc --noEmit`
 - `npm test -- --runInBand`
 - `git diff --check`
+
+Latest validation after visual preview copy polish:
+
+- `npm test -- --runInBand __tests__/visual-preview.test.ts`
+- `npx tsc --noEmit`
+- `npm test -- --runInBand`
+- `git diff --check`
