@@ -397,7 +397,9 @@ export function RootNavigator() {
     }
 
     const data = userResult.data;
-    if (data) {
+    if (!data) {
+      resetProfile();
+    } else {
       updateProfile({
         displayName: data.full_name ?? '',
         phone: data.phone ?? '',

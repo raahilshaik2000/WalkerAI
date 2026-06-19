@@ -142,5 +142,7 @@ describe('Supabase auth helpers', () => {
     expect(rootNavigator).toContain('setAuthErrorMessage(null);');
     expect(rootNavigator).toContain('onPress={handleFallbackSignOut}');
     expect(rootNavigator).not.toContain('onPress={() => supabase.auth.signOut()}');
+    expect(rootNavigator).toContain('if (!data) {');
+    expect(rootNavigator).toContain('} else {\n      updateProfile({');
   });
 });
