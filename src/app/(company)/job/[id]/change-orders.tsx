@@ -63,9 +63,19 @@ export default function CompanyChangeOrdersScreen() {
   const [submitting, setSubmitting] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
+  const clearChangeOrderState = useCallback(() => {
+    setChangeOrders([]);
+    setCompanyId(null);
+    setShowForm(false);
+    setDescription('');
+    setCostDelta('');
+  }, []);
+
   const fetchChangeOrders = useCallback(async () => {
+    setLoading(true);
     if (!projectId || !user?.id) {
       setErrorMessage('Project is missing. Reopen change orders from the job page.');
+      clearChangeOrderState();
       setLoading(false);
       return;
     }
@@ -81,6 +91,7 @@ export default function CompanyChangeOrdersScreen() {
 
       if (companyResult.error) {
         setErrorMessage(formatAppSafeErrorMessage(companyResult.error, 'Could not load company profile.'));
+        clearChangeOrderState();
         setLoading(false);
         return;
       }
@@ -89,6 +100,7 @@ export default function CompanyChangeOrdersScreen() {
 
       if (!currentCompanyId) {
         setErrorMessage('Complete contractor onboarding before viewing change orders for this job.');
+        clearChangeOrderState();
         setLoading(false);
         return;
       }
@@ -111,6 +123,7 @@ export default function CompanyChangeOrdersScreen() {
 
           if (legacyResult.error) {
             setErrorMessage(formatAppSafeErrorMessage(legacyResult.error, 'Could not load change orders.'));
+            clearChangeOrderState();
             setLoading(false);
             return;
           }
@@ -122,6 +135,7 @@ export default function CompanyChangeOrdersScreen() {
         }
 
         setErrorMessage(formatAppSafeErrorMessage(error, 'Could not load change orders.'));
+        clearChangeOrderState();
         setLoading(false);
         return;
       }
@@ -130,10 +144,10 @@ export default function CompanyChangeOrdersScreen() {
       setLoading(false);
     } catch (err) {
       setErrorMessage(formatAppSafeErrorMessage(err, 'Could not load change orders.'));
-      setChangeOrders([]);
+      clearChangeOrderState();
       setLoading(false);
     }
-  }, [projectId, user?.id]);
+  }, [clearChangeOrderState, projectId, user?.id]);
 
   useEffect(() => {
     fetchChangeOrders();

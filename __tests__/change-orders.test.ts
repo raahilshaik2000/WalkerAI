@@ -68,4 +68,34 @@ describe('change-order workflow copy', () => {
     expect(companyChangeOrders).not.toContain("Alert.alert('Error', insertError.message)");
     expect(companyChangeOrders).not.toContain("Alert.alert('Error', error.message)");
   });
+
+  it('clears stale change-order state when approval context cannot load', () => {
+    const companyChangeOrders = fs.readFileSync(
+      path.join(__dirname, '../src/app/(company)/job/[id]/change-orders.tsx'),
+      'utf8',
+    );
+    const homeownerChangeOrders = fs.readFileSync(
+      path.join(__dirname, '../src/app/(homeowner)/project/[id]/change-orders.tsx'),
+      'utf8',
+    );
+
+    expect(homeownerChangeOrders).toContain('const clearChangeOrderState = useCallback(() => {');
+    expect(homeownerChangeOrders).toContain('setChangeOrders([]);');
+    expect(homeownerChangeOrders).toContain('setResponding(null);');
+    expect(homeownerChangeOrders).toContain("setErrorMessage('Project is missing. Reopen change orders from the project page.');\n        clearChangeOrderState();");
+    expect(homeownerChangeOrders).toContain("setErrorMessage(formatAppSafeErrorMessage(error, 'Could not load change orders.'));\n        clearChangeOrderState();");
+    expect(homeownerChangeOrders).toContain("setErrorMessage(formatAppSafeErrorMessage(err, 'Could not load change orders.'));\n      clearChangeOrderState();");
+    expect(homeownerChangeOrders).toContain('}, [clearChangeOrderState, projectId]);');
+
+    expect(companyChangeOrders).toContain('const clearChangeOrderState = useCallback(() => {');
+    expect(companyChangeOrders).toContain('setCompanyId(null);');
+    expect(companyChangeOrders).toContain('setShowForm(false);');
+    expect(companyChangeOrders).toContain("setDescription('');");
+    expect(companyChangeOrders).toContain("setErrorMessage('Project is missing. Reopen change orders from the job page.');\n      clearChangeOrderState();");
+    expect(companyChangeOrders).toContain("setErrorMessage(formatAppSafeErrorMessage(companyResult.error, 'Could not load company profile.'));\n        clearChangeOrderState();");
+    expect(companyChangeOrders).toContain("setErrorMessage(formatAppSafeErrorMessage(legacyResult.error, 'Could not load change orders.'));\n            clearChangeOrderState();");
+    expect(companyChangeOrders).toContain("setErrorMessage(formatAppSafeErrorMessage(error, 'Could not load change orders.'));\n        clearChangeOrderState();");
+    expect(companyChangeOrders).toContain("setErrorMessage(formatAppSafeErrorMessage(err, 'Could not load change orders.'));\n      clearChangeOrderState();");
+    expect(companyChangeOrders).toContain('}, [clearChangeOrderState, projectId, user?.id]);');
+  });
 });

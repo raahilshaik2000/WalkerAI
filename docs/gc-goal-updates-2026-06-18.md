@@ -1036,3 +1036,17 @@ Latest validation after GC materials and discovery stale-state hardening:
 - `npx tsc --noEmit`
 - `npm test -- --runInBand`
 - `git diff --check`
+
+Latest update after change-order stale-state hardening:
+
+- Hardened homeowner change orders so missing project ids, query errors, or thrown load exceptions clear visible change orders and pending response state before showing an approval error.
+- Hardened company/trade change orders so missing project/user context, company profile load failures, missing contractor onboarding, legacy schema fallback failures, query errors, or thrown load exceptions clear visible change orders, cached company id, and draft proposal form fields.
+- This keeps homeowner approval and trade pricing-change workflows from showing stale decision data when the account or project context becomes invalid.
+- Added regression assertions in `__tests__/change-orders.test.ts`.
+
+Latest validation after change-order stale-state hardening:
+
+- `npm test -- --runInBand __tests__/change-orders.test.ts`
+- `npx tsc --noEmit`
+- `npm test -- --runInBand`
+- `git diff --check`

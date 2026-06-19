@@ -34,11 +34,17 @@ export default function HomeownerChangeOrdersScreen() {
   const [responding, setResponding] = useState<string | null>(null);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
+  const clearChangeOrderState = useCallback(() => {
+    setChangeOrders([]);
+    setResponding(null);
+  }, []);
+
   const fetchChangeOrders = useCallback(async () => {
     setLoading(true);
     try {
       if (!projectId) {
         setErrorMessage('Project is missing. Reopen change orders from the project page.');
+        clearChangeOrderState();
         return;
       }
 
@@ -49,17 +55,18 @@ export default function HomeownerChangeOrdersScreen() {
         .order('created_at', { ascending: false });
       if (error) {
         setErrorMessage(formatAppSafeErrorMessage(error, 'Could not load change orders.'));
+        clearChangeOrderState();
         return;
       }
       setErrorMessage(null);
       setChangeOrders((data ?? []) as ChangeOrder[]);
     } catch (err) {
       setErrorMessage(formatAppSafeErrorMessage(err, 'Could not load change orders.'));
-      setChangeOrders([]);
+      clearChangeOrderState();
     } finally {
       setLoading(false);
     }
-  }, [projectId]);
+  }, [clearChangeOrderState, projectId]);
 
   useEffect(() => {
     fetchChangeOrders();
