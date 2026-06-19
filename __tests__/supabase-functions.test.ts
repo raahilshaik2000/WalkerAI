@@ -544,7 +544,7 @@ describe('quote submission status sync migration', () => {
 
   it('keeps partially accepted trade-slot projects dispatching after the first quote', () => {
     const source = fs.readFileSync(
-      path.join(__dirname, '../supabase/migrations/20260619001000_keep_partial_trade_projects_dispatching_on_quote.sql'),
+      path.join(__dirname, '../supabase/migrations/20260619033435_keep_partial_trade_projects_dispatching_on_quote.sql'),
       'utf8',
     );
 

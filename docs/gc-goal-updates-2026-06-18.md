@@ -906,7 +906,7 @@ Latest no-code payment and closeout audit:
 Latest update after partial trade quote dispatch fix:
 
 - Found a real multi-trade pricing/acceptance blocker: when the first accepted trade submitted a pending quote, `sync_project_status_on_quote_submission` moved the whole project from `dispatching` to `quoting`. The company accept flow requires the project to remain `dispatching` while other dispatched slots are still open, so remaining trades could be blocked from accepting their portions of the job.
-- Updated the original quote-status sync migration and added corrective migration `20260619001000_keep_partial_trade_projects_dispatching_on_quote.sql`. Pending quotes still move legacy accepted projects and fully filled/scheduling trade projects into `quoting`, but partially filled trade-slot projects stay `dispatching` until every slot is filled or scheduled.
+- Updated the original quote-status sync migration and added corrective migration `20260619033435_keep_partial_trade_projects_dispatching_on_quote.sql`. Pending quotes still move legacy accepted projects and fully filled/scheduling trade projects into `quoting`, but partially filled trade-slot projects stay `dispatching` until every slot is filled or scheduled.
 - Added a regression assertion in `__tests__/supabase-functions.test.ts` so this partial-slot quote path cannot silently regress.
 
 Latest validation after partial trade quote dispatch fix:
