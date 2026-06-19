@@ -859,3 +859,16 @@ Latest validation after GC approvals setup-lock UX:
 - `npm test -- --runInBand`
 - `git diff --check`
 - `xcodebuild -workspace ios/WalkerAI.xcworkspace -scheme WalkerAI -configuration Debug -sdk iphonesimulator -destination 'generic/platform=iOS Simulator' build CODE_SIGNING_ALLOWED=NO`
+
+Latest update after GC-created project validation audit:
+
+- Verified the contractor-initiated project screen and final `create_gc_managed_project` RPC still require a real `general_contractor` account, a complete verified GC profile, an existing homeowner account, project scope, contact context, and valid coordinates.
+- Tightened the create screen so blank management/concierge allowance inputs are rejected instead of silently falling back to default percentages.
+- Added a duplicate-submit guard while the GC profile or create request is loading.
+
+Latest validation after GC-created project validation hardening:
+
+- `npm test -- --runInBand __tests__/general-contractor.test.ts`
+- `npx tsc --noEmit`
+- `npm test -- --runInBand`
+- `git diff --check`

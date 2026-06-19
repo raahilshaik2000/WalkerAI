@@ -1148,6 +1148,13 @@ describe('general contractor account type', () => {
     expect(createProject).toContain('Scope required');
     expect(createProject).toContain('p_homeowner_contact_name: contactName');
     expect(createProject).toContain('p_homeowner_contact_phone: contactPhone || null');
+    expect(createProject).toContain('if (loading || profileLoading) return;');
+    expect(createProject).toContain('function parsePercent(value: string): number | null');
+    expect(createProject).toContain('if (!trimmed) return null;');
+    expect(createProject).toContain('const parsedMarkup = parsePercent(markupPct);');
+    expect(createProject).toContain('const parsedConcierge = parsePercent(conciergeFeePct);');
+    expect(createProject).not.toContain('const parsedMarkup = parsePercent(markupPct, 15);');
+    expect(createProject).not.toContain('const parsedConcierge = parsePercent(conciergeFeePct, 10);');
     expect(createProject).toContain("import { formatAppSafeErrorMessage } from '@/lib/supabase/functions'");
     expect(createProject).toContain("formatAppSafeErrorMessage(err, 'Please try again.')");
     expect(createProject).not.toContain("Alert.alert('Could not create project', err instanceof Error ? err.message : 'Please try again.')");
