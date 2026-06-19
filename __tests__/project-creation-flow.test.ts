@@ -92,4 +92,33 @@ describe('project creation flow guards', () => {
     expect(confirmSource).toContain("Alert.alert('Dispatch failed', formatAppSafeErrorMessage(err, 'Could not send this project to contractors. Please try again.'))");
     expect(confirmSource).not.toContain("Alert.alert('Dispatch failed', err instanceof Error ? err.message : 'Please try again.')");
   });
+
+  it('uses app-safe copy for project creation voice, render, and brief failures', () => {
+    const questionnaireSource = fs.readFileSync(
+      path.join(__dirname, '../src/app/(homeowner)/project/create/questionnaire.tsx'),
+      'utf8',
+    );
+    const rendersSource = fs.readFileSync(
+      path.join(__dirname, '../src/app/(homeowner)/project/create/renders.tsx'),
+      'utf8',
+    );
+    const briefSource = fs.readFileSync(
+      path.join(__dirname, '../src/app/(homeowner)/project/create/brief.tsx'),
+      'utf8',
+    );
+
+    expect(questionnaireSource).toContain("import { formatAppSafeErrorMessage } from '@/lib/supabase/functions';");
+    expect(questionnaireSource).toContain("setVoiceError(formatAppSafeErrorMessage(err, 'Voice answer failed. Try again or answer manually.'))");
+    expect(questionnaireSource).not.toContain("setVoiceError(err instanceof Error ? err.message : 'Voice answer failed. Try again or answer manually.')");
+
+    expect(rendersSource).toContain("import { formatAppSafeErrorMessage } from '@/lib/supabase/functions';");
+    expect(rendersSource).toContain("setRenderError(visualPreviewUnavailableMessage(formatAppSafeErrorMessage(err, 'Render generation failed.')))");
+    expect(rendersSource).not.toContain("visualPreviewUnavailableMessage(err instanceof Error ? err.message : 'Render generation failed.')");
+
+    expect(briefSource).toContain("import { formatAppSafeErrorMessage, formatSupabaseFunctionError } from '@/lib/supabase/functions';");
+    expect(briefSource).toContain("setError(formatAppSafeErrorMessage(err, 'Failed to generate brief.'))");
+    expect(briefSource).toContain("setError(formatAppSafeErrorMessage(err, 'Failed to save material details.'))");
+    expect(briefSource).not.toContain("setError(err instanceof Error ? err.message : 'Failed to generate brief.')");
+    expect(briefSource).not.toContain("setError(err instanceof Error ? err.message : 'Failed to save material details.')");
+  });
 });

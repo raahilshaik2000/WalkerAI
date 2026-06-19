@@ -20,6 +20,7 @@ import {
   speakProjectQuestion,
   stopProjectVoice,
 } from '@/lib/project-voice';
+import { formatAppSafeErrorMessage } from '@/lib/supabase/functions';
 import { Colors, Radius, Spacing, Typography } from '@/constants/theme';
 import { GlassButton, GradientBackground, WizardHeader } from '@/components/ui';
 
@@ -114,7 +115,7 @@ export default function QuestionnaireStep() {
         optionLabel: matchedOption.label,
       });
     } catch (err) {
-      setVoiceError(err instanceof Error ? err.message : 'Voice answer failed. Try again or answer manually.');
+      setVoiceError(formatAppSafeErrorMessage(err, 'Voice answer failed. Try again or answer manually.'));
     } finally {
       setVoiceBusy(false);
       await stopProjectVoice();

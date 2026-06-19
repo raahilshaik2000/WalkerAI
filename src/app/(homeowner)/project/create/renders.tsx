@@ -14,6 +14,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { useNavigation } from '@react-navigation/native';
 import ReactNativeHapticFeedback from 'react-native-haptic-feedback';
 import { supabase } from '@/lib/supabase/client';
+import { formatAppSafeErrorMessage } from '@/lib/supabase/functions';
 import { useProjectWizardStore } from '@/stores/project-wizard.store';
 import {
   shouldGenerateImagePreview,
@@ -94,7 +95,7 @@ export default function RendersStep() {
           setRenderError(null);
         }
       } catch (err) {
-        setRenderError(visualPreviewUnavailableMessage(err instanceof Error ? err.message : 'Render generation failed.'));
+        setRenderError(visualPreviewUnavailableMessage(formatAppSafeErrorMessage(err, 'Render generation failed.')));
       } finally {
         setLoading(false);
       }

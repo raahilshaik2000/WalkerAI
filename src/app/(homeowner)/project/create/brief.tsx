@@ -12,7 +12,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { useNavigation } from '@react-navigation/native';
 import Ionicons from 'react-native-vector-icons/Ionicons';
 import { supabase } from '@/lib/supabase/client';
-import { formatSupabaseFunctionError } from '@/lib/supabase/functions';
+import { formatAppSafeErrorMessage, formatSupabaseFunctionError } from '@/lib/supabase/functions';
 import { useProjectWizardStore } from '@/stores/project-wizard.store';
 import { Colors, Spacing, Typography, Radius } from '@/constants/theme';
 import { GlassButton, GlassCard, GradientBackground, StatusBadge, WizardHeader } from '@/components/ui';
@@ -292,7 +292,7 @@ RULES:
 
       setBrief(briefData);
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to generate brief.');
+      setError(formatAppSafeErrorMessage(err, 'Failed to generate brief.'));
     } finally {
       setLoading(false);
     }
@@ -339,7 +339,7 @@ RULES:
       useProjectWizardStore.getState().setStep(8);
       navigation.navigate('Confirm');
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to save material details.');
+      setError(formatAppSafeErrorMessage(err, 'Failed to save material details.'));
     }
   };
 

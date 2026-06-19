@@ -4,7 +4,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { useNavigation } from '@react-navigation/native';
 import Ionicons from 'react-native-vector-icons/Ionicons';
 import { supabase } from '@/lib/supabase/client';
-import { formatSupabaseFunctionError } from '@/lib/supabase/functions';
+import { formatAppSafeErrorMessage, formatSupabaseFunctionError } from '@/lib/supabase/functions';
 import { uploadBase64 } from '@/lib/supabase/storage';
 import { useDIYWizardStore } from '@/stores/diy-wizard.store';
 import { useAuthStore } from '@/stores/auth.store';
@@ -136,8 +136,8 @@ export default function DIYGeneratingScreen() {
 
         store.setGuide(data.guide);
         navigation.replace('DIYGuide');
-      } catch (err: any) {
-        setError(err?.message || String(err));
+      } catch (err) {
+        setError(formatAppSafeErrorMessage(err, 'Failed to generate DIY guide.'));
       }
     };
     run();

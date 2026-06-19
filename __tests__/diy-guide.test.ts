@@ -34,4 +34,15 @@ describe('DIY guide error handling', () => {
     expect(source).not.toContain("Alert.alert('Error', err?.message ?? 'Failed to save guide.')");
     expect(source).not.toContain("Alert.alert('Error', err?.message ?? 'Failed to convert project.')");
   });
+
+  it('uses app-safe copy when DIY generation fails', () => {
+    const source = fs.readFileSync(
+      path.join(__dirname, '../src/app/(homeowner)/project/create/diy-generating.tsx'),
+      'utf8',
+    );
+
+    expect(source).toContain("import { formatAppSafeErrorMessage, formatSupabaseFunctionError } from '@/lib/supabase/functions';");
+    expect(source).toContain("setError(formatAppSafeErrorMessage(err, 'Failed to generate DIY guide.'))");
+    expect(source).not.toContain('setError(err?.message || String(err))');
+  });
 });
