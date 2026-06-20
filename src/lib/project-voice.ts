@@ -245,9 +245,31 @@ export function transcriptRejectsSelection(transcript: string) {
   return /\b(no|nope|wrong|try again|not that|different|cancel)\b/.test(normalizedTranscript);
 }
 
+export function transcriptRequestsOptionsRepeat(transcript: string) {
+  const normalizedTranscript = normalize(transcript);
+  return /\b(repeat|again|say that again|read them again|options again|what are the options|list the options)\b/.test(normalizedTranscript);
+}
+
 export function transcriptRequestsVoiceStop(transcript: string) {
   const normalizedTranscript = normalize(transcript);
   return /\b(stop|pause|cancel|quit|exit|manual|tap manually|voice cancelled)\b/.test(normalizedTranscript);
+}
+
+export function extractCorrectedAnswerTranscript(transcript: string) {
+  const normalizedTranscript = normalize(transcript);
+  const correctionPatterns = [
+    /\b(?:i\s+)?(?:mean|meant|wanted|want|choose|pick|select|take|use)\s+(?:the\s+)?(.+)$/,
+    /\b(?:actually|instead|rather)\s+(?:i\s+)?(?:want|choose|pick|select|take|use)?\s*(?:the\s+)?(.+)$/,
+    /\b(?:not|not that|wrong)\s+.+?\b(?:but|it is|its|it's)\s+(?:the\s+)?(.+)$/,
+  ];
+
+  for (const pattern of correctionPatterns) {
+    const match = normalizedTranscript.match(pattern);
+    const candidate = match?.[1]?.trim();
+    if (candidate) return candidate;
+  }
+
+  return normalizedTranscript;
 }
 
 export function buildVoiceContextTerms(question: QuestionnaireQuestion) {

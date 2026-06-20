@@ -1,9 +1,11 @@
 import {
   analyzeTranscriptForQuestionOption,
   buildVoiceContextTerms,
+  extractCorrectedAnswerTranscript,
   matchTranscriptToQuestionOption,
   transcriptConfirmsSelection,
   transcriptRejectsSelection,
+  transcriptRequestsOptionsRepeat,
   transcriptRequestsVoiceStop,
 } from '../src/lib/project-voice';
 import { KITCHEN_QUESTIONS } from '../src/data/fixed-questions';
@@ -86,8 +88,19 @@ describe('project voice answer matching', () => {
     expect(transcriptConfirmsSelection('go ahead and select it')).toBe(true);
     expect(transcriptRejectsSelection('no try again')).toBe(true);
     expect(transcriptRejectsSelection('not that one')).toBe(true);
+    expect(transcriptRequestsOptionsRepeat('what are the options again')).toBe(true);
     expect(transcriptRequestsVoiceStop('pause this for now')).toBe(true);
     expect(transcriptRequestsVoiceStop('stop and let me tap manually')).toBe(true);
+  });
+
+  it('extracts corrected answers from confirmation turns', () => {
+    expect(extractCorrectedAnswerTranscript('no I meant granite')).toBe('granite');
+    expect(extractCorrectedAnswerTranscript('not quartz but granite')).toBe('granite');
+    expect(extractCorrectedAnswerTranscript('actually the third one')).toBe('third one');
+
+    expect(matchTranscriptToQuestionOption(extractCorrectedAnswerTranscript('no I meant granite'), question)).toBe('k_ct_granite');
+    expect(matchTranscriptToQuestionOption(extractCorrectedAnswerTranscript('not quartz but granite'), question)).toBe('k_ct_granite');
+    expect(matchTranscriptToQuestionOption(extractCorrectedAnswerTranscript('actually the third one'), question)).toBe('k_ct_marble');
   });
 
   it('builds speech recognition context from option labels and positions', () => {
@@ -116,5 +129,17 @@ describe('project voice answer matching', () => {
     expect(source).toContain('const maxAttempts = 2;');
     expect(source).toContain('Let me try that again. You can say the option number, or say the answer in your own words.');
     expect(source).toContain('Trying once more.');
+  });
+
+  it('keeps voice confirmation conversational for corrections and repeats', () => {
+    const source = require('fs').readFileSync(
+      require('path').join(__dirname, '../src/app/(homeowner)/project/create/questionnaire.tsx'),
+      'utf8',
+    );
+
+    expect(source).toContain('transcriptRequestsOptionsRepeat(confirmationTranscript)');
+    expect(source).toContain('extractCorrectedAnswerTranscript(confirmationTranscript)');
+    expect(source).toContain('No problem. I selected');
+    expect(source).toContain('Repeating the options.');
   });
 });

@@ -15,6 +15,7 @@ import { useProjectWizardStore } from '@/stores/project-wizard.store';
 import {
   analyzeTranscriptForQuestionOption,
   buildVoiceContextTerms,
+  extractCorrectedAnswerTranscript,
   isProjectVoiceAvailable,
   listenForProjectAnswer,
   requestProjectVoicePermissions,
@@ -23,6 +24,7 @@ import {
   stopProjectVoice,
   transcriptConfirmsSelection,
   transcriptRejectsSelection,
+  transcriptRequestsOptionsRepeat,
   transcriptRequestsVoiceStop,
 } from '@/lib/project-voice';
 import { formatAppSafeErrorMessage } from '@/lib/supabase/functions';
@@ -115,6 +117,12 @@ export default function QuestionnaireStep() {
         return null;
       }
 
+      if (transcriptRequestsOptionsRepeat(transcript)) {
+        setVoiceTranscript('Repeating the options.');
+        await speakProjectQuestion(activeQuestion);
+        continue;
+      }
+
       const match = analyzeTranscriptForQuestionOption(transcript, activeQuestion);
       if (!match) {
         if (attempt < maxAttempts - 1) {
@@ -161,6 +169,12 @@ export default function QuestionnaireStep() {
         return null;
       }
 
+      if (transcriptRequestsOptionsRepeat(confirmationTranscript)) {
+        setVoiceTranscript('Repeating the options.');
+        await speakProjectQuestion(activeQuestion);
+        continue;
+      }
+
       if (transcriptConfirmsSelection(confirmationTranscript)) {
         ReactNativeHapticFeedback.trigger('notificationSuccess');
         setAnswer(activeQuestion.id, match.optionId);
@@ -169,6 +183,33 @@ export default function QuestionnaireStep() {
       }
 
       if (transcriptRejectsSelection(confirmationTranscript)) {
+        const correctedTranscript = extractCorrectedAnswerTranscript(confirmationTranscript);
+        const correctedMatch = analyzeTranscriptForQuestionOption(correctedTranscript, activeQuestion);
+        const correctedOption = correctedMatch && correctedMatch.optionId !== match.optionId
+          ? activeQuestion.options.find((o) => o.id === correctedMatch.optionId)
+          : null;
+
+        if (correctedMatch && correctedOption) {
+          const correctedLabel = shortOptionLabel(correctedOption.label);
+          if (correctedMatch.confidence >= 0.78) {
+            ReactNativeHapticFeedback.trigger('notificationSuccess');
+            setAnswer(activeQuestion.id, correctedMatch.optionId);
+            setVoiceTranscript(`Correction heard. Selected ${correctedLabel}.`);
+            await speakProjectPrompt(`No problem. I selected ${correctedLabel}.`);
+            return { optionId: correctedMatch.optionId, optionLabel: correctedOption.label };
+          }
+
+          ReactNativeHapticFeedback.trigger('impactLight');
+          setPendingVoiceMatch({
+            transcript: correctedTranscript,
+            optionId: correctedMatch.optionId,
+            optionLabel: correctedOption.label,
+            confidence: correctedMatch.confidence,
+          });
+          setVoiceError('I heard your correction, but I need you to confirm it below.');
+          return null;
+        }
+
         if (attempt < maxAttempts - 1) {
           setVoiceError('Okay, I will not select that option. Trying once more.');
           continue;
