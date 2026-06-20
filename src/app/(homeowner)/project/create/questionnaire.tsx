@@ -19,11 +19,13 @@ import {
   isProjectVoiceAvailable,
   listenForProjectAnswer,
   requestProjectVoicePermissions,
+  speakProjectDecisionHelp,
   speakProjectQuestion,
   speakProjectPrompt,
   stopProjectVoice,
   transcriptConfirmsSelection,
   transcriptRejectsSelection,
+  transcriptRequestsDecisionHelp,
   transcriptRequestsOptionsRepeat,
   transcriptRequestsPreviousQuestion,
   transcriptRequestsVoiceStop,
@@ -144,6 +146,12 @@ export default function QuestionnaireStep() {
         continue;
       }
 
+      if (transcriptRequestsDecisionHelp(transcript)) {
+        setVoiceTranscript('Explaining the options.');
+        await speakProjectDecisionHelp(activeQuestion);
+        continue;
+      }
+
       if (transcriptRequestsPreviousQuestion(transcript)) {
         const movedBack = await goBackByVoice();
         return movedBack ? { command: 'previous' } : null;
@@ -198,6 +206,12 @@ export default function QuestionnaireStep() {
       if (transcriptRequestsOptionsRepeat(confirmationTranscript)) {
         setVoiceTranscript('Repeating the options.');
         await speakProjectQuestion(activeQuestion);
+        continue;
+      }
+
+      if (transcriptRequestsDecisionHelp(confirmationTranscript)) {
+        setVoiceTranscript('Explaining the options.');
+        await speakProjectDecisionHelp(activeQuestion);
         continue;
       }
 

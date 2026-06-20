@@ -36,6 +36,17 @@ export async function speakProjectQuestion(question: QuestionnaireQuestion) {
   await speakProjectPrompt(`${question.text}. Your options are: ${options}.`);
 }
 
+export async function speakProjectDecisionHelp(question: QuestionnaireQuestion) {
+  const context = question.context_note ? `${question.context_note} ` : '';
+  const optionGuidance = question.options.map((option, index) => {
+    const [label, detail] = option.label.split('—').map((part) => part.trim());
+    return detail
+      ? `Option ${index + 1}, ${label}, means ${detail}.`
+      : `Option ${index + 1} is ${label}.`;
+  }).join(' ');
+  await speakProjectPrompt(`${context}${optionGuidance} Which one sounds closest?`);
+}
+
 export async function speakProjectPrompt(text: string) {
   if (!nativeVoice?.speak) return;
   await nativeVoice.speak(text);
@@ -355,6 +366,11 @@ export function transcriptRejectsSelection(transcript: string) {
   return /\b(no|nope|wrong|try again|not that|different|cancel)\b/.test(normalizedTranscript);
 }
 
+export function transcriptRequestsDecisionHelp(transcript: string) {
+  const normalizedTranscript = normalize(transcript);
+  return /\b(help me choose|help me decide|not sure|unsure|don t know|dont know|do not know|what do you recommend|recommend|explain|difference|compare)\b/.test(normalizedTranscript);
+}
+
 export function transcriptRequestsOptionsRepeat(transcript: string) {
   const normalizedTranscript = normalize(transcript);
   return /\b(repeat|again|say that again|read them again|options again|what are the options|list the options)\b/.test(normalizedTranscript);
@@ -396,7 +412,17 @@ export function buildVoiceContextTerms(question: QuestionnaireQuestion) {
     terms.add(option.label.split('—')[0].trim());
     labelKeywords(option.label).forEach((keyword) => terms.add(keyword));
   });
-  ['repeat options', 'what are the options', 'go back', 'previous question', 'change my last answer', 'stop'].forEach((term) => terms.add(term));
+  [
+    'repeat options',
+    'what are the options',
+    'help me choose',
+    'not sure',
+    'what do you recommend',
+    'go back',
+    'previous question',
+    'change my last answer',
+    'stop',
+  ].forEach((term) => terms.add(term));
   return Array.from(terms).filter((term) => term.length > 0);
 }
 

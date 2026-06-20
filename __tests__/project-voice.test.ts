@@ -5,6 +5,7 @@ import {
   matchTranscriptToQuestionOption,
   transcriptConfirmsSelection,
   transcriptRejectsSelection,
+  transcriptRequestsDecisionHelp,
   transcriptRequestsOptionsRepeat,
   transcriptRequestsPreviousQuestion,
   transcriptRequestsVoiceStop,
@@ -122,6 +123,8 @@ describe('project voice answer matching', () => {
     expect(transcriptConfirmsSelection('go ahead and select it')).toBe(true);
     expect(transcriptRejectsSelection('no try again')).toBe(true);
     expect(transcriptRejectsSelection('not that one')).toBe(true);
+    expect(transcriptRequestsDecisionHelp('I am not sure, help me choose')).toBe(true);
+    expect(transcriptRequestsDecisionHelp('what do you recommend')).toBe(true);
     expect(transcriptRequestsOptionsRepeat('what are the options again')).toBe(true);
     expect(transcriptRequestsPreviousQuestion('go back to the previous question')).toBe(true);
     expect(transcriptRequestsPreviousQuestion('change my last answer')).toBe(true);
@@ -147,6 +150,8 @@ describe('project voice answer matching', () => {
     expect(terms).toContain('Quartz — engineered stone, low maintenance');
     expect(terms).toContain('granite');
     expect(terms).toContain('marble');
+    expect(terms).toContain('help me choose');
+    expect(terms).toContain('what do you recommend');
     expect(terms).toContain('go back');
     expect(terms).toContain('change my last answer');
   });
@@ -196,5 +201,22 @@ describe('project voice answer matching', () => {
     expect(questionnaireSource).toContain('transcriptRequestsPreviousQuestion(transcript)');
     expect(questionnaireSource).toContain("return movedBack ? { command: 'previous' } : null;");
     expect(questionnaireSource).toContain("if (!('optionId' in result))");
+  });
+
+  it('answers help-me-choose turns with option guidance and keeps listening', () => {
+    const voiceSource = require('fs').readFileSync(
+      require('path').join(__dirname, '../src/lib/project-voice.ts'),
+      'utf8',
+    );
+    const questionnaireSource = require('fs').readFileSync(
+      require('path').join(__dirname, '../src/app/(homeowner)/project/create/questionnaire.tsx'),
+      'utf8',
+    );
+
+    expect(voiceSource).toContain('export async function speakProjectDecisionHelp(question: QuestionnaireQuestion)');
+    expect(voiceSource).toContain('Which one sounds closest?');
+    expect(questionnaireSource).toContain('transcriptRequestsDecisionHelp(transcript)');
+    expect(questionnaireSource).toContain('await speakProjectDecisionHelp(activeQuestion);');
+    expect(questionnaireSource).toContain("setVoiceTranscript('Explaining the options.');");
   });
 });
