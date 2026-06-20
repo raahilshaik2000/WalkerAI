@@ -685,6 +685,13 @@ export function transcriptAcceptsRecommendation(transcript: string) {
     || /\bthat\s+recommendation\s+(works|sounds good|is fine)\b/.test(normalizedTranscript);
 }
 
+export function transcriptAcceptsSuggestionFollowUp(transcript: string) {
+  const normalizedTranscript = normalize(transcript);
+  if (hasRejectionCue(normalizedTranscript)) return false;
+  return /\b(that|this)\s+(sounds good|works|is fine|one is fine)\b/.test(normalizedTranscript)
+    || /\b(sounds good|works for me|that works|let s do that|lets do that|do that|go ahead|yes that one|that one)\b/.test(normalizedTranscript);
+}
+
 export function transcriptRequestsOptionsRepeat(transcript: string) {
   const normalizedTranscript = normalize(transcript);
   return /\b(repeat|again|say that again|read them again|options again|what are the options|list the options)\b/.test(normalizedTranscript);
@@ -741,6 +748,8 @@ export function buildVoiceContextTerms(question: QuestionnaireQuestion) {
     'go with your recommendation',
     'choose your recommendation',
     'whatever you recommend',
+    'that sounds good',
+    'lets do that',
     'go back',
     'previous question',
     'change my last answer',

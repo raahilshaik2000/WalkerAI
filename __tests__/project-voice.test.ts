@@ -5,6 +5,7 @@ import {
   matchTranscriptToQuestionOption,
   recommendedOptionForQuestion,
   transcriptAcceptsRecommendation,
+  transcriptAcceptsSuggestionFollowUp,
   transcriptConfirmsSelection,
   transcriptRejectsSelection,
   transcriptRequestsDecisionHelp,
@@ -266,6 +267,9 @@ describe('project voice answer matching', () => {
     expect(transcriptRequestsDecisionHelp('what do you recommend')).toBe(true);
     expect(transcriptAcceptsRecommendation('go with your recommendation')).toBe(true);
     expect(transcriptRequestsDecisionHelp('go with your recommendation')).toBe(false);
+    expect(transcriptAcceptsSuggestionFollowUp('that sounds good')).toBe(true);
+    expect(transcriptAcceptsSuggestionFollowUp('lets do that')).toBe(true);
+    expect(transcriptAcceptsSuggestionFollowUp('no that is not right')).toBe(false);
     expect(transcriptRequestsOptionsRepeat('what are the options again')).toBe(true);
     expect(transcriptRequestsPreviousQuestion('go back to the previous question')).toBe(true);
     expect(transcriptRequestsPreviousQuestion('change my last answer')).toBe(true);
@@ -301,6 +305,8 @@ describe('project voice answer matching', () => {
     expect(terms).toContain('what do you recommend');
     expect(terms).toContain('go with your recommendation');
     expect(terms).toContain('whatever you recommend');
+    expect(terms).toContain('that sounds good');
+    expect(terms).toContain('lets do that');
     expect(terms).toContain('go back');
     expect(terms).toContain('change my last answer');
     expect(countertopTerms).toContain('porcelain slab');
@@ -397,6 +403,8 @@ describe('project voice answer matching', () => {
     expect(voiceSource).toContain('Which one sounds closest?');
     expect(questionnaireSource).toContain('transcriptRequestsDecisionHelp(transcript)');
     expect(questionnaireSource).toContain('!transcriptAcceptsRecommendation(transcript)');
+    expect(questionnaireSource).toContain('suggestionWasOffered && transcriptAcceptsSuggestionFollowUp(transcript)');
+    expect(questionnaireSource).toContain('selected the recommendation');
     expect(questionnaireSource).toContain('await speakProjectDecisionHelp(activeQuestion);');
     expect(questionnaireSource).toContain("setVoiceTranscript('Explaining the options.');");
   });
