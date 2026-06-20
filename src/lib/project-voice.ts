@@ -19,6 +19,8 @@ export interface VoiceOptionMatch {
 
 export interface VoiceOptionExplanation {
   optionId: string | null;
+  recommendedOptionId?: string | null;
+  recommendedOptionLabel?: string | null;
   label: string;
   detail: string;
 }
@@ -77,7 +79,10 @@ export async function speakProjectDecisionHelp(question: QuestionnaireQuestion) 
 
 export async function speakProjectOptionExplanation(explanation: VoiceOptionExplanation) {
   if (!explanation.optionId) {
-    await speakProjectPrompt(`${explanation.detail} You can choose one, ask about another option, or say help me choose.`);
+    const recommendation = explanation.recommendedOptionId
+      ? ` My recommendation is ${explanation.recommendedOptionLabel}.`
+      : '';
+    await speakProjectPrompt(`${explanation.detail}${recommendation} You can choose one, ask about another option, or say help me choose.`);
     return;
   }
 
@@ -588,7 +593,8 @@ function optionVoiceAliases(question: QuestionnaireQuestion) {
 
 function optionExplanationPromptRequested(value: string) {
   if (/\bwhat is\s+(the\s+)?(best|cheapest|lowest|most|least)\b/.test(value)) return false;
-  return /\b(what is|what are|what s|whats|tell me about|explain|describe|more about|learn about|what does|compare|difference between)\b/.test(value);
+  return /\b(what is|what are|what s|whats|tell me about|explain|describe|more about|learn about|what does|compare|difference between|which is better|which one is better|which should i choose|which would you choose|should i choose)\b/.test(value)
+    || /\bor\b/.test(value);
 }
 
 function optionExplanationTerms(question: QuestionnaireQuestion, optionId: string, label: string) {
@@ -628,6 +634,10 @@ export function optionExplanationForTranscript(
 
   if (matches.length === 1) return matches[0];
   if (matches.length > 1) {
+    const defaultRecommendation = recommendedOptionForQuestion(question);
+    const recommendedMatch = defaultRecommendation
+      ? matches.find((match) => match.optionId === defaultRecommendation.id)
+      : null;
     const labels = matches.map((match) => match.label).join(' and ');
     const detail = matches
       .map((match) => (
@@ -636,7 +646,13 @@ export function optionExplanationForTranscript(
           : `${match.label} is one of the available options.`
       ))
       .join(' ');
-    return { optionId: null, label: labels, detail };
+    return {
+      optionId: null,
+      recommendedOptionId: recommendedMatch?.optionId ?? null,
+      recommendedOptionLabel: recommendedMatch?.label ?? null,
+      label: labels,
+      detail,
+    };
   }
 
   return null;

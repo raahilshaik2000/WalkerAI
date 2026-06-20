@@ -137,6 +137,7 @@ export default function QuestionnaireStep() {
     const maxAttempts = 3;
     let suggestionWasOffered = false;
     let lastExplainedOptionId: string | null = null;
+    let lastSuggestedContextLabel = 'the explained option';
 
     const selectVoiceOption = async (optionId: string, transcriptText: string, contextLabel: string) => {
       const option = activeQuestion.options.find((item) => item.id === optionId);
@@ -174,6 +175,7 @@ export default function QuestionnaireStep() {
         setVoicePhase('speaking');
         suggestionWasOffered = false;
         lastExplainedOptionId = null;
+        lastSuggestedContextLabel = 'the explained option';
         await speakProjectQuestion(activeQuestion);
         continue;
       }
@@ -183,7 +185,8 @@ export default function QuestionnaireStep() {
         setVoiceTranscript(`Explaining ${optionExplanation.label}.`);
         setVoicePhase('helping');
         suggestionWasOffered = false;
-        lastExplainedOptionId = optionExplanation.optionId;
+        lastExplainedOptionId = optionExplanation.optionId ?? optionExplanation.recommendedOptionId ?? null;
+        lastSuggestedContextLabel = optionExplanation.optionId ? 'the explained option' : 'the comparison recommendation';
         await speakProjectOptionExplanation(optionExplanation);
         continue;
       }
@@ -193,6 +196,7 @@ export default function QuestionnaireStep() {
         setVoicePhase('helping');
         suggestionWasOffered = true;
         lastExplainedOptionId = null;
+        lastSuggestedContextLabel = 'the recommendation';
         await speakProjectDecisionHelp(activeQuestion);
         continue;
       }
@@ -205,7 +209,7 @@ export default function QuestionnaireStep() {
       if ((lastExplainedOptionId || suggestionWasOffered) && transcriptAcceptsSuggestionFollowUp(transcript)) {
         const recommended = recommendedOptionForQuestion(activeQuestion);
         const optionId = lastExplainedOptionId ?? recommended?.id;
-        if (optionId) return selectVoiceOption(optionId, transcript, lastExplainedOptionId ? 'the explained option' : 'the recommendation');
+        if (optionId) return selectVoiceOption(optionId, transcript, lastExplainedOptionId ? lastSuggestedContextLabel : 'the recommendation');
       }
 
       const match = analyzeTranscriptForQuestionOption(transcript, activeQuestion);
@@ -278,6 +282,7 @@ export default function QuestionnaireStep() {
         setVoicePhase('speaking');
         suggestionWasOffered = false;
         lastExplainedOptionId = null;
+        lastSuggestedContextLabel = 'the explained option';
         await speakProjectQuestion(activeQuestion);
         continue;
       }
@@ -287,7 +292,8 @@ export default function QuestionnaireStep() {
         setVoiceTranscript(`Explaining ${confirmationExplanation.label}.`);
         setVoicePhase('helping');
         suggestionWasOffered = false;
-        lastExplainedOptionId = confirmationExplanation.optionId;
+        lastExplainedOptionId = confirmationExplanation.optionId ?? confirmationExplanation.recommendedOptionId ?? null;
+        lastSuggestedContextLabel = confirmationExplanation.optionId ? 'the explained option' : 'the comparison recommendation';
         await speakProjectOptionExplanation(confirmationExplanation);
         continue;
       }
@@ -297,6 +303,7 @@ export default function QuestionnaireStep() {
         setVoicePhase('helping');
         suggestionWasOffered = true;
         lastExplainedOptionId = null;
+        lastSuggestedContextLabel = 'the recommendation';
         await speakProjectDecisionHelp(activeQuestion);
         continue;
       }
