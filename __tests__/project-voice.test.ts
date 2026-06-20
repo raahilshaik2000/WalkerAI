@@ -224,9 +224,19 @@ describe('project voice answer matching', () => {
       optionId: null,
       recommendedOptionId: 'k_ct_quartz',
     });
+    expect(optionExplanationForTranscript('granite or marble', question)).toMatchObject({
+      optionId: null,
+      recommendedOptionId: 'k_ct_granite',
+      recommendedOptionLabel: 'Granite',
+    });
+    expect(optionExplanationForTranscript('marble or granite', question)).toMatchObject({
+      optionId: null,
+      recommendedOptionId: 'k_ct_granite',
+    });
     expect(matchTranscriptToQuestionOption('what is quartz', question)).toBeNull();
     expect(matchTranscriptToQuestionOption('what about quartz', question)).toBeNull();
     expect(matchTranscriptToQuestionOption('is quartz better than granite', question)).toBeNull();
+    expect(matchTranscriptToQuestionOption('granite or marble', question)).toBeNull();
     expect(matchTranscriptToQuestionOption('what is the difference between quartz and granite', question)).toBeNull();
     expect(matchTranscriptToQuestionOption('which is better quartz or granite', question)).toBeNull();
     expect(optionExplanationForTranscript('what is the best value quality level', KITCHEN_QUESTIONS.find((item) => item.id === 'k_tier')!)).toBeNull();

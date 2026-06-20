@@ -374,6 +374,27 @@ const DEFAULT_RECOMMENDED_OPTION_IDS: Record<string, string> = {
   b_home: 'b_home_partial',
 };
 
+const COMPARISON_OPTION_PRIORITY: Record<string, string[]> = {
+  k_style: ['k_style_transitional', 'k_style_modern', 'k_style_farmhouse', 'k_style_traditional', 'k_style_industrial'],
+  b_style: ['b_style_modern', 'b_style_transitional', 'b_style_farmhouse', 'b_style_traditional', 'b_style_industrial'],
+  k_tier: ['k_tier_mid', 'k_tier_budget', 'k_tier_luxury'],
+  b_tier: ['b_tier_mid', 'b_tier_budget', 'b_tier_luxury'],
+  k_cabinets: ['k_cab_reface', 'k_cab_paint', 'k_cab_full', 'k_cab_keep'],
+  k_countertops: ['k_ct_quartz', 'k_ct_granite', 'k_ct_porcelain', 'k_ct_marble', 'k_ct_keep'],
+  k_appliances: ['k_app_full', 'k_app_some', 'k_app_none'],
+  k_flooring: ['k_floor_full', 'k_floor_repair', 'k_floor_keep'],
+  k_layout: ['k_lay_none', 'k_lay_minor', 'k_lay_major'],
+  b_shower: ['b_sh_walkin', 'b_sh_combo', 'b_sh_keep', 'b_sh_both'],
+  b_vanity: ['b_van_single', 'b_van_double', 'b_van_floating', 'b_van_keep'],
+  b_tile: ['b_tile_shower', 'b_tile_floor', 'b_tile_full', 'b_tile_keep'],
+  b_toilet: ['b_toil_replace', 'b_toil_keep'],
+  b_plumbing: ['b_plumb_none', 'b_plumb_minor', 'b_plumb_major'],
+  k_timeline: ['k_time_standard', 'k_time_flexible', 'k_time_asap'],
+  b_timeline: ['b_time_standard', 'b_time_flexible', 'b_time_asap'],
+  k_home: ['k_home_partial', 'k_home_no', 'k_home_yes'],
+  b_home: ['b_home_partial', 'b_home_no', 'b_home_yes'],
+};
+
 export function recommendedOptionForQuestion(question: QuestionnaireQuestion) {
   const recommendedOptionId = DEFAULT_RECOMMENDED_OPTION_IDS[question.id];
   if (!recommendedOptionId) return null;
@@ -387,6 +408,21 @@ export function recommendedOptionForQuestion(question: QuestionnaireQuestion) {
     index,
     label: option.label.split('—')[0].trim(),
   };
+}
+
+function recommendedComparisonMatch(
+  question: QuestionnaireQuestion,
+  matches: VoiceOptionExplanation[],
+) {
+  const matchById = new Map(matches.map((match) => [match.optionId, match]));
+  const priority = COMPARISON_OPTION_PRIORITY[question.id] ?? [
+    DEFAULT_RECOMMENDED_OPTION_IDS[question.id],
+    ...question.options.map((option) => option.id),
+  ].filter((optionId): optionId is string => !!optionId);
+
+  return priority
+    .map((optionId) => matchById.get(optionId))
+    .find((match): match is VoiceOptionExplanation => !!match) ?? null;
 }
 
 const PREFERENCE_OPTION_RULES: Record<string, PreferenceOptionRule[]> = {
@@ -636,10 +672,7 @@ export function optionExplanationForTranscript(
 
   if (matches.length === 1) return matches[0];
   if (matches.length > 1) {
-    const defaultRecommendation = recommendedOptionForQuestion(question);
-    const recommendedMatch = defaultRecommendation
-      ? matches.find((match) => match.optionId === defaultRecommendation.id)
-      : null;
+    const recommendedMatch = recommendedComparisonMatch(question, matches);
     const labels = matches.map((match) => match.label).join(' and ');
     const detail = matches
       .map((match) => (
