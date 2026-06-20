@@ -182,8 +182,17 @@ describe('project voice answer matching', () => {
     expect(optionExplanationForTranscript('explain option two', question)).toMatchObject({
       optionId: 'k_ct_granite',
     });
-    expect(optionExplanationForTranscript('what is the difference between quartz and granite', question)).toBeNull();
+    expect(optionExplanationForTranscript('what is the difference between quartz and granite', question)).toMatchObject({
+      optionId: null,
+      label: 'Quartz and Granite',
+      detail: expect.stringContaining('Quartz means engineered stone, low maintenance. Granite means natural stone, unique patterns.'),
+    });
+    expect(optionExplanationForTranscript('compare quartz and granite', question)).toMatchObject({
+      optionId: null,
+      label: 'Quartz and Granite',
+    });
     expect(matchTranscriptToQuestionOption('what is quartz', question)).toBeNull();
+    expect(matchTranscriptToQuestionOption('what is the difference between quartz and granite', question)).toBeNull();
     expect(optionExplanationForTranscript('what is the best value quality level', KITCHEN_QUESTIONS.find((item) => item.id === 'k_tier')!)).toBeNull();
   });
 
@@ -427,6 +436,7 @@ describe('project voice answer matching', () => {
     expect(questionnaireSource).toContain('optionExplanationForTranscript(transcript, activeQuestion)');
     expect(questionnaireSource).toContain('await speakProjectOptionExplanation(optionExplanation);');
     expect(questionnaireSource).toContain("lastExplainedOptionId ? 'the explained option' : 'the recommendation'");
+    expect(voiceSource).toContain('You can choose one, ask about another option, or say help me choose.');
     expect(questionnaireSource).toContain('(lastExplainedOptionId || suggestionWasOffered) && transcriptAcceptsSuggestionFollowUp(transcript)');
     expect(questionnaireSource).toContain('selectVoiceOption(optionId, transcript');
     expect(questionnaireSource).toContain('await speakProjectDecisionHelp(activeQuestion);');

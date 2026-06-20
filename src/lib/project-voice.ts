@@ -18,7 +18,7 @@ export interface VoiceOptionMatch {
 }
 
 export interface VoiceOptionExplanation {
-  optionId: string;
+  optionId: string | null;
   label: string;
   detail: string;
 }
@@ -76,6 +76,11 @@ export async function speakProjectDecisionHelp(question: QuestionnaireQuestion) 
 }
 
 export async function speakProjectOptionExplanation(explanation: VoiceOptionExplanation) {
+  if (!explanation.optionId) {
+    await speakProjectPrompt(`${explanation.detail} You can choose one, ask about another option, or say help me choose.`);
+    return;
+  }
+
   const detail = explanation.detail
     ? `${explanation.label} means ${explanation.detail}.`
     : `${explanation.label} is one of the available options.`;
@@ -605,7 +610,7 @@ export function optionExplanationForTranscript(
   }
 
   const matches = question.options
-    .map((option) => {
+    .map<VoiceOptionExplanation | null>((option) => {
       const [label, detail = ''] = option.label.split('—').map((part) => part.trim());
       const terms = optionExplanationTerms(question, option.id, option.label)
         .map(normalize)
@@ -615,7 +620,20 @@ export function optionExplanationForTranscript(
     })
     .filter((match): match is VoiceOptionExplanation => !!match);
 
-  return matches.length === 1 ? matches[0] : null;
+  if (matches.length === 1) return matches[0];
+  if (matches.length > 1) {
+    const labels = matches.map((match) => match.label).join(' and ');
+    const detail = matches
+      .map((match) => (
+        match.detail
+          ? `${match.label} means ${match.detail}.`
+          : `${match.label} is one of the available options.`
+      ))
+      .join(' ');
+    return { optionId: null, label: labels, detail };
+  }
+
+  return null;
 }
 
 function directNaturalOptionMatch(value: string, question: QuestionnaireQuestion): VoiceOptionMatch | null {
