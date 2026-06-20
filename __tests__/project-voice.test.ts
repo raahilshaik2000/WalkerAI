@@ -508,6 +508,8 @@ describe('project voice answer matching', () => {
     expect(voiceSource).toContain('You can choose one, ask about another option, or say help me choose.');
     expect(voiceSource).toContain('My recommendation is');
     expect(questionnaireSource).toContain('(lastExplainedOptionId || suggestionWasOffered) && transcriptAcceptsSuggestionFollowUp(transcript)');
+    expect(questionnaireSource).toContain('transcriptAcceptsRecommendation(confirmationTranscript)');
+    expect(questionnaireSource).toContain("selectVoiceOption(recommended.id, confirmationTranscript, 'the recommendation')");
     expect(questionnaireSource).toContain('selectVoiceOption(optionId, transcript');
     expect(questionnaireSource).toContain('await speakProjectDecisionHelp(activeQuestion);');
     expect(questionnaireSource).toContain("setVoiceTranscript('Explaining the options.');");

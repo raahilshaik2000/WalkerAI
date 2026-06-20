@@ -318,6 +318,11 @@ export default function QuestionnaireStep() {
         return movedBack ? { command: 'previous' } : null;
       }
 
+      if (transcriptAcceptsRecommendation(confirmationTranscript)) {
+        const recommended = recommendedOptionForQuestion(activeQuestion);
+        if (recommended) return selectVoiceOption(recommended.id, confirmationTranscript, 'the recommendation');
+      }
+
       if (transcriptRejectsSelection(confirmationTranscript)) {
         const correctedTranscript = extractCorrectedAnswerTranscript(confirmationTranscript);
         const correctedMatch = analyzeTranscriptForQuestionOption(correctedTranscript, activeQuestion);
