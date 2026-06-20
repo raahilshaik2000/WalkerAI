@@ -212,6 +212,20 @@ export default function QuestionnaireStep() {
         if (optionId) return selectVoiceOption(optionId, transcript, lastExplainedOptionId ? lastSuggestedContextLabel : 'the recommendation');
       }
 
+      if ((lastExplainedOptionId || suggestionWasOffered) && transcriptRejectsSelection(transcript)) {
+        const correctedTranscript = extractCorrectedAnswerTranscript(transcript);
+        const correctedMatch = analyzeTranscriptForQuestionOption(correctedTranscript, activeQuestion);
+        const recommended = recommendedOptionForQuestion(activeQuestion);
+        const rejectedContextOptionId = lastExplainedOptionId ?? recommended?.id ?? null;
+        const correctedOption = correctedMatch && correctedMatch.optionId !== rejectedContextOptionId
+          ? activeQuestion.options.find((o) => o.id === correctedMatch.optionId)
+          : null;
+
+        if (correctedMatch && correctedOption && correctedMatch.confidence >= 0.78) {
+          return selectVoiceOption(correctedMatch.optionId, correctedTranscript, 'your correction');
+        }
+      }
+
       const match = analyzeTranscriptForQuestionOption(transcript, activeQuestion);
       if (!match) {
         if (attempt < maxAttempts - 1) {

@@ -378,6 +378,8 @@ describe('project voice answer matching', () => {
     expect(matchTranscriptToQuestionOption(extractCorrectedAnswerTranscript('change it to granite'), question)).toBe('k_ct_granite');
     expect(matchTranscriptToQuestionOption(extractCorrectedAnswerTranscript('switch to granite'), question)).toBe('k_ct_granite');
     expect(matchTranscriptToQuestionOption(extractCorrectedAnswerTranscript('make it quartz'), question)).toBe('k_ct_quartz');
+    expect(matchTranscriptToQuestionOption(extractCorrectedAnswerTranscript('no actually the third one'), question)).toBe('k_ct_marble');
+    expect(matchTranscriptToQuestionOption(extractCorrectedAnswerTranscript('no granite'), question)).toBe('k_ct_granite');
     expect(transcriptRejectsSelection('changed my mind granite')).toBe(true);
     expect(transcriptRejectsSelection('switch to granite')).toBe(true);
   });
@@ -508,6 +510,9 @@ describe('project voice answer matching', () => {
     expect(voiceSource).toContain('You can choose one, ask about another option, or say help me choose.');
     expect(voiceSource).toContain('My recommendation is');
     expect(questionnaireSource).toContain('(lastExplainedOptionId || suggestionWasOffered) && transcriptAcceptsSuggestionFollowUp(transcript)');
+    expect(questionnaireSource).toContain('(lastExplainedOptionId || suggestionWasOffered) && transcriptRejectsSelection(transcript)');
+    expect(questionnaireSource).toContain('const rejectedContextOptionId = lastExplainedOptionId ?? recommended?.id ?? null;');
+    expect(questionnaireSource).toContain("selectVoiceOption(correctedMatch.optionId, correctedTranscript, 'your correction')");
     expect(questionnaireSource).toContain('transcriptAcceptsRecommendation(confirmationTranscript)');
     expect(questionnaireSource).toContain("selectVoiceOption(recommended.id, confirmationTranscript, 'the recommendation')");
     expect(questionnaireSource).toContain('selectVoiceOption(optionId, transcript');
