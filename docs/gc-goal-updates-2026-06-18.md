@@ -1380,3 +1380,18 @@ Latest validation after supplier catalog auth fallback hardening:
 - `npx tsc --noEmit`
 - `npm test -- --runInBand`
 - `git diff --check`
+
+Latest update after GC onboarding auth fallback hardening:
+
+- Hardened the GC business onboarding screen so resumed profile loading and profile saving fall back to the active Supabase session before deciding the GC is signed out.
+- Hardened GC license and insurance onboarding so document preload, validation, upload storage paths, and save queries all use the active session id even when the local auth store has not hydrated yet.
+- Kept the existing GC onboarding requirements unchanged: business profile, service address coordinates, license document, and insurance document are still required before project controls and marketplace eligibility unlock.
+- Added regression assertions in `__tests__/general-contractor.test.ts`.
+
+Latest validation after GC onboarding auth fallback hardening:
+
+- `npm test -- --runInBand __tests__/general-contractor.test.ts __tests__/auth.test.ts`
+- `npx tsc --noEmit`
+- Full validation pending in this slice:
+  - `npm test -- --runInBand`
+  - `git diff --check`

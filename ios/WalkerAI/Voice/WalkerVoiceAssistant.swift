@@ -76,9 +76,11 @@ class WalkerVoiceAssistant: NSObject, AVSpeechSynthesizerDelegate {
 
       let utterance = AVSpeechUtterance(string: trimmedText)
       utterance.voice = self.preferredVoice()
-      utterance.rate = AVSpeechUtteranceDefaultSpeechRate * 0.88
-      utterance.pitchMultiplier = 1.04
+      utterance.rate = AVSpeechUtteranceDefaultSpeechRate * 0.92
+      utterance.pitchMultiplier = 1.02
       utterance.volume = 1.0
+      utterance.preUtteranceDelay = 0.04
+      utterance.postUtteranceDelay = 0.08
       self.speechSynthesizer.speak(utterance)
     }
   }
@@ -211,15 +213,33 @@ class WalkerVoiceAssistant: NSObject, AVSpeechSynthesizerDelegate {
 
   private func preferredVoice() -> AVSpeechSynthesisVoice? {
     let preferredLanguages = ["en-CA", "en-US", "en-GB"]
+    let preferredNames = ["Samantha", "Ava", "Allison", "Joelle", "Karen", "Moira", "Daniel"]
     let voices = AVSpeechSynthesisVoice.speechVoices()
 
-    for language in preferredLanguages {
-      let languageVoices = voices
-        .filter { $0.language == language }
-        .sorted { $0.quality.rawValue > $1.quality.rawValue }
-      if let voice = languageVoices.first {
-        return voice
+    let rankedVoices = voices
+      .filter { preferredLanguages.contains($0.language) }
+      .sorted { lhs, rhs in
+        let lhsLanguageRank = preferredLanguages.firstIndex(of: lhs.language) ?? preferredLanguages.count
+        let rhsLanguageRank = preferredLanguages.firstIndex(of: rhs.language) ?? preferredLanguages.count
+        if lhsLanguageRank != rhsLanguageRank {
+          return lhsLanguageRank < rhsLanguageRank
+        }
+
+        if lhs.quality.rawValue != rhs.quality.rawValue {
+          return lhs.quality.rawValue > rhs.quality.rawValue
+        }
+
+        let lhsNameRank = preferredNames.firstIndex(where: { lhs.name.localizedCaseInsensitiveContains($0) }) ?? preferredNames.count
+        let rhsNameRank = preferredNames.firstIndex(where: { rhs.name.localizedCaseInsensitiveContains($0) }) ?? preferredNames.count
+        if lhsNameRank != rhsNameRank {
+          return lhsNameRank < rhsNameRank
+        }
+
+        return lhs.name < rhs.name
       }
+
+    if let voice = rankedVoices.first {
+      return voice
     }
 
     return AVSpeechSynthesisVoice(language: "en-CA") ?? AVSpeechSynthesisVoice(language: "en-US")

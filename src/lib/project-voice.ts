@@ -17,6 +17,18 @@ export interface VoiceOptionMatch {
   reason: 'position' | 'exact' | 'primary' | 'keywords';
 }
 
+type OptionPhraseRule = {
+  optionId: string;
+  aliases: string[];
+  patterns: RegExp[];
+};
+
+type PreferenceOptionRule = {
+  optionId: string;
+  confidence: number;
+  patterns: RegExp[];
+};
+
 export function isProjectVoiceAvailable() {
   return Platform.OS === 'ios'
     && !!nativeVoice?.requestPermissions
@@ -32,19 +44,25 @@ export async function requestProjectVoicePermissions() {
 }
 
 export async function speakProjectQuestion(question: QuestionnaireQuestion) {
-  const options = question.options.map((option, index) => `${index + 1}. ${option.label}`).join('. ');
-  await speakProjectPrompt(`${question.text}. Your options are: ${options}.`);
+  const options = question.options.map((option, index) => {
+    const [label, detail] = option.label.split('—').map((part) => part.trim());
+    return detail
+      ? `Option ${index + 1}: ${label}, ${detail}`
+      : `Option ${index + 1}: ${label}`;
+  }).join('. ');
+  await speakProjectPrompt(`${question.text}. ${options}. You can say an option number, answer in your own words, ask me to repeat, or say help me choose.`);
 }
 
 export async function speakProjectDecisionHelp(question: QuestionnaireQuestion) {
   const context = question.context_note ? `${question.context_note} ` : '';
+  const recommendation = decisionRecommendation(question);
   const optionGuidance = question.options.map((option, index) => {
     const [label, detail] = option.label.split('—').map((part) => part.trim());
     return detail
       ? `Option ${index + 1}, ${label}, means ${detail}.`
       : `Option ${index + 1} is ${label}.`;
   }).join(' ');
-  await speakProjectPrompt(`${context}${optionGuidance} Which one sounds closest?`);
+  await speakProjectPrompt(`${context}${recommendation}${optionGuidance} Which one sounds closest?`);
 }
 
 export async function speakProjectPrompt(text: string) {
@@ -277,30 +295,263 @@ function tokenList(value: string) {
     .filter((token) => token.length > 2 && !STOP_WORDS.has(token));
 }
 
+function decisionRecommendation(question: QuestionnaireQuestion) {
+  const recommendations: Record<string, string> = {
+    k_style: 'A safe choice for resale is transitional. Choose modern if you want a cleaner minimal look, or farmhouse if you want warmer shaker details. ',
+    b_style: 'A safe choice for resale is modern spa or transitional. Choose farmhouse for warmer black fixture details, or traditional if you want a more classic finish. ',
+    k_tier: 'If budget is the priority, choose budget. If you want a strong balance of durability and price, choose mid-range. Choose luxury only if premium finishes matter most. ',
+    b_tier: 'If budget is the priority, choose budget. For most renovations, mid-range is the practical balance. Choose luxury for natural stone or custom fixtures. ',
+    k_cabinets: 'If the boxes are in good shape, refacing or repainting can save money. Choose full replacement when the layout, boxes, or storage need a real change. ',
+    k_countertops: 'Quartz is usually the safest low-maintenance choice. Granite gives natural variation. Marble or quartzite is more premium, and keeping existing counters saves budget. ',
+    k_appliances: 'Choose full suite if you want all cutouts coordinated at once. Choose some appliances if only a few are changing, or no if you are keeping the current set. ',
+    k_flooring: 'Choose full replacement for a clean finished renovation. Choose repair or refinish if the existing floor is worth saving. Choose keep if the floor is already fine. ',
+    k_layout: 'Choose no layout changes for the simplest budget. Choose minor if only doors, windows, or small electrical items move. Choose major for walls or plumbing moves. ',
+    b_shower: 'A walk-in shower is common for a modern upgrade. A tub shower combo is practical for families. Choose keep if the current layout works. ',
+    b_vanity: 'A single vanity is practical for smaller bathrooms. Double vanity is best if space allows. Floating vanity gives a modern look. ',
+    b_tile: 'Full tile gives the most complete renovation. Shower area only controls cost. Floor only is a smaller scope. Keeping tile saves budget. ',
+    b_toilet: 'Choose replace if you want a clean finished renovation. Choose keep if the current toilet is newer and working well. ',
+    b_plumbing: 'Choose no plumbing moves for the simplest budget. Minor is for same-wall moves. Major is for different walls or drain relocation. ',
+    k_timeline: 'Choose ASAP only if you are ready to start soon. Standard is best if you need planning time. Flexible helps contractors schedule around availability. ',
+    b_timeline: 'Choose ASAP only if you are ready to start soon. Standard is best if you need planning time. Flexible helps contractors schedule around availability. ',
+    k_home: 'Choose yes if you will live through the work, partially if you have some flexibility, or no if you can stay somewhere else. ',
+    b_home: 'Choose yes if you will live through the work, partially if you have some flexibility, or no if you can stay somewhere else. ',
+  };
+
+  return recommendations[question.id] ?? '';
+}
+
+const PREFERENCE_OPTION_RULES: Record<string, PreferenceOptionRule[]> = {
+  k_style: [
+    { optionId: 'k_style_transitional', confidence: 0.9, patterns: [/\bresale\b/, /\bsafe choice\b/, /\bbest value\b/, /\bbalanced\b/] },
+    { optionId: 'k_style_modern', confidence: 0.88, patterns: [/\bminimal\b/, /\bclean\b/, /\bsleek\b/] },
+    { optionId: 'k_style_farmhouse', confidence: 0.88, patterns: [/\bwarm\b/, /\bcozy\b/, /\bshaker\b/] },
+  ],
+  b_style: [
+    { optionId: 'b_style_modern', confidence: 0.9, patterns: [/\bresale\b/, /\bspa\b/, /\bhotel\b/, /\bclean\b/, /\bsleek\b/] },
+    { optionId: 'b_style_transitional', confidence: 0.88, patterns: [/\bsafe choice\b/, /\bbest value\b/, /\bbalanced\b/] },
+    { optionId: 'b_style_farmhouse', confidence: 0.86, patterns: [/\bwarm\b/, /\bcozy\b/, /\bmatte black\b/] },
+  ],
+  k_tier: [
+    { optionId: 'k_tier_budget', confidence: 0.95, patterns: [/\b(cheapest|affordable|low cost|save money|tight budget)\b/, /\bcheap\b(?!\s+but)/] },
+    { optionId: 'k_tier_mid', confidence: 0.92, patterns: [/\bbest value\b/, /\bbalanced\b/, /\bpractical\b/, /\bgood quality\b/, /\bnot too expensive\b/] },
+    { optionId: 'k_tier_luxury', confidence: 0.92, patterns: [/\bbest\b/, /\bpremium\b/, /\bluxury\b/, /\bhigh end\b/] },
+  ],
+  b_tier: [
+    { optionId: 'b_tier_budget', confidence: 0.95, patterns: [/\b(cheapest|affordable|low cost|save money|tight budget)\b/, /\bcheap\b(?!\s+but)/] },
+    { optionId: 'b_tier_mid', confidence: 0.92, patterns: [/\bbest value\b/, /\bbalanced\b/, /\bpractical\b/, /\bgood quality\b/, /\bnot too expensive\b/] },
+    { optionId: 'b_tier_luxury', confidence: 0.92, patterns: [/\bbest\b/, /\bpremium\b/, /\bluxury\b/, /\bhigh end\b/] },
+  ],
+  k_cabinets: [
+    { optionId: 'k_cab_paint', confidence: 0.88, patterns: [/\b(cheap|cheapest|affordable|save money|tight budget)\b/] },
+    { optionId: 'k_cab_reface', confidence: 0.9, patterns: [/\bbest value\b/, /\bbalanced\b/, /\bboxes are good\b/, /\bkeep boxes\b/] },
+    { optionId: 'k_cab_full', confidence: 0.88, patterns: [/\bbest\b/, /\bnew layout\b/, /\bmore storage\b/, /\bfull renovation\b/] },
+  ],
+  k_countertops: [
+    { optionId: 'k_ct_keep', confidence: 0.88, patterns: [/\b(cheap|cheapest|affordable|save money|tight budget)\b/] },
+    { optionId: 'k_ct_quartz', confidence: 0.95, patterns: [/\b(low|lowest)\s+maintenance\b/, /\bdurable\b/, /\beasy to clean\b/, /\bbest value\b/, /\bresale\b/] },
+    { optionId: 'k_ct_granite', confidence: 0.86, patterns: [/\bnatural\b/, /\bunique\b/] },
+    { optionId: 'k_ct_marble', confidence: 0.88, patterns: [/\bluxury\b/, /\bpremium\b/, /\bhigh end\b/] },
+  ],
+  k_appliances: [
+    { optionId: 'k_app_none', confidence: 0.9, patterns: [/\b(cheap|cheapest|affordable|save money|tight budget)\b/] },
+    { optionId: 'k_app_some', confidence: 0.88, patterns: [/\bbest value\b/, /\bpractical\b/, /\bonly what needs it\b/] },
+    { optionId: 'k_app_full', confidence: 0.88, patterns: [/\bcoordinate\b/, /\bcomplete\b/, /\bfull renovation\b/, /\ball new\b/] },
+  ],
+  k_flooring: [
+    { optionId: 'k_floor_keep', confidence: 0.9, patterns: [/\b(cheap|cheapest|affordable|save money|tight budget)\b/] },
+    { optionId: 'k_floor_repair', confidence: 0.88, patterns: [/\bbest value\b/, /\bexisting floor is good\b/, /\bworth saving\b/] },
+    { optionId: 'k_floor_full', confidence: 0.86, patterns: [/\bclean finish\b/, /\bfull renovation\b/, /\ball new\b/] },
+  ],
+  k_layout: [
+    { optionId: 'k_lay_none', confidence: 0.95, patterns: [/\b(cheap|cheapest|affordable|save money|tight budget|simple|fastest)\b/] },
+    { optionId: 'k_lay_minor', confidence: 0.86, patterns: [/\bsmall change\b/, /\bminor update\b/] },
+    { optionId: 'k_lay_major', confidence: 0.86, patterns: [/\bopen concept\b/, /\bmore space\b/, /\bbig change\b/] },
+  ],
+  b_shower: [
+    { optionId: 'b_sh_keep', confidence: 0.88, patterns: [/\b(cheap|cheapest|affordable|save money|tight budget)\b/] },
+    { optionId: 'b_sh_walkin', confidence: 0.9, patterns: [/\bmodern\b/, /\bresale\b/, /\baccessibility\b/, /\bspa\b/] },
+    { optionId: 'b_sh_combo', confidence: 0.86, patterns: [/\bfamily\b/, /\bkids\b/, /\bpractical\b/] },
+  ],
+  b_vanity: [
+    { optionId: 'b_van_keep', confidence: 0.88, patterns: [/\b(cheap|cheapest|affordable|save money|tight budget)\b/] },
+    { optionId: 'b_van_double', confidence: 0.9, patterns: [/\bresale\b/, /\btwo people\b/, /\bshared bathroom\b/] },
+    { optionId: 'b_van_floating', confidence: 0.86, patterns: [/\bmodern\b/, /\bspa\b/, /\bclean\b/] },
+  ],
+  b_tile: [
+    { optionId: 'b_tile_keep', confidence: 0.88, patterns: [/\b(cheap|cheapest|affordable|save money|tight budget)\b/] },
+    { optionId: 'b_tile_shower', confidence: 0.9, patterns: [/\bbest value\b/, /\bpractical\b/, /\bcontrol cost\b/] },
+    { optionId: 'b_tile_full', confidence: 0.88, patterns: [/\bcomplete\b/, /\bfull renovation\b/, /\bpremium\b/] },
+  ],
+  b_toilet: [
+    { optionId: 'b_toil_keep', confidence: 0.9, patterns: [/\b(cheap|cheapest|affordable|save money|tight budget|newer|working well)\b/] },
+    { optionId: 'b_toil_replace', confidence: 0.9, patterns: [/\bclean finish\b/, /\bcomplete\b/, /\ball new\b/] },
+  ],
+  b_plumbing: [
+    { optionId: 'b_plumb_none', confidence: 0.95, patterns: [/\b(cheap|cheapest|affordable|save money|tight budget|simple|fastest)\b/] },
+    { optionId: 'b_plumb_minor', confidence: 0.86, patterns: [/\bsmall move\b/, /\bsame wall\b/] },
+    { optionId: 'b_plumb_major', confidence: 0.86, patterns: [/\bdifferent wall\b/, /\bbig change\b/, /\bnew layout\b/] },
+  ],
+  k_timeline: [
+    { optionId: 'k_time_flexible', confidence: 0.9, patterns: [/\bbest price\b/, /\bbest availability\b/, /\bcontractor availability\b/, /\bnot urgent\b/] },
+    { optionId: 'k_time_standard', confidence: 0.88, patterns: [/\bpractical\b/, /\bplanning time\b/, /\bnormal\b/] },
+    { optionId: 'k_time_asap', confidence: 0.9, patterns: [/\bsoon\b/, /\bfastest\b/, /\burgent\b/] },
+  ],
+  b_timeline: [
+    { optionId: 'b_time_flexible', confidence: 0.9, patterns: [/\bbest price\b/, /\bbest availability\b/, /\bcontractor availability\b/, /\bnot urgent\b/] },
+    { optionId: 'b_time_standard', confidence: 0.88, patterns: [/\bpractical\b/, /\bplanning time\b/, /\bnormal\b/] },
+    { optionId: 'b_time_asap', confidence: 0.9, patterns: [/\bsoon\b/, /\bfastest\b/, /\burgent\b/] },
+  ],
+  k_home: [
+    { optionId: 'k_home_no', confidence: 0.88, patterns: [/\b(less|least)\s+disruption\b/, /\bsafer\b/, /\bfaster work\b/] },
+    { optionId: 'k_home_partial', confidence: 0.86, patterns: [/\bsome flexibility\b/, /\bpart time\b/] },
+    { optionId: 'k_home_yes', confidence: 0.86, patterns: [/\bstay home\b/, /\bneed to stay\b/] },
+  ],
+  b_home: [
+    { optionId: 'b_home_no', confidence: 0.88, patterns: [/\b(less|least)\s+disruption\b/, /\bsafer\b/, /\bfaster work\b/] },
+    { optionId: 'b_home_partial', confidence: 0.86, patterns: [/\bsome flexibility\b/, /\bpart time\b/] },
+    { optionId: 'b_home_yes', confidence: 0.86, patterns: [/\bstay home\b/, /\bneed to stay\b/] },
+  ],
+};
+
+const QUESTION_OPTION_PHRASES: Record<string, OptionPhraseRule[]> = {
+  k_style: [
+    { optionId: 'k_style_transitional', aliases: ['transitional', 'classic and modern', 'modern and classic', 'mix of modern and traditional'], patterns: [/\btransitional\b/, /\b(classic|traditional)\b.*\bmodern\b/, /\bmodern\b.*\b(classic|traditional)\b/, /\bmix\b.*\bmodern\b.*\btraditional\b/] },
+    { optionId: 'k_style_modern', aliases: ['modern', 'contemporary', 'clean lines', 'minimal hardware'], patterns: [/\bmodern\b/, /\bcontemporary\b/, /\bclean lines\b/, /\bminimal\b/] },
+    { optionId: 'k_style_traditional', aliases: ['traditional', 'classic', 'raised panel', 'ornate'], patterns: [/\btraditional\b/, /\bclassic\b/, /\braised panel\b/, /\bornate\b/] },
+    { optionId: 'k_style_farmhouse', aliases: ['farmhouse', 'modern farmhouse', 'shaker', 'rustic', 'warm wood'], patterns: [/\bmodern farmhouse\b/, /\bfarmhouse\b/, /\bshaker\b/, /\brustic\b/, /\bwarm\b.*\bwood\b/] },
+    { optionId: 'k_style_industrial', aliases: ['industrial', 'exposed materials', 'dark metal', 'black metal'], patterns: [/\bindustrial\b/, /\bexposed\b/, /\bdark\b.*\bmetal\b/, /\bblack\b.*\bmetal\b/] },
+  ],
+  b_style: [
+    { optionId: 'b_style_transitional', aliases: ['transitional', 'classic and modern', 'modern and classic', 'mix of modern and traditional'], patterns: [/\btransitional\b/, /\b(classic|traditional)\b.*\bmodern\b/, /\bmodern\b.*\b(classic|traditional)\b/, /\bmix\b.*\bmodern\b.*\btraditional\b/] },
+    { optionId: 'b_style_modern', aliases: ['modern', 'spa', 'clean lines', 'frameless glass', 'hotel spa'], patterns: [/\bmodern\b/, /\bspa\b/, /\bclean lines\b/, /\bframeless\b/, /\bhotel\b.*\bspa\b/] },
+    { optionId: 'b_style_traditional', aliases: ['traditional', 'classic', 'ornate', 'wainscoting'], patterns: [/\btraditional\b/, /\bclassic\b/, /\bornate\b/, /\bwainscot/] },
+    { optionId: 'b_style_farmhouse', aliases: ['farmhouse', 'modern farmhouse', 'shiplap', 'freestanding tub', 'matte black'], patterns: [/\bmodern farmhouse\b/, /\bfarmhouse\b/, /\bshiplap\b/, /\bfree\s?standing\b/, /\bmatte\b.*\bblack\b/] },
+    { optionId: 'b_style_industrial', aliases: ['industrial', 'concrete', 'dark tones', 'exposed pipe'], patterns: [/\bindustrial\b/, /\bconcrete\b/, /\bdark\b.*\btone\b/, /\bexposed\b.*\bpipe\b/] },
+  ],
+  k_tier: [
+    { optionId: 'k_tier_budget', aliases: ['budget', 'affordable', 'basic', 'builder grade', 'stock cabinets', 'laminate'], patterns: [/\bbudget\b/, /\b(cheap|cheapest|affordable|low cost)\b/, /\bbasic\b/, /\bbuilder grade\b/, /\bstock\b/, /\blaminate\b/] },
+    { optionId: 'k_tier_mid', aliases: ['mid range', 'middle range', 'good quality', 'semi custom', 'not too cheap', 'not too expensive'], patterns: [/\bmid range\b/, /\bmiddle range\b/, /\bgood quality\b/, /\bsemi custom\b/, /\bnot too cheap\b/, /\bnot too expensive\b/, /\bmiddle of the road\b/] },
+    { optionId: 'k_tier_luxury', aliases: ['luxury', 'premium', 'high end', 'custom', 'marble', 'quartzite'], patterns: [/\bluxury\b/, /\bpremium\b/, /\bhigh end\b/, /\btop of the line\b/, /\bcustom\b/, /\bquartzite\b/, /\bmarble\b/] },
+  ],
+  b_tier: [
+    { optionId: 'b_tier_budget', aliases: ['budget', 'affordable', 'basic', 'builder grade', 'functional finish'], patterns: [/\bbudget\b/, /\b(cheap|cheapest|affordable|low cost)\b/, /\bbasic\b/, /\bbuilder grade\b/, /\bfunctional\b/] },
+    { optionId: 'b_tier_mid', aliases: ['mid range', 'middle range', 'good quality', 'quality porcelain', 'semi custom'], patterns: [/\bmid range\b/, /\bmiddle range\b/, /\bgood quality\b/, /\bporcelain\b/, /\bsemi custom\b/, /\bnot too expensive\b/] },
+    { optionId: 'b_tier_luxury', aliases: ['luxury', 'premium', 'high end', 'natural stone', 'custom vanity'], patterns: [/\bluxury\b/, /\bpremium\b/, /\bhigh end\b/, /\bnatural stone\b/, /\bcustom\b/] },
+  ],
+  k_cabinets: [
+    { optionId: 'k_cab_full', aliases: ['full replacement', 'replace cabinets', 'new cabinets', 'rip out cabinets'], patterns: [/\bfull replacement\b/, /\breplace\b.*\bcabinet/, /\bnew\b.*\bcabinet/, /\brip out\b.*\bcabinet/, /\bfrom scratch\b/] },
+    { optionId: 'k_cab_reface', aliases: ['reface', 'refacing', 'new doors', 'keep boxes', 'replace cabinet doors'], patterns: [/\brefac/, /\bnew\b.*\bdoors\b/, /\breplace\b.*\bdoors\b/, /\bkeep\b.*\bbox/, /\bexisting\b.*\bbox/] },
+    { optionId: 'k_cab_paint', aliases: ['paint cabinets', 'refinish cabinets', 'repaint', 'just paint'], patterns: [/\bpaint\b.*\bcabinet/, /\bcabinet\b.*\bpaint/, /\brefinish\b.*\bcabinet/, /\brepaint\b/, /\bjust paint\b/] },
+    { optionId: 'k_cab_keep', aliases: ['keep cabinets', 'no cabinet work', 'leave cabinets', 'as is'], patterns: [/\bkeep\b.*\bcabinet/, /\bleave\b.*\bcabinet/, /\bno\b.*\bcabinet\b.*\bwork\b/, /\bas is\b/, /\bdon t\b.*\bcabinet/] },
+  ],
+  k_countertops: [
+    { optionId: 'k_ct_quartz', aliases: ['quartz', 'engineered stone', 'low maintenance'], patterns: [/\bquartz\b/, /\bengineered\b.*\bstone\b/, /\blow maintenance\b/] },
+    { optionId: 'k_ct_granite', aliases: ['granite', 'natural stone', 'unique patterns'], patterns: [/\bgranite\b/, /\bnatural stone\b/, /\bunique\b.*\bpattern/] },
+    { optionId: 'k_ct_marble', aliases: ['marble', 'quartzite', 'premium stone'], patterns: [/\bmarble\b/, /\bquartzite\b/, /\bpremium\b.*\bstone\b/] },
+    { optionId: 'k_ct_porcelain', aliases: ['porcelain', 'porcelain slab', 'large format'], patterns: [/\bporcelain\b/, /\blarge format\b/] },
+    { optionId: 'k_ct_keep', aliases: ['keep countertops', 'existing countertops', 'leave counters'], patterns: [/\bkeep\b.*\bcounter/, /\bexisting\b.*\bcounter/, /\bleave\b.*\bcounter/, /\bno\b.*\bcounter/] },
+  ],
+  k_appliances: [
+    { optionId: 'k_app_some', aliases: ['some appliances', 'a few appliances', 'not all appliances'], patterns: [/\b(some|a few|couple)\b.*\bappliance/, /\bnot all\b.*\bappliance/] },
+    { optionId: 'k_app_full', aliases: ['full appliance suite', 'all appliances', 'fridge stove dishwasher range hood'], patterns: [/\bfull suite\b/, /\ball\b.*\bappliance/, /\beverything\b.*\bappliance/, /\bfridge\b.*\bstove\b.*\bdishwasher\b/] },
+    { optionId: 'k_app_none', aliases: ['keep appliances', 'no appliances', 'existing appliances'], patterns: [/\b(no|none)\b.*\bappliance/, /\bkeep\b.*\bappliance/, /\bexisting\b.*\bappliance/, /\bcurrent\b.*\bappliance/] },
+  ],
+  k_flooring: [
+    { optionId: 'k_floor_full', aliases: ['replace floor', 'new flooring', 'full floor replacement'], patterns: [/\breplace\b.*\bfloor/, /\bnew\b.*\bfloor/, /\bfull\b.*\bfloor/] },
+    { optionId: 'k_floor_repair', aliases: ['repair floor', 'refinish floor', 'sand existing floor'], patterns: [/\brepair\b.*\bfloor/, /\brefinish\b.*\bfloor/, /\bsand\b.*\bfloor/] },
+    { optionId: 'k_floor_keep', aliases: ['keep floor', 'existing flooring', 'leave floor'], patterns: [/\bkeep\b.*\bfloor/, /\bexisting\b.*\bfloor/, /\bleave\b.*\bfloor/, /\bno\b.*\bfloor/] },
+  ],
+  k_layout: [
+    { optionId: 'k_lay_none', aliases: ['same layout', 'no layout changes', 'cosmetic only', 'do not move anything'], patterns: [/\bsame layout\b/, /\bno\b.*\blayout/, /\bcosmetic\b.*\bonly\b/, /\bdon t\b.*\b(move|relocate|change)/, /\bdo not\b.*\b(move|relocate|change)/] },
+    { optionId: 'k_lay_minor', aliases: ['minor layout change', 'move a window', 'move a door', 'small electrical change'], patterns: [/\bminor\b/, /\bmove\b.*\b(window|door)\b/, /\breposition\b.*\b(window|door)\b/, /\bsmall\b.*\belectrical\b/] },
+    { optionId: 'k_lay_major', aliases: ['major layout change', 'move walls', 'relocate plumbing', 'open up space'], patterns: [/\bmajor\b/, /\bmove\b.*\bwall/, /\brelocat\w*\b.*\bplumb/, /\bopen up\b/] },
+  ],
+  b_shower: [
+    { optionId: 'b_sh_walkin', aliases: ['walk in shower', 'shower only', 'no tub', 'remove tub'], patterns: [/\bwalk in\b/, /\bwalkin\b/, /\bshower only\b/, /\bno tub\b/, /\bremove\b.*\btub\b/] },
+    { optionId: 'b_sh_combo', aliases: ['tub shower combo', 'shower tub combo', 'alcove tub'], patterns: [/\btub\b.*\bshower\b.*\bcombo\b/, /\bshower\b.*\btub\b.*\bcombo\b/, /\balcove\b/] },
+    { optionId: 'b_sh_both', aliases: ['separate tub and shower', 'soaker tub', 'separate shower'], patterns: [/\bseparate\b.*\btub\b.*\bshower\b/, /\bsoaker\b/, /\bseparate shower\b/] },
+    { optionId: 'b_sh_keep', aliases: ['keep shower', 'existing shower tub', 'same shower layout'], patterns: [/\bkeep\b.*\b(shower|tub)\b/, /\bexisting\b.*\b(shower|tub)\b/, /\bsame\b.*\b(shower|tub)\b/] },
+  ],
+  b_vanity: [
+    { optionId: 'b_van_double', aliases: ['double vanity', 'two sinks', 'double sink'], patterns: [/\bdouble\b.*\bvanity\b/, /\btwo\b.*\bsinks?\b/, /\bdouble\b.*\bsinks?\b/] },
+    { optionId: 'b_van_single', aliases: ['single vanity', 'one sink', 'single sink'], patterns: [/\bsingle\b.*\bvanity\b/, /\bone\b.*\bsink\b/, /\bsingle\b.*\bsink\b/] },
+    { optionId: 'b_van_floating', aliases: ['floating vanity', 'wall mount vanity', 'wall mounted sink'], patterns: [/\bfloating\b/, /\bwall mount/, /\bwall mounted\b/] },
+    { optionId: 'b_van_keep', aliases: ['keep vanity', 'refinish vanity', 'existing vanity'], patterns: [/\bkeep\b.*\bvanity\b/, /\brefinish\b.*\bvanity\b/, /\bexisting\b.*\bvanity\b/] },
+  ],
+  b_tile: [
+    { optionId: 'b_tile_full', aliases: ['full tile', 'all tile', 'tile everything', 'floor and shower walls'], patterns: [/\bfull\b.*\btile\b/, /\ball\b.*\btile\b/, /\btile\b.*\beverything\b/, /\bfloor\b.*\bshower\b.*\bwall\b/] },
+    { optionId: 'b_tile_shower', aliases: ['shower tile only', 'tub area only', 'only the shower'], patterns: [/\bshower\b.*\bonly\b/, /\bonly\b.*\bshower\b/, /\btub area\b/, /\bshower area\b/] },
+    { optionId: 'b_tile_floor', aliases: ['floor tile only', 'only the floor'], patterns: [/\bfloor\b.*\bonly\b/, /\bonly\b.*\bfloor\b/] },
+    { optionId: 'b_tile_keep', aliases: ['keep tile', 'existing tile', 'no tile work'], patterns: [/\bkeep\b.*\btile\b/, /\bexisting\b.*\btile\b/, /\bno\b.*\btile\b/] },
+  ],
+  b_toilet: [
+    { optionId: 'b_toil_replace', aliases: ['replace toilet', 'new toilet'], patterns: [/\breplace\b.*\btoilet\b/, /\bnew\b.*\btoilet\b/] },
+    { optionId: 'b_toil_keep', aliases: ['keep toilet', 'existing toilet'], patterns: [/\bkeep\b.*\btoilet\b/, /\bexisting\b.*\btoilet\b/, /\bno\b.*\btoilet\b/] },
+  ],
+  b_plumbing: [
+    { optionId: 'b_plumb_none', aliases: ['no plumbing moves', 'same plumbing location', 'do not move plumbing'], patterns: [/\bno\b.*\bplumb/, /\bsame\b.*\b(plumbing location|fixture location)/, /\bdon t\b.*\bmove\b.*\bplumb/, /\bdo not\b.*\bmove\b.*\bplumb/] },
+    { optionId: 'b_plumb_minor', aliases: ['minor plumbing move', 'move plumbing a foot', 'same wall'], patterns: [/\bminor\b/, /\bsame wall\b/, /\b(a|one|two|1|2)\b.*\b(foot|feet)\b/, /\bsmall\b.*\bplumb/] },
+    { optionId: 'b_plumb_major', aliases: ['major plumbing move', 'different wall', 'drain relocation'], patterns: [/\bmajor\b/, /\bdifferent wall\b/, /\bdrain\b.*\brelocat/, /\bmove\b.*\bplumb\b.*\bwall\b/] },
+  ],
+  k_timeline: [
+    { optionId: 'k_time_asap', aliases: ['as soon as possible', 'right away', 'next few weeks', 'next month'], patterns: [/\basap\b/, /\bas soon as possible\b/, /\bright away\b/, /\bimmediately\b/, /\bnext few weeks\b/, /\bnext month\b/, /\bsoon\b/] },
+    { optionId: 'k_time_standard', aliases: ['three to six months', 'in a few months', 'standard timeline'], patterns: [/\b3\s*6 months\b/, /\bthree\b.*\bsix\b.*\bmonths\b/, /\bfew months\b/, /\bstandard\b/] },
+    { optionId: 'k_time_flexible', aliases: ['flexible', 'no rush', 'six months out', 'later'], patterns: [/\bflexible\b/, /\bno rush\b/, /\bnot in a rush\b/, /\b6 months\b/, /\bsix months\b/, /\blater\b/] },
+  ],
+  b_timeline: [
+    { optionId: 'b_time_asap', aliases: ['as soon as possible', 'right away', 'next few weeks', 'next month'], patterns: [/\basap\b/, /\bas soon as possible\b/, /\bright away\b/, /\bimmediately\b/, /\bnext few weeks\b/, /\bnext month\b/, /\bsoon\b/] },
+    { optionId: 'b_time_standard', aliases: ['three to six months', 'in a few months', 'standard timeline'], patterns: [/\b3\s*6 months\b/, /\bthree\b.*\bsix\b.*\bmonths\b/, /\bfew months\b/, /\bstandard\b/] },
+    { optionId: 'b_time_flexible', aliases: ['flexible', 'no rush', 'six months out', 'later'], patterns: [/\bflexible\b/, /\bno rush\b/, /\bnot in a rush\b/, /\b6 months\b/, /\bsix months\b/, /\blater\b/] },
+  ],
+  k_home: [
+    { optionId: 'k_home_yes', aliases: ['staying home', 'living at home', 'yes I will be home'], patterns: [/\b(stay|staying|live|living)\b.*\b(home|house|there|here)\b/, /\byes\b.*\bhome\b/] },
+    { optionId: 'k_home_partial', aliases: ['home some days', 'partially home', 'sometimes home'], patterns: [/\b(partially|part time|some days|sometimes)\b.*\bhome\b/, /\bhome\b.*\b(some days|sometimes)\b/] },
+    { optionId: 'k_home_no', aliases: ['moving out', 'alternative accommodation', 'somewhere else', 'not living there'], patterns: [/\bmove out\b/, /\bmoving out\b/, /\balternative accommodation\b/, /\bsomewhere else\b/, /\bnot\b.*\b(living|staying)\b/] },
+  ],
+  b_home: [
+    { optionId: 'b_home_yes', aliases: ['staying home', 'living at home', 'yes I will be home'], patterns: [/\b(stay|staying|live|living)\b.*\b(home|house|there|here)\b/, /\byes\b.*\bhome\b/] },
+    { optionId: 'b_home_partial', aliases: ['home some days', 'partially home', 'sometimes home'], patterns: [/\b(partially|part time|some days|sometimes)\b.*\bhome\b/, /\bhome\b.*\b(some days|sometimes)\b/] },
+    { optionId: 'b_home_no', aliases: ['moving out', 'alternative accommodation', 'somewhere else', 'not living there'], patterns: [/\bmove out\b/, /\bmoving out\b/, /\balternative accommodation\b/, /\bsomewhere else\b/, /\bnot\b.*\b(living|staying)\b/] },
+  ],
+};
+
+function optionVoiceAliases(question: QuestionnaireQuestion) {
+  const optionIds = new Set(question.options.map((option) => option.id));
+  return (QUESTION_OPTION_PHRASES[question.id] ?? [])
+    .filter((rule) => optionIds.has(rule.optionId))
+    .flatMap((rule) => rule.aliases);
+}
+
 function directNaturalOptionMatch(value: string, question: QuestionnaireQuestion): VoiceOptionMatch | null {
   const optionIds = new Set(question.options.map((option) => option.id));
-  const choose = (optionId: string) => (
-    optionIds.has(optionId) ? { optionId, confidence: 0.96, reason: 'keywords' as const } : null
+  const choose = (optionId: string, confidence = 0.96) => (
+    optionIds.has(optionId) ? { optionId, confidence, reason: 'keywords' as const } : null
   );
 
-  if (question.id === 'k_appliances') {
-    if (/\b(some|a few|couple)\b/.test(value) || /\bnot all\b/.test(value)) return choose('k_app_some');
-    if (/\b(full suite|all appliances|everything)\b/.test(value)) return choose('k_app_full');
-    if (/\b(no|none|keep|keeping|existing|current)\b/.test(value)) return choose('k_app_none');
+  const preferenceRules = PREFERENCE_OPTION_RULES[question.id] ?? [];
+  for (const rule of preferenceRules) {
+    if (!optionIds.has(rule.optionId)) continue;
+    if (rule.patterns.some((pattern) => pattern.test(value))) {
+      return choose(rule.optionId, rule.confidence);
+    }
   }
 
-  if (question.id === 'b_vanity') {
-    if (/\b(double sink|two sinks|double vanity)\b/.test(value)) return choose('b_van_double');
-    if (/\b(single sink|one sink|single vanity)\b/.test(value)) return choose('b_van_single');
-    if (/\b(floating|wall mount|wall mounted)\b/.test(value)) return choose('b_van_floating');
-    if (/\b(keep|keeping|existing|current|refinish|as is)\b/.test(value)) return choose('b_van_keep');
+  const phraseRules = QUESTION_OPTION_PHRASES[question.id] ?? [];
+  let bestRule: { optionId: string; hits: number } | null = null;
+  let tiedDifferentOption = false;
+  for (const rule of phraseRules) {
+    if (!optionIds.has(rule.optionId)) continue;
+    const hits = rule.patterns.filter((pattern) => pattern.test(value)).length;
+    if (hits > 0 && (!bestRule || hits > bestRule.hits)) {
+      bestRule = { optionId: rule.optionId, hits };
+      tiedDifferentOption = false;
+    } else if (hits > 0 && bestRule && hits === bestRule.hits && rule.optionId !== bestRule.optionId) {
+      tiedDifferentOption = true;
+    }
   }
 
-  if (question.id === 'b_tile') {
-    if (/\b(floor only|only the floor)\b/.test(value)) return choose('b_tile_floor');
-    if (/\b(shower only|only the shower|shower area|tub area)\b/.test(value)) return choose('b_tile_shower');
-    if (/\b(full tile|all tile|everything tiled)\b/.test(value)) return choose('b_tile_full');
-    if (/\b(keep|keeping|existing|current|as is)\b/.test(value)) return choose('b_tile_keep');
+  if (bestRule) {
+    return choose(bestRule.optionId, tiedDifferentOption ? 0.68 : 0.96);
   }
 
   return null;
@@ -358,12 +609,17 @@ export function analyzeTranscriptForQuestionOption(
 
 export function transcriptConfirmsSelection(transcript: string) {
   const normalizedTranscript = normalize(transcript);
-  return /\b(yes|yeah|yep|correct|confirm|right|that one|sounds good|go ahead|select it|pick it)\b/.test(normalizedTranscript);
+  if (hasRejectionCue(normalizedTranscript)) return false;
+  return /\b(yes|yeah|yep|yup|correct|confirm|right|that one|sounds good|go ahead|select it|pick it|exactly|looks right)\b/.test(normalizedTranscript);
 }
 
 export function transcriptRejectsSelection(transcript: string) {
   const normalizedTranscript = normalize(transcript);
-  return /\b(no|nope|wrong|try again|not that|different|cancel)\b/.test(normalizedTranscript);
+  return hasRejectionCue(normalizedTranscript);
+}
+
+function hasRejectionCue(normalizedTranscript: string) {
+  return /\b(no|nope|wrong|try again|not that|not right|different|cancel)\b/.test(normalizedTranscript);
 }
 
 export function transcriptRequestsDecisionHelp(transcript: string) {
@@ -389,9 +645,11 @@ export function transcriptRequestsVoiceStop(transcript: string) {
 export function extractCorrectedAnswerTranscript(transcript: string) {
   const normalizedTranscript = normalize(transcript);
   const correctionPatterns = [
+    /\b(?:not|not that|wrong)\s+.+?\b(?:but|instead|rather)\s+(?:the\s+)?(.+)$/,
     /\b(?:i\s+)?(?:mean|meant|wanted|want|choose|pick|select|take|use)\s+(?:the\s+)?(.+)$/,
     /\b(?:actually|instead|rather)\s+(?:i\s+)?(?:want|choose|pick|select|take|use)?\s*(?:the\s+)?(.+)$/,
     /\b(?:not|not that|wrong)\s+.+?\b(?:but|it is|its|it's)\s+(?:the\s+)?(.+)$/,
+    /\b(?:no|nope|wrong)\s+(?:actually\s+)?(?:the\s+)?(.+)$/,
   ];
 
   for (const pattern of correctionPatterns) {
@@ -400,7 +658,9 @@ export function extractCorrectedAnswerTranscript(transcript: string) {
     if (candidate) return candidate;
   }
 
-  return normalizedTranscript;
+  return normalizedTranscript
+    .replace(/^(no|nope|wrong|not that one|not that)\s+/, '')
+    .trim();
 }
 
 export function buildVoiceContextTerms(question: QuestionnaireQuestion) {
@@ -412,6 +672,7 @@ export function buildVoiceContextTerms(question: QuestionnaireQuestion) {
     terms.add(option.label.split('—')[0].trim());
     labelKeywords(option.label).forEach((keyword) => terms.add(keyword));
   });
+  optionVoiceAliases(question).forEach((term) => terms.add(term));
   [
     'repeat options',
     'what are the options',

@@ -90,7 +90,16 @@ describe('project creation flow guards', () => {
     expect(questionnaireSource).toContain('const transcript = await listenForProjectAnswer(9, voiceContextTerms);');
     expect(questionnaireSource).toContain('if (match.confidence >= 0.78) {');
     expect(questionnaireSource).toContain('setAnswer(activeQuestion.id, match.optionId);');
-    expect(questionnaireSource).toContain("await speakProjectPrompt(`I heard ${transcript}. Should I choose ${spokenLabel}? Say yes or no.`);");
+    expect(questionnaireSource).toContain('Say yes, no, or tell me the answer you want instead.');
+    expect(questionnaireSource).toContain('const confirmationTranscript = await listenForProjectAnswer(6, [');
+    expect(questionnaireSource).toContain('...voiceContextTerms,');
+    expect(questionnaireSource).toContain('const alternateMatch = analyzeTranscriptForQuestionOption(confirmationTranscript, activeQuestion);');
+    expect(questionnaireSource).toContain("type VoicePhase = 'idle' | 'speaking' | 'listening' | 'thinking' | 'helping' | 'confirming' | 'selected' | 'paused' | 'error';");
+    expect(questionnaireSource).toContain("setVoicePhase('listening');");
+    expect(questionnaireSource).toContain("setVoicePhase('selected');");
+    expect(questionnaireSource).toContain("voicePhase === 'helping'");
+    expect(questionnaireSource).toContain('Listening for your answer');
+    expect(questionnaireSource).toContain('Checking your answer');
     expect(questionnaireSource).toContain('transcriptConfirmsSelection(confirmationTranscript)');
     expect(questionnaireSource).toContain('transcriptRejectsSelection(confirmationTranscript)');
     expect(questionnaireSource).toContain('transcriptRequestsVoiceStop(transcript)');

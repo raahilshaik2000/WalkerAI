@@ -72,6 +72,29 @@ describe('project voice answer matching', () => {
     expect(matchTranscriptToQuestionOption('middle range finishes', kitchenQuestion('k_tier'))).toBe('k_tier_mid');
   });
 
+  it('matches conversational kitchen answers across every project question', () => {
+    const kitchenQuestion = (id: string) => {
+      const found = KITCHEN_QUESTIONS.find((item) => item.id === id);
+      if (!found) throw new Error(`Missing kitchen question ${id}`);
+      return found;
+    };
+
+    expect(matchTranscriptToQuestionOption('I like a classic and modern mix', kitchenQuestion('k_style'))).toBe('k_style_transitional');
+    expect(matchTranscriptToQuestionOption('let us do shaker cabinets with a warm farmhouse look', kitchenQuestion('k_style'))).toBe('k_style_farmhouse');
+    expect(matchTranscriptToQuestionOption('modern farmhouse', kitchenQuestion('k_style'))).toBe('k_style_farmhouse');
+    expect(matchTranscriptToQuestionOption('rip out the old cabinets and put in new cabinets', kitchenQuestion('k_cabinets'))).toBe('k_cab_full');
+    expect(matchTranscriptToQuestionOption('just replace the doors and keep the existing boxes', kitchenQuestion('k_cabinets'))).toBe('k_cab_reface');
+    expect(matchTranscriptToQuestionOption('we only want to repaint the cabinets', kitchenQuestion('k_cabinets'))).toBe('k_cab_paint');
+    expect(matchTranscriptToQuestionOption('leave the cabinets as is', kitchenQuestion('k_cabinets'))).toBe('k_cab_keep');
+    expect(matchTranscriptToQuestionOption('I want a porcelain slab', kitchenQuestion('k_countertops'))).toBe('k_ct_porcelain');
+    expect(matchTranscriptToQuestionOption('keep the current counters', kitchenQuestion('k_countertops'))).toBe('k_ct_keep');
+    expect(matchTranscriptToQuestionOption('replace the floor completely', kitchenQuestion('k_flooring'))).toBe('k_floor_full');
+    expect(matchTranscriptToQuestionOption('sand and refinish the existing floor', kitchenQuestion('k_flooring'))).toBe('k_floor_repair');
+    expect(matchTranscriptToQuestionOption('leave the floor alone', kitchenQuestion('k_flooring'))).toBe('k_floor_keep');
+    expect(matchTranscriptToQuestionOption('move a window but nothing major', kitchenQuestion('k_layout'))).toBe('k_lay_minor');
+    expect(matchTranscriptToQuestionOption('we are moving walls and relocating plumbing', kitchenQuestion('k_layout'))).toBe('k_lay_major');
+  });
+
   it('matches budget, timeline, appliance, and living-at-home phrases across kitchen questions', () => {
     const kitchenQuestion = (id: string) => {
       const found = KITCHEN_QUESTIONS.find((item) => item.id === id);
@@ -87,6 +110,34 @@ describe('project voice answer matching', () => {
     expect(matchTranscriptToQuestionOption('no rush, I am flexible', kitchenQuestion('k_timeline'))).toBe('k_time_flexible');
     expect(matchTranscriptToQuestionOption('I will be staying in the house', kitchenQuestion('k_home'))).toBe('k_home_yes');
     expect(matchTranscriptToQuestionOption('we are moving out somewhere else', kitchenQuestion('k_home'))).toBe('k_home_no');
+  });
+
+  it('maps preference questions to practical recommendations when the user asks conversationally', () => {
+    const kitchenQuestion = (id: string) => {
+      const found = KITCHEN_QUESTIONS.find((item) => item.id === id);
+      if (!found) throw new Error(`Missing kitchen question ${id}`);
+      return found;
+    };
+    const bathroomQuestion = (id: string) => {
+      const found = BATHROOM_QUESTIONS.find((item) => item.id === id);
+      if (!found) throw new Error(`Missing bathroom question ${id}`);
+      return found;
+    };
+
+    expect(analyzeTranscriptForQuestionOption('what is best for resale', kitchenQuestion('k_style'))).toMatchObject({
+      optionId: 'k_style_transitional',
+      confidence: 0.9,
+    });
+    expect(analyzeTranscriptForQuestionOption('I want the lowest maintenance countertop', kitchenQuestion('k_countertops'))).toMatchObject({
+      optionId: 'k_ct_quartz',
+      confidence: 0.95,
+    });
+    expect(matchTranscriptToQuestionOption('what is the cheapest countertop option', kitchenQuestion('k_countertops'))).toBe('k_ct_keep');
+    expect(matchTranscriptToQuestionOption('what is the best value quality level', kitchenQuestion('k_tier'))).toBe('k_tier_mid');
+    expect(matchTranscriptToQuestionOption('I want the simplest and fastest layout', kitchenQuestion('k_layout'))).toBe('k_lay_none');
+    expect(matchTranscriptToQuestionOption('best for a family bathroom', bathroomQuestion('b_shower'))).toBe('b_sh_combo');
+    expect(matchTranscriptToQuestionOption('best value tile scope', bathroomQuestion('b_tile'))).toBe('b_tile_shower');
+    expect(matchTranscriptToQuestionOption('least disruption during the bathroom work', bathroomQuestion('b_home'))).toBe('b_home_no');
   });
 
   it('matches bathroom-specific natural phrases without exact labels', () => {
@@ -105,7 +156,33 @@ describe('project voice answer matching', () => {
     expect(matchTranscriptToQuestionOption('do not move plumbing', bathroomQuestion('b_plumbing'))).toBe('b_plumb_none');
   });
 
+  it('matches conversational bathroom answers across every project question', () => {
+    const bathroomQuestion = (id: string) => {
+      const found = BATHROOM_QUESTIONS.find((item) => item.id === id);
+      if (!found) throw new Error(`Missing bathroom question ${id}`);
+      return found;
+    };
+
+    expect(matchTranscriptToQuestionOption('make it feel like a modern hotel spa', bathroomQuestion('b_style'))).toBe('b_style_modern');
+    expect(matchTranscriptToQuestionOption('matte black fixtures and farmhouse style', bathroomQuestion('b_style'))).toBe('b_style_farmhouse');
+    expect(matchTranscriptToQuestionOption('builder grade is fine', bathroomQuestion('b_tier'))).toBe('b_tier_budget');
+    expect(matchTranscriptToQuestionOption('premium natural stone finishes', bathroomQuestion('b_tier'))).toBe('b_tier_luxury');
+    expect(matchTranscriptToQuestionOption('keep the existing shower tub layout', bathroomQuestion('b_shower'))).toBe('b_sh_keep');
+    expect(matchTranscriptToQuestionOption('we want a new toilet', bathroomQuestion('b_toilet'))).toBe('b_toil_replace');
+    expect(matchTranscriptToQuestionOption('keep the existing toilet', bathroomQuestion('b_toilet'))).toBe('b_toil_keep');
+    expect(matchTranscriptToQuestionOption('same wall, just move plumbing a foot', bathroomQuestion('b_plumbing'))).toBe('b_plumb_minor');
+    expect(matchTranscriptToQuestionOption('the drain is moving to a different wall', bathroomQuestion('b_plumbing'))).toBe('b_plumb_major');
+    expect(matchTranscriptToQuestionOption('start right away', bathroomQuestion('b_timeline'))).toBe('b_time_asap');
+    expect(matchTranscriptToQuestionOption('we will be home some days', bathroomQuestion('b_home'))).toBe('b_home_partial');
+  });
+
   it('returns confidence metadata for direct and uncertain matches', () => {
+    const kitchenQuestion = (id: string) => {
+      const found = KITCHEN_QUESTIONS.find((item) => item.id === id);
+      if (!found) throw new Error(`Missing kitchen question ${id}`);
+      return found;
+    };
+
     expect(analyzeTranscriptForQuestionOption('option two', question)).toMatchObject({
       optionId: 'k_ct_granite',
       confidence: 1,
@@ -113,6 +190,11 @@ describe('project voice answer matching', () => {
     });
     expect(analyzeTranscriptForQuestionOption('natural stone', question)).toMatchObject({
       optionId: 'k_ct_granite',
+    });
+    expect(analyzeTranscriptForQuestionOption('classic modern', kitchenQuestion('k_style'))).toMatchObject({
+      optionId: 'k_style_transitional',
+      confidence: 0.68,
+      reason: 'keywords',
     });
   });
 
@@ -129,8 +211,11 @@ describe('project voice answer matching', () => {
   it('recognizes yes/no confirmation turns', () => {
     expect(transcriptConfirmsSelection('yes that one is correct')).toBe(true);
     expect(transcriptConfirmsSelection('go ahead and select it')).toBe(true);
+    expect(transcriptConfirmsSelection('no that is not right')).toBe(false);
+    expect(transcriptConfirmsSelection('not that one')).toBe(false);
     expect(transcriptRejectsSelection('no try again')).toBe(true);
     expect(transcriptRejectsSelection('not that one')).toBe(true);
+    expect(transcriptRejectsSelection('no that is not right')).toBe(true);
     expect(transcriptRequestsDecisionHelp('I am not sure, help me choose')).toBe(true);
     expect(transcriptRequestsDecisionHelp('what do you recommend')).toBe(true);
     expect(transcriptRequestsOptionsRepeat('what are the options again')).toBe(true);
@@ -143,15 +228,19 @@ describe('project voice answer matching', () => {
   it('extracts corrected answers from confirmation turns', () => {
     expect(extractCorrectedAnswerTranscript('no I meant granite')).toBe('granite');
     expect(extractCorrectedAnswerTranscript('not quartz but granite')).toBe('granite');
+    expect(extractCorrectedAnswerTranscript('not quartz instead granite')).toBe('granite');
+    expect(extractCorrectedAnswerTranscript('no second option')).toBe('second option');
     expect(extractCorrectedAnswerTranscript('actually the third one')).toBe('third one');
 
     expect(matchTranscriptToQuestionOption(extractCorrectedAnswerTranscript('no I meant granite'), question)).toBe('k_ct_granite');
     expect(matchTranscriptToQuestionOption(extractCorrectedAnswerTranscript('not quartz but granite'), question)).toBe('k_ct_granite');
+    expect(matchTranscriptToQuestionOption(extractCorrectedAnswerTranscript('no second option'), question)).toBe('k_ct_granite');
     expect(matchTranscriptToQuestionOption(extractCorrectedAnswerTranscript('actually the third one'), question)).toBe('k_ct_marble');
   });
 
   it('builds speech recognition context from option labels and positions', () => {
     const terms = buildVoiceContextTerms(question);
+    const countertopTerms = buildVoiceContextTerms(KITCHEN_QUESTIONS.find((item) => item.id === 'k_countertops')!);
 
     expect(terms).toContain('option 1');
     expect(terms).toContain('Quartz');
@@ -162,6 +251,8 @@ describe('project voice answer matching', () => {
     expect(terms).toContain('what do you recommend');
     expect(terms).toContain('go back');
     expect(terms).toContain('change my last answer');
+    expect(countertopTerms).toContain('porcelain slab');
+    expect(countertopTerms).toContain('keep countertops');
   });
 
   it('stops both speech output and active listening sessions', () => {
@@ -181,13 +272,13 @@ describe('project voice answer matching', () => {
     expect(source).toContain('silenceTimer?.invalidate()');
   });
 
-  it('asks again once before giving up on an unmatched voice answer', () => {
+  it('asks again before giving up on an unmatched voice answer', () => {
     const source = require('fs').readFileSync(
       require('path').join(__dirname, '../src/app/(homeowner)/project/create/questionnaire.tsx'),
       'utf8',
     );
 
-    expect(source).toContain('const maxAttempts = 2;');
+    expect(source).toContain('const maxAttempts = 3;');
     expect(source).toContain('Let me try that again. You can say the option number, or say the answer in your own words.');
     expect(source).toContain('Trying once more.');
   });
@@ -199,9 +290,23 @@ describe('project voice answer matching', () => {
     );
 
     expect(source).toContain('transcriptRequestsOptionsRepeat(confirmationTranscript)');
+    expect(source).toContain('...voiceContextTerms,');
+    expect(source).toContain('const alternateMatch = analyzeTranscriptForQuestionOption(confirmationTranscript, activeQuestion);');
     expect(source).toContain('extractCorrectedAnswerTranscript(confirmationTranscript)');
     expect(source).toContain('No problem. I selected');
+    expect(source).toContain('Got it. I selected');
     expect(source).toContain('Repeating the options.');
+    expect(source).toContain('I still need to confirm that. Please say yes, no, or say the answer you want.');
+  });
+
+  it('uses more natural spoken question prompts and iOS voices', () => {
+    const voiceSource = readNativeVoiceType();
+    const nativeSource = readNativeVoiceSource();
+
+    expect(voiceSource).toContain('You can say an option number, answer in your own words, ask me to repeat, or say help me choose.');
+    expect(nativeSource).toContain('let preferredNames = ["Samantha", "Ava", "Allison", "Joelle", "Karen", "Moira", "Daniel"]');
+    expect(nativeSource).toContain('utterance.preUtteranceDelay = 0.04');
+    expect(nativeSource).toContain('utterance.postUtteranceDelay = 0.08');
   });
 
   it('keeps voice walkthrough navigable without manual taps', () => {
@@ -232,6 +337,9 @@ describe('project voice answer matching', () => {
     );
 
     expect(voiceSource).toContain('export async function speakProjectDecisionHelp(question: QuestionnaireQuestion)');
+    expect(voiceSource).toContain('const recommendation = decisionRecommendation(question);');
+    expect(voiceSource).toContain('A safe choice for resale is transitional.');
+    expect(voiceSource).toContain('Quartz is usually the safest low-maintenance choice.');
     expect(voiceSource).toContain('Which one sounds closest?');
     expect(questionnaireSource).toContain('transcriptRequestsDecisionHelp(transcript)');
     expect(questionnaireSource).toContain('await speakProjectDecisionHelp(activeQuestion);');
