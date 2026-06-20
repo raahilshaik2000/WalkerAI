@@ -593,7 +593,9 @@ function optionVoiceAliases(question: QuestionnaireQuestion) {
 
 function optionExplanationPromptRequested(value: string) {
   if (/\bwhat is\s+(the\s+)?(best|cheapest|lowest|most|least)\b/.test(value)) return false;
-  return /\b(what is|what are|what s|whats|tell me about|explain|describe|more about|learn about|what does|compare|difference between|which is better|which one is better|which should i choose|which would you choose|should i choose)\b/.test(value)
+  return /\b(what is|what are|what s|whats|what about|how about|tell me about|explain|describe|more about|learn about|what does|why|compare|difference between|which is better|which one is better|which should i choose|which would you choose|should i choose)\b/.test(value)
+    || /\b(is|are)\b.*\b(good|better|best|worth it|durable|expensive|cheap|easy to clean|low maintenance)\b/.test(value)
+    || /\bbetter than\b/.test(value)
     || /\bor\b/.test(value);
 }
 

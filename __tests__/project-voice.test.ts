@@ -189,6 +189,15 @@ describe('project voice answer matching', () => {
       optionId: 'k_ct_granite',
       label: 'Granite',
     });
+    expect(optionExplanationForTranscript('what about quartz', question)).toMatchObject({
+      optionId: 'k_ct_quartz',
+    });
+    expect(optionExplanationForTranscript('why quartz', question)).toMatchObject({
+      optionId: 'k_ct_quartz',
+    });
+    expect(optionExplanationForTranscript('is quartz good', question)).toMatchObject({
+      optionId: 'k_ct_quartz',
+    });
     expect(optionExplanationForTranscript('explain option two', question)).toMatchObject({
       optionId: 'k_ct_granite',
     });
@@ -207,11 +216,17 @@ describe('project voice answer matching', () => {
       optionId: null,
       recommendedOptionId: 'k_ct_quartz',
     });
+    expect(optionExplanationForTranscript('is quartz better than granite', question)).toMatchObject({
+      optionId: null,
+      recommendedOptionId: 'k_ct_quartz',
+    });
     expect(optionExplanationForTranscript('quartz or granite', question)).toMatchObject({
       optionId: null,
       recommendedOptionId: 'k_ct_quartz',
     });
     expect(matchTranscriptToQuestionOption('what is quartz', question)).toBeNull();
+    expect(matchTranscriptToQuestionOption('what about quartz', question)).toBeNull();
+    expect(matchTranscriptToQuestionOption('is quartz better than granite', question)).toBeNull();
     expect(matchTranscriptToQuestionOption('what is the difference between quartz and granite', question)).toBeNull();
     expect(matchTranscriptToQuestionOption('which is better quartz or granite', question)).toBeNull();
     expect(optionExplanationForTranscript('what is the best value quality level', KITCHEN_QUESTIONS.find((item) => item.id === 'k_tier')!)).toBeNull();
