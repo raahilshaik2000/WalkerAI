@@ -17,6 +17,12 @@ export interface VoiceOptionMatch {
   reason: 'position' | 'exact' | 'primary' | 'keywords';
 }
 
+export interface VoiceOptionExplanation {
+  optionId: string;
+  label: string;
+  detail: string;
+}
+
 type OptionPhraseRule = {
   optionId: string;
   aliases: string[];
@@ -67,6 +73,13 @@ export async function speakProjectDecisionHelp(question: QuestionnaireQuestion) 
       : `Option ${index + 1} is ${label}.`;
   }).join(' ');
   await speakProjectPrompt(`${context}${recommendation}${defaultRecommendationText}${optionGuidance} Which one sounds closest?`);
+}
+
+export async function speakProjectOptionExplanation(explanation: VoiceOptionExplanation) {
+  const detail = explanation.detail
+    ? `${explanation.label} means ${explanation.detail}.`
+    : `${explanation.label} is one of the available options.`;
+  await speakProjectPrompt(`${detail} You can choose it, ask about another option, or say help me choose.`);
 }
 
 export async function speakProjectPrompt(text: string) {
@@ -562,6 +575,49 @@ function optionVoiceAliases(question: QuestionnaireQuestion) {
     .flatMap((rule) => rule.aliases);
 }
 
+function optionExplanationPromptRequested(value: string) {
+  if (/\bwhat is\s+(the\s+)?(best|cheapest|lowest|most|least)\b/.test(value)) return false;
+  return /\b(what is|what are|what s|whats|tell me about|explain|describe|more about|learn about|what does|compare|difference between)\b/.test(value);
+}
+
+function optionExplanationTerms(question: QuestionnaireQuestion, optionId: string, label: string) {
+  const phraseRule = (QUESTION_OPTION_PHRASES[question.id] ?? []).find((rule) => rule.optionId === optionId);
+  return [
+    label.split('—')[0].trim(),
+    ...labelKeywords(label),
+    ...(phraseRule?.aliases ?? []),
+  ];
+}
+
+export function optionExplanationForTranscript(
+  transcript: string,
+  question: QuestionnaireQuestion,
+): VoiceOptionExplanation | null {
+  const normalizedTranscript = normalize(transcript);
+  if (!optionExplanationPromptRequested(normalizedTranscript)) return null;
+
+  const positional = optionPositionMatch(normalizedTranscript, question);
+  if (positional) {
+    const option = question.options.find((item) => item.id === positional.optionId);
+    if (!option) return null;
+    const [label, detail = ''] = option.label.split('—').map((part) => part.trim());
+    return { optionId: option.id, label, detail };
+  }
+
+  const matches = question.options
+    .map((option) => {
+      const [label, detail = ''] = option.label.split('—').map((part) => part.trim());
+      const terms = optionExplanationTerms(question, option.id, option.label)
+        .map(normalize)
+        .filter((term) => term.length > 2);
+      const matched = terms.some((term) => normalizedTranscript.includes(term));
+      return matched ? { optionId: option.id, label, detail } : null;
+    })
+    .filter((match): match is VoiceOptionExplanation => !!match);
+
+  return matches.length === 1 ? matches[0] : null;
+}
+
 function directNaturalOptionMatch(value: string, question: QuestionnaireQuestion): VoiceOptionMatch | null {
   const optionIds = new Set(question.options.map((option) => option.id));
   const choose = (optionId: string, confidence = 0.96) => (
@@ -607,6 +663,8 @@ export function analyzeTranscriptForQuestionOption(
   question: QuestionnaireQuestion,
 ): VoiceOptionMatch | null {
   const baseTranscript = normalize(transcript);
+  if (optionExplanationForTranscript(baseTranscript, question)) return null;
+
   const directMatch = directNaturalOptionMatch(baseTranscript, question);
   if (directMatch) return directMatch;
 
@@ -745,6 +803,9 @@ export function buildVoiceContextTerms(question: QuestionnaireQuestion) {
     'help me choose',
     'not sure',
     'what do you recommend',
+    'what is option 1',
+    'tell me about option 1',
+    'explain option 1',
     'go with your recommendation',
     'choose your recommendation',
     'whatever you recommend',

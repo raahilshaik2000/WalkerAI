@@ -18,9 +18,11 @@ import {
   extractCorrectedAnswerTranscript,
   isProjectVoiceAvailable,
   listenForProjectAnswer,
+  optionExplanationForTranscript,
   recommendedOptionForQuestion,
   requestProjectVoicePermissions,
   speakProjectDecisionHelp,
+  speakProjectOptionExplanation,
   speakProjectQuestion,
   speakProjectPrompt,
   stopProjectVoice,
@@ -134,6 +136,20 @@ export default function QuestionnaireStep() {
     const voiceContextTerms = buildVoiceContextTerms(activeQuestion);
     const maxAttempts = 3;
     let suggestionWasOffered = false;
+    let lastExplainedOptionId: string | null = null;
+
+    const selectVoiceOption = async (optionId: string, transcriptText: string, contextLabel: string) => {
+      const option = activeQuestion.options.find((item) => item.id === optionId);
+      if (!option) return null;
+
+      const spokenLabel = shortOptionLabel(option.label);
+      ReactNativeHapticFeedback.trigger('notificationSuccess');
+      setAnswer(activeQuestion.id, option.id);
+      setVoiceTranscript(`Heard "${transcriptText}" and selected ${contextLabel}: ${spokenLabel}.`);
+      setVoicePhase('selected');
+      await speakProjectPrompt(`Got it. I selected ${spokenLabel}.`);
+      return { optionId: option.id, optionLabel: option.label };
+    };
 
     for (let attempt = 0; attempt < maxAttempts; attempt += 1) {
       if (attempt > 0) {
@@ -157,7 +173,18 @@ export default function QuestionnaireStep() {
         setVoiceTranscript('Repeating the options.');
         setVoicePhase('speaking');
         suggestionWasOffered = false;
+        lastExplainedOptionId = null;
         await speakProjectQuestion(activeQuestion);
+        continue;
+      }
+
+      const optionExplanation = optionExplanationForTranscript(transcript, activeQuestion);
+      if (optionExplanation) {
+        setVoiceTranscript(`Explaining ${optionExplanation.label}.`);
+        setVoicePhase('helping');
+        suggestionWasOffered = false;
+        lastExplainedOptionId = optionExplanation.optionId;
+        await speakProjectOptionExplanation(optionExplanation);
         continue;
       }
 
@@ -165,6 +192,7 @@ export default function QuestionnaireStep() {
         setVoiceTranscript('Explaining the options.');
         setVoicePhase('helping');
         suggestionWasOffered = true;
+        lastExplainedOptionId = null;
         await speakProjectDecisionHelp(activeQuestion);
         continue;
       }
@@ -174,21 +202,10 @@ export default function QuestionnaireStep() {
         return movedBack ? { command: 'previous' } : null;
       }
 
-      if (suggestionWasOffered && transcriptAcceptsSuggestionFollowUp(transcript)) {
+      if ((lastExplainedOptionId || suggestionWasOffered) && transcriptAcceptsSuggestionFollowUp(transcript)) {
         const recommended = recommendedOptionForQuestion(activeQuestion);
-        const recommendedOption = recommended
-          ? activeQuestion.options.find((option) => option.id === recommended.id)
-          : null;
-
-        if (recommendedOption) {
-          const recommendedLabel = recommended?.label ?? shortOptionLabel(recommendedOption.label);
-          ReactNativeHapticFeedback.trigger('notificationSuccess');
-          setAnswer(activeQuestion.id, recommendedOption.id);
-          setVoiceTranscript(`Heard "${transcript}" and selected the recommendation: ${recommendedLabel}.`);
-          setVoicePhase('selected');
-          await speakProjectPrompt(`Got it. I selected ${recommendedLabel}.`);
-          return { optionId: recommendedOption.id, optionLabel: recommendedOption.label };
-        }
+        const optionId = lastExplainedOptionId ?? recommended?.id;
+        if (optionId) return selectVoiceOption(optionId, transcript, lastExplainedOptionId ? 'the explained option' : 'the recommendation');
       }
 
       const match = analyzeTranscriptForQuestionOption(transcript, activeQuestion);
@@ -260,7 +277,18 @@ export default function QuestionnaireStep() {
         setVoiceTranscript('Repeating the options.');
         setVoicePhase('speaking');
         suggestionWasOffered = false;
+        lastExplainedOptionId = null;
         await speakProjectQuestion(activeQuestion);
+        continue;
+      }
+
+      const confirmationExplanation = optionExplanationForTranscript(confirmationTranscript, activeQuestion);
+      if (confirmationExplanation) {
+        setVoiceTranscript(`Explaining ${confirmationExplanation.label}.`);
+        setVoicePhase('helping');
+        suggestionWasOffered = false;
+        lastExplainedOptionId = confirmationExplanation.optionId;
+        await speakProjectOptionExplanation(confirmationExplanation);
         continue;
       }
 
@@ -268,6 +296,7 @@ export default function QuestionnaireStep() {
         setVoiceTranscript('Explaining the options.');
         setVoicePhase('helping');
         suggestionWasOffered = true;
+        lastExplainedOptionId = null;
         await speakProjectDecisionHelp(activeQuestion);
         continue;
       }

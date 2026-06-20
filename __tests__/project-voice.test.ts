@@ -3,6 +3,7 @@ import {
   buildVoiceContextTerms,
   extractCorrectedAnswerTranscript,
   matchTranscriptToQuestionOption,
+  optionExplanationForTranscript,
   recommendedOptionForQuestion,
   transcriptAcceptsRecommendation,
   transcriptAcceptsSuggestionFollowUp,
@@ -168,6 +169,24 @@ describe('project voice answer matching', () => {
     });
   });
 
+  it('explains a mentioned option instead of selecting it when the transcript is a question', () => {
+    expect(optionExplanationForTranscript('what is quartz', question)).toMatchObject({
+      optionId: 'k_ct_quartz',
+      label: 'Quartz',
+      detail: 'engineered stone, low maintenance',
+    });
+    expect(optionExplanationForTranscript('tell me about granite', question)).toMatchObject({
+      optionId: 'k_ct_granite',
+      label: 'Granite',
+    });
+    expect(optionExplanationForTranscript('explain option two', question)).toMatchObject({
+      optionId: 'k_ct_granite',
+    });
+    expect(optionExplanationForTranscript('what is the difference between quartz and granite', question)).toBeNull();
+    expect(matchTranscriptToQuestionOption('what is quartz', question)).toBeNull();
+    expect(optionExplanationForTranscript('what is the best value quality level', KITCHEN_QUESTIONS.find((item) => item.id === 'k_tier')!)).toBeNull();
+  });
+
   it('matches bathroom-specific natural phrases without exact labels', () => {
     const bathroomQuestion = (id: string) => {
       const found = BATHROOM_QUESTIONS.find((item) => item.id === id);
@@ -303,6 +322,8 @@ describe('project voice answer matching', () => {
     expect(terms).toContain('marble');
     expect(terms).toContain('help me choose');
     expect(terms).toContain('what do you recommend');
+    expect(terms).toContain('tell me about option 1');
+    expect(terms).toContain('explain option 1');
     expect(terms).toContain('go with your recommendation');
     expect(terms).toContain('whatever you recommend');
     expect(terms).toContain('that sounds good');
@@ -403,8 +424,11 @@ describe('project voice answer matching', () => {
     expect(voiceSource).toContain('Which one sounds closest?');
     expect(questionnaireSource).toContain('transcriptRequestsDecisionHelp(transcript)');
     expect(questionnaireSource).toContain('!transcriptAcceptsRecommendation(transcript)');
-    expect(questionnaireSource).toContain('suggestionWasOffered && transcriptAcceptsSuggestionFollowUp(transcript)');
-    expect(questionnaireSource).toContain('selected the recommendation');
+    expect(questionnaireSource).toContain('optionExplanationForTranscript(transcript, activeQuestion)');
+    expect(questionnaireSource).toContain('await speakProjectOptionExplanation(optionExplanation);');
+    expect(questionnaireSource).toContain("lastExplainedOptionId ? 'the explained option' : 'the recommendation'");
+    expect(questionnaireSource).toContain('(lastExplainedOptionId || suggestionWasOffered) && transcriptAcceptsSuggestionFollowUp(transcript)');
+    expect(questionnaireSource).toContain('selectVoiceOption(optionId, transcript');
     expect(questionnaireSource).toContain('await speakProjectDecisionHelp(activeQuestion);');
     expect(questionnaireSource).toContain("setVoiceTranscript('Explaining the options.');");
   });
