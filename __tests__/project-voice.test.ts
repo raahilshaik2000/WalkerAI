@@ -9,7 +9,7 @@ import {
   transcriptRequestsPreviousQuestion,
   transcriptRequestsVoiceStop,
 } from '../src/lib/project-voice';
-import { KITCHEN_QUESTIONS } from '../src/data/fixed-questions';
+import { BATHROOM_QUESTIONS, KITCHEN_QUESTIONS } from '../src/data/fixed-questions';
 import type { QuestionnaireQuestion } from '../src/types/database.types';
 
 const question: QuestionnaireQuestion = {
@@ -61,6 +61,39 @@ describe('project voice answer matching', () => {
     expect(matchTranscriptToQuestionOption('do not move anything, same layout', kitchenQuestion('k_layout'))).toBe('k_lay_none');
     expect(matchTranscriptToQuestionOption('keep the appliances', kitchenQuestion('k_appliances'))).toBe('k_app_none');
     expect(matchTranscriptToQuestionOption('middle range finishes', kitchenQuestion('k_tier'))).toBe('k_tier_mid');
+  });
+
+  it('matches budget, timeline, appliance, and living-at-home phrases across kitchen questions', () => {
+    const kitchenQuestion = (id: string) => {
+      const found = KITCHEN_QUESTIONS.find((item) => item.id === id);
+      if (!found) throw new Error(`Missing kitchen question ${id}`);
+      return found;
+    };
+
+    expect(matchTranscriptToQuestionOption('whatever is cheapest', kitchenQuestion('k_tier'))).toBe('k_tier_budget');
+    expect(matchTranscriptToQuestionOption('not too cheap but not too expensive', kitchenQuestion('k_tier'))).toBe('k_tier_mid');
+    expect(matchTranscriptToQuestionOption('top of the line finishes', kitchenQuestion('k_tier'))).toBe('k_tier_luxury');
+    expect(matchTranscriptToQuestionOption('some appliances but not all', kitchenQuestion('k_appliances'))).toBe('k_app_some');
+    expect(matchTranscriptToQuestionOption('replace the full appliance suite', kitchenQuestion('k_appliances'))).toBe('k_app_full');
+    expect(matchTranscriptToQuestionOption('no rush, I am flexible', kitchenQuestion('k_timeline'))).toBe('k_time_flexible');
+    expect(matchTranscriptToQuestionOption('I will be staying in the house', kitchenQuestion('k_home'))).toBe('k_home_yes');
+    expect(matchTranscriptToQuestionOption('we are moving out somewhere else', kitchenQuestion('k_home'))).toBe('k_home_no');
+  });
+
+  it('matches bathroom-specific natural phrases without exact labels', () => {
+    const bathroomQuestion = (id: string) => {
+      const found = BATHROOM_QUESTIONS.find((item) => item.id === id);
+      if (!found) throw new Error(`Missing bathroom question ${id}`);
+      return found;
+    };
+
+    expect(matchTranscriptToQuestionOption('walk in shower no tub', bathroomQuestion('b_shower'))).toBe('b_sh_walkin');
+    expect(matchTranscriptToQuestionOption('tub shower combo', bathroomQuestion('b_shower'))).toBe('b_sh_combo');
+    expect(matchTranscriptToQuestionOption('double sink vanity', bathroomQuestion('b_vanity'))).toBe('b_van_double');
+    expect(matchTranscriptToQuestionOption('wall mounted sink', bathroomQuestion('b_vanity'))).toBe('b_van_floating');
+    expect(matchTranscriptToQuestionOption('only the shower area', bathroomQuestion('b_tile'))).toBe('b_tile_shower');
+    expect(matchTranscriptToQuestionOption('only the floor', bathroomQuestion('b_tile'))).toBe('b_tile_floor');
+    expect(matchTranscriptToQuestionOption('do not move plumbing', bathroomQuestion('b_plumbing'))).toBe('b_plumb_none');
   });
 
   it('returns confidence metadata for direct and uncertain matches', () => {

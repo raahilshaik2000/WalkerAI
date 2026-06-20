@@ -74,19 +74,96 @@ function expandNaturalAnswerPhrases(value: string) {
   }
 
   if (/\b(mid range|middle range)\b/.test(value)) {
-    expansions.push('mid range');
+    expansions.push('mid range quality semi custom standard good quality');
   }
 
-  if (/\b(high end|premium)\b/.test(value)) {
-    expansions.push('luxury');
+  if (/\b(cheap|cheapest|affordable|low cost|save money|basic|builder grade)\b/.test(value)) {
+    expansions.push('budget stock basic builder grade functional');
+  }
+
+  if (/\b(high end|premium|top of the line|best quality|highest quality|luxury)\b/.test(value)) {
+    expansions.push('luxury custom premium high end natural stone');
+  }
+
+  if (/\b(good quality|better quality|not too cheap|not too expensive|middle of the road)\b/.test(value)) {
+    expansions.push('mid range quality semi custom');
   }
 
   if (/\b(don t|dont|do not|not)\s+(move|relocate|change)\b/.test(value) || /\bsame layout\b/.test(value)) {
     expansions.push('no cosmetic refresh same layout keeping all fixtures in the same location');
   }
 
-  if (/\bkeep(?:ing)?(?: the| my| all)?\s+(appliance|appliances|cabinet|cabinets|countertop|countertops|floor|flooring|tile|toilet|vanity)\b/.test(value)) {
+  if (/\b(keep|keeping|leave|leaving|don t replace|dont replace|do not replace)\b/.test(value)
+    && /\b(appliance|appliances|cabinet|cabinets|countertop|countertops|floor|flooring|tile|toilet|vanity|shower|tub|layout|existing|current|as is)\b/.test(value)) {
     expansions.push('keep existing');
+  }
+
+  if (/\b(some|a few|couple)\b/.test(value) && /\b(appliance|appliances)\b/.test(value)) {
+    expansions.push('some appliances only');
+  }
+
+  if (/\b(all|everything|full suite)\b/.test(value) && /\b(appliance|appliances|fridge|stove|dishwasher|range hood)\b/.test(value)) {
+    expansions.push('full suite fridge stove dishwasher range hood');
+  }
+
+  if (/\b(stay|staying|live|living)\b/.test(value) && /\b(home|house|there|here)\b/.test(value)) {
+    expansions.push('yes staying home throughout');
+  }
+
+  if (/\b(move out|moving out|not living|won t live|wont live|somewhere else|alternative accommodation)\b/.test(value)) {
+    expansions.push('no alternative accommodation arranged');
+  }
+
+  if (/\b(part time|partially|some days|sometimes)\b/.test(value) && /\b(home|house|there|here)\b/.test(value)) {
+    expansions.push('partially home some days flexibility');
+  }
+
+  if (/\b(next month|next few weeks|soon|right away|immediately)\b/.test(value)) {
+    expansions.push('asap ready start within next 1 3 months');
+  }
+
+  if (/\b(three months|3 months|few months|spring|summer|fall|winter)\b/.test(value)) {
+    expansions.push('standard within 3 6 months');
+  }
+
+  if (/\b(six months|6 months|no rush|not in a rush|flexible|later)\b/.test(value)) {
+    expansions.push('flexible no hard deadline 6 months');
+  }
+
+  if (/\b(walk in|walkin|shower only|no tub)\b/.test(value)) {
+    expansions.push('walk in shower only remove tub');
+  }
+
+  if (/\b(tub shower|shower tub|combo|alcove)\b/.test(value)) {
+    expansions.push('tub shower combo standard alcove');
+  }
+
+  if (/\b(soaker|separate tub|separate shower)\b/.test(value)) {
+    expansions.push('separate soaker tub separate shower');
+  }
+
+  if (/\b(single sink|one sink|single vanity)\b/.test(value)) {
+    expansions.push('new single vanity');
+  }
+
+  if (/\b(double sink|two sinks|double vanity)\b/.test(value)) {
+    expansions.push('new double vanity');
+  }
+
+  if (/\b(floating|wall mount|wall mounted)\b/.test(value) && /\b(vanity|sink)\b/.test(value)) {
+    expansions.push('floating wall mount vanity');
+  }
+
+  if (/\b(floor only|only the floor)\b/.test(value)) {
+    expansions.push('floor tile only');
+  }
+
+  if (/\b(shower only|only the shower|tub area)\b/.test(value)) {
+    expansions.push('shower tub area only');
+  }
+
+  if (/\b(all tile|full tile|everything tiled)\b/.test(value)) {
+    expansions.push('full tile job floor shower walls feature wall');
   }
 
   return expansions.length ? `${value} ${expansions.join(' ')}` : value;
@@ -189,11 +266,44 @@ function tokenList(value: string) {
     .filter((token) => token.length > 2 && !STOP_WORDS.has(token));
 }
 
+function directNaturalOptionMatch(value: string, question: QuestionnaireQuestion): VoiceOptionMatch | null {
+  const optionIds = new Set(question.options.map((option) => option.id));
+  const choose = (optionId: string) => (
+    optionIds.has(optionId) ? { optionId, confidence: 0.96, reason: 'keywords' as const } : null
+  );
+
+  if (question.id === 'k_appliances') {
+    if (/\b(some|a few|couple)\b/.test(value) || /\bnot all\b/.test(value)) return choose('k_app_some');
+    if (/\b(full suite|all appliances|everything)\b/.test(value)) return choose('k_app_full');
+    if (/\b(no|none|keep|keeping|existing|current)\b/.test(value)) return choose('k_app_none');
+  }
+
+  if (question.id === 'b_vanity') {
+    if (/\b(double sink|two sinks|double vanity)\b/.test(value)) return choose('b_van_double');
+    if (/\b(single sink|one sink|single vanity)\b/.test(value)) return choose('b_van_single');
+    if (/\b(floating|wall mount|wall mounted)\b/.test(value)) return choose('b_van_floating');
+    if (/\b(keep|keeping|existing|current|refinish|as is)\b/.test(value)) return choose('b_van_keep');
+  }
+
+  if (question.id === 'b_tile') {
+    if (/\b(floor only|only the floor)\b/.test(value)) return choose('b_tile_floor');
+    if (/\b(shower only|only the shower|shower area|tub area)\b/.test(value)) return choose('b_tile_shower');
+    if (/\b(full tile|all tile|everything tiled)\b/.test(value)) return choose('b_tile_full');
+    if (/\b(keep|keeping|existing|current|as is)\b/.test(value)) return choose('b_tile_keep');
+  }
+
+  return null;
+}
+
 export function analyzeTranscriptForQuestionOption(
   transcript: string,
   question: QuestionnaireQuestion,
 ): VoiceOptionMatch | null {
-  const normalizedTranscript = expandNaturalAnswerPhrases(normalize(transcript));
+  const baseTranscript = normalize(transcript);
+  const directMatch = directNaturalOptionMatch(baseTranscript, question);
+  if (directMatch) return directMatch;
+
+  const normalizedTranscript = expandNaturalAnswerPhrases(baseTranscript);
   if (!normalizedTranscript) return null;
 
   const positional = optionPositionMatch(normalizedTranscript, question);
