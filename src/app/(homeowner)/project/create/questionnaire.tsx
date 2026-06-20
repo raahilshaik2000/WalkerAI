@@ -23,6 +23,7 @@ import {
   speakProjectQuestion,
   speakProjectPrompt,
   stopProjectVoice,
+  transcriptAcceptsRecommendation,
   transcriptConfirmsSelection,
   transcriptRejectsSelection,
   transcriptRequestsDecisionHelp,
@@ -156,7 +157,7 @@ export default function QuestionnaireStep() {
         continue;
       }
 
-      if (transcriptRequestsDecisionHelp(transcript)) {
+      if (!transcriptAcceptsRecommendation(transcript) && transcriptRequestsDecisionHelp(transcript)) {
         setVoiceTranscript('Explaining the options.');
         setVoicePhase('helping');
         await speakProjectDecisionHelp(activeQuestion);
@@ -240,7 +241,7 @@ export default function QuestionnaireStep() {
         continue;
       }
 
-      if (transcriptRequestsDecisionHelp(confirmationTranscript)) {
+      if (!transcriptAcceptsRecommendation(confirmationTranscript) && transcriptRequestsDecisionHelp(confirmationTranscript)) {
         setVoiceTranscript('Explaining the options.');
         setVoicePhase('helping');
         await speakProjectDecisionHelp(activeQuestion);

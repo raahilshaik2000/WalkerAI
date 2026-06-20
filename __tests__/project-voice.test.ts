@@ -3,6 +3,8 @@ import {
   buildVoiceContextTerms,
   extractCorrectedAnswerTranscript,
   matchTranscriptToQuestionOption,
+  recommendedOptionForQuestion,
+  transcriptAcceptsRecommendation,
   transcriptConfirmsSelection,
   transcriptRejectsSelection,
   transcriptRequestsDecisionHelp,
@@ -140,6 +142,31 @@ describe('project voice answer matching', () => {
     expect(matchTranscriptToQuestionOption('least disruption during the bathroom work', bathroomQuestion('b_home'))).toBe('b_home_no');
   });
 
+  it('selects a default recommendation when the user accepts the assistant recommendation', () => {
+    const kitchenQuestion = (id: string) => {
+      const found = KITCHEN_QUESTIONS.find((item) => item.id === id);
+      if (!found) throw new Error(`Missing kitchen question ${id}`);
+      return found;
+    };
+    const bathroomQuestion = (id: string) => {
+      const found = BATHROOM_QUESTIONS.find((item) => item.id === id);
+      if (!found) throw new Error(`Missing bathroom question ${id}`);
+      return found;
+    };
+
+    expect(recommendedOptionForQuestion(kitchenQuestion('k_countertops'))).toMatchObject({
+      id: 'k_ct_quartz',
+      label: 'Quartz',
+    });
+    expect(matchTranscriptToQuestionOption('go with your recommendation', kitchenQuestion('k_countertops'))).toBe('k_ct_quartz');
+    expect(matchTranscriptToQuestionOption('whatever you recommend is fine', kitchenQuestion('k_tier'))).toBe('k_tier_mid');
+    expect(matchTranscriptToQuestionOption('choose the recommended one', bathroomQuestion('b_tile'))).toBe('b_tile_shower');
+    expect(analyzeTranscriptForQuestionOption('use your default suggestion', bathroomQuestion('b_plumbing'))).toMatchObject({
+      optionId: 'b_plumb_none',
+      confidence: 0.96,
+    });
+  });
+
   it('matches bathroom-specific natural phrases without exact labels', () => {
     const bathroomQuestion = (id: string) => {
       const found = BATHROOM_QUESTIONS.find((item) => item.id === id);
@@ -237,6 +264,8 @@ describe('project voice answer matching', () => {
     expect(transcriptRejectsSelection('no that is not right')).toBe(true);
     expect(transcriptRequestsDecisionHelp('I am not sure, help me choose')).toBe(true);
     expect(transcriptRequestsDecisionHelp('what do you recommend')).toBe(true);
+    expect(transcriptAcceptsRecommendation('go with your recommendation')).toBe(true);
+    expect(transcriptRequestsDecisionHelp('go with your recommendation')).toBe(false);
     expect(transcriptRequestsOptionsRepeat('what are the options again')).toBe(true);
     expect(transcriptRequestsPreviousQuestion('go back to the previous question')).toBe(true);
     expect(transcriptRequestsPreviousQuestion('change my last answer')).toBe(true);
@@ -270,6 +299,8 @@ describe('project voice answer matching', () => {
     expect(terms).toContain('marble');
     expect(terms).toContain('help me choose');
     expect(terms).toContain('what do you recommend');
+    expect(terms).toContain('go with your recommendation');
+    expect(terms).toContain('whatever you recommend');
     expect(terms).toContain('go back');
     expect(terms).toContain('change my last answer');
     expect(countertopTerms).toContain('porcelain slab');
@@ -359,10 +390,13 @@ describe('project voice answer matching', () => {
 
     expect(voiceSource).toContain('export async function speakProjectDecisionHelp(question: QuestionnaireQuestion)');
     expect(voiceSource).toContain('const recommendation = decisionRecommendation(question);');
+    expect(voiceSource).toContain('const defaultRecommendation = recommendedOptionForQuestion(question);');
+    expect(voiceSource).toContain('My default recommendation is option');
     expect(voiceSource).toContain('A safe choice for resale is transitional.');
     expect(voiceSource).toContain('Quartz is usually the safest low-maintenance choice.');
     expect(voiceSource).toContain('Which one sounds closest?');
     expect(questionnaireSource).toContain('transcriptRequestsDecisionHelp(transcript)');
+    expect(questionnaireSource).toContain('!transcriptAcceptsRecommendation(transcript)');
     expect(questionnaireSource).toContain('await speakProjectDecisionHelp(activeQuestion);');
     expect(questionnaireSource).toContain("setVoiceTranscript('Explaining the options.');");
   });

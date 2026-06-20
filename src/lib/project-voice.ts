@@ -56,13 +56,17 @@ export async function speakProjectQuestion(question: QuestionnaireQuestion) {
 export async function speakProjectDecisionHelp(question: QuestionnaireQuestion) {
   const context = question.context_note ? `${question.context_note} ` : '';
   const recommendation = decisionRecommendation(question);
+  const defaultRecommendation = recommendedOptionForQuestion(question);
+  const defaultRecommendationText = defaultRecommendation
+    ? `My default recommendation is option ${defaultRecommendation.index + 1}: ${defaultRecommendation.label}. `
+    : '';
   const optionGuidance = question.options.map((option, index) => {
     const [label, detail] = option.label.split('—').map((part) => part.trim());
     return detail
       ? `Option ${index + 1}, ${label}, means ${detail}.`
       : `Option ${index + 1} is ${label}.`;
   }).join(' ');
-  await speakProjectPrompt(`${context}${recommendation}${optionGuidance} Which one sounds closest?`);
+  await speakProjectPrompt(`${context}${recommendation}${defaultRecommendationText}${optionGuidance} Which one sounds closest?`);
 }
 
 export async function speakProjectPrompt(text: string) {
@@ -320,6 +324,42 @@ function decisionRecommendation(question: QuestionnaireQuestion) {
   return recommendations[question.id] ?? '';
 }
 
+const DEFAULT_RECOMMENDED_OPTION_IDS: Record<string, string> = {
+  k_style: 'k_style_transitional',
+  b_style: 'b_style_modern',
+  k_tier: 'k_tier_mid',
+  b_tier: 'b_tier_mid',
+  k_cabinets: 'k_cab_reface',
+  k_countertops: 'k_ct_quartz',
+  k_appliances: 'k_app_full',
+  k_flooring: 'k_floor_full',
+  k_layout: 'k_lay_none',
+  b_shower: 'b_sh_walkin',
+  b_vanity: 'b_van_single',
+  b_tile: 'b_tile_shower',
+  b_toilet: 'b_toil_replace',
+  b_plumbing: 'b_plumb_none',
+  k_timeline: 'k_time_standard',
+  b_timeline: 'b_time_standard',
+  k_home: 'k_home_partial',
+  b_home: 'b_home_partial',
+};
+
+export function recommendedOptionForQuestion(question: QuestionnaireQuestion) {
+  const recommendedOptionId = DEFAULT_RECOMMENDED_OPTION_IDS[question.id];
+  if (!recommendedOptionId) return null;
+
+  const index = question.options.findIndex((option) => option.id === recommendedOptionId);
+  const option = index >= 0 ? question.options[index] : null;
+  if (!option) return null;
+
+  return {
+    id: option.id,
+    index,
+    label: option.label.split('—')[0].trim(),
+  };
+}
+
 const PREFERENCE_OPTION_RULES: Record<string, PreferenceOptionRule[]> = {
   k_style: [
     { optionId: 'k_style_transitional', confidence: 0.9, patterns: [/\bresale\b/, /\bsafe choice\b/, /\bbest value\b/, /\bbalanced\b/] },
@@ -528,6 +568,11 @@ function directNaturalOptionMatch(value: string, question: QuestionnaireQuestion
     optionIds.has(optionId) ? { optionId, confidence, reason: 'keywords' as const } : null
   );
 
+  const recommendedOption = recommendedOptionForQuestion(question);
+  if (recommendedOption && transcriptAcceptsRecommendation(value)) {
+    return choose(recommendedOption.id, 0.96);
+  }
+
   const preferenceRules = PREFERENCE_OPTION_RULES[question.id] ?? [];
   for (const rule of preferenceRules) {
     if (!optionIds.has(rule.optionId)) continue;
@@ -628,7 +673,16 @@ function hasRejectionCue(normalizedTranscript: string) {
 
 export function transcriptRequestsDecisionHelp(transcript: string) {
   const normalizedTranscript = normalize(transcript);
+  if (transcriptAcceptsRecommendation(normalizedTranscript)) return false;
   return /\b(help me choose|help me decide|not sure|unsure|don t know|dont know|do not know|what do you recommend|recommend|explain|difference|compare)\b/.test(normalizedTranscript);
+}
+
+export function transcriptAcceptsRecommendation(transcript: string) {
+  const normalizedTranscript = normalize(transcript);
+  return /\b(go with|choose|pick|select|use|take)\b.*\b(your|the|that)?\s*(recommendation|recommended|default|suggestion)\b/.test(normalizedTranscript)
+    || /\b(whatever|what ever)\s+you\s+(recommend|suggest|think)\b/.test(normalizedTranscript)
+    || /\byour\s+(recommendation|suggestion)\s+is\s+fine\b/.test(normalizedTranscript)
+    || /\bthat\s+recommendation\s+(works|sounds good|is fine)\b/.test(normalizedTranscript);
 }
 
 export function transcriptRequestsOptionsRepeat(transcript: string) {
@@ -684,6 +738,9 @@ export function buildVoiceContextTerms(question: QuestionnaireQuestion) {
     'help me choose',
     'not sure',
     'what do you recommend',
+    'go with your recommendation',
+    'choose your recommendation',
+    'whatever you recommend',
     'go back',
     'previous question',
     'change my last answer',
