@@ -198,6 +198,25 @@ describe('project voice answer matching', () => {
     });
   });
 
+  it('lowers confidence when fallback keyword scoring cannot clearly separate two options', () => {
+    const ambiguousTileQuestion: QuestionnaireQuestion = {
+      id: 'ambiguous_tile_scope',
+      text: 'Where should tile be installed?',
+      type: 'single_select',
+      context_note: '',
+      options: [
+        { id: 'floor_tile', label: 'Floor tile — porcelain tile floor', next_question_id: null },
+        { id: 'shower_tile', label: 'Shower tile — porcelain tile walls', next_question_id: null },
+      ],
+    };
+
+    expect(analyzeTranscriptForQuestionOption('porcelain tile floor and shower', ambiguousTileQuestion)).toMatchObject({
+      optionId: 'floor_tile',
+      confidence: 0.68,
+      reason: 'keywords',
+    });
+  });
+
   it('does not treat unrelated numbers as option selections', () => {
     expect(matchTranscriptToQuestionOption('I need 2 slabs and maybe granite', question)).toBe('k_ct_granite');
     expect(matchTranscriptToQuestionOption('I have 2 kids at home', question)).toBeNull();
@@ -231,6 +250,8 @@ describe('project voice answer matching', () => {
     expect(extractCorrectedAnswerTranscript('not quartz instead granite')).toBe('granite');
     expect(extractCorrectedAnswerTranscript('no second option')).toBe('second option');
     expect(extractCorrectedAnswerTranscript('actually the third one')).toBe('third one');
+    expect(extractCorrectedAnswerTranscript('no not quartz granite')).toBe('granite');
+    expect(extractCorrectedAnswerTranscript('no it is granite')).toBe('granite');
 
     expect(matchTranscriptToQuestionOption(extractCorrectedAnswerTranscript('no I meant granite'), question)).toBe('k_ct_granite');
     expect(matchTranscriptToQuestionOption(extractCorrectedAnswerTranscript('not quartz but granite'), question)).toBe('k_ct_granite');

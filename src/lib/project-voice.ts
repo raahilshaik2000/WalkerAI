@@ -572,7 +572,7 @@ export function analyzeTranscriptForQuestionOption(
   if (positional) return positional;
 
   const transcriptTokens = tokenList(normalizedTranscript);
-  let best: VoiceOptionMatch | null = null;
+  const candidates: VoiceOptionMatch[] = [];
 
   for (const option of question.options) {
     const normalizedLabel = normalize(option.label);
@@ -583,8 +583,7 @@ export function analyzeTranscriptForQuestionOption(
 
     if (normalizedTranscript.includes(primaryLabel) && primaryLabel.length > 2) {
       const confidence = primaryLabel.split(' ').length > 1 ? 0.94 : 0.88;
-      const candidate = { optionId: option.id, confidence, reason: 'primary' as const };
-      if (!best || candidate.confidence > best.confidence) best = candidate;
+      candidates.push({ optionId: option.id, confidence, reason: 'primary' });
       continue;
     }
 
@@ -599,12 +598,17 @@ export function analyzeTranscriptForQuestionOption(
     if (matchedKeywords.length === 0 && primaryHits === 0) continue;
 
     const confidence = Math.min(0.9, score);
-    if (!best || confidence > best.confidence) {
-      best = { optionId: option.id, confidence, reason: 'keywords' };
-    }
+    candidates.push({ optionId: option.id, confidence, reason: 'keywords' });
   }
 
-  return best && best.confidence >= 0.34 ? best : null;
+  const [best, runnerUp] = candidates.sort((a, b) => b.confidence - a.confidence);
+  if (!best || best.confidence < 0.34) return null;
+
+  if (runnerUp && best.confidence - runnerUp.confidence <= 0.12) {
+    return { ...best, confidence: Math.min(best.confidence, 0.68) };
+  }
+
+  return best;
 }
 
 export function transcriptConfirmsSelection(transcript: string) {
@@ -646,10 +650,11 @@ export function extractCorrectedAnswerTranscript(transcript: string) {
   const normalizedTranscript = normalize(transcript);
   const correctionPatterns = [
     /\b(?:not|not that|wrong)\s+.+?\b(?:but|instead|rather)\s+(?:the\s+)?(.+)$/,
+    /\b(?:no|nope)\s+not\s+\w+\s+(?:it\s+is\s+|its\s+|it s\s+)?(?:the\s+)?(.+)$/,
     /\b(?:i\s+)?(?:mean|meant|wanted|want|choose|pick|select|take|use)\s+(?:the\s+)?(.+)$/,
     /\b(?:actually|instead|rather)\s+(?:i\s+)?(?:want|choose|pick|select|take|use)?\s*(?:the\s+)?(.+)$/,
     /\b(?:not|not that|wrong)\s+.+?\b(?:but|it is|its|it's)\s+(?:the\s+)?(.+)$/,
-    /\b(?:no|nope|wrong)\s+(?:actually\s+)?(?:the\s+)?(.+)$/,
+    /\b(?:no|nope|wrong)\s+(?:actually\s+)?(?:it\s+is\s+|its\s+|it s\s+)?(?:the\s+)?(.+)$/,
   ];
 
   for (const pattern of correctionPatterns) {
