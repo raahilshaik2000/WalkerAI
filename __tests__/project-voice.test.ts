@@ -362,11 +362,24 @@ describe('project voice answer matching', () => {
     expect(extractCorrectedAnswerTranscript('actually the third one')).toBe('third one');
     expect(extractCorrectedAnswerTranscript('no not quartz granite')).toBe('granite');
     expect(extractCorrectedAnswerTranscript('no it is granite')).toBe('granite');
+    expect(extractCorrectedAnswerTranscript('changed my mind granite')).toBe('granite');
+    expect(extractCorrectedAnswerTranscript('I changed my mind, I want granite')).toBe('granite');
+    expect(extractCorrectedAnswerTranscript('change it to granite')).toBe('granite');
+    expect(extractCorrectedAnswerTranscript('switch to granite')).toBe('granite');
+    expect(extractCorrectedAnswerTranscript('make it quartz')).toBe('quartz');
+    expect(extractCorrectedAnswerTranscript('set it to marble')).toBe('marble');
+    expect(extractCorrectedAnswerTranscript('actually go with granite')).toBe('granite');
+    expect(extractCorrectedAnswerTranscript('use granite instead')).toBe('granite');
 
     expect(matchTranscriptToQuestionOption(extractCorrectedAnswerTranscript('no I meant granite'), question)).toBe('k_ct_granite');
     expect(matchTranscriptToQuestionOption(extractCorrectedAnswerTranscript('not quartz but granite'), question)).toBe('k_ct_granite');
     expect(matchTranscriptToQuestionOption(extractCorrectedAnswerTranscript('no second option'), question)).toBe('k_ct_granite');
     expect(matchTranscriptToQuestionOption(extractCorrectedAnswerTranscript('actually the third one'), question)).toBe('k_ct_marble');
+    expect(matchTranscriptToQuestionOption(extractCorrectedAnswerTranscript('change it to granite'), question)).toBe('k_ct_granite');
+    expect(matchTranscriptToQuestionOption(extractCorrectedAnswerTranscript('switch to granite'), question)).toBe('k_ct_granite');
+    expect(matchTranscriptToQuestionOption(extractCorrectedAnswerTranscript('make it quartz'), question)).toBe('k_ct_quartz');
+    expect(transcriptRejectsSelection('changed my mind granite')).toBe(true);
+    expect(transcriptRejectsSelection('switch to granite')).toBe(true);
   });
 
   it('builds speech recognition context from option labels and positions', () => {

@@ -831,7 +831,7 @@ export function transcriptRejectsSelection(transcript: string) {
 }
 
 function hasRejectionCue(normalizedTranscript: string) {
-  return /\b(no|nope|wrong|try again|not that|not right|different|cancel)\b/.test(normalizedTranscript);
+  return /\b(no|nope|wrong|try again|not that|not right|different|cancel|changed my mind|change it to|switch to|make it|set it to)\b/.test(normalizedTranscript);
 }
 
 export function transcriptRequestsDecisionHelp(transcript: string) {
@@ -877,6 +877,11 @@ export function extractCorrectedAnswerTranscript(transcript: string) {
   const correctionPatterns = [
     /\b(?:not|not that|wrong)\s+.+?\b(?:but|instead|rather)\s+(?:the\s+)?(.+)$/,
     /\b(?:no|nope)\s+not\s+\w+\s+(?:it\s+is\s+|its\s+|it s\s+)?(?:the\s+)?(.+)$/,
+    /\b(?:i\s+)?changed\s+my\s+mind\s+(?:i\s+)?(?:want|choose|pick|select|take|use)?\s*(?:the\s+)?(.+)$/,
+    /\b(?:change|switch)\s+(?:it|this|that|my\s+answer)?\s*(?:to|over\s+to)?\s*(?:the\s+)?(.+)$/,
+    /\b(?:make|set)\s+(?:it|this|that|my\s+answer)?\s*(?:to)?\s*(?:the\s+)?(.+)$/,
+    /\b(?:use|choose|pick|select|take)\s+(?:the\s+)?(.+?)\s+(?:instead|rather)$/,
+    /\b(?:actually|instead|rather)?\s*(?:go\s+with|go\s+for)\s+(?:the\s+)?(.+)$/,
     /\b(?:i\s+)?(?:mean|meant|wanted|want|choose|pick|select|take|use)\s+(?:the\s+)?(.+)$/,
     /\b(?:actually|instead|rather)\s+(?:i\s+)?(?:want|choose|pick|select|take|use)?\s*(?:the\s+)?(.+)$/,
     /\b(?:not|not that|wrong)\s+.+?\b(?:but|it is|its|it's)\s+(?:the\s+)?(.+)$/,
@@ -886,11 +891,18 @@ export function extractCorrectedAnswerTranscript(transcript: string) {
   for (const pattern of correctionPatterns) {
     const match = normalizedTranscript.match(pattern);
     const candidate = match?.[1]?.trim();
-    if (candidate) return candidate;
+    if (candidate) return cleanupCorrectedAnswerCandidate(candidate);
   }
 
-  return normalizedTranscript
+  return cleanupCorrectedAnswerCandidate(normalizedTranscript
     .replace(/^(no|nope|wrong|not that one|not that)\s+/, '')
+    .trim());
+}
+
+function cleanupCorrectedAnswerCandidate(candidate: string) {
+  return normalize(candidate)
+    .replace(/\b(?:instead|rather)$/g, '')
+    .replace(/^(?:to|the)\s+/, '')
     .trim();
 }
 
