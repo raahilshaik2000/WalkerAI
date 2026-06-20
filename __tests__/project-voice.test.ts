@@ -444,6 +444,9 @@ describe('project voice answer matching', () => {
 
     expect(source).toContain('transcriptRequestsOptionsRepeat(confirmationTranscript)');
     expect(source).toContain('...voiceContextTerms,');
+    expect(source).toContain("'changed my mind'");
+    expect(source).toContain("'switch to'");
+    expect(source).toContain("'make it'");
     expect(source).toContain('const alternateMatch = analyzeTranscriptForQuestionOption(confirmationTranscript, activeQuestion);');
     expect(source).toContain('extractCorrectedAnswerTranscript(confirmationTranscript)');
     expect(source).toContain('No problem. I selected');
