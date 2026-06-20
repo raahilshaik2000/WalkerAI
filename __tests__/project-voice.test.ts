@@ -163,6 +163,8 @@ describe('project voice answer matching', () => {
     expect(matchTranscriptToQuestionOption('go with your recommendation', kitchenQuestion('k_countertops'))).toBe('k_ct_quartz');
     expect(matchTranscriptToQuestionOption('whatever you recommend is fine', kitchenQuestion('k_tier'))).toBe('k_tier_mid');
     expect(matchTranscriptToQuestionOption('choose the recommended one', bathroomQuestion('b_tile'))).toBe('b_tile_shower');
+    expect(matchTranscriptToQuestionOption('you decide', kitchenQuestion('k_countertops'))).toBe('k_ct_quartz');
+    expect(matchTranscriptToQuestionOption('surprise me', bathroomQuestion('b_plumbing'))).toBe('b_plumb_none');
     expect(analyzeTranscriptForQuestionOption('use your default suggestion', bathroomQuestion('b_plumbing'))).toMatchObject({
       optionId: 'b_plumb_none',
       confidence: 0.96,
@@ -297,6 +299,9 @@ describe('project voice answer matching', () => {
     expect(transcriptRequestsDecisionHelp('go with your recommendation')).toBe(false);
     expect(transcriptAcceptsSuggestionFollowUp('that sounds good')).toBe(true);
     expect(transcriptAcceptsSuggestionFollowUp('lets do that')).toBe(true);
+    expect(transcriptAcceptsSuggestionFollowUp('yes')).toBe(true);
+    expect(transcriptAcceptsSuggestionFollowUp('okay')).toBe(true);
+    expect(transcriptAcceptsSuggestionFollowUp('perfect')).toBe(true);
     expect(transcriptAcceptsSuggestionFollowUp('no that is not right')).toBe(false);
     expect(transcriptRequestsOptionsRepeat('what are the options again')).toBe(true);
     expect(transcriptRequestsPreviousQuestion('go back to the previous question')).toBe(true);
@@ -337,6 +342,9 @@ describe('project voice answer matching', () => {
     expect(terms).toContain('whatever you recommend');
     expect(terms).toContain('that sounds good');
     expect(terms).toContain('lets do that');
+    expect(terms).toContain('okay');
+    expect(terms).toContain('perfect');
+    expect(terms).toContain('you decide');
     expect(terms).toContain('go back');
     expect(terms).toContain('change my last answer');
     expect(countertopTerms).toContain('porcelain slab');

@@ -757,6 +757,7 @@ export function transcriptAcceptsRecommendation(transcript: string) {
   const normalizedTranscript = normalize(transcript);
   return /\b(go with|choose|pick|select|use|take)\b.*\b(your|the|that)?\s*(recommendation|recommended|default|suggestion)\b/.test(normalizedTranscript)
     || /\b(whatever|what ever)\s+you\s+(recommend|suggest|think)\b/.test(normalizedTranscript)
+    || /\b(you decide|surprise me|dealer s choice|dealers choice)\b/.test(normalizedTranscript)
     || /\byour\s+(recommendation|suggestion)\s+is\s+fine\b/.test(normalizedTranscript)
     || /\bthat\s+recommendation\s+(works|sounds good|is fine)\b/.test(normalizedTranscript);
 }
@@ -765,7 +766,8 @@ export function transcriptAcceptsSuggestionFollowUp(transcript: string) {
   const normalizedTranscript = normalize(transcript);
   if (hasRejectionCue(normalizedTranscript)) return false;
   return /\b(that|this)\s+(sounds good|works|is fine|one is fine)\b/.test(normalizedTranscript)
-    || /\b(sounds good|works for me|that works|let s do that|lets do that|do that|go ahead|yes that one|that one)\b/.test(normalizedTranscript);
+    || /\b(sounds good|works for me|that works|let s do that|lets do that|do that|go ahead|yes that one|that one)\b/.test(normalizedTranscript)
+    || /^(yes|yeah|yep|yup|okay|ok|sure|perfect|great|fine|correct|exactly)$/.test(normalizedTranscript);
 }
 
 export function transcriptRequestsOptionsRepeat(transcript: string) {
@@ -829,6 +831,12 @@ export function buildVoiceContextTerms(question: QuestionnaireQuestion) {
     'whatever you recommend',
     'that sounds good',
     'lets do that',
+    'yes',
+    'okay',
+    'sure',
+    'perfect',
+    'you decide',
+    'surprise me',
     'go back',
     'previous question',
     'change my last answer',
