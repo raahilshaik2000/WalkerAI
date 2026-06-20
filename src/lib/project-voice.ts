@@ -254,7 +254,13 @@ function labelKeywords(label: string) {
 function tokenMatchesKeyword(token: string, keyword: string) {
   if (token === keyword) return true;
   const shortest = Math.min(token.length, keyword.length);
-  return shortest >= 4 && (token.startsWith(keyword) || keyword.startsWith(token));
+  return shortest >= 4
+    && Math.abs(token.length - keyword.length) <= 2
+    && (token.startsWith(keyword) || keyword.startsWith(token));
+}
+
+function escapeRegExp(value: string) {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 }
 
 function transcriptHasKeyword(keyword: string, transcriptTokens: string[], normalizedTranscript: string) {
@@ -427,7 +433,7 @@ const PREFERENCE_OPTION_RULES: Record<string, PreferenceOptionRule[]> = {
   ],
   b_shower: [
     { optionId: 'b_sh_keep', confidence: 0.88, patterns: [/\b(cheap|cheapest|affordable|save money|tight budget)\b/] },
-    { optionId: 'b_sh_walkin', confidence: 0.9, patterns: [/\bmodern\b/, /\bresale\b/, /\baccessibility\b/, /\bspa\b/] },
+    { optionId: 'b_sh_walkin', confidence: 0.92, patterns: [/\bwalk in\b/, /\bwalkin\b/, /\bno tub\b/, /\bremove tub\b/, /\bmodern\b/, /\bresale\b/, /\baccessibility\b/, /\bspa\b/] },
     { optionId: 'b_sh_combo', confidence: 0.86, patterns: [/\bfamily\b/, /\bkids\b/, /\bpractical\b/] },
   ],
   b_vanity: [
@@ -636,10 +642,37 @@ export function optionExplanationForTranscript(
   return null;
 }
 
+function rejectedOptionIdsForTranscript(value: string, question: QuestionnaireQuestion) {
+  const rejected = new Set<string>();
+
+  question.options.forEach((option) => {
+    if (question.id === 'b_shower' && option.id === 'b_sh_walkin' && /\b(no tub|remove tub)\b/.test(value)) {
+      return;
+    }
+
+    const phraseRule = (QUESTION_OPTION_PHRASES[question.id] ?? []).find((rule) => rule.optionId === option.id);
+    const terms = [
+      option.label.split('—')[0].trim(),
+      ...(phraseRule?.aliases ?? []),
+    ].map(normalize).filter((term) => term.length > 2);
+
+    if (terms.some((term) => {
+      const escaped = escapeRegExp(term);
+      return new RegExp(`\\b(?:not|no|nope|without|except|excluding|exclude|anything but|everything but|don t want|dont want|do not want|don t like|dont like|do not like|not interested in)\\s+(?:the\\s+)?${escaped}\\b`).test(value)
+        || new RegExp(`\\b${escaped}\\b\\s+(?:is\\s+)?(?:out|no|not)\\b`).test(value);
+    })) {
+      rejected.add(option.id);
+    }
+  });
+
+  return rejected;
+}
+
 function directNaturalOptionMatch(value: string, question: QuestionnaireQuestion): VoiceOptionMatch | null {
   const optionIds = new Set(question.options.map((option) => option.id));
+  const rejectedOptionIds = rejectedOptionIdsForTranscript(value, question);
   const choose = (optionId: string, confidence = 0.96) => (
-    optionIds.has(optionId) ? { optionId, confidence, reason: 'keywords' as const } : null
+    optionIds.has(optionId) && !rejectedOptionIds.has(optionId) ? { optionId, confidence, reason: 'keywords' as const } : null
   );
 
   const recommendedOption = recommendedOptionForQuestion(question);
@@ -659,7 +692,7 @@ function directNaturalOptionMatch(value: string, question: QuestionnaireQuestion
   let bestRule: { optionId: string; hits: number } | null = null;
   let tiedDifferentOption = false;
   for (const rule of phraseRules) {
-    if (!optionIds.has(rule.optionId)) continue;
+    if (!optionIds.has(rule.optionId) || rejectedOptionIds.has(rule.optionId)) continue;
     const hits = rule.patterns.filter((pattern) => pattern.test(value)).length;
     if (hits > 0 && (!bestRule || hits > bestRule.hits)) {
       bestRule = { optionId: rule.optionId, hits };
@@ -694,8 +727,11 @@ export function analyzeTranscriptForQuestionOption(
 
   const transcriptTokens = tokenList(normalizedTranscript);
   const candidates: VoiceOptionMatch[] = [];
+  const rejectedOptionIds = rejectedOptionIdsForTranscript(normalizedTranscript, question);
 
   for (const option of question.options) {
+    if (rejectedOptionIds.has(option.id)) continue;
+
     const normalizedLabel = normalize(option.label);
     const primaryLabel = normalize(option.label.split('—')[0]);
     if (normalizedTranscript === normalizedLabel || normalizedTranscript === primaryLabel) {

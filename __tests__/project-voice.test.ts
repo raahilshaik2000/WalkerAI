@@ -63,6 +63,14 @@ describe('project voice answer matching', () => {
     expect(matchTranscriptToQuestionOption('natural stone unique pattern', question)).toBe('k_ct_granite');
   });
 
+  it('does not select an option the user explicitly rejects', () => {
+    expect(matchTranscriptToQuestionOption('not quartz but granite', question)).toBe('k_ct_granite');
+    expect(matchTranscriptToQuestionOption('no quartz granite', question)).toBe('k_ct_granite');
+    expect(matchTranscriptToQuestionOption('I do not want quartz', question)).toBeNull();
+    expect(matchTranscriptToQuestionOption('anything but quartz', question)).toBeNull();
+    expect(matchTranscriptToQuestionOption('not marble, quartz', question)).toBe('k_ct_quartz');
+  });
+
   it('matches natural homeowner phrases that do not repeat exact option labels', () => {
     const kitchenQuestion = (id: string) => {
       const found = KITCHEN_QUESTIONS.find((item) => item.id === id);
