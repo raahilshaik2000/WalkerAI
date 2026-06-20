@@ -138,6 +138,8 @@ interface ProjectWizardState {
   setAnswer: (questionId: string, answer: string) => void;
   /** Move to next question. Pass nextQuestionId to jump; null advances sequentially */
   nextQuestion: (nextQuestionId?: string | null) => void;
+  /** Move back one question without clearing previously selected answers */
+  previousQuestion: () => void;
   setSelectedRender: (renderId: string | null) => void;
   setMeasurements: (measurements: RoomMeasurements | null) => void;
   setRoomScanData: (scanData: RoomScanData | null) => void;
@@ -151,6 +153,7 @@ interface ProjectWizardState {
 const initialState: Omit<ProjectWizardState,
   | 'setAddress' | 'setRoomType' | 'addPhoto' | 'updatePhoto' | 'removePhoto'
   | 'setAnalysisResult' | 'setQuestions' | 'setAnswer' | 'nextQuestion'
+  | 'previousQuestion'
   | 'setSelectedRender' | 'setMeasurements' | 'setRoomScanData' | 'setMaterialOverride' | 'setSurfaceSelection' | 'setProjectId' | 'setStep' | 'reset'
 > = {
   address: '',
@@ -209,6 +212,11 @@ export const useProjectWizardStore = create<ProjectWizardState>()((set, get) => 
       }
     }
     set({ currentQuestionIndex: currentQuestionIndex + 1 });
+  },
+
+  previousQuestion: () => {
+    const { currentQuestionIndex } = get();
+    set({ currentQuestionIndex: Math.max(0, currentQuestionIndex - 1) });
   },
 
   setSelectedRender: (selectedRenderId) => set({ selectedRenderId }),

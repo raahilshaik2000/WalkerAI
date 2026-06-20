@@ -6,6 +6,7 @@ import {
   transcriptConfirmsSelection,
   transcriptRejectsSelection,
   transcriptRequestsOptionsRepeat,
+  transcriptRequestsPreviousQuestion,
   transcriptRequestsVoiceStop,
 } from '../src/lib/project-voice';
 import { KITCHEN_QUESTIONS } from '../src/data/fixed-questions';
@@ -89,6 +90,8 @@ describe('project voice answer matching', () => {
     expect(transcriptRejectsSelection('no try again')).toBe(true);
     expect(transcriptRejectsSelection('not that one')).toBe(true);
     expect(transcriptRequestsOptionsRepeat('what are the options again')).toBe(true);
+    expect(transcriptRequestsPreviousQuestion('go back to the previous question')).toBe(true);
+    expect(transcriptRequestsPreviousQuestion('change my last answer')).toBe(true);
     expect(transcriptRequestsVoiceStop('pause this for now')).toBe(true);
     expect(transcriptRequestsVoiceStop('stop and let me tap manually')).toBe(true);
   });
@@ -111,6 +114,8 @@ describe('project voice answer matching', () => {
     expect(terms).toContain('Quartz — engineered stone, low maintenance');
     expect(terms).toContain('granite');
     expect(terms).toContain('marble');
+    expect(terms).toContain('go back');
+    expect(terms).toContain('change my last answer');
   });
 
   it('stops both speech output and active listening sessions', () => {
@@ -141,5 +146,22 @@ describe('project voice answer matching', () => {
     expect(source).toContain('extractCorrectedAnswerTranscript(confirmationTranscript)');
     expect(source).toContain('No problem. I selected');
     expect(source).toContain('Repeating the options.');
+  });
+
+  it('keeps voice walkthrough navigable without manual taps', () => {
+    const questionnaireSource = require('fs').readFileSync(
+      require('path').join(__dirname, '../src/app/(homeowner)/project/create/questionnaire.tsx'),
+      'utf8',
+    );
+    const storeSource = require('fs').readFileSync(
+      require('path').join(__dirname, '../src/stores/project-wizard.store.ts'),
+      'utf8',
+    );
+
+    expect(storeSource).toContain('previousQuestion: () => void;');
+    expect(storeSource).toContain('Math.max(0, currentQuestionIndex - 1)');
+    expect(questionnaireSource).toContain('transcriptRequestsPreviousQuestion(transcript)');
+    expect(questionnaireSource).toContain("return movedBack ? { command: 'previous' } : null;");
+    expect(questionnaireSource).toContain("if (!('optionId' in result))");
   });
 });

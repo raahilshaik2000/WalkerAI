@@ -250,6 +250,11 @@ export function transcriptRequestsOptionsRepeat(transcript: string) {
   return /\b(repeat|again|say that again|read them again|options again|what are the options|list the options)\b/.test(normalizedTranscript);
 }
 
+export function transcriptRequestsPreviousQuestion(transcript: string) {
+  const normalizedTranscript = normalize(transcript);
+  return /\b(go back|previous question|last question|back one|change my last answer|change previous answer|change that answer|edit last answer)\b/.test(normalizedTranscript);
+}
+
 export function transcriptRequestsVoiceStop(transcript: string) {
   const normalizedTranscript = normalize(transcript);
   return /\b(stop|pause|cancel|quit|exit|manual|tap manually|voice cancelled)\b/.test(normalizedTranscript);
@@ -281,6 +286,7 @@ export function buildVoiceContextTerms(question: QuestionnaireQuestion) {
     terms.add(option.label.split('—')[0].trim());
     labelKeywords(option.label).forEach((keyword) => terms.add(keyword));
   });
+  ['repeat options', 'what are the options', 'go back', 'previous question', 'change my last answer', 'stop'].forEach((term) => terms.add(term));
   return Array.from(terms).filter((term) => term.length > 0);
 }
 

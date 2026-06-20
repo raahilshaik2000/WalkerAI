@@ -25,6 +25,7 @@ import {
   transcriptConfirmsSelection,
   transcriptRejectsSelection,
   transcriptRequestsOptionsRepeat,
+  transcriptRequestsPreviousQuestion,
   transcriptRequestsVoiceStop,
 } from '@/lib/project-voice';
 import { formatAppSafeErrorMessage } from '@/lib/supabase/functions';
@@ -39,6 +40,7 @@ export default function QuestionnaireStep() {
     currentQuestionIndex,
     setAnswer,
     nextQuestion,
+    previousQuestion,
   } = useProjectWizardStore();
 
   const fadeAnim = useRef(new Animated.Value(1)).current;
@@ -97,7 +99,26 @@ export default function QuestionnaireStep() {
     return true;
   };
 
-  const askQuestionByVoice = async (activeQuestion: ActiveQuestion) => {
+  type VoiceQuestionResult =
+    | { optionId: string; optionLabel: string }
+    | { command: 'previous' };
+
+  const goBackByVoice = async () => {
+    const latestState = useProjectWizardStore.getState();
+    if (latestState.currentQuestionIndex <= 0) {
+      setVoiceError('You are already on the first question.');
+      await speakProjectPrompt('You are already on the first question.');
+      return false;
+    }
+
+    previousQuestion();
+    setPendingVoiceMatch(null);
+    setVoiceTranscript('Moved back one question.');
+    await speakProjectPrompt('No problem. Going back to the previous question.');
+    return true;
+  };
+
+  const askQuestionByVoice = async (activeQuestion: ActiveQuestion): Promise<VoiceQuestionResult | null> => {
     await speakProjectQuestion(activeQuestion);
     const voiceContextTerms = buildVoiceContextTerms(activeQuestion);
     const maxAttempts = 2;
@@ -121,6 +142,11 @@ export default function QuestionnaireStep() {
         setVoiceTranscript('Repeating the options.');
         await speakProjectQuestion(activeQuestion);
         continue;
+      }
+
+      if (transcriptRequestsPreviousQuestion(transcript)) {
+        const movedBack = await goBackByVoice();
+        return movedBack ? { command: 'previous' } : null;
       }
 
       const match = analyzeTranscriptForQuestionOption(transcript, activeQuestion);
@@ -173,6 +199,11 @@ export default function QuestionnaireStep() {
         setVoiceTranscript('Repeating the options.');
         await speakProjectQuestion(activeQuestion);
         continue;
+      }
+
+      if (transcriptRequestsPreviousQuestion(confirmationTranscript)) {
+        const movedBack = await goBackByVoice();
+        return movedBack ? { command: 'previous' } : null;
       }
 
       if (transcriptConfirmsSelection(confirmationTranscript)) {
@@ -284,6 +315,10 @@ export default function QuestionnaireStep() {
 
         const result = await askQuestionByVoice(activeQuestion);
         if (!result || !voiceWalkthroughRef.current) break;
+        if (!('optionId' in result)) {
+          await new Promise((resolve) => setTimeout(resolve, 300));
+          continue;
+        }
 
         const shouldContinue = advanceAfterVoiceAnswer(activeQuestion, result.optionId);
         if (!shouldContinue) break;
