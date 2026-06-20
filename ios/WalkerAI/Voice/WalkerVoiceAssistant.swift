@@ -14,6 +14,8 @@ class WalkerVoiceAssistant: NSObject, AVSpeechSynthesizerDelegate {
   private var speechResolve: RCTPromiseResolveBlock?
   private var lastTranscript = ""
   private var finishTimer: Timer?
+  private var silenceTimer: Timer?
+  private let silenceFinishDelay: TimeInterval = 1.15
 
   override init() {
     super.init()
@@ -159,6 +161,7 @@ class WalkerVoiceAssistant: NSObject, AVSpeechSynthesizerDelegate {
         guard let self = self else { return }
         if let result = result {
           self.lastTranscript = result.bestTranscription.formattedString
+          self.scheduleSilenceFinishIfNeeded()
           if result.isFinal {
             self.finishListening()
           }
@@ -176,6 +179,16 @@ class WalkerVoiceAssistant: NSObject, AVSpeechSynthesizerDelegate {
       self.finishTimer = Timer.scheduledTimer(withTimeInterval: duration, repeats: false) { [weak self] _ in
         self?.finishListening()
       }
+    }
+  }
+
+  private func scheduleSilenceFinishIfNeeded() {
+    let transcript = lastTranscript.trimmingCharacters(in: .whitespacesAndNewlines)
+    guard !transcript.isEmpty else { return }
+
+    silenceTimer?.invalidate()
+    silenceTimer = Timer.scheduledTimer(withTimeInterval: silenceFinishDelay, repeats: false) { [weak self] _ in
+      self?.finishListening()
     }
   }
 
@@ -230,6 +243,8 @@ class WalkerVoiceAssistant: NSObject, AVSpeechSynthesizerDelegate {
   private func stopRecognition() {
     finishTimer?.invalidate()
     finishTimer = nil
+    silenceTimer?.invalidate()
+    silenceTimer = nil
     activeResolve = nil
     activeReject = nil
     recognitionTask?.cancel()

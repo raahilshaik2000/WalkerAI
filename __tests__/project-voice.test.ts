@@ -33,6 +33,14 @@ const readNativeVoiceType = () => {
   return source;
 };
 
+const readNativeVoiceSource = () => {
+  const source = require('fs').readFileSync(
+    require('path').join(__dirname, '../ios/WalkerAI/Voice/WalkerVoiceAssistant.swift'),
+    'utf8',
+  );
+  return source;
+};
+
 describe('project voice answer matching', () => {
   it('matches spoken option numbers', () => {
     expect(matchTranscriptToQuestionOption('I choose option two', question)).toBe('k_ct_granite');
@@ -161,6 +169,16 @@ describe('project voice answer matching', () => {
 
     expect(source).toContain('cancelListening?: () => Promise<{ cancelled: boolean }>;');
     expect(source).toContain('nativeVoice.cancelListening()');
+  });
+
+  it('finishes native listening shortly after speech stops', () => {
+    const source = readNativeVoiceSource();
+
+    expect(source).toContain('private var silenceTimer: Timer?');
+    expect(source).toContain('private let silenceFinishDelay: TimeInterval = 1.15');
+    expect(source).toContain('self.scheduleSilenceFinishIfNeeded()');
+    expect(source).toContain('silenceTimer = Timer.scheduledTimer(withTimeInterval: silenceFinishDelay');
+    expect(source).toContain('silenceTimer?.invalidate()');
   });
 
   it('asks again once before giving up on an unmatched voice answer', () => {
