@@ -176,8 +176,8 @@ export default function RendersStep() {
         <SafeAreaView style={styles.safe}>
           <View style={styles.loadingCenter}>
             <ActivityIndicator size="large" color={Colors.accent} />
-            <Text style={styles.loadingText}>Checking visual previews…</Text>
-            <Text style={styles.loadingSubtext}>Your finish selections and brief can continue without generated images</Text>
+            <Text style={styles.loadingText}>Loading finish customizer…</Text>
+            <Text style={styles.loadingSubtext}>Choose materials and finishes for your project brief</Text>
           </View>
         </SafeAreaView>
       </GradientBackground>
@@ -194,7 +194,7 @@ export default function RendersStep() {
           <WizardHeader currentStep={5} />
 
           <Text style={styles.stepLabel}>STEP 5 OF 8</Text>
-          <Text style={styles.title}>Optional Visual Preview</Text>
+          <Text style={styles.title}>Finish & Material Preview</Text>
           <Text style={styles.subtitle}>{subtitle}</Text>
 
           {/* When the 3D customizer is shown (iOS + scan data) it already

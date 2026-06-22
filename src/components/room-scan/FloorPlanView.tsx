@@ -8,7 +8,7 @@ import Svg, {
   Path,
   Polygon,
 } from 'react-native-svg';
-import { normalizeFloorPlan, type NormalizedSegment } from '@/lib/room-scan/normalizeFloorPlan';
+import { normalizeFloorPlan } from '@/lib/room-scan/normalizeFloorPlan';
 import { findNearestWallSegment } from '@/lib/room-scan/floorPlanGeometry';
 
 interface WallData {
@@ -41,8 +41,6 @@ interface FloorPlanViewProps {
   windows: WindowData[];
   size: number;
 }
-
-type WallSegment = NormalizedSegment;
 
 // Real interior walls are 4–6 inches (0.10–0.15m). Going thinner here both
 // matches reality and lets corners render cleanly without overpowering
