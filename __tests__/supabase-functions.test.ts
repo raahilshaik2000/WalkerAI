@@ -617,10 +617,10 @@ describe('stripe-webhook source guards', () => {
     expect(source).toContain('return quoteRequiredSlots.every((slot) => (');
     expect(source).toContain('async function projectHasTradeSlots');
     expect(source).toContain("await updateStripeReadiness(adminClient, 'general_contractors', account.id, readiness);");
-    expect(source).toContain("const scheduleRequired = await projectHasTradeSlots(adminClient, project_id);");
+    expect(source).toContain("const scheduleRequired = await projectHasTradeSlots(adminClient, projectId);");
     expect(source).toContain(".select('id, scheduling_status')");
     expect(source).toContain('async function projectScheduleConfirmed');
-    expect(source).toContain("const scheduleConfirmed = !scheduleRequired || await projectScheduleConfirmed(adminClient, project_id);");
+    expect(source).toContain("const scheduleConfirmed = !scheduleRequired || await projectScheduleConfirmed(adminClient, projectId);");
     expect(source).toContain("const nextProjectState = scheduleConfirmed");
     expect(source).toContain("? { status: 'active' }");
     expect(source).toContain(": { status: 'scheduling', scheduling_status: 'pending_homeowner' };");
@@ -1013,7 +1013,7 @@ describe('accept-job source guards', () => {
     expect(source).toContain('let autoQuoteCreated = false;');
     expect(source).toContain('autoQuoteCreated = true;');
     expect(source).toContain('Job accepted but project AI budget is missing; manual quote is required.');
-    expect(source).toContain('needs_quote: !autoQuoteCreated || warnings.some');
+    expect(source).toContain('needs_quote: !isMasterModel && (!autoQuoteCreated || warnings.some');
   });
 });
 
