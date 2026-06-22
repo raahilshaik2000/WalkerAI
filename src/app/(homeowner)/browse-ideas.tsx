@@ -27,6 +27,36 @@ const CATEGORY_FILTERS: { id: InspirationCategory | 'all'; label: string }[] = [
   { id: 'pro_work', label: 'Pro Work' },
 ];
 
+function BrowseIdeaCard({ item, onPress }: { item: InspirationItem; onPress: () => void }) {
+  const [imageError, setImageError] = useState(false);
+  const height = item.id.charCodeAt(1) % 2 === 0 ? 220 : 180;
+  return (
+    <AnimatedPressable
+      style={[styles.card, { height }]}
+      scaleTo={0.96}
+      haptic
+      onPress={onPress}
+    >
+      {!imageError ? (
+        <Image
+          source={{ uri: item.imageUrl }}
+          style={styles.image}
+          onError={() => setImageError(true)}
+        />
+      ) : (
+        <View style={styles.imageFallback} />
+      )}
+      <LinearGradient colors={['transparent', 'rgba(0,0,0,0.8)']} style={styles.gradient} />
+      <View style={[styles.pill, { backgroundColor: item.categoryColor + '30' }]}>
+        <Text style={[styles.pillText, { color: item.categoryColor }]}>{item.categoryLabel}</Text>
+      </View>
+      <View style={styles.bottom}>
+        <Text style={styles.title} numberOfLines={2}>{item.title}</Text>
+      </View>
+    </AnimatedPressable>
+  );
+}
+
 export default function BrowseIdeasScreen() {
   const navigation = useNavigation<any>();
   const [category, setCategory] = useState<InspirationCategory | 'all'>('all');
@@ -39,26 +69,12 @@ export default function BrowseIdeasScreen() {
     [category],
   );
 
-  const renderItem = ({ item }: { item: InspirationItem }) => {
-    const height = item.id.charCodeAt(1) % 2 === 0 ? 220 : 180;
-    return (
-      <AnimatedPressable
-        style={[styles.card, { height }]}
-        scaleTo={0.96}
-        haptic
-        onPress={() => navigation.navigate('InspirationDetail', { item })}
-      >
-        <Image source={{ uri: item.imageUrl }} style={styles.image} />
-        <LinearGradient colors={['transparent', 'rgba(0,0,0,0.8)']} style={styles.gradient} />
-        <View style={[styles.pill, { backgroundColor: item.categoryColor + '30' }]}>
-          <Text style={[styles.pillText, { color: item.categoryColor }]}>{item.categoryLabel}</Text>
-        </View>
-        <View style={styles.bottom}>
-          <Text style={styles.title} numberOfLines={2}>{item.title}</Text>
-        </View>
-      </AnimatedPressable>
-    );
-  };
+  const renderItem = ({ item }: { item: InspirationItem }) => (
+    <BrowseIdeaCard
+      item={item}
+      onPress={() => navigation.navigate('InspirationDetail', { item })}
+    />
+  );
 
   return (
     <GradientBackground>
@@ -138,6 +154,7 @@ const styles = StyleSheet.create({
     backgroundColor: Colors.surface.default,
   },
   image: { width: '100%', height: '100%', resizeMode: 'cover' },
+  imageFallback: { width: '100%', height: '100%', backgroundColor: Colors.surface.hover },
   gradient: {
     position: 'absolute',
     left: 0,

@@ -1,4 +1,4 @@
-import React, { useCallback } from 'react';
+import React, { useCallback, useState } from 'react';
 import { FlatList, Image, StyleSheet, Text, View } from 'react-native';
 import Animated from 'react-native-reanimated';
 import LinearGradient from 'react-native-linear-gradient';
@@ -11,31 +11,49 @@ import { useStaggeredEntrance } from './useStaggeredEntrance';
 
 const CARD_WIDTH = 200;
 
+function InspirationCard({ item, onPress }: { item: InspirationItem; onPress: () => void }) {
+  const [imageError, setImageError] = useState(false);
+  return (
+    <AnimatedPressable style={styles.card} scaleTo={0.96} haptic onPress={onPress}>
+      {!imageError ? (
+        <Image
+          source={{ uri: item.imageUrl }}
+          style={styles.image}
+          onError={() => setImageError(true)}
+        />
+      ) : (
+        <View style={styles.imageFallback} />
+      )}
+      <LinearGradient
+        colors={['transparent', 'rgba(0,0,0,0.8)']}
+        style={styles.gradient}
+      />
+
+      {/* Category pill */}
+      <View style={[styles.categoryPill, { backgroundColor: item.categoryColor + '30' }]}>
+        <Text style={[styles.categoryText, { color: item.categoryColor }]}>
+          {item.categoryLabel}
+        </Text>
+      </View>
+
+      {/* Bottom content */}
+      <View style={styles.bottom}>
+        <Text style={styles.title} numberOfLines={2}>{item.title}</Text>
+      </View>
+    </AnimatedPressable>
+  );
+}
+
 export function InspirationCarousel() {
   const navigation = useNavigation<any>();
   const animatedStyle = useStaggeredEntrance(4);
 
   const renderItem = useCallback(
     ({ item }: { item: InspirationItem }) => (
-      <AnimatedPressable style={styles.card} scaleTo={0.96} haptic onPress={() => navigation.navigate('InspirationDetail', { item })}>
-        <Image source={{ uri: item.imageUrl }} style={styles.image} />
-        <LinearGradient
-          colors={['transparent', 'rgba(0,0,0,0.8)']}
-          style={styles.gradient}
-        />
-
-        {/* Category pill */}
-        <View style={[styles.categoryPill, { backgroundColor: item.categoryColor + '30' }]}>
-          <Text style={[styles.categoryText, { color: item.categoryColor }]}>
-            {item.categoryLabel}
-          </Text>
-        </View>
-
-        {/* Bottom content */}
-        <View style={styles.bottom}>
-          <Text style={styles.title} numberOfLines={2}>{item.title}</Text>
-        </View>
-      </AnimatedPressable>
+      <InspirationCard
+        item={item}
+        onPress={() => navigation.navigate('InspirationDetail', { item })}
+      />
     ),
     [navigation],
   );
@@ -71,6 +89,11 @@ const styles = StyleSheet.create({
     width: '100%',
     height: '100%',
     resizeMode: 'cover',
+  },
+  imageFallback: {
+    width: '100%',
+    height: '100%',
+    backgroundColor: Colors.surface.hover,
   },
   gradient: {
     position: 'absolute',
