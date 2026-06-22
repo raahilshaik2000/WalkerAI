@@ -16,9 +16,9 @@ export function UnsupportedDevice({ onManualMeasurement, onGoBack, reason }: Uns
       <View style={styles.iconWrapper}>
         <Ionicons name="warning-outline" size={64} color="#FF6B00" />
       </View>
-      <Text style={styles.title}>LiDAR Required</Text>
+      <Text style={styles.title}>Automatic Scan Unavailable</Text>
       <Text style={styles.body}>
-        {reason || 'Automatic room scanning requires an iPhone Pro or iPad Pro with a LiDAR sensor.'}
+        {reason || "Automatic room scanning isn't available on this device."}
       </Text>
       <Text style={styles.body}>
         You can still enter your room measurements manually.
