@@ -73,7 +73,7 @@ Deno.serve(async (req) => {
   }
 
   try {
-    const stripe = new Stripe(Deno.env.get('STRIPE_SECRET_KEY')!, { apiVersion: '2024-06-20' });
+    const stripe = new Stripe(Deno.env.get('STRIPE_SECRET_KEY')!);
     const userClient = createClient(
       Deno.env.get('SUPABASE_URL')!,
       Deno.env.get('SUPABASE_ANON_KEY')!,
@@ -138,8 +138,14 @@ Deno.serve(async (req) => {
 
     // Calculate platform fee
     const platformFeePct = order.platform_fee_pct ?? 8;
+    if (!Number.isFinite(platformFeePct) || platformFeePct < 0 || platformFeePct > 100) {
+      throw new Error('Invalid platform fee percentage');
+    }
     const platformFee = Math.round(order.final_price * (platformFeePct / 100));
     const payoutAmount = order.final_price - platformFee;
+    if (!Number.isFinite(payoutAmount) || payoutAmount <= 0) {
+      throw new Error('Calculated supplier payout must be greater than zero');
+    }
 
     // Create Stripe transfer to supplier's Connect account
     const transfer = await stripe.transfers.create(
