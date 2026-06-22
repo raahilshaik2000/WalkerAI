@@ -75,6 +75,11 @@ export interface Project {
   ai_cost_min: number | null; // CAD cents
   ai_cost_max: number | null; // CAD cents
   ai_confidence_score: number | null;
+  master_total_cents: number | null; // CAD cents — master-quote homeowner total
+  master_payment_intent_id: string | null; // Stripe PI id for the master payment
+  payment_status: 'unpaid' | 'funded' | 'refunded';
+  platform_margin_pct: number; // WalkerAI implicit margin (default 0.10), hidden from homeowner
+  payment_model: 'legacy' | 'master'; // legacy = old per-quote path; master = new master-quote path
   assigned_company_id: string | null;
   accepted_at: string | null;
   dispatch_round: number | null;

@@ -6,6 +6,172 @@ const corsHeaders = {
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 };
 
+function isMissingColumnError(error: { message?: string } | null | undefined) {
+  const message = error?.message ?? '';
+  return /column .* does not exist/i.test(message)
+    || /could not find the .* column of/i.test(message)
+    || /schema cache/i.test(message);
+}
+
+function jsonResponse(body: unknown, status = 200) {
+  return new Response(JSON.stringify(body), {
+    status,
+    headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+  });
+}
+
+async function getOrCreateStripeCustomer(
+  adminClient: ReturnType<typeof createClient>,
+  stripe: Stripe,
+  user: { id: string; email?: string | null },
+): Promise<string> {
+  const { data: userData, error: userError } = await adminClient
+    .from('users')
+    .select('stripe_customer_id, email')
+    .eq('id', user.id)
+    .single();
+  if (userError) throw userError;
+
+  const existing = (userData as { stripe_customer_id?: string | null } | null)?.stripe_customer_id;
+  if (existing) return existing;
+
+  const customer = await stripe.customers.create({
+    email: (userData as { email?: string | null } | null)?.email ?? user.email ?? undefined,
+    metadata: { supabase_user_id: user.id },
+  });
+  const { error: customerUpdateError } = await adminClient
+    .from('users')
+    .update({ stripe_customer_id: customer.id })
+    .eq('id', user.id);
+  if (customerUpdateError) throw customerUpdateError;
+  return customer.id;
+}
+
+interface MasterProject {
+  id: string;
+  homeowner_id: string;
+  payment_status?: string | null;
+  master_total_cents?: number | null;
+  master_payment_intent_id?: string | null;
+  ai_cost_min?: number | null;
+  ai_cost_max?: number | null;
+}
+
+// Master-quote model: one PaymentIntent for the whole project, captured to the
+// WalkerAI platform balance (escrow). No per-trade quotes. Homeowner can pay only
+// once every required slot is filled. Per-trade payouts are released later via
+// release-trade-payout. WalkerAI's margin is the implicit master − Σ(payouts) gap.
+async function handleMasterPaymentIntent(
+  adminClient: ReturnType<typeof createClient>,
+  stripe: Stripe,
+  user: { id: string; email?: string | null },
+  project: MasterProject,
+): Promise<Response> {
+  if (project.homeowner_id !== user.id) {
+    return jsonResponse({ error: 'Forbidden' }, 403);
+  }
+  if (project.payment_status === 'funded') {
+    return jsonResponse({ error: 'This project has already been paid' }, 409);
+  }
+
+  // Gate: every required slot must be filled/scheduled and assigned.
+  const { data: slots, error: slotsError } = await adminClient
+    .from('project_slots')
+    .select('id, status, assigned_company_id, payout_cents')
+    .eq('project_id', project.id);
+  if (slotsError) throw slotsError;
+
+  const required = (slots ?? []) as Array<{
+    status: string | null;
+    assigned_company_id: string | null;
+    payout_cents: number | null;
+  }>;
+  if (required.length === 0) {
+    return jsonResponse({ error: 'No trades to pay for yet' }, 400);
+  }
+  const allFilled = required.every(
+    (slot) => !!slot.assigned_company_id && ['filled', 'scheduled'].includes(slot.status ?? '')
+  );
+  if (!allFilled) {
+    return jsonResponse({ error: 'All trades must accept before you can pay.' }, 400);
+  }
+
+  // Master total = homeowner price (avg AI estimate), floored at Σ(trade payouts)
+  // so WalkerAI never charges less than it pays out. Reuse a previously computed
+  // total if one is already locked on the project.
+  // Canonical formula: src/lib/master-quote.ts computeMasterTotalCents (unit-tested).
+  const base = (project.ai_cost_min != null && project.ai_cost_max != null)
+    ? Math.round((project.ai_cost_min + project.ai_cost_max) / 2)
+    : 0;
+  const sumPayouts = required.reduce((sum, slot) => sum + (slot.payout_cents ?? 0), 0);
+  let masterTotal = (project.master_total_cents && project.master_total_cents > 0)
+    ? project.master_total_cents
+    : Math.max(base, sumPayouts);
+  if (masterTotal < sumPayouts) masterTotal = sumPayouts;
+  if (!Number.isFinite(masterTotal) || masterTotal <= 0) {
+    return jsonResponse({ error: 'Project total is unavailable; cannot start payment.' }, 400);
+  }
+
+  const customerId = await getOrCreateStripeCustomer(adminClient, stripe, user);
+  const transferGroup = `project_${project.id}`;
+
+  // Reuse an in-flight PI if the amount still matches.
+  if (project.master_payment_intent_id) {
+    const existing = await stripe.paymentIntents.retrieve(project.master_payment_intent_id);
+    if (existing.status === 'succeeded') {
+      return jsonResponse({ error: 'This project has already been paid' }, 409);
+    }
+    if (
+      !['canceled', 'requires_capture'].includes(existing.status)
+      && existing.amount === masterTotal
+      && existing.currency === 'cad'
+      && existing.client_secret
+    ) {
+      return jsonResponse({
+        success: true,
+        client_secret: existing.client_secret,
+        payment_intent_id: existing.id,
+        master_total_cents: masterTotal,
+        reused: true,
+      });
+    }
+  }
+
+  const paymentIntent = await stripe.paymentIntents.create({
+    amount: masterTotal,
+    currency: 'cad',
+    customer: customerId,
+    transfer_group: transferGroup,
+    metadata: {
+      project_id: project.id,
+      homeowner_id: user.id,
+      payment_kind: 'master',
+    },
+    description: `WalkerAI — Renovation Project ${project.id} (master)`,
+  });
+
+  // Persist the master total + PI id. Guard against a concurrent funding.
+  const { data: updatedProject, error: projectUpdateError } = await adminClient
+    .from('projects')
+    .update({ master_total_cents: masterTotal, master_payment_intent_id: paymentIntent.id })
+    .eq('id', project.id)
+    .neq('payment_status', 'funded')
+    .select('id')
+    .maybeSingle();
+  if (projectUpdateError) throw projectUpdateError;
+  if (!updatedProject) {
+    await stripe.paymentIntents.cancel(paymentIntent.id);
+    return jsonResponse({ error: 'Project is no longer awaiting payment' }, 409);
+  }
+
+  return jsonResponse({
+    success: true,
+    client_secret: paymentIntent.client_secret,
+    payment_intent_id: paymentIntent.id,
+    master_total_cents: masterTotal,
+  });
+}
+
 Deno.serve(async (req) => {
   if (req.method === 'OPTIONS') return new Response('ok', { headers: corsHeaders });
 
@@ -48,6 +214,25 @@ Deno.serve(async (req) => {
     }
 
     const { quote_id, project_id: pid } = await req.json();
+
+    // Master-quote projects pay one project-level PI (no quotes). Detect and branch
+    // before the quote lookup. Legacy projects fall through to the per-quote path.
+    if (pid && !quote_id) {
+      let projectResult = await adminClient
+        .from('projects')
+        .select('id, homeowner_id, payment_model, payment_status, master_total_cents, master_payment_intent_id, ai_cost_min, ai_cost_max')
+        .eq('id', pid)
+        .maybeSingle();
+      if (projectResult.error && isMissingColumnError(projectResult.error)) {
+        // Pre-migration: master columns absent, so no master projects exist — fall through.
+        projectResult = { data: null, error: null } as typeof projectResult;
+      }
+      if (projectResult.error) throw projectResult.error;
+      const projectRow = projectResult.data as (MasterProject & { payment_model?: string }) | null;
+      if (projectRow?.payment_model === 'master') {
+        return await handleMasterPaymentIntent(adminClient, stripe, user, projectRow);
+      }
+    }
 
     const quoteSelect = `
       id, total_amount, status, project_id, stripe_payment_intent_id, stripe_transfer_group,
@@ -115,26 +300,7 @@ Deno.serve(async (req) => {
     }
 
     // Get or create Stripe customer for homeowner
-    const { data: userData, error: userError } = await adminClient
-      .from('users')
-      .select('stripe_customer_id, email')
-      .eq('id', user.id)
-      .single();
-    if (userError) throw userError;
-
-    let customerId = userData?.stripe_customer_id;
-    if (!customerId) {
-      const customer = await stripe.customers.create({
-        email: userData?.email ?? user.email,
-        metadata: { supabase_user_id: user.id },
-      });
-      customerId = customer.id;
-      const { error: customerUpdateError } = await adminClient
-        .from('users')
-        .update({ stripe_customer_id: customerId })
-        .eq('id', user.id);
-      if (customerUpdateError) throw customerUpdateError;
-    }
+    const customerId = await getOrCreateStripeCustomer(adminClient, stripe, user);
 
     if (quote.stripe_payment_intent_id) {
       const existingPaymentIntent = await stripe.paymentIntents.retrieve(quote.stripe_payment_intent_id);

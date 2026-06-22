@@ -276,12 +276,21 @@ Deno.serve(async (req) => {
         );
       }
 
-      // Load slot + project details
-      const { data: slot, error: slotError } = await adminClient
+      // Load slot + project details (incl. estimate + margin to lock the trade payout)
+      let slotResult = await adminClient
         .from('project_slots')
-        .select('id, trade_type, project_id, projects(homeowner_id, status, scheduling_status, ai_cost_min, ai_cost_max)')
+        .select('id, trade_type, project_id, estimated_cost_min, estimated_cost_max, projects(homeowner_id, status, scheduling_status, ai_cost_min, ai_cost_max, payment_model, platform_margin_pct)')
         .eq('id', slot_id)
         .single();
+      if (isMissingColumnError(slotResult.error)) {
+        // Pre-migration fallback: master-quote columns not present yet.
+        slotResult = await adminClient
+          .from('project_slots')
+          .select('id, trade_type, project_id, estimated_cost_min, estimated_cost_max, projects(homeowner_id, status, scheduling_status, ai_cost_min, ai_cost_max)')
+          .eq('id', slot_id)
+          .single();
+      }
+      const { data: slot, error: slotError } = slotResult;
 
       if (slotError || !slot) {
         warnings.push(`Slot accepted but details could not be loaded: ${slotError?.message ?? 'missing slot'}`);
@@ -289,11 +298,38 @@ Deno.serve(async (req) => {
 
       const proj = firstJoinedRow(
         slot?.projects as
-          | { homeowner_id: string; status: string; scheduling_status: string; ai_cost_min: number; ai_cost_max: number }
-          | { homeowner_id: string; status: string; scheduling_status: string; ai_cost_min: number; ai_cost_max: number }[]
+          | { homeowner_id: string; status: string; scheduling_status: string; ai_cost_min: number; ai_cost_max: number; payment_model?: string; platform_margin_pct?: number }
+          | { homeowner_id: string; status: string; scheduling_status: string; ai_cost_min: number; ai_cost_max: number; payment_model?: string; platform_margin_pct?: number }[]
           | null
           | undefined
       );
+
+      // Lock the per-trade payout at acceptance (master-quote model, D1/D2).
+      // payout = avg(AI slot estimate) * (1 - platform margin); WalkerAI's margin
+      // is the implicit gap. Legacy (fenced) projects keep the old quote path.
+      if (proj && (proj.payment_model ?? 'master') === 'master') {
+        const minCost = (slot as { estimated_cost_min?: number | null } | null)?.estimated_cost_min;
+        const maxCost = (slot as { estimated_cost_max?: number | null } | null)?.estimated_cost_max;
+        const marginPct = typeof proj.platform_margin_pct === 'number' ? proj.platform_margin_pct : 0.10;
+        if (minCost != null && maxCost != null) {
+          // Canonical formula: src/lib/master-quote.ts computeTradePayoutCents (unit-tested).
+          const payoutCents = Math.round(((minCost + maxCost) / 2) * (1 - marginPct));
+          const { error: payoutError } = await adminClient
+            .from('project_slots')
+            .update({ payout_cents: payoutCents })
+            .eq('id', slot_id)
+            .is('payout_cents', null); // lock once; never overwrite an existing payout
+          if (payoutError) {
+            warnings.push(
+              isMissingColumnError(payoutError)
+                ? 'Slot accepted but payout could not be locked yet (master-quote migration pending).'
+                : `Slot accepted but payout lock failed: ${payoutError.message}`
+            );
+          }
+        } else {
+          warnings.push('Slot accepted but AI estimate is missing; trade payout not locked.');
+        }
+      }
 
       if (proj) {
         // Notify homeowner about this slot being filled
@@ -403,18 +439,32 @@ Deno.serve(async (req) => {
     }
 
     // Job accepted successfully — load project details
-    const { data: project, error: projectError } = await adminClient
+    let projectResult = await adminClient
       .from('projects')
-      .select('homeowner_id, address, city, room_type, ai_cost_min, ai_cost_max')
+      .select('homeowner_id, address, city, room_type, ai_cost_min, ai_cost_max, payment_model')
       .eq('id', project_id)
       .single();
+    if (isMissingColumnError(projectResult.error)) {
+      // Pre-migration fallback: payment_model column not present yet.
+      projectResult = await adminClient
+        .from('projects')
+        .select('homeowner_id, address, city, room_type, ai_cost_min, ai_cost_max')
+        .eq('id', project_id)
+        .single();
+    }
+    const { data: project, error: projectError } = projectResult;
     if (projectError || !project) {
       warnings.push(`Job accepted but project details could not be loaded: ${projectError?.message ?? 'missing project'}`);
     }
 
-    // Auto-create a quote at the AI price with standard milestones + line items
+    // Auto-create a quote at the AI price with standard milestones + line items.
+    // Master-quote projects (D4) skip this entirely — they pay one master PI and
+    // settle per-trade payouts; only legacy projects keep the per-quote path.
+    const isMasterModel = (project as { payment_model?: string } | null)?.payment_model === 'master';
     let autoQuoteCreated = false;
-    if (project?.ai_cost_min && project?.ai_cost_max) {
+    if (isMasterModel) {
+      // No auto-quote for master-model projects; payout is handled per-trade.
+    } else if (project?.ai_cost_min && project?.ai_cost_max) {
       const avgCost = Math.round((project.ai_cost_min + project.ai_cost_max) / 2);
       const deposit    = Math.round(avgCost * 0.30);
       const midpoint   = Math.round(avgCost * 0.40);
@@ -550,7 +600,7 @@ Deno.serve(async (req) => {
         project_id,
         company_id: company.id,
         warnings,
-        needs_quote: !autoQuoteCreated || warnings.some((warning) => warning.includes('quote') || warning.includes('milestone')),
+        needs_quote: !isMasterModel && (!autoQuoteCreated || warnings.some((warning) => warning.includes('quote') || warning.includes('milestone'))),
       }),
       { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
     );

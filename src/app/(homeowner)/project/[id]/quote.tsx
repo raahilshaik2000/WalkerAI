@@ -22,6 +22,7 @@ import ReactNativeHapticFeedback from 'react-native-haptic-feedback';
 import { useStripe } from '@stripe/stripe-react-native';
 import { supabase } from '@/lib/supabase/client';
 import { formatCadCents } from '@/lib/currency';
+import { averageCostCents } from '@/lib/master-quote';
 import { formatAppSafeErrorMessage, formatSupabaseFunctionError } from '@/lib/supabase/functions';
 import { getPaymentSheetConfig } from '@/lib/payments';
 import { formatTradeLabel } from '@/lib/trade-labels';
@@ -35,6 +36,17 @@ interface ProjectData {
   status: string;
   room_type: string | null;
   ai_analysis: any;
+  payment_model: 'legacy' | 'master' | null;
+  payment_status: 'unpaid' | 'funded' | 'refunded' | null;
+  master_total_cents: number | null;
+}
+
+interface MasterSlot {
+  id: string;
+  trade_type: string | null;
+  status: string | null;
+  assigned_company_id: string | null;
+  company_name: string | null;
 }
 
 interface Milestone {
@@ -87,6 +99,14 @@ function normalizeQuote(row: any): Quote {
   };
 }
 
+function isMissingColumnError(error: { message?: string } | null | undefined) {
+  const message = error?.message;
+  if (!message) return false;
+  return /column .* does not exist/i.test(message)
+    || /could not find the .* column of/i.test(message)
+    || /schema cache/i.test(message);
+}
+
 function isMissingQuoteSlotSelectError(error: { message?: string } | null | undefined) {
   if (!error?.message) return false;
   return /column .*slot_id.* does not exist/i.test(error.message)
@@ -122,6 +142,7 @@ export default function CostBreakdownScreen() {
   const { initPaymentSheet, presentPaymentSheet } = useStripe();
 
   const [project, setProject] = useState<ProjectData | null>(null);
+  const [masterSlots, setMasterSlots] = useState<MasterSlot[]>([]);
   const [quotes, setQuotes] = useState<Quote[]>([]);
   const [quote, setQuote] = useState<Quote | null>(null);
   const [selectedQuoteId, setSelectedQuoteId] = useState<string | null>(null);
@@ -146,7 +167,7 @@ export default function CostBreakdownScreen() {
     }
     const projectPromise = supabase
       .from('projects')
-      .select('ai_cost_min, ai_cost_max, status, room_type, ai_analysis')
+      .select('ai_cost_min, ai_cost_max, status, room_type, ai_analysis, payment_model, payment_status, master_total_cents')
       .eq('id', projectId)
       .maybeSingle();
     const quotesPromise = supabase
@@ -155,10 +176,18 @@ export default function CostBreakdownScreen() {
       .eq('project_id', projectId)
       .order('submitted_at', { ascending: false });
 
-    const [projectResult, initialQuoteResult] = await Promise.all([
+    let [projectResult, initialQuoteResult] = await Promise.all([
       projectPromise,
       quotesPromise,
     ]);
+    // Pre-migration fallback: master columns may not exist yet — treat as legacy.
+    if (isMissingColumnError(projectResult.error)) {
+      projectResult = await supabase
+        .from('projects')
+        .select('ai_cost_min, ai_cost_max, status, room_type, ai_analysis')
+        .eq('id', projectId)
+        .maybeSingle();
+    }
     const { data: proj, error: projectError } = projectResult;
     let quotes: any[] | null = initialQuoteResult.data as any[] | null;
     let quoteError = initialQuoteResult.error;
@@ -190,6 +219,40 @@ export default function CostBreakdownScreen() {
       setLoading(false);
       return;
     }
+    // ── Master-quote projects: single project price, no per-trade quotes ──
+    if ((proj as any).payment_model === 'master') {
+      const { data: slotRows, error: slotsError } = await supabase
+        .from('project_slots')
+        .select('id, trade_type, status, assigned_company_id, companies(name)')
+        .eq('project_id', projectId)
+        .order('work_order', { ascending: true, nullsFirst: false })
+        .order('created_at', { ascending: true });
+      if (slotsError) {
+        setErrorMessage(formatAppSafeErrorMessage(slotsError, 'Could not load project trades.'));
+        setProject(proj as any);
+        setMasterSlots([]);
+        setLoading(false);
+        return;
+      }
+      const slots: MasterSlot[] = ((slotRows ?? []) as any[]).map((s) => {
+        const company = Array.isArray(s.companies) ? s.companies[0] : s.companies;
+        return {
+          id: s.id,
+          trade_type: s.trade_type ?? null,
+          status: s.status ?? null,
+          assigned_company_id: s.assigned_company_id ?? null,
+          company_name: company?.name ?? null,
+        };
+      });
+      setProject(proj as any);
+      setMasterSlots(slots);
+      setQuotes([]);
+      setQuote(null);
+      setLineItems([]);
+      setLoading(false);
+      return;
+    }
+
     if (quoteError) {
       setErrorMessage(formatAppSafeErrorMessage(quoteError, 'Could not load quote.'));
       setProject(proj as any);
@@ -300,6 +363,54 @@ export default function CostBreakdownScreen() {
     );
   };
 
+  const handlePayMaster = async (masterTotal: number) => {
+    Alert.alert(
+      'Confirm Payment',
+      `Pay ${formatCad(masterTotal)} to WalkerAI to start your project? Funds are held securely in escrow and released to each trade only after you approve their completed work.`,
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Pay Now',
+          onPress: async () => {
+            setPaying(true);
+            try {
+              const { data, error } = await supabase.functions.invoke('create-payment-intent', {
+                body: { project_id: projectId },
+              });
+              if (error) throw new Error(await formatSupabaseFunctionError(error));
+              const paymentSheetConfig = getPaymentSheetConfig(data);
+
+              const { error: initErr } = await initPaymentSheet({
+                paymentIntentClientSecret: paymentSheetConfig.clientSecret,
+                merchantDisplayName: 'WalkerAI',
+              });
+              if (initErr) throw new Error(initErr.message);
+
+              const { error: payErr } = await presentPaymentSheet();
+              if (payErr) {
+                if (payErr.code !== 'Canceled') throw new Error(payErr.message);
+                return;
+              }
+
+              ReactNativeHapticFeedback.trigger('notificationSuccess');
+              setTimeout(() => fetchData(), 1500);
+              setTimeout(() => fetchData(), 4000);
+              Alert.alert(
+                'Payment received!',
+                'Your project is funded. Each trade is paid from escrow only after you approve their completed work.',
+                [{ text: 'View Project', onPress: () => navigation.goBack() }]
+              );
+            } catch (err) {
+              Alert.alert('Payment failed', await formatSupabaseFunctionError(err, 'Please try again.'));
+            } finally {
+              setPaying(false);
+            }
+          },
+        },
+      ]
+    );
+  };
+
   if (loading) {
     return (
       <GradientBackground>
@@ -321,6 +432,123 @@ export default function CostBreakdownScreen() {
             <Text style={Typography.h3}>Could not load quote</Text>
             <Text style={[Typography.bodySecondary, styles.errorText]}>{errorMessage}</Text>
           </View>
+        </SafeAreaView>
+      </GradientBackground>
+    );
+  }
+
+  // ── Master-quote project view: one price, pay WalkerAI, no commission/% ──
+  if (project?.payment_model === 'master') {
+    const masterTotal = project.master_total_cents && project.master_total_cents > 0
+      ? project.master_total_cents
+      : (project.ai_cost_min != null && project.ai_cost_max != null
+        ? averageCostCents(project.ai_cost_min, project.ai_cost_max)
+        : 0);
+    const allTradesJoined = masterSlots.length > 0
+      && masterSlots.every((s) => !!s.assigned_company_id && ['filled', 'scheduled'].includes(s.status ?? ''));
+    const isFunded = project.payment_status === 'funded';
+    const canPayMaster = !isFunded && allTradesJoined && masterTotal > 0;
+    const pendingTrades = masterSlots.filter((s) => !s.assigned_company_id || !['filled', 'scheduled'].includes(s.status ?? '')).length;
+
+    return (
+      <GradientBackground glow="top-right">
+        <SafeAreaView style={styles.safe}>
+          <View style={styles.header}>
+            <TouchableOpacity style={styles.backBtn} onPress={() => navigation.goBack()}>
+              <Ionicons name="chevron-back" size={22} color="#fff" />
+            </TouchableOpacity>
+            <Text style={styles.headerTitle}>Project Quote</Text>
+            <View style={{ width: 36 }} />
+          </View>
+
+          <ScrollView contentContainerStyle={styles.scroll} showsVerticalScrollIndicator={false}>
+            {/* Master price */}
+            <GlassCard style={styles.card}>
+              <View style={styles.priceHeader}>
+                <View style={[styles.iconCircle, { backgroundColor: 'rgba(255,107,0,0.12)' }]}>
+                  <Ionicons name="sparkles" size={20} color="#FF6B00" />
+                </View>
+                <View style={{ flex: 1 }}>
+                  <Text style={styles.priceLabel}>Project Total</Text>
+                  <Text style={styles.priceSubLabel}>One price for your whole renovation</Text>
+                </View>
+              </View>
+              <Text style={styles.priceRange}>{masterTotal > 0 ? formatCad(masterTotal) : '—'}</Text>
+              {isFunded ? (
+                <View style={styles.confirmedRow}>
+                  <Ionicons name="checkmark-circle" size={16} color="#34D399" />
+                  <Text style={styles.confirmedText}>Paid — held in escrow</Text>
+                </View>
+              ) : allTradesJoined ? (
+                <Text style={styles.pendingText}>All trades are ready — pay to start your project</Text>
+              ) : (
+                <Text style={styles.pendingText}>
+                  {pendingTrades} trade{pendingTrades === 1 ? '' : 's'} still joining — you can pay once everyone has accepted
+                </Text>
+              )}
+            </GlassCard>
+
+            {/* Trades on this project (names + status only — no per-trade amounts) */}
+            {masterSlots.length > 0 && (
+              <GlassCard style={styles.card}>
+                <Text style={styles.sectionLabel}>Your Trades</Text>
+                <Text style={styles.sectionSub}>Each trade is paid from escrow only after you approve their completed work.</Text>
+                {masterSlots.map((s) => {
+                  const joined = !!s.assigned_company_id && ['filled', 'scheduled'].includes(s.status ?? '');
+                  return (
+                    <View key={s.id} style={styles.quoteOption}>
+                      <View style={styles.quoteOptionLeft}>
+                        <View style={[styles.quoteStatusDot, joined ? styles.quoteStatusDotPaid : styles.quoteStatusDotPending]} />
+                        <View style={{ flex: 1 }}>
+                          <Text style={styles.quoteCompany}>{formatTradeLabel(s.trade_type) ?? 'Trade'}</Text>
+                          <Text style={styles.quoteStatusText}>
+                            {joined ? (s.company_name ?? 'Contractor joined') : 'Finding a contractor…'}
+                          </Text>
+                        </View>
+                      </View>
+                      {joined ? <Ionicons name="checkmark-circle" size={17} color="#34D399" /> : null}
+                    </View>
+                  );
+                })}
+              </GlassCard>
+            )}
+
+            {/* How Escrow Works */}
+            <GlassCard style={styles.card}>
+              <Text style={styles.sectionLabel}>How Escrow Works</Text>
+              {[
+                { icon: 'lock-closed-outline', text: 'You pay one project total to WalkerAI upfront — held securely, not released yet.' },
+                { icon: 'hammer-outline', text: 'When a trade finishes their work, you review their photos and approve. Only then is that trade paid.' },
+                { icon: 'shield-checkmark-outline', text: "You're always in control. No trade gets paid without your approval." },
+              ].map((item, i) => (
+                <View key={i} style={[styles.escrowRow, i < 2 && { marginBottom: 14 }]}>
+                  <View style={styles.escrowIconWrap}>
+                    <Ionicons name={item.icon} size={18} color="#FF6B00" />
+                  </View>
+                  <Text style={styles.escrowText}>{item.text}</Text>
+                </View>
+              ))}
+            </GlassCard>
+
+            {/* Pay CTA */}
+            {canPayMaster && (
+              <TouchableOpacity style={styles.payCta} onPress={() => handlePayMaster(masterTotal)} activeOpacity={0.85} disabled={paying}>
+                <Ionicons name="card-outline" size={20} color="#000" />
+                <Text style={styles.payCtaText}>
+                  {paying ? 'Processing…' : `Pay ${formatCad(masterTotal)} to WalkerAI`}
+                </Text>
+              </TouchableOpacity>
+            )}
+
+            {isFunded && (
+              <View style={styles.paidBanner}>
+                <Ionicons name="checkmark-circle" size={20} color="#34D399" />
+                <Text style={styles.paidBannerText}>
+                  {project.status === 'active' ? 'Payment received — project is active' : 'Payment received — held in escrow'}
+                </Text>
+              </View>
+            )}
+          </ScrollView>
         </SafeAreaView>
       </GradientBackground>
     );

@@ -173,6 +173,52 @@ async function projectScheduleConfirmed(
   return projectStateResult.data?.scheduling_status === 'confirmed';
 }
 
+// Move a paid project into its next state (active, or scheduling if the homeowner
+// still has to confirm start dates) and kick off material-order generation once
+// it's actually active. Shared by the legacy per-quote path and the master path.
+async function activateProjectAfterPayment(
+  adminClient: ReturnType<typeof createClient>,
+  supabaseUrl: string,
+  serviceRoleKey: string,
+  projectId: string,
+): Promise<boolean> {
+  const scheduleRequired = await projectHasTradeSlots(adminClient, projectId);
+  const scheduleConfirmed = !scheduleRequired || await projectScheduleConfirmed(adminClient, projectId);
+  const nextProjectState = scheduleConfirmed
+    ? { status: 'active' }
+    : { status: 'scheduling', scheduling_status: 'pending_homeowner' };
+
+  const { data: updatedProject, error: projectUpdateError } = await adminClient
+    .from('projects')
+    .update(nextProjectState)
+    .eq('id', projectId)
+    .select('id')
+    .maybeSingle();
+  if (projectUpdateError) throw projectUpdateError;
+  if (!updatedProject) throw new Error(`Project ${projectId} could not be updated after payment`);
+
+  if (scheduleConfirmed) {
+    try {
+      const orderRes = await fetch(`${supabaseUrl}/functions/v1/generate-material-orders`, {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${serviceRoleKey}`,
+          'apikey': serviceRoleKey,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ project_id: projectId }),
+      });
+      if (!orderRes.ok) {
+        console.warn(`generate-material-orders after payment failed: ${await orderRes.text()}`);
+      }
+    } catch (orderError) {
+      console.warn('generate-material-orders after payment failed:', orderError);
+    }
+  }
+
+  return scheduleConfirmed;
+}
+
 // No CORS headers — Stripe webhook hits this directly, not from browser
 Deno.serve(async (req) => {
   const stripe = new Stripe(Deno.env.get('STRIPE_SECRET_KEY')!);
@@ -290,39 +336,7 @@ Deno.serve(async (req) => {
 
           const readyForActive = await allFilledSlotsHaveApprovedQuotes(adminClient, project_id);
           if (readyForActive) {
-            const scheduleRequired = await projectHasTradeSlots(adminClient, project_id);
-            const scheduleConfirmed = !scheduleRequired || await projectScheduleConfirmed(adminClient, project_id);
-            const nextProjectState = scheduleConfirmed
-              ? { status: 'active' }
-              : { status: 'scheduling', scheduling_status: 'pending_homeowner' };
-
-            const { data: updatedProject, error: projectUpdateError } = await adminClient
-              .from('projects')
-              .update(nextProjectState)
-              .eq('id', project_id)
-              .select('id')
-              .maybeSingle();
-            if (projectUpdateError) throw projectUpdateError;
-            if (!updatedProject) throw new Error(`Project ${project_id} could not be updated after payment`);
-
-            if (scheduleConfirmed) {
-              try {
-                const orderRes = await fetch(`${supabaseUrl}/functions/v1/generate-material-orders`, {
-                  method: 'POST',
-                  headers: {
-                    'Authorization': `Bearer ${serviceRoleKey}`,
-                    'apikey': serviceRoleKey,
-                    'Content-Type': 'application/json',
-                  },
-                  body: JSON.stringify({ project_id }),
-                });
-                if (!orderRes.ok) {
-                  console.warn(`generate-material-orders after payment failed: ${await orderRes.text()}`);
-                }
-              } catch (orderError) {
-                console.warn('generate-material-orders after payment failed:', orderError);
-              }
-            }
+            await activateProjectAfterPayment(adminClient, supabaseUrl, serviceRoleKey, project_id);
           }
 
           if (quote?.company_id) {
@@ -342,6 +356,70 @@ Deno.serve(async (req) => {
                 },
               });
               if (notificationError) console.warn('quote_approved notification failed:', notificationError);
+            }
+          }
+        }
+
+        // ── Master-quote model: single project-level payment ──────────
+        // PI carries payment_kind='master' + project_id (no quote_id). Mark the
+        // project funded (escrow received) and move it into its next state.
+        if (project_id && !quote_id && pi.metadata.payment_kind === 'master') {
+          const { data: project, error: projectLookupError } = await adminClient
+            .from('projects')
+            .select('id, homeowner_id, payment_status, master_payment_intent_id')
+            .eq('id', project_id)
+            .single();
+          if (projectLookupError || !project) {
+            throw new Error(`Master project not found for payment_intent ${pi.id}`);
+          }
+          if (project.master_payment_intent_id && project.master_payment_intent_id !== pi.id) {
+            throw new Error(`PaymentIntent ${pi.id} does not match master project ${project_id}`);
+          }
+
+          const { data: fundedProject, error: fundError } = await adminClient
+            .from('projects')
+            .update({ payment_status: 'funded' })
+            .eq('id', project_id)
+            .eq('master_payment_intent_id', pi.id)
+            .neq('payment_status', 'funded')
+            .select('id')
+            .maybeSingle();
+          if (fundError) throw fundError;
+
+          if (fundedProject) {
+            await activateProjectAfterPayment(adminClient, supabaseUrl, serviceRoleKey, project_id);
+
+            // Notify homeowner + each assigned company that the project is funded.
+            const recipients: Array<{ user_id: string; role: 'homeowner' | 'company' }> = [
+              { user_id: project.homeowner_id, role: 'homeowner' },
+            ];
+            const { data: filledSlots, error: filledSlotsError } = await adminClient
+              .from('project_slots')
+              .select('companies(user_id)')
+              .eq('project_id', project_id)
+              .not('assigned_company_id', 'is', null);
+            if (filledSlotsError) {
+              console.warn('master funded: assigned companies could not be loaded:', filledSlotsError);
+            }
+            for (const slot of (filledSlots ?? []) as Array<{ companies: { user_id: string } | { user_id: string }[] | null }>) {
+              const company = Array.isArray(slot.companies) ? slot.companies[0] : slot.companies;
+              if (company?.user_id) recipients.push({ user_id: company.user_id, role: 'company' });
+            }
+
+            const notifications = recipients.map(({ user_id, role }) => ({
+              user_id,
+              type: 'project_funded',
+              payload: {
+                project_id,
+                payment_intent_id: pi.id,
+                deep_link: role === 'homeowner'
+                  ? `/(homeowner)/project/${project_id}`
+                  : `/(company)/job/${project_id}`,
+              },
+            }));
+            if (notifications.length > 0) {
+              const { error: notificationError } = await adminClient.from('notifications').insert(notifications);
+              if (notificationError) console.warn('project_funded notification failed:', notificationError);
             }
           }
         }
