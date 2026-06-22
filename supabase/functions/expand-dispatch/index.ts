@@ -16,9 +16,24 @@ const DISPATCH_WINDOW_MS = 2 * 60 * 60 * 1000;
 Deno.serve(async (req) => {
   if (req.method === 'OPTIONS') return new Response('ok', { headers: corsHeaders });
 
+  const serviceRoleKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
+
+  // Cron-only function: it drives the dispatch state machine with the service
+  // role (bypassing RLS), so it must not be reachable by anonymous/anon-key
+  // callers. Require the caller to present the service role key as a bearer
+  // token. The pg_cron job that invokes this must send
+  // `Authorization: Bearer <service_role_key>`.
+  const authHeader = req.headers.get('Authorization') ?? '';
+  if (authHeader !== `Bearer ${serviceRoleKey}`) {
+    return new Response(JSON.stringify({ error: 'Unauthorized' }), {
+      status: 401,
+      headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+    });
+  }
+
   const supabase = createClient(
     Deno.env.get('SUPABASE_URL')!,
-    Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!,
+    serviceRoleKey,
   );
 
   try {
