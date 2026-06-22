@@ -167,7 +167,7 @@ describe('homeowner project schedule screen source guards', () => {
     expect(source).toContain(": 'scheduling';");
     expect(source).toContain("supabase.functions.invoke('generate-material-orders'");
     expect(source).toMatch(
-      /const nextProjectStatus =[\s\S]*?\.from\('projects'\)[\s\S]*?status: nextProjectStatus/
+      /let nextProjectStatus[\s\S]*?\.from\('projects'\)[\s\S]*?status: nextProjectStatus/
     );
     expect(source).toMatch(
       /if \(nextProjectStatus === 'active'\) \{[\s\S]*?generate-material-orders/

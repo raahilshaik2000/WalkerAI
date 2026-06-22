@@ -205,52 +205,72 @@ export default function ScheduleScreen() {
         .filter((date): date is string => !!date)
         .sort();
 
-      const { data: pendingQuotes, error: pendingQuoteError } = await supabase
-        .from('quotes')
-        .select('id')
-        .eq('project_id', projectId)
-        .eq('status', 'pending')
-        .limit(1);
-      if (pendingQuoteError) throw pendingQuoteError;
-
-      const hasPendingQuotes = (pendingQuotes?.length ?? 0) > 0;
-      let allRequiredQuotesApproved = false;
-      if (!hasPendingQuotes) {
-        let approvedQuotes: QuoteApprovalRow[] = [];
-        const approvedQuoteResult = await supabase
-          .from('quotes')
-          .select('id, slot_id, company_id')
-          .eq('project_id', projectId)
-          .eq('status', 'approved');
-
-        if (isMissingColumnError(approvedQuoteResult.error)) {
-          const legacyApprovedQuoteResult = await supabase
-            .from('quotes')
-            .select('id, company_id')
-            .eq('project_id', projectId)
-            .eq('status', 'approved');
-          if (legacyApprovedQuoteResult.error) throw legacyApprovedQuoteResult.error;
-          approvedQuotes = (legacyApprovedQuoteResult.data ?? []).map((quote) => ({
-            id: quote.id,
-            slot_id: null,
-            company_id: quote.company_id,
-          }));
-        } else {
-          if (approvedQuoteResult.error) throw approvedQuoteResult.error;
-          approvedQuotes = (approvedQuoteResult.data ?? []) as QuoteApprovalRow[];
-        }
-
-        allRequiredQuotesApproved = allSchedulableSlotsHaveApprovedQuotes(
-          walkerAiSchedulableSlots,
-          approvedQuotes
-        );
+      // Master-quote projects activate on payment (payment_status='funded'), not
+      // quote approval. Legacy projects keep the per-quote activation rule.
+      let projectPaymentModel: string | null = null;
+      let projectPaymentStatus: string | null = null;
+      const paymentInfoResult = await supabase
+        .from('projects')
+        .select('payment_model, payment_status')
+        .eq('id', projectId)
+        .maybeSingle();
+      if (!isMissingColumnError(paymentInfoResult.error)) {
+        if (paymentInfoResult.error) throw paymentInfoResult.error;
+        projectPaymentModel = (paymentInfoResult.data as any)?.payment_model ?? null;
+        projectPaymentStatus = (paymentInfoResult.data as any)?.payment_status ?? null;
       }
 
-      const nextProjectStatus = hasPendingQuotes
-        ? 'quoting'
-        : allRequiredQuotesApproved
-        ? 'active'
-        : 'scheduling';
+      let nextProjectStatus: string;
+      if (projectPaymentModel === 'master') {
+        nextProjectStatus = projectPaymentStatus === 'funded' ? 'active' : 'scheduling';
+      } else {
+        const { data: pendingQuotes, error: pendingQuoteError } = await supabase
+          .from('quotes')
+          .select('id')
+          .eq('project_id', projectId)
+          .eq('status', 'pending')
+          .limit(1);
+        if (pendingQuoteError) throw pendingQuoteError;
+
+        const hasPendingQuotes = (pendingQuotes?.length ?? 0) > 0;
+        let allRequiredQuotesApproved = false;
+        if (!hasPendingQuotes) {
+          let approvedQuotes: QuoteApprovalRow[] = [];
+          const approvedQuoteResult = await supabase
+            .from('quotes')
+            .select('id, slot_id, company_id')
+            .eq('project_id', projectId)
+            .eq('status', 'approved');
+
+          if (isMissingColumnError(approvedQuoteResult.error)) {
+            const legacyApprovedQuoteResult = await supabase
+              .from('quotes')
+              .select('id, company_id')
+              .eq('project_id', projectId)
+              .eq('status', 'approved');
+            if (legacyApprovedQuoteResult.error) throw legacyApprovedQuoteResult.error;
+            approvedQuotes = (legacyApprovedQuoteResult.data ?? []).map((quote) => ({
+              id: quote.id,
+              slot_id: null,
+              company_id: quote.company_id,
+            }));
+          } else {
+            if (approvedQuoteResult.error) throw approvedQuoteResult.error;
+            approvedQuotes = (approvedQuoteResult.data ?? []) as QuoteApprovalRow[];
+          }
+
+          allRequiredQuotesApproved = allSchedulableSlotsHaveApprovedQuotes(
+            walkerAiSchedulableSlots,
+            approvedQuotes
+          );
+        }
+
+        nextProjectStatus = hasPendingQuotes
+          ? 'quoting'
+          : allRequiredQuotesApproved
+          ? 'active'
+          : 'scheduling';
+      }
 
       // Confirm dates only. Stripe payment approval is the authority that activates the project.
       const { error: projectUpdateError } = await supabase
