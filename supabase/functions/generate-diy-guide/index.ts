@@ -124,7 +124,8 @@ Deno.serve(async (req) => {
       return jsonResponse({ error: 'Uploaded project photos were not found for this DIY project' }, 400);
     }
 
-    const anthropic = new Anthropic({ apiKey: Deno.env.get('ANTHROPIC_API_KEY')! });
+    const anthropicKey = Deno.env.get('ANTHROPIC_API_KEY');
+    const anthropic = anthropicKey ? new Anthropic({ apiKey: anthropicKey }) : null;
 
     // Convert photos to base64
     const imageBlocks: Anthropic.ImageBlockParam[] = [];
@@ -213,41 +214,51 @@ ${isHazardous ? `- First step MUST be the safety shut-off procedure described ab
 - safety_warnings MUST include the professional recommendation` : ''}
 - Return ONLY the JSON, no markdown.`;
 
-    const response = await anthropic.messages.create({
-      model: 'claude-sonnet-4-6',
-      max_tokens: 8000,
-      messages: [{
-        role: 'user',
-        content: [
-          ...imageBlocks,
-          { type: 'text', text: prompt },
-        ],
-      }],
-    });
-
-    const content = response.content[0];
-    if (content.type !== 'text') throw new Error('Unexpected response from Claude');
-
     let guide: Record<string, unknown>;
-    const raw = content.text.trim();
-
-    // Attempt 1: direct parse
+    let usedFallback = false;
     try {
-      guide = JSON.parse(raw);
-    } catch {
-      // Attempt 2: strip markdown code fences
+      if (!anthropic) throw new Error('ANTHROPIC_API_KEY not configured');
+      const response = await anthropic.messages.create({
+        model: 'claude-sonnet-4-6',
+        max_tokens: 8000,
+        messages: [{
+          role: 'user',
+          content: [
+            ...imageBlocks,
+            { type: 'text', text: prompt },
+          ],
+        }],
+      });
+
+      const content = response.content[0];
+      if (content.type !== 'text') throw new Error('Unexpected response from Claude');
+
+      const raw = content.text.trim();
+
+      // Attempt 1: direct parse
       try {
-        const stripped = raw.replace(/```json\n?/g, '').replace(/```\n?/g, '').trim();
-        guide = JSON.parse(stripped);
+        guide = JSON.parse(raw);
       } catch {
-        // Attempt 3: extract outermost {...} block
-        const match = raw.match(/\{[\s\S]*\}/);
-        if (!match) throw new Error('No JSON object found in Claude response');
-        let extracted = match[0];
-        // Remove trailing commas before } or ] (common Claude mistake)
-        extracted = extracted.replace(/,(\s*[}\]])/g, '$1');
-        guide = JSON.parse(extracted);
+        // Attempt 2: strip markdown code fences
+        try {
+          const stripped = raw.replace(/```json\n?/g, '').replace(/```\n?/g, '').trim();
+          guide = JSON.parse(stripped);
+        } catch {
+          // Attempt 3: extract outermost {...} block
+          const match = raw.match(/\{[\s\S]*\}/);
+          if (!match) throw new Error('No JSON object found in Claude response');
+          let extracted = match[0];
+          // Remove trailing commas before } or ] (common Claude mistake)
+          extracted = extracted.replace(/,(\s*[}\]])/g, '$1');
+          guide = JSON.parse(extracted);
+        }
       }
+    } catch (aiError) {
+      // Missing key or provider/parse failure: return a safe generic guide
+      // instead of a 500 so the homeowner is never left stuck on this step.
+      console.warn('generate-diy-guide falling back to template guide:', aiError);
+      guide = fallbackGuide(description, category, skill_level, budgetLabel, isHazardous);
+      usedFallback = true;
     }
 
     const { data: persistedProject, error: persistError } = await adminClient
@@ -264,10 +275,52 @@ ${isHazardous ? `- First step MUST be the safety shut-off procedure described ab
     if (persistError) throw new Error(`DIY guide could not be saved: ${persistError.message}`);
     if (!persistedProject) throw new Error('DIY guide could not be saved to this project');
 
-    return jsonResponse({ success: true, guide });
+    return jsonResponse({ success: true, guide, fallback: usedFallback });
 
   } catch (err) {
     console.error('generate-diy-guide error:', err);
     return jsonResponse({ error: err instanceof Error ? err.message : 'Internal error' }, 500);
   }
 });
+
+// Deterministic safe guide used when the AI provider is unavailable or returns
+// unparseable output. Mirrors the JSON shape the app expects so the DIY screen
+// always has something to render.
+function fallbackGuide(
+  description: string,
+  category: string,
+  skillLevel: string,
+  budgetLabel: string,
+  isHazardous: boolean,
+): Record<string, unknown> {
+  const proWarning = isHazardous
+    ? `${category} work can be dangerous. If you are not fully confident, hire a licensed professional.`
+    : 'Stop and consult a professional if the work exceeds your comfort level.';
+  return {
+    title: `DIY Guide: ${description}`.slice(0, 60),
+    overview: `A general step-by-step approach for this ${category} project at a ${skillLevel} skill level. Detailed AI guidance was unavailable, so this is a safe, generic starting plan — review each step against your actual space before starting.`,
+    estimated_time: 'Varies',
+    difficulty: skillLevel === 'advanced' ? 'Advanced' : skillLevel === 'intermediate' ? 'Intermediate' : 'Beginner',
+    recommend_pro: isHazardous,
+    safety_warnings: [
+      'Turn off and isolate any relevant power, water, or gas before starting.',
+      'Wear appropriate protective equipment (gloves, eye protection, dust mask).',
+      proWarning,
+    ],
+    steps: [
+      { step_number: 1, title: 'Plan and prep the area', description: 'Clear the workspace, protect surrounding surfaces, and gather everything you need before you begin.', tip: 'Take before photos for reference.', warning: isHazardous ? 'Shut off the relevant utility (power/water/gas) first.' : null },
+      { step_number: 2, title: 'Gather tools and materials', description: `Source the tools and materials needed for this ${category} task within your ${budgetLabel} budget.`, tip: 'Buy a little extra material to account for mistakes.', warning: null },
+      { step_number: 3, title: 'Work in small, reversible stages', description: 'Proceed methodically in small steps, checking your progress and fit as you go.', tip: 'Measure twice, cut once.', warning: null },
+      { step_number: 4, title: 'Inspect and finish', description: 'Test your work, clean up, and confirm everything functions and looks correct before considering it done.', tip: null, warning: 'If anything feels unsafe or wrong, stop and call a professional.' },
+    ],
+    materials: [
+      { name: 'Project-specific materials', quantity: 'As needed', estimated_cost: budgetLabel, where_to_buy: 'Home Depot / local hardware store', is_tool: false },
+      { name: 'Basic hand tools', quantity: '1 set', estimated_cost: 'Varies', where_to_buy: 'Hardware store', is_tool: true },
+      { name: 'Safety equipment (gloves, eye protection)', quantity: '1 set', estimated_cost: '$15–30', where_to_buy: 'Hardware store', is_tool: true },
+    ],
+    when_to_call_pro: isHazardous
+      ? `Hire a licensed ${category} professional if the job involves permits, structural changes, or you are unsure at any point.`
+      : 'Hire a professional if the project involves structural, electrical, or plumbing changes beyond basic work, or if you are unsure at any point.',
+    total_estimated_cost: budgetLabel,
+  };
+}

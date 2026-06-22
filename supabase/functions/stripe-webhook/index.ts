@@ -374,6 +374,146 @@ Deno.serve(async (req) => {
         break;
       }
 
+      case 'payment_intent.payment_failed': {
+        // Card declined / payment failed. Leave the quote pending so the
+        // homeowner can retry, but notify them so they know to act.
+        const pi = event.data.object as Stripe.PaymentIntent;
+        const { project_id } = pi.metadata;
+        if (project_id) {
+          const { data: project } = await adminClient
+            .from('projects')
+            .select('homeowner_id')
+            .eq('id', project_id)
+            .maybeSingle();
+          const homeownerId = (project as { homeowner_id?: string } | null)?.homeowner_id;
+          if (homeownerId) {
+            const { error: notifyError } = await adminClient.from('notifications').insert({
+              user_id: homeownerId,
+              type: 'payment_failed',
+              payload: {
+                project_id,
+                quote_id: pi.metadata.quote_id ?? null,
+                payment_intent_id: pi.id,
+                message: pi.last_payment_error?.message
+                  ?? 'Your payment did not go through. Please try again or use a different card.',
+                deep_link: `/(homeowner)/project/${project_id}`,
+              },
+            });
+            if (notifyError) console.warn('payment_failed notification failed:', notifyError);
+          }
+        }
+        break;
+      }
+
+      case 'charge.dispute.created': {
+        // A chargeback was opened. Flag the project and notify the homeowner so
+        // the dispute is reflected in app state, not just in Stripe.
+        const dispute = event.data.object as Stripe.Dispute;
+        const paymentIntentId = typeof dispute.payment_intent === 'string'
+          ? dispute.payment_intent
+          : dispute.payment_intent?.id;
+        if (paymentIntentId) {
+          const pi = await stripe.paymentIntents.retrieve(paymentIntentId);
+          const projectId = pi.metadata?.project_id;
+          if (projectId) {
+            const { error: flagError } = await adminClient
+              .from('projects')
+              .update({ status: 'disputed' })
+              .eq('id', projectId)
+              .neq('status', 'disputed');
+            if (flagError) console.warn('dispute project flag failed:', flagError);
+
+            const { data: project } = await adminClient
+              .from('projects')
+              .select('homeowner_id')
+              .eq('id', projectId)
+              .maybeSingle();
+            const homeownerId = (project as { homeowner_id?: string } | null)?.homeowner_id;
+            if (homeownerId) {
+              const { error: notifyError } = await adminClient.from('notifications').insert({
+                user_id: homeownerId,
+                type: 'payment_disputed',
+                payload: {
+                  project_id: projectId,
+                  dispute_id: dispute.id,
+                  amount: dispute.amount,
+                  reason: dispute.reason,
+                  message: 'A payment dispute was opened on this project.',
+                  deep_link: `/(homeowner)/project/${projectId}`,
+                },
+              });
+              if (notifyError) console.warn('payment_disputed notification failed:', notifyError);
+            }
+          }
+        }
+        break;
+      }
+
+      case 'charge.dispute.closed': {
+        // Dispute resolved. On a won dispute, restore the project from
+        // 'disputed'; on a lost dispute, leave it flagged for manual handling.
+        const dispute = event.data.object as Stripe.Dispute;
+        const paymentIntentId = typeof dispute.payment_intent === 'string'
+          ? dispute.payment_intent
+          : dispute.payment_intent?.id;
+        if (paymentIntentId) {
+          const pi = await stripe.paymentIntents.retrieve(paymentIntentId);
+          const projectId = pi.metadata?.project_id;
+          if (projectId) {
+            if (dispute.status === 'won') {
+              const { error: restoreError } = await adminClient
+                .from('projects')
+                .update({ status: 'active' })
+                .eq('id', projectId)
+                .eq('status', 'disputed');
+              if (restoreError) console.warn('dispute restore failed:', restoreError);
+            }
+
+            const { data: project } = await adminClient
+              .from('projects')
+              .select('homeowner_id')
+              .eq('id', projectId)
+              .maybeSingle();
+            const homeownerId = (project as { homeowner_id?: string } | null)?.homeowner_id;
+            if (homeownerId) {
+              const { error: notifyError } = await adminClient.from('notifications').insert({
+                user_id: homeownerId,
+                type: 'payment_dispute_resolved',
+                payload: {
+                  project_id: projectId,
+                  dispute_id: dispute.id,
+                  outcome: dispute.status,
+                  deep_link: `/(homeowner)/project/${projectId}`,
+                },
+              });
+              if (notifyError) console.warn('payment_dispute_resolved notification failed:', notifyError);
+            }
+          }
+        }
+        break;
+      }
+
+      case 'transfer.reversed': {
+        // A released payout was reversed (e.g. following a dispute or refund).
+        // Roll back whichever payout it funded, matched by transfer id so it is
+        // independent of metadata shape (milestone vs supplier order).
+        const transfer = event.data.object as Stripe.Transfer;
+        const { error: milestoneError } = await adminClient
+          .from('milestones')
+          .update({ status: 'homeowner_approved', stripe_transfer_id: null })
+          .eq('stripe_transfer_id', transfer.id);
+        if (milestoneError) console.warn('milestone reversal rollback failed:', milestoneError);
+
+        const { error: orderError } = await adminClient
+          .from('material_orders')
+          .update({ status: 'delivered', stripe_transfer_id: null })
+          .eq('stripe_transfer_id', transfer.id);
+        if (orderError && !isMissingColumnError(orderError)) {
+          console.warn('material order reversal rollback failed:', orderError);
+        }
+        break;
+      }
+
       default:
         console.log(`Unhandled event type: ${event.type}`);
     }
