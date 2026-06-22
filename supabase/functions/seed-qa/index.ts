@@ -29,6 +29,19 @@ interface SeedRequest {
 Deno.serve(async (req) => {
   if (req.method === 'OPTIONS') return new Response('ok', { headers: corsHeaders });
 
+  // QA-only seeder: it mints auth users with the service role, so it must never
+  // be invokable without an explicit shared secret. Fails closed — if
+  // QA_SEED_SECRET is unset, or the caller doesn't present a matching
+  // `x-qa-seed-secret` header, the request is rejected. This keeps the function
+  // safe even if it is accidentally deployed to a live project.
+  const qaSecret = Deno.env.get('QA_SEED_SECRET');
+  if (!qaSecret || req.headers.get('x-qa-seed-secret') !== qaSecret) {
+    return new Response(JSON.stringify({ error: 'Unauthorized' }), {
+      status: 401,
+      headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+    });
+  }
+
   const supabase = createClient(
     Deno.env.get('SUPABASE_URL')!,
     Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!,

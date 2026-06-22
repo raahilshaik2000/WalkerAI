@@ -37,13 +37,14 @@ function password() {
   return `Wa1!${crypto.randomBytes(18).toString('base64url')}`;
 }
 
-async function invokeSeedQa({ supabaseUrl, anonKey, credentials }) {
+async function invokeSeedQa({ supabaseUrl, anonKey, qaSeedSecret, credentials }) {
   const response = await fetch(`${supabaseUrl}/functions/v1/seed-qa`, {
     method: 'POST',
     headers: {
       apikey: anonKey,
       authorization: `Bearer ${anonKey}`,
       'content-type': 'application/json',
+      ...(qaSeedSecret ? { 'x-qa-seed-secret': qaSeedSecret } : {}),
     },
     body: JSON.stringify({
       homeowner_email: credentials.homeowner.email,
@@ -60,13 +61,14 @@ async function invokeSeedQa({ supabaseUrl, anonKey, credentials }) {
   return { ok: response.ok, status: response.status, body };
 }
 
-async function invokeCreateTestUser({ supabaseUrl, anonKey, account }) {
+async function invokeCreateTestUser({ supabaseUrl, anonKey, qaSeedSecret, account }) {
   const response = await fetch(`${supabaseUrl}/functions/v1/create-test-user`, {
     method: 'POST',
     headers: {
       apikey: anonKey,
       authorization: `Bearer ${anonKey}`,
       'content-type': 'application/json',
+      ...(qaSeedSecret ? { 'x-qa-seed-secret': qaSeedSecret } : {}),
     },
     body: JSON.stringify({
       email: account.email,
@@ -84,10 +86,10 @@ function helperMissing(result) {
   return result.status === 404 || /function.*not found|requested function was not found/i.test(result.body);
 }
 
-async function invokeCreateTestUserForAll({ supabaseUrl, anonKey, credentials }) {
+async function invokeCreateTestUserForAll({ supabaseUrl, anonKey, qaSeedSecret, credentials }) {
   const results = [];
   for (const [role, account] of Object.entries(credentials)) {
-    const result = await invokeCreateTestUser({ supabaseUrl, anonKey, account });
+    const result = await invokeCreateTestUser({ supabaseUrl, anonKey, qaSeedSecret, account });
     results.push({ role, ...result });
     if (!result.ok) return { ok: false, results };
   }
@@ -107,6 +109,12 @@ async function main() {
   if (!supabaseUrl || !anonKey) {
     throw new Error('Missing SUPABASE_URL or SUPABASE_ANON_KEY in .env');
   }
+  // The seeders fail closed without this shared secret. Set QA_SEED_SECRET in
+  // .env to the same value configured as the function's Supabase secret.
+  const qaSeedSecret = process.env.QA_SEED_SECRET || readEnvValue('QA_SEED_SECRET');
+  if (!qaSeedSecret) {
+    throw new Error('Missing QA_SEED_SECRET in .env (required: the QA seeders reject calls without it)');
+  }
 
   const credentials = Object.fromEntries(
     Object.entries(qaAccounts).map(([key, account]) => [
@@ -115,12 +123,12 @@ async function main() {
     ]),
   );
 
-  const seedResult = await invokeSeedQa({ supabaseUrl, anonKey, credentials });
+  const seedResult = await invokeSeedQa({ supabaseUrl, anonKey, qaSeedSecret, credentials });
   let mode = 'seed-qa';
 
   if (!seedResult.ok && helperMissing(seedResult)) {
     mode = 'create-test-user';
-    const createResults = await invokeCreateTestUserForAll({ supabaseUrl, anonKey, credentials });
+    const createResults = await invokeCreateTestUserForAll({ supabaseUrl, anonKey, qaSeedSecret, credentials });
     if (!createResults.ok) {
       const firstFailure = createResults.results.find((result) => !result.ok);
       const createHelperMissing = firstFailure ? helperMissing(firstFailure) : false;
