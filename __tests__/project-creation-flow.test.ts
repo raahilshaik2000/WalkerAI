@@ -230,7 +230,7 @@ describe('project creation flow guards', () => {
       'utf8',
     );
 
-    expect(analyzingSource).toContain('const PHOTO_SAVE_ATTEMPTS = 3;');
+    expect(analyzingSource).toContain('const PHOTO_SAVE_ATTEMPTS = 5;');
     expect(analyzingSource).toContain('function isTransientPhotoSaveError(error: unknown)');
     expect(analyzingSource).toContain('async function saveProjectPhoto(params: {');
     expect(analyzingSource).toContain("uploadBase64(\n        'project-photos',");

@@ -1,8 +1,12 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import {
+  ActivityIndicator,
   Alert,
   Animated,
+  Dimensions,
   Easing,
+  FlatList,
+  Image,
   ScrollView,
   StyleSheet,
   Text,
@@ -13,9 +17,11 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { useNavigation } from '@react-navigation/native'
 import { useRoute } from '@react-navigation/native';
 import Ionicons from 'react-native-vector-icons/Ionicons';
+import { launchImageLibrary } from 'react-native-image-picker';
 import { supabase } from '@/lib/supabase/client';
 import { isMissingSupabaseSchemaObjectError } from '@/lib/supabase/errors';
-import { formatAppSafeErrorMessage } from '@/lib/supabase/functions';
+import { formatAppSafeErrorMessage, formatSupabaseFunctionError } from '@/lib/supabase/functions';
+import { uploadBase64 } from '@/lib/supabase/storage';
 import { restartProjectDispatch } from '@/lib/project-dispatch';
 import { getRequiredStringParam } from '@/lib/navigation-params';
 import { formatGcProjectType } from '@/lib/gc-project-type';
@@ -40,6 +46,8 @@ interface Project {
     rating: number;
     total_reviews: number;
   } | null;
+  project_photos: Array<{ url: string }>;
+  renders: Array<{ url: string; selected?: boolean | null }>;
 }
 
 interface GcProjectContext {
@@ -62,13 +70,59 @@ interface AssignedTradeSlot {
   } | null;
 }
 
-type ProjectRow = Omit<Project, 'assigned_company'> & {
+type ProjectRow = Omit<Project, 'assigned_company' | 'project_photos' | 'renders'> & {
   assigned_company?: Project['assigned_company'] | Project['assigned_company'][];
+  project_photos?: Array<{ url: string }>;
+  renders?: Array<{ url: string; selected?: boolean | null }>;
 };
 
 type AssignedTradeSlotRow = Omit<AssignedTradeSlot, 'assigned_company'> & {
   assigned_company?: AssignedTradeSlot['assigned_company'] | AssignedTradeSlot['assigned_company'][];
 };
+
+const { width: SCREEN_WIDTH } = Dimensions.get('window');
+
+function getOrderedPhotoUrls(project: Pick<Project, 'renders' | 'project_photos'> | null): string[] {
+  if (!project) return [];
+  const renders = project.renders ?? [];
+  const selectedUrl = renders.find((r) => r.selected)?.url;
+  const urls = [
+    selectedUrl,
+    ...renders.map((r) => r.url),
+    ...(project.project_photos?.map((p) => p.url) ?? []),
+  ].filter(Boolean) as string[];
+  return [...new Set(urls)];
+}
+
+function PhotoGallery({ urls }: { urls: string[] }) {
+  const [active, setActive] = useState(0);
+  if (urls.length === 0) return null;
+  return (
+    <View style={styles.galleryWrap}>
+      <FlatList
+        data={urls}
+        keyExtractor={(_, i) => `photo-${i}`}
+        horizontal
+        pagingEnabled
+        showsHorizontalScrollIndicator={false}
+        style={styles.galleryList}
+        onMomentumScrollEnd={(e) =>
+          setActive(Math.round(e.nativeEvent.contentOffset.x / GALLERY_WIDTH))
+        }
+        renderItem={({ item: uri }) => (
+          <Image source={{ uri }} style={styles.galleryImage} resizeMode="cover" />
+        )}
+      />
+      {urls.length > 1 && (
+        <View style={styles.galleryDots}>
+          {urls.map((_, i) => (
+            <View key={i} style={[styles.galleryDot, i === active && styles.galleryDotActive]} />
+          ))}
+        </View>
+      )}
+    </View>
+  );
+}
 
 function formatCad(cents: number) {
   return new Intl.NumberFormat('en-CA', { style: 'currency', currency: 'CAD', maximumFractionDigits: 0 }).format(cents / 100);
@@ -129,7 +183,7 @@ function DispatchRadar() {
         <Animated.View key={i} style={[radarStyles.ring, ringStyle(r)]} />
       ))}
       <View style={radarStyles.core}>
-        <Text style={radarStyles.coreText}>📡</Text>
+        <Ionicons name="search" size={24} color={Colors.accent} />
       </View>
     </View>
   );
@@ -152,6 +206,8 @@ export default function ProjectDetailScreen() {
   const [loading, setLoading] = useState(true);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [redispatching, setRedispatching] = useState(false);
+  const [deleting, setDeleting] = useState(false);
+  const [addingPhotos, setAddingPhotos] = useState(false);
   const finishSelections = readPersistedSurfaceSelections(project?.questionnaire_answers);
 
   const fetchProject = useCallback(async () => {
@@ -169,7 +225,9 @@ export default function ProjectDetailScreen() {
         .from('projects')
         .select(`
           id, address, room_type, status, scheduling_status, ai_cost_min, ai_cost_max, questionnaire_answers, created_at, assigned_company_id,
-          assigned_company:companies!assigned_company_id ( name, rating, total_reviews )
+          assigned_company:companies!assigned_company_id ( name, rating, total_reviews ),
+          project_photos ( url ),
+          renders ( url, selected )
         `)
         .eq('id', id)
         .maybeSingle(),
@@ -230,6 +288,8 @@ export default function ProjectDetailScreen() {
           assigned_company: Array.isArray(row.assigned_company)
             ? row.assigned_company[0] ?? null
             : row.assigned_company ?? null,
+          project_photos: row.project_photos ?? [],
+          renders: row.renders ?? [],
         }
       : null);
     setAssignedTradeSlots(slotRows.map((slot) => ({
@@ -276,6 +336,88 @@ export default function ProjectDetailScreen() {
       Alert.alert('Could not restart search', formatAppSafeErrorMessage(err, 'Please try again.'));
     } finally {
       setRedispatching(false);
+    }
+  };
+
+  const handleDeleteProject = () => {
+    const isActiveProject = project !== null && ['active', 'scheduling', 'quoting', 'accepted'].includes(project.status);
+    const confirmMessage = isActiveProject
+      ? 'This project has an active contractor. Deleting it will permanently remove all project data, files, and history. This cannot be undone.'
+      : 'This will permanently remove this project and all its data. This cannot be undone.';
+
+    Alert.alert('Delete project?', confirmMessage, [
+      { text: 'Cancel', style: 'cancel' },
+      {
+        text: 'Delete',
+        style: 'destructive',
+        onPress: async () => {
+          if (!project?.id) return;
+          setDeleting(true);
+          try {
+            const { error } = await supabase.functions.invoke('delete-project', {
+              body: { project_id: project.id },
+            });
+            if (error) {
+              throw new Error(await formatSupabaseFunctionError(error, 'Could not delete project.'));
+            }
+            Alert.alert('Project deleted', 'Your project has been permanently removed.', [
+              { text: 'OK', onPress: () => navigation.goBack() },
+            ]);
+          } catch (err) {
+            Alert.alert('Could not delete project', formatAppSafeErrorMessage(err, 'Please try again.'));
+          } finally {
+            setDeleting(false);
+          }
+        },
+      },
+    ]);
+  };
+
+  const handleAddPhotos = async () => {
+    let result;
+    try {
+      result = await launchImageLibrary({ mediaType: 'photo', quality: 0.3, includeBase64: true, selectionLimit: 8 });
+    } catch (err) {
+      Alert.alert('Could not open photos', formatAppSafeErrorMessage(err, 'Please try again.'));
+      return;
+    }
+
+    if (result.didCancel || !result.assets || result.assets.length === 0) return;
+
+    setAddingPhotos(true);
+    try {
+      const uploadTimestamp = Date.now();
+      for (let i = 0; i < result.assets.length; i += 1) {
+        const asset = result.assets[i];
+        if (!asset.base64) continue;
+
+        const rawType = asset.type ?? 'image/jpeg';
+        const contentType = rawType === 'image/jpg' ? 'image/jpeg' : rawType;
+        const ext = asset.fileName?.match(/\.([a-zA-Z0-9]+)(?:[?#].*)?$/)?.[1]?.toLowerCase() ?? 'jpg';
+        const storagePath = `${id}/added-${uploadTimestamp}-${i}.${ext}`;
+
+        const { publicUrl, storagePath: savedStoragePath } = await uploadBase64(
+          'project-photos',
+          storagePath,
+          asset.base64,
+          contentType,
+          { retries: 3, upsert: true },
+        );
+
+        const { error: insertError } = await supabase.from('project_photos').insert({
+          project_id: id,
+          url: publicUrl,
+          storage_path: savedStoragePath,
+        });
+
+        if (insertError) throw insertError;
+      }
+
+      await fetchProject();
+    } catch (err) {
+      Alert.alert('Upload failed', formatAppSafeErrorMessage(err, 'Could not save photos. Please try again.'));
+    } finally {
+      setAddingPhotos(false);
     }
   };
 
@@ -334,15 +476,45 @@ export default function ProjectDetailScreen() {
             <TouchableOpacity onPress={() => navigation.goBack()} style={styles.backBtn}>
               <Text style={styles.backText}>← Back</Text>
             </TouchableOpacity>
-            <StatusBadge
-              label={project.status.replace('_', ' ')}
-              variant={STATUS_VARIANT[project.status] ?? 'neutral'}
-              dot
-            />
+            <View style={styles.headerRight}>
+              <StatusBadge
+                label={project.status.replace('_', ' ')}
+                variant={STATUS_VARIANT[project.status] ?? 'neutral'}
+                dot
+              />
+              <TouchableOpacity
+                onPress={handleDeleteProject}
+                disabled={deleting}
+                style={[styles.deleteBtn, deleting && styles.deleteBtnDisabled]}
+                activeOpacity={0.7}
+              >
+                <Ionicons name="trash-outline" size={18} color={Colors.error} />
+              </TouchableOpacity>
+            </View>
           </View>
 
           <Text style={styles.roomType}>{projectTitle}</Text>
           <Text style={styles.address}>{project.address}</Text>
+
+          {/* Photo gallery */}
+          <PhotoGallery urls={getOrderedPhotoUrls(project)} />
+
+          {/* Add Photos */}
+          <TouchableOpacity
+            style={[styles.addPhotosBtn, addingPhotos && styles.addPhotosBtnDisabled]}
+            onPress={handleAddPhotos}
+            disabled={addingPhotos}
+            activeOpacity={0.8}
+          >
+            {addingPhotos ? (
+              <ActivityIndicator size="small" color={Colors.accent} />
+            ) : (
+              <Ionicons name="add-circle-outline" size={16} color={Colors.accent} />
+            )}
+            <Text style={styles.addPhotosBtnText}>
+              {addingPhotos ? 'Uploading...' : '+ Add photos'}
+            </Text>
+          </TouchableOpacity>
 
           {/* Dispatch radar */}
           {isDispatching && (
@@ -468,13 +640,72 @@ export default function ProjectDetailScreen() {
   );
 }
 
+const GALLERY_WIDTH = SCREEN_WIDTH - Spacing.sm * 2;
+const GALLERY_HEIGHT = Math.round((GALLERY_WIDTH * 3) / 4);
+
 const styles = StyleSheet.create({
   safe: { flex: 1 },
   scroll: { flexGrow: 1, paddingHorizontal: Spacing.sm, paddingTop: Spacing.sm, paddingBottom: Spacing.xl },
   center: { flex: 1, alignItems: 'center', justifyContent: 'center' },
   header: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: Spacing.md },
+  headerRight: { flexDirection: 'row', alignItems: 'center', gap: 10 },
   backBtn: {},
   backText: { color: Colors.text.secondary, fontSize: 15 },
+  deleteBtn: {
+    width: 34,
+    height: 34,
+    borderRadius: Radius.item,
+    borderWidth: 1,
+    borderColor: Colors.error,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: 'rgba(224,11,11,0.08)',
+  },
+  deleteBtnDisabled: { opacity: 0.4 },
+  galleryWrap: {
+    marginVertical: Spacing.sm,
+    alignItems: 'center',
+  },
+  galleryList: {
+    width: GALLERY_WIDTH,
+  },
+  galleryImage: {
+    width: GALLERY_WIDTH,
+    height: GALLERY_HEIGHT,
+    borderRadius: Radius.card,
+  },
+  galleryDots: {
+    flexDirection: 'row',
+    gap: 6,
+    marginTop: Spacing.sm,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  galleryDot: {
+    width: 6,
+    height: 6,
+    borderRadius: 3,
+    backgroundColor: 'rgba(255,255,255,0.3)',
+  },
+  galleryDotActive: {
+    width: 18,
+    backgroundColor: Colors.accent,
+  },
+  addPhotosBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    alignSelf: 'center',
+    gap: 6,
+    paddingHorizontal: Spacing.md,
+    paddingVertical: 8,
+    borderRadius: Radius.item,
+    borderWidth: 1,
+    borderColor: Colors.accent,
+    backgroundColor: 'rgba(255, 107, 0, 0.08)',
+    marginBottom: Spacing.sm,
+  },
+  addPhotosBtnDisabled: { opacity: 0.5 },
+  addPhotosBtnText: { color: Colors.accent, fontSize: 13, fontWeight: '700' },
   roomType: { ...Typography.h2, textTransform: 'capitalize', marginBottom: 6 },
   address: { ...Typography.bodySecondary, marginBottom: Spacing.md },
   card: { marginBottom: Spacing.sm },
