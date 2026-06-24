@@ -451,6 +451,39 @@ Deno.serve(async (req) => {
     const gcCompletionApprovalRequired = isFinalTrade && await hasActiveGcManagement(adminClient, project.id);
     if (isFinalTrade && !gcCompletionApprovalRequired) {
       await completeProjectAndNotify(adminClient, project.id, project.homeowner_id, company.user_id);
+    } else if (!isFinalTrade) {
+      // Sequential flow: this payout unlocks the next trade — tell its company
+      // they can start. The next active trade is the lowest-ordered unpaid slot.
+      const { data: nextSlot, error: nextSlotError } = await adminClient
+        .from('project_slots')
+        .select('id, trade_type, work_order, companies(user_id)')
+        .eq('project_id', project.id)
+        .neq('payout_status', 'paid')
+        .not('work_order', 'is', null)
+        .order('work_order', { ascending: true })
+        .limit(1)
+        .maybeSingle();
+      if (nextSlotError) {
+        console.warn('Trade paid but next-trade lookup failed:', nextSlotError.message);
+      } else if (nextSlot) {
+        const nextCompany = Array.isArray(nextSlot.companies)
+          ? nextSlot.companies[0]
+          : nextSlot.companies as { user_id: string } | null;
+        if (nextCompany?.user_id) {
+          const { error: nextNotifyError } = await adminClient.from('notifications').insert({
+            user_id: nextCompany.user_id,
+            type: 'trade_turn_started',
+            payload: {
+              project_id: project.id,
+              slot_id: nextSlot.id,
+              trade_type: nextSlot.trade_type,
+              message: 'The previous trade is complete — you can start your work now.',
+              deep_link: `/(company)/job/${project.id}`,
+            },
+          });
+          if (nextNotifyError) console.warn('Next-trade turn notification failed:', nextNotifyError.message);
+        }
+      }
     }
 
     // Implicit margin + HST for bookkeeping (WalkerAI owes HST on its margin).
