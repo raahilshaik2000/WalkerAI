@@ -342,9 +342,17 @@ export function RootNavigator() {
   const updateProfile = useProfileStore((state) => state.updateProfile);
   const resetProfile = useProfileStore((state) => state.resetProfile);
   const [authRoleResolved, setAuthRoleResolved] = useState(false);
+  const appliedUserIdRef = useRef<string | null>(null);
 
   const applySession = useCallback(async (nextSession: typeof session) => {
-    setAuthRoleResolved(false);
+    const nextUserId = nextSession?.user?.id ?? null;
+    // Only blank the app while resolving a *real* identity change (sign in/out).
+    // A token refresh for the same user must NOT reset the navigator — otherwise
+    // any long in-app flow (e.g. DIY AI generation calling refreshSession) gets
+    // unmounted mid-way and the user is dropped back on the home screen.
+    const sameUser = appliedUserIdRef.current !== null && appliedUserIdRef.current === nextUserId;
+    appliedUserIdRef.current = nextUserId;
+    if (!sameUser) setAuthRoleResolved(false);
     setSession(nextSession);
     if (!nextSession?.user?.id) {
       setRole(null);

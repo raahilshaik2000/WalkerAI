@@ -1961,7 +1961,8 @@ describe('general contractor account type', () => {
     expect(completeDirectToolsMigration).toContain("NULLIF(TRIM(gc.insurance_doc_url), '') IS NOT NULL");
     expect(navigator).toContain('GeneralContractorMessages');
     expect(gcProjectDetail).toContain("navigation.navigate('GeneralContractorMessages'");
-    expect(gcMessages).toContain("from('messages').insert");
+    expect(gcMessages).toContain("from('messages')");
+    expect(gcMessages).toContain(".insert({");
     expect(gcMessages).toContain("channel(`gc-messages:${projectId}`)");
     expect(gcMessages).toContain("import { launchImageLibrary } from 'react-native-image-picker'");
     expect(gcMessages).toContain("const [uploadingAttachment, setUploadingAttachment] = useState(false)");

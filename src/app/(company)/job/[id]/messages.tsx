@@ -70,7 +70,8 @@ export default function CompanyMessagesScreen() {
         event: 'INSERT', schema: 'public', table: 'messages',
         filter: `project_id=eq.${projectId}`,
       }, (payload) => {
-        setMessages((prev) => [...prev, payload.new as Message]);
+        const incoming = payload.new as Message;
+        setMessages((prev) => prev.some((m) => m.id === incoming.id) ? prev : [...prev, incoming]);
         setTimeout(() => flatListRef.current?.scrollToEnd({ animated: true }), 100);
       })
       .subscribe();
@@ -88,16 +89,24 @@ export default function CompanyMessagesScreen() {
     const trimmed = body.trim();
     setBody('');
 
-    const { error } = await supabase.from('messages').insert({
-      project_id: projectId,
-      sender_id: user.id,
-      body: trimmed,
-    });
+    // Append optimistically — realtime delivery isn't guaranteed.
+    const { data: inserted, error } = await supabase
+      .from('messages')
+      .insert({
+        project_id: projectId,
+        sender_id: user.id,
+        body: trimmed,
+      })
+      .select('id, body, sender_id, sent_at, attachment_url')
+      .single();
 
     if (error) {
       setBody(trimmed);
       Alert.alert('Message not sent', formatAppSafeErrorMessage(error, 'Please try again.'));
-    } else {
+    } else if (inserted) {
+      const sent = inserted as Message;
+      setMessages((prev) => prev.some((m) => m.id === sent.id) ? prev : [...prev, sent]);
+      setTimeout(() => flatListRef.current?.scrollToEnd({ animated: true }), 100);
       ReactNativeHapticFeedback.trigger('impactLight');
     }
     setSending(false);
