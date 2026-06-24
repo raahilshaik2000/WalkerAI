@@ -2,7 +2,10 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import {
   Alert,
   Animated,
+  Dimensions,
   Easing,
+  FlatList,
+  Image,
   ScrollView,
   StyleSheet,
   Text,
@@ -15,7 +18,7 @@ import { useRoute } from '@react-navigation/native';
 import Ionicons from 'react-native-vector-icons/Ionicons';
 import { supabase } from '@/lib/supabase/client';
 import { isMissingSupabaseSchemaObjectError } from '@/lib/supabase/errors';
-import { formatAppSafeErrorMessage } from '@/lib/supabase/functions';
+import { formatAppSafeErrorMessage, formatSupabaseFunctionError } from '@/lib/supabase/functions';
 import { restartProjectDispatch } from '@/lib/project-dispatch';
 import { getRequiredStringParam } from '@/lib/navigation-params';
 import { formatGcProjectType } from '@/lib/gc-project-type';
@@ -40,6 +43,8 @@ interface Project {
     rating: number;
     total_reviews: number;
   } | null;
+  project_photos: Array<{ url: string }>;
+  renders: Array<{ url: string; selected?: boolean | null }>;
 }
 
 interface GcProjectContext {
@@ -62,13 +67,29 @@ interface AssignedTradeSlot {
   } | null;
 }
 
-type ProjectRow = Omit<Project, 'assigned_company'> & {
+type ProjectRow = Omit<Project, 'assigned_company' | 'project_photos' | 'renders'> & {
   assigned_company?: Project['assigned_company'] | Project['assigned_company'][];
+  project_photos?: Array<{ url: string }>;
+  renders?: Array<{ url: string; selected?: boolean | null }>;
 };
 
 type AssignedTradeSlotRow = Omit<AssignedTradeSlot, 'assigned_company'> & {
   assigned_company?: AssignedTradeSlot['assigned_company'] | AssignedTradeSlot['assigned_company'][];
 };
+
+const { width: SCREEN_WIDTH } = Dimensions.get('window');
+
+function getOrderedPhotoUrls(project: Pick<Project, 'renders' | 'project_photos'> | null): string[] {
+  if (!project) return [];
+  const renders = project.renders ?? [];
+  const selectedUrl = renders.find((r) => r.selected)?.url;
+  const urls = [
+    selectedUrl,
+    ...renders.map((r) => r.url),
+    ...(project.project_photos?.map((p) => p.url) ?? []),
+  ].filter(Boolean) as string[];
+  return [...new Set(urls)];
+}
 
 function formatCad(cents: number) {
   return new Intl.NumberFormat('en-CA', { style: 'currency', currency: 'CAD', maximumFractionDigits: 0 }).format(cents / 100);
@@ -152,6 +173,7 @@ export default function ProjectDetailScreen() {
   const [loading, setLoading] = useState(true);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [redispatching, setRedispatching] = useState(false);
+  const [deleting, setDeleting] = useState(false);
   const finishSelections = readPersistedSurfaceSelections(project?.questionnaire_answers);
 
   const fetchProject = useCallback(async () => {
@@ -169,7 +191,9 @@ export default function ProjectDetailScreen() {
         .from('projects')
         .select(`
           id, address, room_type, status, scheduling_status, ai_cost_min, ai_cost_max, questionnaire_answers, created_at, assigned_company_id,
-          assigned_company:companies!assigned_company_id ( name, rating, total_reviews )
+          assigned_company:companies!assigned_company_id ( name, rating, total_reviews ),
+          project_photos ( url ),
+          renders ( url, selected )
         `)
         .eq('id', id)
         .maybeSingle(),
@@ -230,6 +254,8 @@ export default function ProjectDetailScreen() {
           assigned_company: Array.isArray(row.assigned_company)
             ? row.assigned_company[0] ?? null
             : row.assigned_company ?? null,
+          project_photos: row.project_photos ?? [],
+          renders: row.renders ?? [],
         }
       : null);
     setAssignedTradeSlots(slotRows.map((slot) => ({
@@ -277,6 +303,40 @@ export default function ProjectDetailScreen() {
     } finally {
       setRedispatching(false);
     }
+  };
+
+  const handleDeleteProject = () => {
+    const isActiveProject = project !== null && ['active', 'scheduling', 'quoting', 'accepted'].includes(project.status);
+    const confirmMessage = isActiveProject
+      ? 'This project has an active contractor. Deleting it will permanently remove all project data, files, and history. This cannot be undone.'
+      : 'This will permanently remove this project and all its data. This cannot be undone.';
+
+    Alert.alert('Delete project?', confirmMessage, [
+      { text: 'Cancel', style: 'cancel' },
+      {
+        text: 'Delete',
+        style: 'destructive',
+        onPress: async () => {
+          if (!project?.id) return;
+          setDeleting(true);
+          try {
+            const { error } = await supabase.functions.invoke('delete-project', {
+              body: { project_id: project.id },
+            });
+            if (error) {
+              throw new Error(await formatSupabaseFunctionError(error, 'Could not delete project.'));
+            }
+            Alert.alert('Project deleted', 'Your project has been permanently removed.', [
+              { text: 'OK', onPress: () => navigation.goBack() },
+            ]);
+          } catch (err) {
+            Alert.alert('Could not delete project', formatAppSafeErrorMessage(err, 'Please try again.'));
+          } finally {
+            setDeleting(false);
+          }
+        },
+      },
+    ]);
   };
 
   if (loading) {
@@ -334,15 +394,53 @@ export default function ProjectDetailScreen() {
             <TouchableOpacity onPress={() => navigation.goBack()} style={styles.backBtn}>
               <Text style={styles.backText}>← Back</Text>
             </TouchableOpacity>
-            <StatusBadge
-              label={project.status.replace('_', ' ')}
-              variant={STATUS_VARIANT[project.status] ?? 'neutral'}
-              dot
-            />
+            <View style={styles.headerRight}>
+              <StatusBadge
+                label={project.status.replace('_', ' ')}
+                variant={STATUS_VARIANT[project.status] ?? 'neutral'}
+                dot
+              />
+              <TouchableOpacity
+                onPress={handleDeleteProject}
+                disabled={deleting}
+                style={[styles.deleteBtn, deleting && styles.deleteBtnDisabled]}
+                activeOpacity={0.7}
+              >
+                <Ionicons name="trash-outline" size={18} color={Colors.error} />
+              </TouchableOpacity>
+            </View>
           </View>
 
           <Text style={styles.roomType}>{projectTitle}</Text>
           <Text style={styles.address}>{project.address}</Text>
+
+          {/* Photo gallery */}
+          {(() => {
+            const photoUrls = getOrderedPhotoUrls(project);
+            if (photoUrls.length === 0) return null;
+            if (photoUrls.length === 1) {
+              return (
+                <Image
+                  source={{ uri: photoUrls[0] }}
+                  style={styles.heroSingle}
+                  resizeMode="cover"
+                />
+              );
+            }
+            return (
+              <FlatList
+                data={photoUrls}
+                keyExtractor={(_, i) => `photo-${i}`}
+                horizontal
+                pagingEnabled
+                showsHorizontalScrollIndicator={false}
+                style={styles.galleryList}
+                renderItem={({ item: uri }) => (
+                  <Image source={{ uri }} style={styles.galleryImage} resizeMode="cover" />
+                )}
+              />
+            );
+          })()}
 
           {/* Dispatch radar */}
           {isDispatching && (
@@ -468,13 +566,43 @@ export default function ProjectDetailScreen() {
   );
 }
 
+const GALLERY_HEIGHT = 200;
+
 const styles = StyleSheet.create({
   safe: { flex: 1 },
   scroll: { flexGrow: 1, paddingHorizontal: Spacing.sm, paddingTop: Spacing.sm, paddingBottom: Spacing.xl },
   center: { flex: 1, alignItems: 'center', justifyContent: 'center' },
   header: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: Spacing.md },
+  headerRight: { flexDirection: 'row', alignItems: 'center', gap: 10 },
   backBtn: {},
   backText: { color: Colors.text.secondary, fontSize: 15 },
+  deleteBtn: {
+    width: 34,
+    height: 34,
+    borderRadius: Radius.item,
+    borderWidth: 1,
+    borderColor: Colors.error,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: 'rgba(224,11,11,0.08)',
+  },
+  deleteBtnDisabled: { opacity: 0.4 },
+  heroSingle: {
+    width: '100%',
+    height: GALLERY_HEIGHT,
+    borderRadius: Radius.card,
+    marginBottom: Spacing.sm,
+  },
+  galleryList: {
+    marginHorizontal: -Spacing.sm,
+    marginBottom: Spacing.sm,
+  },
+  galleryImage: {
+    width: SCREEN_WIDTH - Spacing.sm * 2,
+    height: GALLERY_HEIGHT,
+    marginHorizontal: Spacing.sm,
+    borderRadius: Radius.card,
+  },
   roomType: { ...Typography.h2, textTransform: 'capitalize', marginBottom: 6 },
   address: { ...Typography.bodySecondary, marginBottom: Spacing.md },
   card: { marginBottom: Spacing.sm },

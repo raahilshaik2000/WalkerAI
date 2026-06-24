@@ -93,7 +93,8 @@ describe('general contractor account type', () => {
       'utf8',
     );
 
-    expect(homeownerProjectDetail).toContain("import { formatAppSafeErrorMessage } from '@/lib/supabase/functions'");
+    expect(homeownerProjectDetail).toContain("formatAppSafeErrorMessage");
+    expect(homeownerProjectDetail).toContain("from '@/lib/supabase/functions'");
     expect(homeownerProjectDetail).toContain("Could not load GC project context: ${formatAppSafeErrorMessage(gcContextResult.error, 'Please try again.')}");
     expect(homeownerProjectDetail).not.toContain('Could not load GC project context: ${gcContextResult.error.message}');
     expect(homeownerConcierge).toContain("import { formatAppSafeErrorMessage, formatSupabaseFunctionError } from '@/lib/supabase/functions'");
