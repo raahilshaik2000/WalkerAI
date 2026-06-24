@@ -84,10 +84,21 @@ export default function GeneralContractorDiscoveryScreen() {
   const [gcReady, setGcReady] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
+  const clearDiscoveryState = useCallback(() => {
+    setAssignment(null);
+    setRequests([]);
+    setRequestType('change_order');
+    setTitle('');
+    setDescription('');
+    setCostDelta('');
+    setTimelineDelta('');
+    setGcReady(false);
+  }, []);
+
   const fetchData = useCallback(async () => {
-    const currentUser = (await supabase.auth.getUser()).data.user;
-    if (!currentUser?.id) {
-      setErrorMessage('You need to be signed in to manage discoveries.');
+    if (!projectId) {
+      setErrorMessage('Project is missing. Reopen discoveries from the GC project page.');
+      clearDiscoveryState();
       setLoading(false);
       setRefreshing(false);
       return;
@@ -95,6 +106,13 @@ export default function GeneralContractorDiscoveryScreen() {
 
     try {
       setErrorMessage(null);
+      const currentUser = (await supabase.auth.getUser()).data.user;
+      if (!currentUser?.id) {
+        setErrorMessage('You need to be signed in to manage discoveries.');
+        clearDiscoveryState();
+        return;
+      }
+
       const { data: gc, error: gcError } = await supabase
         .from('general_contractors')
         .select(GENERAL_CONTRACTOR_READINESS_SELECT)
@@ -126,14 +144,12 @@ export default function GeneralContractorDiscoveryScreen() {
       setRequests((requestResult.data ?? []) as DiscoveryRequest[]);
     } catch (err) {
       setErrorMessage(formatAppSafeErrorMessage(err, 'Could not load discoveries.'));
-      setAssignment(null);
-      setRequests([]);
-      setGcReady(false);
+      clearDiscoveryState();
     } finally {
       setLoading(false);
       setRefreshing(false);
     }
-  }, [projectId]);
+  }, [clearDiscoveryState, projectId]);
 
   useFocusEffect(
     useCallback(() => {

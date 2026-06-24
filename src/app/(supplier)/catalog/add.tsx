@@ -4,6 +4,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { useNavigation } from '@react-navigation/native';
 import Ionicons from 'react-native-vector-icons/Ionicons';
 import { supabase } from '@/lib/supabase/client';
+import { getCurrentUser } from '@/lib/supabase/auth';
 import { formatAppSafeErrorMessage } from '@/lib/supabase/functions';
 import { useAuthStore } from '@/stores/auth.store';
 import { Colors, Spacing, Typography } from '@/constants/theme';
@@ -40,37 +41,44 @@ export default function AddCatalogItem() {
   useEffect(() => {
     let mounted = true;
     (async () => {
-      if (!user?.id) {
+      try {
+        const currentUserId = user?.id ?? (await getCurrentUser())?.id ?? null;
+        if (!currentUserId) {
+          if (!mounted) return;
+          setSupplierId(null);
+          setAvailableCategories([]);
+          setSetupRoute('SupplierBusinessOnboarding');
+          return;
+        }
+
+        const { data, error } = await supabase
+          .from('suppliers')
+          .select('id, license_number, categories')
+          .eq('user_id', currentUserId)
+          .order('created_at', { ascending: false })
+          .limit(1)
+          .maybeSingle();
+
         if (!mounted) return;
-        setSupplierId(null);
-        setAvailableCategories([]);
-        setSetupRoute('SupplierBusinessOnboarding');
-        setProfileLoading(false);
-        return;
-      }
+        if (error) {
+          Alert.alert('Could not load supplier profile', formatAppSafeErrorMessage(error, 'Please try again.'));
+          navigation.goBack();
+          return;
+        }
 
-      const { data, error } = await supabase
-        .from('suppliers')
-        .select('id, license_number, categories')
-        .eq('user_id', user.id)
-        .order('created_at', { ascending: false })
-        .limit(1)
-        .maybeSingle();
-
-      if (!mounted) return;
-      if (error) {
-        Alert.alert('Could not load supplier profile', formatAppSafeErrorMessage(error, 'Please try again.'));
+        const route = nextCatalogSetupRoute(data);
+        const categories = selectedSupplierCategories(data?.categories);
+        setSupplierId(data?.id ?? null);
+        setAvailableCategories(categories);
+        setCategory((current) => current && categories.includes(current) ? current : categories[0] ?? null);
+        setSetupRoute(route);
+      } catch (err) {
+        if (!mounted) return;
+        Alert.alert('Could not load supplier profile', formatAppSafeErrorMessage(err, 'Please try again.'));
         navigation.goBack();
-        return;
+      } finally {
+        if (mounted) setProfileLoading(false);
       }
-
-      const route = nextCatalogSetupRoute(data);
-      const categories = selectedSupplierCategories(data?.categories);
-      setSupplierId(data?.id ?? null);
-      setAvailableCategories(categories);
-      setCategory((current) => current && categories.includes(current) ? current : categories[0] ?? null);
-      setSetupRoute(route);
-      setProfileLoading(false);
     })();
     return () => { mounted = false; };
   }, [navigation, user?.id]);
@@ -82,10 +90,14 @@ export default function AddCatalogItem() {
     }
     const price = parsePositiveCadToCents(priceStr);
     if (price == null) { Alert.alert('Invalid price', 'Enter a valid price greater than $0, with up to two decimal places and below $21,474,836.47.'); return; }
-    if (!user?.id) {
-      Alert.alert('Sign in required', 'Please sign in again before adding catalog items.');
+    let currentUserId: string | null = null;
+    try {
+      currentUserId = user?.id ?? (await getCurrentUser())?.id ?? null;
+    } catch (err) {
+      Alert.alert('Sign in required', formatAppSafeErrorMessage(err, 'Please sign in again before adding catalog items.'));
       return;
     }
+    if (!currentUserId) { Alert.alert('Sign in required', 'Please sign in again before adding catalog items.'); return; }
     if (!supplierId || setupRoute) {
       Alert.alert('Supplier setup required', 'Complete your supplier profile, license, and supply categories before adding catalog items.');
       return;

@@ -16,6 +16,7 @@ import { supabase } from '@/lib/supabase/client';
 import { isMissingSupabaseSchemaObjectError } from '@/lib/supabase/errors';
 import { formatAppSafeErrorMessage } from '@/lib/supabase/functions';
 import { getRequiredStringParam } from '@/lib/navigation-params';
+import { formatGcProjectType } from '@/lib/gc-project-type';
 import { formatTradeLabel } from '@/lib/trade-labels';
 import { useAuthStore } from '@/stores/auth.store';
 import { Colors, Radius, Spacing, Typography } from '@/constants/theme';
@@ -100,8 +101,15 @@ export default function ReviewScreen() {
     Object.values(ratings).reduce((s, v) => s + v, 0) / DIMENSIONS.length
   );
 
+  const clearReviewTargets = useCallback(() => {
+    setTargets([]);
+    setSelectedTargetKey(null);
+    setProjectStatus(null);
+  }, []);
+
   const loadReviewTargets = useCallback(async () => {
     if (!projectId) {
+      clearReviewTargets();
       setLoadingTargets(false);
       return;
     }
@@ -135,8 +143,7 @@ export default function ReviewScreen() {
       const gcContextUnavailable = isMissingSupabaseSchemaObjectError(gcRes.error, 'general_contractor_projects');
       const loadError = quotesRes.error ?? slotsRes.error ?? legacyRes.error ?? (gcContextUnavailable ? null : gcRes.error);
       if (loadError) {
-        setTargets([]);
-        setSelectedTargetKey(null);
+        clearReviewTargets();
         setProjectStatus((legacyRes.data as any)?.status ?? null);
         setTargetError(formatAppSafeErrorMessage(loadError, 'Could not load contractor review targets.'));
         return;
@@ -187,7 +194,7 @@ export default function ReviewScreen() {
           target_type: 'general_contractor',
           user_id: gc.user_id,
           name: gc.name,
-          trade_type: (assignment as any).project_type ? `GC management · ${(assignment as any).project_type}` : 'GC management',
+          trade_type: `GC management · ${formatGcProjectType((assignment as any).project_type)}`,
         });
       }
 
@@ -201,7 +208,7 @@ export default function ReviewScreen() {
     } finally {
       setLoadingTargets(false);
     }
-  }, [projectId]);
+  }, [clearReviewTargets, projectId]);
 
   useEffect(() => {
     loadReviewTargets();
@@ -229,6 +236,11 @@ export default function ReviewScreen() {
       return;
     }
 
+    if (!user?.id) {
+      Alert.alert('Sign in required', 'Please sign in again before submitting a contractor review.');
+      return;
+    }
+
     setSubmitting(true);
     try {
       // Duplicate guard
@@ -236,7 +248,7 @@ export default function ReviewScreen() {
         .from('reviews')
         .select('id')
         .eq('project_id', projectId)
-        .eq('reviewer_id', user!.id)
+        .eq('reviewer_id', user.id)
         .eq('reviewee_id', selectedTarget.user_id)
         .maybeSingle();
       if (existingError) {
@@ -250,7 +262,7 @@ export default function ReviewScreen() {
 
       const { error: insertError } = await supabase.from('reviews').insert({
         project_id: projectId,
-        reviewer_id: user!.id,
+        reviewer_id: user.id,
         reviewee_id: selectedTarget.user_id,
         rating: overallRating,
         quality_rating: ratings.quality_rating,
@@ -287,7 +299,7 @@ export default function ReviewScreen() {
         [{ text: 'Done', onPress: () => navigation.goBack() }]
       );
     } catch (err) {
-      Alert.alert('Error', formatAppSafeErrorMessage(err, 'Please try again.'));
+      Alert.alert('Could not submit review', formatAppSafeErrorMessage(err, 'Please try again.'));
     } finally {
       setSubmitting(false);
     }

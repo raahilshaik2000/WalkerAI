@@ -4,6 +4,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { useNavigation } from '@react-navigation/native';
 import Ionicons from 'react-native-vector-icons/Ionicons';
 import { supabase } from '@/lib/supabase/client';
+import { getSession } from '@/lib/supabase/auth';
 import { formatAppSafeErrorMessage, formatSupabaseFunctionError } from '@/lib/supabase/functions';
 import { uploadBase64 } from '@/lib/supabase/storage';
 import { useDIYWizardStore } from '@/stores/diy-wizard.store';
@@ -63,13 +64,14 @@ export default function DIYGeneratingScreen() {
     const run = async () => {
       try {
         await supabase.auth.refreshSession();
-        if (!user?.id) throw new Error('You need to be signed in to create a DIY guide.');
+        const currentUserId = user?.id ?? (await getSession())?.user?.id ?? null;
+        if (!currentUserId) throw new Error('You need to be signed in to create a DIY guide.');
 
         // 1. Create project in DB
         let createResult = await supabase
           .from('projects')
           .insert({
-            homeowner_id: user.id,
+            homeowner_id: currentUserId,
             status: 'draft',
             description: store.description,
             diy_category: store.category,
@@ -81,7 +83,7 @@ export default function DIYGeneratingScreen() {
           createResult = await supabase
             .from('projects')
             .insert({
-              homeowner_id: user.id,
+              homeowner_id: currentUserId,
               status: 'draft',
             })
             .select('id')
@@ -141,7 +143,7 @@ export default function DIYGeneratingScreen() {
       }
     };
     run();
-  }, [navigation, store, user]);
+  }, [navigation, store, user?.id]);
 
   const spin = rotateAnim.interpolate({ inputRange: [0, 1], outputRange: ['0deg', '360deg'] });
 

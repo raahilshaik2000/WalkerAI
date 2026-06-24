@@ -55,18 +55,13 @@ describe('CAD currency parsing', () => {
     expect(formatSignedCadCents(0)).toBe('+$0.00');
   });
 
-  it('keeps payment-facing milestone screens on exact cent formatting', () => {
-    const homeownerMilestones = fs.readFileSync(
-      path.join(__dirname, '../src/app/(homeowner)/project/[id]/milestones.tsx'),
-      'utf8',
-    );
+  it('keeps company payout screen on exact cent formatting', () => {
     const companyMilestones = fs.readFileSync(
       path.join(__dirname, '../src/app/(company)/job/[id]/milestones.tsx'),
       'utf8',
     );
 
-    expect(homeownerMilestones).toContain("import { formatCadCents } from '@/lib/currency'");
-    expect(homeownerMilestones).toContain('return formatCadCents(cents);');
+    // Company screen shows payout_cents — must use formatCadCents for exact rendering.
     expect(companyMilestones).toContain("import { formatCadCents } from '@/lib/currency'");
     expect(companyMilestones).toContain('return formatCadCents(cents);');
   });

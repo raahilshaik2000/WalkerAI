@@ -133,6 +133,25 @@ export default function GeneralContractorTradesScreen() {
   const [gcReady, setGcReady] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
+  const clearTradeManagementState = useCallback(() => {
+    setAssignment(null);
+    setProjectBudget(null);
+    setSlots([]);
+    setQuotes([]);
+    setNegotiations([]);
+    setSelectedSlotId(null);
+    setSelectedQuoteId(null);
+    setRecommendedTradeName('');
+    setRecommendedCompany('');
+    setRecommendedContact('');
+    setCostDelta('');
+    setRecommendationNote('');
+    setCounterAmount('');
+    setCounterNote('');
+    setCancellingNegotiationId(null);
+    setGcReady(false);
+  }, []);
+
   const quotesBySlot = useMemo(() => {
     const grouped = new Map<string, Quote[]>();
     for (const quote of quotes) {
@@ -171,16 +190,15 @@ export default function GeneralContractorTradesScreen() {
   const canManageTradeRequests = assignment?.status === 'active' && gcReady;
 
   const fetchData = useCallback(async () => {
-    const currentUser = (await supabase.auth.getUser()).data.user;
-    if (!currentUser?.id) {
-      setErrorMessage('You need to be signed in to manage trades.');
-      setLoading(false);
-      setRefreshing(false);
-      return;
-    }
-
     try {
       setErrorMessage(null);
+      const currentUser = (await supabase.auth.getUser()).data.user;
+      if (!currentUser?.id) {
+        setErrorMessage('You need to be signed in to manage trades.');
+        clearTradeManagementState();
+        return;
+      }
+
       const { data: gc, error: gcError } = await supabase
         .from('general_contractors')
         .select(GENERAL_CONTRACTOR_READINESS_SELECT)
@@ -236,17 +254,12 @@ export default function GeneralContractorTradesScreen() {
       setNegotiations((negotiationResult.data ?? []) as GcTradeQuoteNegotiation[]);
     } catch (err) {
       setErrorMessage(formatAppSafeErrorMessage(err, 'Could not load trade management.'));
-      setAssignment(null);
-      setProjectBudget(null);
-      setSlots([]);
-      setQuotes([]);
-      setNegotiations([]);
-      setGcReady(false);
+      clearTradeManagementState();
     } finally {
       setLoading(false);
       setRefreshing(false);
     }
-  }, [projectId]);
+  }, [clearTradeManagementState, projectId]);
 
   useFocusEffect(
     useCallback(() => {
@@ -521,23 +534,28 @@ export default function GeneralContractorTradesScreen() {
           style: 'destructive',
           onPress: async () => {
             setCancellingNegotiationId(negotiation.id);
-            const { error } = await supabase
-              .from('gc_trade_quote_negotiations')
-              .update({
-                status: 'cancelled',
-                cancelled_at: new Date().toISOString(),
-              })
-              .eq('id', negotiation.id)
-              .eq('project_id', projectId)
-              .eq('general_contractor_id', assignment.general_contractor_id)
-              .eq('status', 'pending');
+            try {
+              const { error } = await supabase
+                .from('gc_trade_quote_negotiations')
+                .update({
+                  status: 'cancelled',
+                  cancelled_at: new Date().toISOString(),
+                })
+                .eq('id', negotiation.id)
+                .eq('project_id', projectId)
+                .eq('general_contractor_id', assignment.general_contractor_id)
+                .eq('status', 'pending');
 
-            if (error) {
-              Alert.alert('Could not cancel negotiation', formatAppSafeErrorMessage(error, 'Please try again.'));
-            } else {
+              if (error) {
+                Alert.alert('Could not cancel negotiation', formatAppSafeErrorMessage(error, 'Please try again.'));
+                return;
+              }
               await fetchData();
+            } catch (err) {
+              Alert.alert('Could not cancel negotiation', formatAppSafeErrorMessage(err, 'Please try again.'));
+            } finally {
+              setCancellingNegotiationId(null);
             }
-            setCancellingNegotiationId(null);
           },
         },
       ],

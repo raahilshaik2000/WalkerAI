@@ -89,17 +89,22 @@ export default function GeneralContractorDashboard() {
   const [refreshing, setRefreshing] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
-  const fetchData = useCallback(async () => {
-    const currentUser = user ?? (await supabase.auth.getUser()).data.user;
-    if (!currentUser) {
-      setErrorMessage('You need to be signed in to view GC projects.');
-      setLoading(false);
-      setRefreshing(false);
-      return;
-    }
+  const clearDashboardState = useCallback(() => {
+    setGc(null);
+    setAssignments([]);
+    setPendingApprovals(0);
+  }, []);
 
+  const fetchData = useCallback(async () => {
     try {
       setErrorMessage(null);
+      const currentUser = user ?? (await supabase.auth.getUser()).data.user;
+      if (!currentUser) {
+        setErrorMessage('You need to be signed in to view GC projects.');
+        clearDashboardState();
+        return;
+      }
+
       const { data: profile, error: profileError } = await supabase
         .from('general_contractors')
         .select('*')
@@ -195,13 +200,12 @@ export default function GeneralContractorDashboard() {
       );
     } catch (err) {
       setErrorMessage(formatAppSafeErrorMessage(err, 'Could not load GC dashboard.'));
-      setAssignments([]);
-      setPendingApprovals(0);
+      clearDashboardState();
     } finally {
       setLoading(false);
       setRefreshing(false);
     }
-  }, [user]);
+  }, [clearDashboardState, user]);
 
   useFocusEffect(
     useCallback(() => {

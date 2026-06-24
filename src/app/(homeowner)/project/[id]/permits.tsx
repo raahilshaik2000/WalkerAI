@@ -52,39 +52,49 @@ export default function PermitsScreen() {
     const fetchPermits = async () => {
       if (!projectId) {
         setErrorMessage('Project is missing. Reopen permits from the project page.');
+        setPermits([]);
+        setPreviewUrls({});
         setLoading(false);
         return;
       }
 
-      const { data, error } = await supabase
-        .from('permits')
-        .select('id, permit_type, status, document_url')
-        .eq('project_id', projectId);
-      if (error) {
-        setErrorMessage(formatAppSafeErrorMessage(error, 'Could not load permits.'));
-        setLoading(false);
-        return;
-      }
-
-      const rows = (data ?? []) as Permit[];
-      setPermits(rows);
-      setErrorMessage(null);
-      setLoading(false);
-
-      const previews: Record<string, string> = {};
-      await Promise.all(rows.map(async (permit) => {
-        if (!permit.document_url) return;
-        if (/^https?:\/\//i.test(permit.document_url)) {
-          previews[permit.id] = permit.document_url;
+      try {
+        const { data, error } = await supabase
+          .from('permits')
+          .select('id, permit_type, status, document_url')
+          .eq('project_id', projectId);
+        if (error) {
+          setErrorMessage(formatAppSafeErrorMessage(error, 'Could not load permits.'));
+          setPermits([]);
+          setPreviewUrls({});
           return;
         }
-        try {
-          previews[permit.id] = await getSignedUrl('permits', permit.document_url, 3600);
-        } catch {
-          // Keep the permit visible even if the private preview URL cannot be minted.
-        }
-      }));
-      setPreviewUrls(previews);
+
+        const rows = (data ?? []) as Permit[];
+        setPermits(rows);
+        setErrorMessage(null);
+
+        const previews: Record<string, string> = {};
+        await Promise.all(rows.map(async (permit) => {
+          if (!permit.document_url) return;
+          if (/^https?:\/\//i.test(permit.document_url)) {
+            previews[permit.id] = permit.document_url;
+            return;
+          }
+          try {
+            previews[permit.id] = await getSignedUrl('permits', permit.document_url, 3600);
+          } catch {
+            // Keep the permit visible even if the private preview URL cannot be minted.
+          }
+        }));
+        setPreviewUrls(previews);
+      } catch (err) {
+        setErrorMessage(formatAppSafeErrorMessage(err, 'Could not load permits.'));
+        setPermits([]);
+        setPreviewUrls({});
+      } finally {
+        setLoading(false);
+      }
     };
     fetchPermits();
   }, [projectId]);

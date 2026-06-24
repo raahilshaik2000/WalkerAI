@@ -196,7 +196,7 @@ export default function JobBriefScreen() {
   const finishSelections = readPersistedSurfaceSelections(job?.questionnaire_answers);
 
   const fetchJob = useCallback(async () => {
-    if (!projectId || !user?.id) {
+    if (!projectId) {
       setErrorMessage('Job is missing. Reopen this invite from the job feed.');
       setJob(null);
       setLoading(false);
@@ -205,6 +205,14 @@ export default function JobBriefScreen() {
 
     try {
       setErrorMessage(null);
+      let currentUserId = user?.id ?? null;
+      if (!currentUserId) {
+        const { data: authData, error: authError } = await supabase.auth.getUser();
+        if (authError) throw authError;
+        currentUserId = authData.user?.id ?? null;
+      }
+      if (!currentUserId) throw new Error('Sign in again before opening this job.');
+
       const [projectResult, slotResult, companyData, gcContextResult] = await Promise.all([
         supabase
           .from('projects')
@@ -225,7 +233,7 @@ export default function JobBriefScreen() {
               .eq('id', slotId)
               .maybeSingle()
           : Promise.resolve({ data: null, error: null }),
-        fetchCompanyPayoutProfile(user.id),
+        fetchCompanyPayoutProfile(currentUserId),
         supabase
           .from('general_contractor_projects')
           .select('project_type')
@@ -252,7 +260,7 @@ export default function JobBriefScreen() {
       const slotData = slotResult.data;
 
       setJob(projectData as JobBrief);
-      if (slotData) setSlot(slotData as Slot);
+      setSlot(slotData ? (slotData as Slot) : null);
       setPayoutReady(isStripePayoutLocallyReady(companyData));
       const companyId = companyData?.id;
       const slotInfo = slotData as Slot | null;
@@ -404,7 +412,7 @@ export default function JobBriefScreen() {
       if (msg.includes('lock') || msg.includes('RACE')) {
         Alert.alert('Try again', 'Another contractor is claiming this slot right now. Try again.');
       } else {
-        Alert.alert('Error', msg);
+        Alert.alert('Could not accept job', msg);
       }
     } finally {
       setAccepting(false);

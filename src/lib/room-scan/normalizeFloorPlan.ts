@@ -162,12 +162,12 @@ function snapSegmentsToGrid(segments: NormalizedSegment[]): NormalizedSegment[] 
       const y = horizontalYClusters.get(seg.y1) ?? seg.y1;
       const x1 = snapToNearest(seg.x1, canonicalXs, SNAP_TOLERANCE_M * 1.5);
       const x2 = snapToNearest(seg.x2, canonicalXs, SNAP_TOLERANCE_M * 1.5);
-      return { ...seg, y1: y, y2: y, x1, x2 };
+      return { ...seg, y1: y, y2: y, x1, x2, length: Math.abs(x2 - x1) };
     }
     const x = verticalXClusters.get(seg.x1) ?? seg.x1;
     const y1 = snapToNearest(seg.y1, canonicalYs, SNAP_TOLERANCE_M * 1.5);
     const y2 = snapToNearest(seg.y2, canonicalYs, SNAP_TOLERANCE_M * 1.5);
-    return { ...seg, x1: x, x2: x, y1, y2 };
+    return { ...seg, x1: x, x2: x, y1, y2, length: Math.abs(y2 - y1) };
   });
 }
 

@@ -7,17 +7,18 @@ import { Typography, Spacing } from '@/constants/theme';
 interface UnsupportedDeviceProps {
   onManualMeasurement: () => void;
   onGoBack: () => void;
+  reason?: string | null;
 }
 
-export function UnsupportedDevice({ onManualMeasurement, onGoBack }: UnsupportedDeviceProps) {
+export function UnsupportedDevice({ onManualMeasurement, onGoBack, reason }: UnsupportedDeviceProps) {
   return (
     <View style={styles.container}>
       <View style={styles.iconWrapper}>
         <Ionicons name="warning-outline" size={64} color="#FF6B00" />
       </View>
-      <Text style={styles.title}>LiDAR Required</Text>
+      <Text style={styles.title}>Automatic Scan Unavailable</Text>
       <Text style={styles.body}>
-        Automatic room scanning requires an iPhone 12 Pro or newer with a LiDAR sensor.
+        {reason || "Automatic room scanning isn't available on this device."}
       </Text>
       <Text style={styles.body}>
         You can still enter your room measurements manually.

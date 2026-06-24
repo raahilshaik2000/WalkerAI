@@ -14,34 +14,12 @@ import { useNavigation } from '@react-navigation/native'
 import { useRoute } from '@react-navigation/native';
 import ReactNativeHapticFeedback from 'react-native-haptic-feedback';
 import { supabase } from '@/lib/supabase/client';
-import { formatCadCents } from '@/lib/currency';
+import { formatTradeLabel } from '@/lib/trade-labels';
 import { formatAppSafeErrorMessage, formatSupabaseFunctionError } from '@/lib/supabase/functions';
 import { useAuthStore } from '@/stores/auth.store';
 import { Colors, Spacing, Typography } from '@/constants/theme';
 import { getRequiredStringParam } from '@/lib/navigation-params';
 import { GlassButton, GlassCard, GradientBackground, StatusBadge, ListItemSkeleton } from '@/components/ui';
-
-interface Milestone {
-  id: string;
-  title: string;
-  amount: number;
-  status: string;
-  sort_order: number;
-  due_date: string | null;
-  completed_at: string | null;
-  stripe_transfer_id: string | null;
-  quote_id: string;
-  company_name: string | null;
-  evidence_urls: string[];
-}
-
-interface QuoteWithMilestones {
-  id: string;
-  approved_at: string | null;
-  submitted_at: string | null;
-  companies?: { name: string | null } | Array<{ name: string | null }> | null;
-  milestones?: Array<Omit<Milestone, 'quote_id' | 'company_name'>>;
-}
 
 interface ActiveDispute {
   id: string;
@@ -61,42 +39,36 @@ interface MessageEvidence {
   attachment_url: string | null;
 }
 
-function formatCad(cents: number) {
-  return formatCadCents(cents);
+interface MasterTrade {
+  id: string;
+  trade_type: string | null;
+  status: string | null;
+  payout_status: string | null;
+  completion_submitted_at: string | null;
+  stripe_transfer_id: string | null;
+  work_order: number | null;
+  company_name: string | null;
+  evidence_urls: string[];
 }
 
-const MILESTONE_STATUS_VARIANT: Record<string, any> = {
-  pending: 'neutral',
-  started: 'info',
-  in_progress: 'dispatching',
-  completed: 'warning',
-  homeowner_approved: 'approved',
-  paid: 'completed',
-};
-
-function isReleasedMilestone(status: string) {
-  return status === 'paid' || status === 'homeowner_approved';
-}
-
-function evidenceUrlsForMilestone(
-  milestoneId: string,
+function evidenceUrlsForSlot(
+  slotId: string,
   projectPhotos: ProjectPhotoEvidence[],
   messages: MessageEvidence[],
   projectId: string,
 ) {
-  const pathPrefix = `${projectId}/milestones/${milestoneId}/`;
+  const pathPrefix = `${projectId}/slots/${slotId}/`;
   const photoUrls = projectPhotos
     .filter((photo) => typeof photo.storage_path === 'string' && photo.storage_path.startsWith(pathPrefix) && photo.url)
     .map((photo) => photo.url);
   const messageUrls = messages
     .filter((message) => (
       typeof message.body === 'string'
-      && message.body.includes(`[milestone:${milestoneId}]`)
+      && message.body.includes(`[slot:${slotId}]`)
       && typeof message.attachment_url === 'string'
       && message.attachment_url.length > 0
     ))
     .map((message) => message.attachment_url as string);
-
   return Array.from(new Set([...photoUrls, ...messageUrls]));
 }
 
@@ -105,38 +77,32 @@ export default function MilestonesScreen() {
   const projectId = getRequiredStringParam(route.params, 'id');
   const navigation = useNavigation<any>();
   const { user } = useAuthStore();
-  const [milestones, setMilestones] = useState<Milestone[]>([]);
   const [activeDisputes, setActiveDisputes] = useState<ActiveDispute[]>([]);
   const [loading, setLoading] = useState(true);
   const [releasing, setReleasing] = useState<string | null>(null);
-  const [disputeMilestone, setDisputeMilestone] = useState<Milestone | null>(null);
+  const [disputeTrade, setDisputeTrade] = useState<MasterTrade | null>(null);
   const [disputeReason, setDisputeReason] = useState('');
   const [openingDispute, setOpeningDispute] = useState(false);
 
   const [emptyMessage, setEmptyMessage] = useState<string | null>(null);
+  const [masterTrades, setMasterTrades] = useState<MasterTrade[]>([]);
 
   const fetchMilestones = useCallback(async () => {
     setLoading(true);
     try {
       if (!projectId) {
-        setMilestones([]);
         setEmptyMessage('Project is missing. Reopen milestones from the project page.');
         setLoading(false);
         return;
       }
 
-      const [quotesResult, disputesResult, photoEvidenceResult, messageEvidenceResult] = await Promise.all([
+      const [slotsResult, disputesResult, photoEvidenceResult, messageEvidenceResult] = await Promise.all([
         supabase
-          .from('quotes')
-          .select(`
-            id, approved_at, submitted_at,
-            companies(name),
-            milestones(id, title, amount, status, sort_order, due_date, completed_at, stripe_transfer_id)
-          `)
+          .from('project_slots')
+          .select('id, trade_type, status, payout_status, completion_submitted_at, stripe_transfer_id, work_order, companies(name)')
           .eq('project_id', projectId)
-          .eq('status', 'approved')
-          .order('approved_at', { ascending: false })
-          .order('submitted_at', { ascending: false }),
+          .order('work_order', { ascending: true, nullsFirst: false })
+          .order('created_at', { ascending: true }),
         supabase
           .from('disputes')
           .select('id, milestone_id, reason, status, created_at')
@@ -147,37 +113,37 @@ export default function MilestonesScreen() {
           .from('project_photos')
           .select('url, storage_path')
           .eq('project_id', projectId)
-          .like('storage_path', `${projectId}/milestones/%`),
+          .like('storage_path', `${projectId}/slots/%`),
         supabase
           .from('messages')
           .select('body, attachment_url')
           .eq('project_id', projectId)
           .not('attachment_url', 'is', null)
-          .ilike('body', '%[milestone:%'),
+          .ilike('body', '%[slot:%'),
       ]);
-      const loadError = quotesResult.error ?? disputesResult.error ?? photoEvidenceResult.error ?? messageEvidenceResult.error;
-      if (loadError) throw loadError;
+      const masterLoadError = slotsResult.error ?? disputesResult.error ?? photoEvidenceResult.error ?? messageEvidenceResult.error;
+      if (masterLoadError) throw masterLoadError;
 
-      const approvedQuotes = (quotesResult.data ?? []) as unknown as QuoteWithMilestones[];
-      const photoEvidenceRows = (photoEvidenceResult.data ?? []) as ProjectPhotoEvidence[];
-      const messageEvidenceRows = (messageEvidenceResult.data ?? []) as MessageEvidence[];
-      const flattened = approvedQuotes.flatMap((quote) => {
-        const company = Array.isArray(quote.companies) ? quote.companies[0] : quote.companies;
-        return [...(quote.milestones ?? [])]
-          .sort((a, b) => (a.sort_order ?? 0) - (b.sort_order ?? 0))
-          .map((milestone) => ({
-            ...milestone,
-            quote_id: quote.id,
-            company_name: company?.name ?? null,
-            evidence_urls: evidenceUrlsForMilestone(milestone.id, photoEvidenceRows, messageEvidenceRows, projectId),
-          }));
+      const photoRows = (photoEvidenceResult.data ?? []) as ProjectPhotoEvidence[];
+      const messageRows = (messageEvidenceResult.data ?? []) as MessageEvidence[];
+      const trades: MasterTrade[] = ((slotsResult.data ?? []) as any[]).map((s) => {
+        const company = Array.isArray(s.companies) ? s.companies[0] : s.companies;
+        return {
+          id: s.id,
+          trade_type: s.trade_type ?? null,
+          status: s.status ?? null,
+          payout_status: s.payout_status ?? null,
+          completion_submitted_at: s.completion_submitted_at ?? null,
+          stripe_transfer_id: s.stripe_transfer_id ?? null,
+          work_order: s.work_order ?? null,
+          company_name: company?.name ?? null,
+          evidence_urls: evidenceUrlsForSlot(s.id, photoRows, messageRows, projectId),
+        };
       });
 
-      setMilestones(flattened);
+      setMasterTrades(trades);
       setActiveDisputes((disputesResult.data ?? []) as ActiveDispute[]);
-      setEmptyMessage(flattened.length === 0
-        ? 'No approved quote yet. Milestones will appear after you approve contractor quotes.'
-        : null);
+      setEmptyMessage(trades.length === 0 ? 'No trades on this project yet.' : null);
     } catch (err) {
       Alert.alert('Could not load milestones', formatAppSafeErrorMessage(err, 'Please try again.'));
       setLoading(false);
@@ -192,6 +158,7 @@ export default function MilestonesScreen() {
     const channel = supabase
       .channel(`milestones:${projectId}`)
       .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'milestones' }, fetchMilestones)
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'project_slots', filter: `project_id=eq.${projectId}` }, fetchMilestones)
       .on('postgres_changes', { event: '*', schema: 'public', table: 'disputes', filter: `project_id=eq.${projectId}` }, fetchMilestones)
       .on('postgres_changes', { event: '*', schema: 'public', table: 'project_photos', filter: `project_id=eq.${projectId}` }, fetchMilestones)
       .on('postgres_changes', { event: '*', schema: 'public', table: 'messages', filter: `project_id=eq.${projectId}` }, fetchMilestones)
@@ -199,25 +166,24 @@ export default function MilestonesScreen() {
     return () => { supabase.removeChannel(channel); };
   }, [fetchMilestones, projectId]);
 
-  const handleApprove = async (milestoneId: string) => {
+  const handleApproveTrade = async (trade: MasterTrade) => {
     if (activeDisputes.length > 0) {
       Alert.alert('Dispute open', 'Payment release is paused until the active dispute is resolved.');
       return;
     }
-
     Alert.alert(
-      'Release payment?',
-      'This will transfer the milestone amount to your contractor. This cannot be undone.',
+      'Approve this trade?',
+      "This confirms the work is complete and releases this trade's payment from escrow. This cannot be undone.",
       [
         { text: 'Cancel', style: 'cancel' },
         {
-          text: 'Release Payment',
+          text: 'Approve & Release',
           style: 'destructive',
           onPress: async () => {
-            setReleasing(milestoneId);
+            setReleasing(trade.id);
             try {
-              const { error } = await supabase.functions.invoke('release-milestone', {
-                body: { milestone_id: milestoneId },
+              const { error } = await supabase.functions.invoke('release-trade-payout', {
+                body: { slot_id: trade.id },
               });
               if (error) throw new Error(await formatSupabaseFunctionError(error));
               ReactNativeHapticFeedback.trigger('notificationSuccess');
@@ -233,38 +199,46 @@ export default function MilestonesScreen() {
     );
   };
 
-  const handleOpenDispute = (milestone: Milestone) => {
-    setDisputeMilestone(milestone);
+  const handleOpenTradeDispute = (trade: MasterTrade) => {
+    setDisputeTrade(trade);
     setDisputeReason('');
   };
 
+  const closeDisputeModal = () => {
+    setDisputeTrade(null);
+  };
+
   const handleSubmitDispute = async () => {
-    const reason = disputeReason.trim();
-    if (!projectId || !disputeMilestone) {
-      Alert.alert('Missing milestone', 'Reopen milestones from the project page and try again.');
+    const rawReason = disputeReason.trim();
+    if (!projectId || !disputeTrade) {
+      Alert.alert('Missing item', 'Reopen this screen from the project page and try again.');
       return;
     }
     if (!user?.id) {
       Alert.alert('Sign in required', 'Please sign in again before opening a dispute.');
       return;
     }
-    if (reason.length < 12) {
+    if (rawReason.length < 12) {
       Alert.alert('Add details', 'Please describe what needs review before opening a dispute.');
       return;
     }
+
+    // Master-quote disputes are project-level (no milestone); tag the trade in the
+    // reason so it's identifiable. A project-level open dispute pauses all releases.
+    const reason = `[trade:${disputeTrade.trade_type ?? 'trade'}] ${rawReason}`;
 
     setOpeningDispute(true);
     try {
       const { error } = await supabase.from('disputes').insert({
         project_id: projectId,
-        milestone_id: disputeMilestone.id,
+        milestone_id: null,
         raised_by: user.id,
         reason,
         status: 'open',
       });
       if (error) throw error;
       ReactNativeHapticFeedback.trigger('notificationWarning');
-      setDisputeMilestone(null);
+      setDisputeTrade(null);
       setDisputeReason('');
       await fetchMilestones();
     } catch (err) {
@@ -274,10 +248,14 @@ export default function MilestonesScreen() {
     }
   };
 
-  const totalAmount = milestones.reduce((s, m) => s + m.amount, 0);
-  const paidAmount = milestones.filter((m) => isReleasedMilestone(m.status)).reduce((s, m) => s + m.amount, 0);
-  const progressPct = totalAmount > 0 ? (paidAmount / totalAmount) * 100 : 0;
   const hasActiveDispute = activeDisputes.length > 0;
+  const tradePaidCount = masterTrades.filter((t) => t.payout_status === 'paid' || t.stripe_transfer_id).length;
+  const tradeIsPaid = (t: MasterTrade) => t.payout_status === 'paid' || !!t.stripe_transfer_id;
+  // Sequential: a trade is unlocked only once every earlier-ordered trade is paid.
+  const isTradeUnlocked = (trade: MasterTrade) =>
+    trade.work_order == null
+      ? true
+      : masterTrades.every((t) => t.work_order == null || t.work_order >= (trade.work_order as number) || tradeIsPaid(t));
 
   return (
     <GradientBackground glow="top-right">
@@ -285,188 +263,148 @@ export default function MilestonesScreen() {
         <ScrollView contentContainerStyle={styles.scroll} showsVerticalScrollIndicator={false}>
           <View style={styles.header}>
             <Text style={styles.backText} onPress={() => navigation.goBack()}>← Back</Text>
-            <Text style={styles.title}>Milestones</Text>
+            <Text style={styles.title}>Approve Work</Text>
           </View>
 
-          {/* Escrow progress */}
-          <GlassCard style={styles.escrowCard}>
-            <Text style={styles.escrowLabel}>Escrow Progress</Text>
-            <Text style={styles.escrowAmount}>
-              {formatCad(paidAmount)} <Text style={styles.escrowOf}>of {formatCad(totalAmount)} released</Text>
-            </Text>
-            <View style={styles.progressTrack}>
-              <View style={[styles.progressFill, { width: `${progressPct}%` }]} />
-            </View>
-          </GlassCard>
-
-          {hasActiveDispute && (
-            <GlassCard style={styles.disputeCard}>
-              <Text style={styles.disputeTitle}>Payment release paused</Text>
-              <Text style={styles.disputeBody}>
-                An active dispute is open for this project. Milestone payments can resume after the dispute is resolved.
+            <GlassCard style={styles.escrowCard}>
+              <Text style={styles.escrowLabel}>Trades Approved</Text>
+              <Text style={styles.escrowAmount}>
+                {tradePaidCount} <Text style={styles.escrowOf}>of {masterTrades.length} trades</Text>
               </Text>
-              <Text style={styles.disputeReason} numberOfLines={3}>
-                {activeDisputes[0]?.reason}
+              <Text style={{ ...Typography.caption, marginTop: 6 }}>
+                Approve each trade after they finish. Their payment is released from escrow only when you approve.
               </Text>
             </GlassCard>
-          )}
 
-          {emptyMessage && !loading && (
-            <GlassCard style={{ marginBottom: Spacing.md }}>
-              <Text style={{ ...Typography.bodySecondary, lineHeight: 22 }}>{emptyMessage}</Text>
-            </GlassCard>
-          )}
+            {hasActiveDispute && (
+              <GlassCard style={styles.disputeCard}>
+                <Text style={styles.disputeTitle}>Payment release paused</Text>
+                <Text style={styles.disputeBody}>
+                  An active dispute is open for this project. Trade payments can resume after it's resolved.
+                </Text>
+                <Text style={styles.disputeReason} numberOfLines={3}>{activeDisputes[0]?.reason}</Text>
+              </GlassCard>
+            )}
 
-          {loading
-            ? Array.from({ length: 3 }).map((_, i) => <ListItemSkeleton key={i} style={{ marginBottom: 10 }} />)
-            : milestones.map((milestone, index) => {
-                const isReadyForReview = milestone.status === 'completed' && !milestone.stripe_transfer_id;
-                const hasProgressEvidence = milestone.evidence_urls.length > 0;
-                const canApprove = isReadyForReview && !hasActiveDispute && hasProgressEvidence;
-                const isPaid = isReleasedMilestone(milestone.status);
+            {emptyMessage && !loading && (
+              <GlassCard style={{ marginBottom: Spacing.md }}>
+                <Text style={{ ...Typography.bodySecondary, lineHeight: 22 }}>{emptyMessage}</Text>
+              </GlassCard>
+            )}
 
-                return (
-                  <GlassCard key={milestone.id} style={styles.milestoneCard}>
-                    <View style={styles.milestoneRowLayout}>
-                      {/* Step indicator */}
-                      <View style={styles.stepRow}>
-                        <View style={[styles.stepDot, isPaid && styles.stepDotPaid, canApprove && styles.stepDotApprove]}>
-                          <Text style={styles.stepDotText}>
-                            {isPaid ? '✓' : String(index + 1)}
-                          </Text>
-                        </View>
-                        {index < milestones.length - 1 && (
-                          <View style={[styles.stepLine, isPaid && styles.stepLinePaid]} />
-                        )}
-                      </View>
+            {loading
+              ? Array.from({ length: 3 }).map((_, i) => <ListItemSkeleton key={i} style={{ marginBottom: 10 }} />)
+              : masterTrades.map((trade) => {
+                  const isPaid = trade.payout_status === 'paid' || !!trade.stripe_transfer_id;
+                  const isApproved = trade.payout_status === 'approved';
+                  const submitted = !!trade.completion_submitted_at;
+                  const hasEvidence = trade.evidence_urls.length > 0;
+                  const unlocked = isTradeUnlocked(trade);
+                  const readyForReview = submitted && !isPaid && !isApproved && unlocked;
+                  const canApprove = readyForReview && !hasActiveDispute && hasEvidence;
+                  const statusLabel = isPaid ? 'paid' : isApproved ? 'approved' : !unlocked ? 'waiting' : submitted ? 'ready for approval' : 'in progress';
+                  const statusVariant = isPaid ? 'completed' : isApproved ? 'approved' : !unlocked ? 'neutral' : submitted ? 'warning' : 'info';
 
+                  return (
+                    <GlassCard key={trade.id} style={styles.milestoneCard}>
                       <View style={styles.milestoneContent}>
                         <View style={styles.milestoneHeader}>
                           <View style={styles.milestoneTitleWrap}>
-                            <Text style={styles.milestoneTitle} numberOfLines={2}>{milestone.title}</Text>
-                            {milestone.company_name ? (
-                              <Text style={styles.companyName} numberOfLines={1}>{milestone.company_name}</Text>
+                            <Text style={styles.milestoneTitle} numberOfLines={2}>{formatTradeLabel(trade.trade_type) ?? 'Trade'}</Text>
+                            {trade.company_name ? (
+                              <Text style={styles.companyName} numberOfLines={1}>{trade.company_name}</Text>
                             ) : null}
                           </View>
-                          <StatusBadge
-                            label={milestone.status.replace('_', ' ')}
-                            variant={MILESTONE_STATUS_VARIANT[milestone.status]}
-                            size="sm"
-                            style={styles.milestoneStatusBadge}
-                          />
+                          <StatusBadge label={statusLabel} variant={statusVariant as any} size="sm" style={styles.milestoneStatusBadge} />
                         </View>
 
-                      <Text style={styles.milestoneAmount}>{formatCad(milestone.amount)}</Text>
+                        {trade.evidence_urls.length > 0 && (
+                          <View style={styles.evidenceSection}>
+                            <Text style={styles.evidenceLabel}>Completion photos</Text>
+                            <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.evidenceList}>
+                              {trade.evidence_urls.map((url) => (
+                                <Image key={url} source={{ uri: url }} style={styles.evidenceImage} resizeMode="cover" />
+                              ))}
+                            </ScrollView>
+                          </View>
+                        )}
 
-                      {milestone.due_date && (
-                        <Text style={styles.dueDate}>
-                          Due {new Date(milestone.due_date).toLocaleDateString('en-CA', { month: 'short', day: 'numeric' })}
-                        </Text>
-                      )}
+                        {readyForReview && !hasEvidence && (
+                          <Text style={styles.missingEvidence}>
+                            Completion photos are missing. Ask the contractor to upload proof before approving.
+                          </Text>
+                        )}
 
-                      {milestone.evidence_urls.length > 0 && (
-                        <View style={styles.evidenceSection}>
-                          <Text style={styles.evidenceLabel}>Progress evidence</Text>
-                          <ScrollView
-                            horizontal
-                            showsHorizontalScrollIndicator={false}
-                            contentContainerStyle={styles.evidenceList}
-                          >
-                            {milestone.evidence_urls.map((url) => (
-                              <Image
-                                key={url}
-                                source={{ uri: url }}
-                                style={styles.evidenceImage}
-                                resizeMode="cover"
-                              />
-                            ))}
-                          </ScrollView>
-                        </View>
-                      )}
-
-                      {isReadyForReview && !hasProgressEvidence && (
-                        <Text style={styles.missingEvidence}>
-                          Progress photo evidence is missing. Ask the contractor to upload proof before approving.
-                        </Text>
-                      )}
-
-                      {isReadyForReview && (
-                        <View style={styles.reviewActions}>
-                          <GlassButton
-                            label={hasActiveDispute ? 'Release Paused' : hasProgressEvidence ? 'Approve & Release Payment' : 'Awaiting Progress Proof'}
-                            onPress={() => handleApprove(milestone.id)}
-                            loading={releasing === milestone.id}
-                            disabled={!canApprove}
-                            fullWidth
-                            size="sm"
-                            style={styles.approveBtn}
-                            haptic
-                          />
-                          {!hasActiveDispute && (
+                        {readyForReview && (
+                          <View style={styles.reviewActions}>
                             <GlassButton
-                              label="Report Issue"
-                              onPress={() => handleOpenDispute(milestone)}
-                              variant="destructive"
+                              label={hasActiveDispute ? 'Release Paused' : hasEvidence ? 'Approve & Release Payment' : 'Awaiting Photos'}
+                              onPress={() => handleApproveTrade(trade)}
+                              loading={releasing === trade.id}
+                              disabled={!canApprove}
                               fullWidth
                               size="sm"
+                              style={styles.approveBtn}
+                              haptic
                             />
-                          )}
-                        </View>
-                      )}
+                            {!hasActiveDispute && (
+                              <GlassButton
+                                label="Report Issue"
+                                onPress={() => handleOpenTradeDispute(trade)}
+                                variant="destructive"
+                                fullWidth
+                                size="sm"
+                              />
+                            )}
+                          </View>
+                        )}
 
-                      {isPaid && (
-                        <Text style={styles.paidNote}>✓ Payment released</Text>
-                      )}
+                        {!unlocked && !isPaid && !isApproved && (
+                          <Text style={styles.paidNote}>Waiting for earlier trades to finish…</Text>
+                        )}
+
+                        {unlocked && !submitted && !isPaid && !isApproved && (
+                          <Text style={styles.paidNote}>Up next — waiting for the contractor to finish and submit photos…</Text>
+                        )}
+
+                        {isPaid && <Text style={styles.paidNote}>✓ Payment released</Text>}
+                        {isApproved && <Text style={styles.paidNote}>Approved — payment processing</Text>}
                       </View>
-                    </View>
-                  </GlassCard>
-                );
-              })}
-        </ScrollView>
+                    </GlassCard>
+                  );
+                })}
+          </ScrollView>
 
-        <Modal
-          visible={!!disputeMilestone}
-          transparent
-          animationType="fade"
-          onRequestClose={() => setDisputeMilestone(null)}
-        >
-          <View style={styles.modalOverlay}>
-            <View style={styles.modalCard}>
-              <Text style={styles.modalTitle}>Report milestone issue</Text>
-              <Text style={styles.modalBody}>
-                Explain what needs review. Payment release will pause while the dispute is open.
-              </Text>
-              <TextInput
-                value={disputeReason}
-                onChangeText={setDisputeReason}
-                placeholder="Describe the issue..."
-                placeholderTextColor={Colors.text.tertiary}
-                multiline
-                style={styles.disputeInput}
-              />
-              <View style={styles.modalActions}>
-                <GlassButton
-                  label="Cancel"
-                  onPress={() => setDisputeMilestone(null)}
-                  variant="secondary"
-                  size="sm"
-                  style={styles.modalButton}
+          <Modal
+            visible={!!disputeTrade}
+            transparent
+            animationType="fade"
+            onRequestClose={closeDisputeModal}
+          >
+            <View style={styles.modalOverlay}>
+              <View style={styles.modalCard}>
+                <Text style={styles.modalTitle}>Report an issue</Text>
+                <Text style={styles.modalBody}>
+                  Explain what needs review. Payment release will pause while the dispute is open.
+                </Text>
+                <TextInput
+                  value={disputeReason}
+                  onChangeText={setDisputeReason}
+                  placeholder="Describe the issue..."
+                  placeholderTextColor={Colors.text.tertiary}
+                  multiline
+                  style={styles.disputeInput}
                 />
-                <GlassButton
-                  label="Open Dispute"
-                  onPress={handleSubmitDispute}
-                  variant="destructive"
-                  size="sm"
-                  loading={openingDispute}
-                  style={styles.modalButton}
-                />
+                <View style={styles.modalActions}>
+                  <GlassButton label="Cancel" onPress={closeDisputeModal} variant="secondary" size="sm" style={styles.modalButton} />
+                  <GlassButton label="Open Dispute" onPress={handleSubmitDispute} variant="destructive" size="sm" loading={openingDispute} style={styles.modalButton} />
+                </View>
               </View>
             </View>
-          </View>
-        </Modal>
-      </SafeAreaView>
-    </GradientBackground>
-  );
+          </Modal>
+        </SafeAreaView>
+      </GradientBackground>
+    );
 }
 
 const styles = StyleSheet.create({

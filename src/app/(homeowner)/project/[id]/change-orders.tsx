@@ -34,27 +34,39 @@ export default function HomeownerChangeOrdersScreen() {
   const [responding, setResponding] = useState<string | null>(null);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
-  const fetchChangeOrders = useCallback(async () => {
-    if (!projectId) {
-      setErrorMessage('Project is missing. Reopen change orders from the project page.');
-      setLoading(false);
-      return;
-    }
+  const clearChangeOrderState = useCallback(() => {
+    setChangeOrders([]);
+    setResponding(null);
+  }, []);
 
-    const { data, error } = await supabase
-      .from('change_orders')
-      .select('id, project_id, company_id, description, cost_delta, status, signed_by_homeowner, signed_by_company, created_at')
-      .eq('project_id', projectId)
-      .order('created_at', { ascending: false });
-    if (error) {
-      setErrorMessage(formatAppSafeErrorMessage(error, 'Could not load change orders.'));
+  const fetchChangeOrders = useCallback(async () => {
+    setLoading(true);
+    try {
+      if (!projectId) {
+        setErrorMessage('Project is missing. Reopen change orders from the project page.');
+        clearChangeOrderState();
+        return;
+      }
+
+      const { data, error } = await supabase
+        .from('change_orders')
+        .select('id, project_id, company_id, description, cost_delta, status, signed_by_homeowner, signed_by_company, created_at')
+        .eq('project_id', projectId)
+        .order('created_at', { ascending: false });
+      if (error) {
+        setErrorMessage(formatAppSafeErrorMessage(error, 'Could not load change orders.'));
+        clearChangeOrderState();
+        return;
+      }
+      setErrorMessage(null);
+      setChangeOrders((data ?? []) as ChangeOrder[]);
+    } catch (err) {
+      setErrorMessage(formatAppSafeErrorMessage(err, 'Could not load change orders.'));
+      clearChangeOrderState();
+    } finally {
       setLoading(false);
-      return;
     }
-    setErrorMessage(null);
-    setChangeOrders((data ?? []) as ChangeOrder[]);
-    setLoading(false);
-  }, [projectId]);
+  }, [clearChangeOrderState, projectId]);
 
   useEffect(() => {
     fetchChangeOrders();
@@ -85,20 +97,25 @@ export default function HomeownerChangeOrdersScreen() {
           text: 'Approve & Sign',
           onPress: async () => {
             setResponding(co.id);
-            const { data, error } = await supabase.from('change_orders').update({
-              signed_by_homeowner: true,
-              status: co.signed_by_company ? 'approved' : 'proposed',
-            }).eq('id', co.id).select('id').maybeSingle();
+            try {
+              const { data, error } = await supabase.from('change_orders').update({
+                signed_by_homeowner: true,
+                status: co.signed_by_company ? 'approved' : 'proposed',
+              }).eq('id', co.id).select('id').maybeSingle();
 
-            if (error) {
-              Alert.alert('Could not approve change order', formatAppSafeErrorMessage(error, 'Please try again.'));
-            } else if (!data) {
-              Alert.alert('Change order unavailable', 'This change order is no longer available.');
-            } else {
-              ReactNativeHapticFeedback.trigger('notificationSuccess');
-              fetchChangeOrders();
+              if (error) {
+                Alert.alert('Could not approve change order', formatAppSafeErrorMessage(error, 'Please try again.'));
+              } else if (!data) {
+                Alert.alert('Change order unavailable', 'This change order is no longer available.');
+              } else {
+                ReactNativeHapticFeedback.trigger('notificationSuccess');
+                await fetchChangeOrders();
+              }
+            } catch (err) {
+              Alert.alert('Could not approve change order', formatAppSafeErrorMessage(err, 'Please try again.'));
+            } finally {
+              setResponding(null);
             }
-            setResponding(null);
           },
         },
       ]
@@ -116,20 +133,25 @@ export default function HomeownerChangeOrdersScreen() {
           style: 'destructive',
           onPress: async () => {
             setResponding(co.id);
-            const { data, error } = await supabase.from('change_orders')
-              .update({ status: 'rejected' })
-              .eq('id', co.id)
-              .select('id')
-              .maybeSingle();
-            if (error) {
-              Alert.alert('Could not reject change order', formatAppSafeErrorMessage(error, 'Please try again.'));
-            } else if (!data) {
-              Alert.alert('Change order unavailable', 'This change order is no longer available.');
-            } else {
-              ReactNativeHapticFeedback.trigger('notificationWarning');
-              fetchChangeOrders();
+            try {
+              const { data, error } = await supabase.from('change_orders')
+                .update({ status: 'rejected' })
+                .eq('id', co.id)
+                .select('id')
+                .maybeSingle();
+              if (error) {
+                Alert.alert('Could not reject change order', formatAppSafeErrorMessage(error, 'Please try again.'));
+              } else if (!data) {
+                Alert.alert('Change order unavailable', 'This change order is no longer available.');
+              } else {
+                ReactNativeHapticFeedback.trigger('notificationWarning');
+                await fetchChangeOrders();
+              }
+            } catch (err) {
+              Alert.alert('Could not reject change order', formatAppSafeErrorMessage(err, 'Please try again.'));
+            } finally {
+              setResponding(null);
             }
-            setResponding(null);
           },
         },
       ]
@@ -231,6 +253,7 @@ export default function HomeownerChangeOrdersScreen() {
                         label="Reject"
                         onPress={() => handleReject(co)}
                         variant="destructive"
+                        loading={isResponding}
                         size="sm"
                         style={styles.actionBtn}
                       />

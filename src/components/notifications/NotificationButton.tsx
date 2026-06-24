@@ -3,6 +3,7 @@ import { StyleProp, StyleSheet, TouchableOpacity, View, ViewStyle } from 'react-
 import { useNavigation } from '@react-navigation/native';
 import Ionicons from 'react-native-vector-icons/Ionicons';
 import { supabase } from '@/lib/supabase/client';
+import { getSession } from '@/lib/supabase/auth';
 import { useAuthStore } from '@/stores/auth.store';
 import { Colors } from '@/constants/theme';
 
@@ -12,31 +13,55 @@ export function NotificationButton({ style }: { style?: StyleProp<ViewStyle> }) 
   const [unreadCount, setUnreadCount] = useState(0);
 
   useEffect(() => {
-    if (!user?.id) {
-      setUnreadCount(0);
-      return;
-    }
+    let cancelled = false;
+    let channel: ReturnType<typeof supabase.channel> | null = null;
 
     const fetchUnread = async () => {
-      const { count } = await supabase
-        .from('notifications')
-        .select('id', { count: 'exact', head: true })
-        .eq('user_id', user.id)
-        .eq('read', false);
-      setUnreadCount(count ?? 0);
+      try {
+        const activeUserId = user?.id ?? (await getSession())?.user?.id ?? null;
+        if (!activeUserId) {
+          if (!cancelled) setUnreadCount(0);
+          return;
+        }
+
+        const { count } = await supabase
+          .from('notifications')
+          .select('id', { count: 'exact', head: true })
+          .eq('user_id', activeUserId)
+          .eq('read', false);
+        if (!cancelled) setUnreadCount(count ?? 0);
+      } catch {
+        if (!cancelled) setUnreadCount(0);
+      }
     };
 
-    fetchUnread();
+    const subscribe = async () => {
+      const activeUserId = user?.id ?? (await getSession())?.user?.id ?? null;
+      if (!activeUserId || cancelled) {
+        setUnreadCount(0);
+        return;
+      }
 
-    const channel = supabase
-      .channel(`notification-button-${user.id}`)
-      .on('postgres_changes', {
-        event: '*', schema: 'public', table: 'notifications',
-        filter: `user_id=eq.${user.id}`,
-      }, fetchUnread)
-      .subscribe();
+      await fetchUnread();
+      if (cancelled) return;
 
-    return () => { supabase.removeChannel(channel); };
+      channel = supabase
+        .channel(`notification-button-${activeUserId}`)
+        .on('postgres_changes', {
+          event: '*', schema: 'public', table: 'notifications',
+          filter: `user_id=eq.${activeUserId}`,
+        }, fetchUnread)
+        .subscribe();
+    };
+
+    subscribe().catch(() => {
+      if (!cancelled) setUnreadCount(0);
+    });
+
+    return () => {
+      cancelled = true;
+      if (channel) supabase.removeChannel(channel);
+    };
   }, [user?.id]);
 
   return (

@@ -64,6 +64,7 @@ export function AddressAutocomplete({
   const [results, setResults] = useState<NominatimResult[]>([]);
   const [loading, setLoading] = useState(false);
   const [selected, setSelected] = useState(false);
+  const [addressError, setAddressError] = useState<string | null>(null);
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   useEffect(() => {
@@ -80,11 +81,13 @@ export function AddressAutocomplete({
   useEffect(() => {
     if (selected || query.length < 4) {
       setResults([]);
+      setAddressError(null);
       return;
     }
     if (debounceRef.current) clearTimeout(debounceRef.current);
     debounceRef.current = setTimeout(async () => {
       setLoading(true);
+      setAddressError(null);
       try {
         const url =
           `https://nominatim.openstreetmap.org/search?format=json&addressdetails=1&limit=5&countrycodes=ca&q=${encodeURIComponent(query)}`;
@@ -96,6 +99,7 @@ export function AddressAutocomplete({
         setResults(data.filter((item) => Number.isFinite(Number(item.lat)) && Number.isFinite(Number(item.lon))));
       } catch {
         setResults([]);
+        setAddressError('Address lookup failed. Check your connection and try again.');
       } finally {
         setLoading(false);
       }
@@ -131,6 +135,7 @@ export function AddressAutocomplete({
 
   const handleChangeText = (text: string) => {
     setSelected(false);
+    setAddressError(null);
     onClearSelection?.();
     setQuery(text);
   };
@@ -152,11 +157,17 @@ export function AddressAutocomplete({
         />
         {loading && <ActivityIndicator size="small" color={Colors.text.tertiary} style={styles.spinner} />}
         {query.length > 0 && !loading && (
-          <TouchableOpacity onPress={() => { setQuery(''); setResults([]); setSelected(false); onClearSelection?.(); }} style={styles.clearBtn}>
+          <TouchableOpacity onPress={() => { setQuery(''); setResults([]); setSelected(false); setAddressError(null); onClearSelection?.(); }} style={styles.clearBtn}>
             <Ionicons name="close-circle" size={18} color={Colors.text.tertiary} />
           </TouchableOpacity>
         )}
       </View>
+
+      {addressError && (
+        <View style={styles.errorView}>
+          <Text style={styles.errorText}>{addressError}</Text>
+        </View>
+      )}
 
       {results.length > 0 && (
         <View style={styles.listView}>
@@ -204,6 +215,16 @@ const styles = StyleSheet.create({
   },
   spinner: { marginLeft: 8 },
   clearBtn: { marginLeft: 8, padding: 2 },
+  errorView: {
+    marginTop: 6,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    backgroundColor: Colors.surface.default,
+    borderRadius: Radius.card,
+    borderWidth: 1,
+    borderColor: 'rgba(239,68,68,0.3)',
+  },
+  errorText: { fontSize: 13, color: '#EF4444' },
   listView: {
     backgroundColor: Colors.surface.default,
     borderRadius: Radius.card,

@@ -63,71 +63,91 @@ export default function CompanyChangeOrdersScreen() {
   const [submitting, setSubmitting] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
+  const clearChangeOrderState = useCallback(() => {
+    setChangeOrders([]);
+    setCompanyId(null);
+    setShowForm(false);
+    setDescription('');
+    setCostDelta('');
+  }, []);
+
   const fetchChangeOrders = useCallback(async () => {
+    setLoading(true);
     if (!projectId || !user?.id) {
       setErrorMessage('Project is missing. Reopen change orders from the job page.');
+      clearChangeOrderState();
       setLoading(false);
       return;
     }
 
-    const companyResult = await supabase
-      .from('companies')
-      .select('id')
-      .eq('user_id', user.id)
-      .order('created_at', { ascending: false })
-      .limit(1)
-      .maybeSingle();
+    try {
+      const companyResult = await supabase
+        .from('companies')
+        .select('id')
+        .eq('user_id', user.id)
+        .order('created_at', { ascending: false })
+        .limit(1)
+        .maybeSingle();
 
-    if (companyResult.error) {
-      setErrorMessage(formatAppSafeErrorMessage(companyResult.error, 'Could not load company profile.'));
-      setLoading(false);
-      return;
-    }
-    const currentCompanyId = companyResult.data?.id ?? null;
-    setCompanyId(currentCompanyId);
+      if (companyResult.error) {
+        setErrorMessage(formatAppSafeErrorMessage(companyResult.error, 'Could not load company profile.'));
+        clearChangeOrderState();
+        setLoading(false);
+        return;
+      }
+      const currentCompanyId = companyResult.data?.id ?? null;
+      setCompanyId(currentCompanyId);
 
-    if (!currentCompanyId) {
-      setErrorMessage('Complete contractor onboarding before viewing change orders for this job.');
-      setLoading(false);
-      return;
-    }
-
-    const changeOrdersResult = await supabase
-      .from('change_orders')
-      .select(CHANGE_ORDER_SELECT_WITH_COMPANY)
-      .eq('project_id', projectId)
-      .or(`company_id.eq.${currentCompanyId},company_id.is.null`)
-      .order('created_at', { ascending: false });
-
-    const { data, error } = changeOrdersResult;
-    if (error) {
-      if (isMissingChangeOrderCompanyColumn(error)) {
-        const legacyResult = await supabase
-          .from('change_orders')
-          .select(CHANGE_ORDER_SELECT_LEGACY)
-          .eq('project_id', projectId)
-          .order('created_at', { ascending: false });
-
-        if (legacyResult.error) {
-          setErrorMessage(formatAppSafeErrorMessage(legacyResult.error, 'Could not load change orders.'));
-          setLoading(false);
-          return;
-        }
-
-        setErrorMessage(null);
-        setChangeOrders(normalizeLegacyChangeOrders(legacyResult.data as Array<Omit<ChangeOrder, 'company_id'>> | null));
+      if (!currentCompanyId) {
+        setErrorMessage('Complete contractor onboarding before viewing change orders for this job.');
+        clearChangeOrderState();
         setLoading(false);
         return;
       }
 
-      setErrorMessage(formatAppSafeErrorMessage(error, 'Could not load change orders.'));
+      const changeOrdersResult = await supabase
+        .from('change_orders')
+        .select(CHANGE_ORDER_SELECT_WITH_COMPANY)
+        .eq('project_id', projectId)
+        .or(`company_id.eq.${currentCompanyId},company_id.is.null`)
+        .order('created_at', { ascending: false });
+
+      const { data, error } = changeOrdersResult;
+      if (error) {
+        if (isMissingChangeOrderCompanyColumn(error)) {
+          const legacyResult = await supabase
+            .from('change_orders')
+            .select(CHANGE_ORDER_SELECT_LEGACY)
+            .eq('project_id', projectId)
+            .order('created_at', { ascending: false });
+
+          if (legacyResult.error) {
+            setErrorMessage(formatAppSafeErrorMessage(legacyResult.error, 'Could not load change orders.'));
+            clearChangeOrderState();
+            setLoading(false);
+            return;
+          }
+
+          setErrorMessage(null);
+          setChangeOrders(normalizeLegacyChangeOrders(legacyResult.data as Array<Omit<ChangeOrder, 'company_id'>> | null));
+          setLoading(false);
+          return;
+        }
+
+        setErrorMessage(formatAppSafeErrorMessage(error, 'Could not load change orders.'));
+        clearChangeOrderState();
+        setLoading(false);
+        return;
+      }
+      setErrorMessage(null);
+      setChangeOrders((data ?? []) as ChangeOrder[]);
       setLoading(false);
-      return;
+    } catch (err) {
+      setErrorMessage(formatAppSafeErrorMessage(err, 'Could not load change orders.'));
+      clearChangeOrderState();
+      setLoading(false);
     }
-    setErrorMessage(null);
-    setChangeOrders((data ?? []) as ChangeOrder[]);
-    setLoading(false);
-  }, [projectId, user?.id]);
+  }, [clearChangeOrderState, projectId, user?.id]);
 
   useEffect(() => {
     fetchChangeOrders();
@@ -181,32 +201,37 @@ export default function CompanyChangeOrdersScreen() {
       signed_by_homeowner: false,
     };
 
-    const insertResult = await supabase.from('change_orders').insert(changeOrderPayload);
-    let insertError = insertResult.error;
+    try {
+      const insertResult = await supabase.from('change_orders').insert(changeOrderPayload);
+      let insertError = insertResult.error;
 
-    if (isMissingChangeOrderCompanyColumn(insertError)) {
-      const legacyPayload = {
-        project_id: changeOrderPayload.project_id,
-        description: changeOrderPayload.description,
-        cost_delta: changeOrderPayload.cost_delta,
-        status: changeOrderPayload.status,
-        signed_by_company: changeOrderPayload.signed_by_company,
-        signed_by_homeowner: changeOrderPayload.signed_by_homeowner,
-      };
-      const legacyInsertResult = await supabase.from('change_orders').insert(legacyPayload);
-      insertError = legacyInsertResult.error;
-    }
+      if (isMissingChangeOrderCompanyColumn(insertError)) {
+        const legacyPayload = {
+          project_id: changeOrderPayload.project_id,
+          description: changeOrderPayload.description,
+          cost_delta: changeOrderPayload.cost_delta,
+          status: changeOrderPayload.status,
+          signed_by_company: changeOrderPayload.signed_by_company,
+          signed_by_homeowner: changeOrderPayload.signed_by_homeowner,
+        };
+        const legacyInsertResult = await supabase.from('change_orders').insert(legacyPayload);
+        insertError = legacyInsertResult.error;
+      }
 
-    if (insertError) {
-      Alert.alert('Could not submit change order', formatAppSafeErrorMessage(insertError, 'Please try again.'));
-    } else {
-      ReactNativeHapticFeedback.trigger('notificationSuccess');
-      setDescription('');
-      setCostDelta('');
-      setShowForm(false);
-      fetchChangeOrders();
+      if (insertError) {
+        Alert.alert('Could not submit change order', formatAppSafeErrorMessage(insertError, 'Please try again.'));
+      } else {
+        ReactNativeHapticFeedback.trigger('notificationSuccess');
+        setDescription('');
+        setCostDelta('');
+        setShowForm(false);
+        fetchChangeOrders();
+      }
+    } catch (err) {
+      Alert.alert('Could not submit change order', formatAppSafeErrorMessage(err, 'Please try again.'));
+    } finally {
+      setSubmitting(false);
     }
-    setSubmitting(false);
   };
 
   const handleSign = async (co: ChangeOrder) => {
@@ -223,21 +248,25 @@ export default function CompanyChangeOrdersScreen() {
         {
           text: 'Sign',
           onPress: async () => {
-            const { data, error } = await supabase.from('change_orders')
-              .update({
-                signed_by_company: true,
-                status: co.signed_by_homeowner ? 'approved' : 'proposed',
-              })
-              .eq('id', co.id)
-              .select('id')
-              .maybeSingle();
-            if (error) {
-              Alert.alert('Could not sign change order', formatAppSafeErrorMessage(error, 'Please try again.'));
-            } else if (!data) {
-              Alert.alert('Change order unavailable', 'This change order is no longer available.');
-            } else {
-              ReactNativeHapticFeedback.trigger('notificationSuccess');
-              fetchChangeOrders();
+            try {
+              const { data, error } = await supabase.from('change_orders')
+                .update({
+                  signed_by_company: true,
+                  status: co.signed_by_homeowner ? 'approved' : 'proposed',
+                })
+                .eq('id', co.id)
+                .select('id')
+                .maybeSingle();
+              if (error) {
+                Alert.alert('Could not sign change order', formatAppSafeErrorMessage(error, 'Please try again.'));
+              } else if (!data) {
+                Alert.alert('Change order unavailable', 'This change order is no longer available.');
+              } else {
+                ReactNativeHapticFeedback.trigger('notificationSuccess');
+                fetchChangeOrders();
+              }
+            } catch (err) {
+              Alert.alert('Could not sign change order', formatAppSafeErrorMessage(err, 'Please try again.'));
             }
           },
         },

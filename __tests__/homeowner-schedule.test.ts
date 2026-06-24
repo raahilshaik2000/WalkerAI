@@ -146,7 +146,7 @@ describe('homeowner schedule helpers', () => {
 });
 
 describe('homeowner project schedule screen source guards', () => {
-  it('keeps projects in quoting after schedule confirmation when pending quotes still need payment', () => {
+  it('activates project on payment (funded) and stays in scheduling otherwise (master-only path)', () => {
     const source = fs.readFileSync(
       path.join(__dirname, '../src/app/(homeowner)/project/[id]/schedule.tsx'),
       'utf8',
@@ -157,17 +157,16 @@ describe('homeowner project schedule screen source guards', () => {
     expect(source).toContain("Alert.alert('Could not confirm schedule', formatAppSafeErrorMessage(err, 'Please try again.'))");
     expect(source).not.toContain('setErrorMessage(error.message)');
     expect(source).not.toContain("Alert.alert('Error', err instanceof Error ? err.message : 'Failed to confirm schedule.')");
-    expect(source).toContain(".from('quotes')");
-    expect(source).toContain(".eq('project_id', projectId)");
-    expect(source).toContain(".eq('status', 'pending')");
-    expect(source).toContain("const hasPendingQuotes = (pendingQuotes?.length ?? 0) > 0;");
-    expect(source).toContain('allRequiredQuotesApproved = allSchedulableSlotsHaveApprovedQuotes');
-    expect(source).toContain("? 'quoting'");
-    expect(source).toContain("? 'active'");
-    expect(source).toContain(": 'scheduling';");
+    // Master-only: payment_status drives activation, no quote path
+    expect(source).toContain(".select('payment_status')");
+    expect(source).toContain("const projectPaymentStatus = (paymentInfo as any)?.payment_status ?? null;");
+    expect(source).toContain("const nextProjectStatus = projectPaymentStatus === 'funded' ? 'active' : 'scheduling';");
+    expect(source).not.toContain("const hasPendingQuotes");
+    expect(source).not.toContain('allSchedulableSlotsHaveApprovedQuotes');
+    expect(source).not.toContain("? 'quoting'");
     expect(source).toContain("supabase.functions.invoke('generate-material-orders'");
     expect(source).toMatch(
-      /const nextProjectStatus =[\s\S]*?\.from\('projects'\)[\s\S]*?status: nextProjectStatus/
+      /nextProjectStatus[\s\S]*?status: nextProjectStatus/
     );
     expect(source).toMatch(
       /if \(nextProjectStatus === 'active'\) \{[\s\S]*?generate-material-orders/

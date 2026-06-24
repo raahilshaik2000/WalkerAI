@@ -34,6 +34,14 @@ describe('Supabase function error formatting', () => {
     expect(formatAppSafeErrorMessage(new Error('The connection to the database timed out'), 'Could not load notifications.')).toBe(
       'Could not load notifications.',
     );
+    expect(formatAppSafeErrorMessage(
+      new Error('Project creation failed: The connection to the database timed out'),
+      'Analysis failed. Please try again.',
+    )).toBe('Analysis failed. Please try again.');
+    expect(formatAppSafeErrorMessage(
+      { message: 'Project creation failed', details: 'canceling statement due to statement timeout' },
+      'Analysis failed. Please try again.',
+    )).toBe('Analysis failed. Please try again.');
   });
 
   it('falls back to polished copy for database-internal errors', async () => {
@@ -45,6 +53,14 @@ describe('Supabase function error formatting', () => {
       { message: 'column general_contractor_projects.markup_percent does not exist' },
       'Could not load project management context.',
     )).toBe('Could not load project management context.');
+    expect(formatAppSafeErrorMessage(
+      { message: 'Project creation failed', details: 'relation "projects" does not exist' },
+      'Analysis failed. Please try again.',
+    )).toBe('Analysis failed. Please try again.');
+    expect(formatAppSafeErrorMessage(
+      { message: 'Upload failed', hint: 'violates row-level security policy for table "project_photos"' },
+      'Upload failed. Please try again.',
+    )).toBe('Upload failed. Please try again.');
     await expect(formatSupabaseFunctionError({
       message: 'Edge Function returned a non-2xx status code',
       context: new Response(JSON.stringify({ error: 'duplicate key value violates unique constraint "notifications_pkey"' })),
@@ -261,6 +277,10 @@ describe('refresh-connect-status source guards', () => {
     expect(source).toContain("body?.role === 'general_contractor'");
     expect(source).toContain("'general_contractors'");
     expect(source).toContain("'General contractor'");
+    expect(source).toContain(".from('users')");
+    expect(source).toContain(".select('role')");
+    expect(source).toContain('appUser.role !== requestedRole');
+    expect(source).toContain('Account role does not match payout status refresh request');
     expect(source).toContain("JSON.stringify({ error: `${roleLabel} not found` })");
     expect(source).toContain('stripe.accounts.retrieve(accountId)');
     expect(source).toContain('await updateStripeReadiness(adminClient, table, accountOwner.id, readiness)');
@@ -531,13 +551,28 @@ describe('quote submission status sync migration', () => {
 
     expect(source).toContain('CREATE OR REPLACE FUNCTION public.sync_project_status_on_quote_submission()');
     expect(source).toContain("IF NEW.status = 'pending' THEN");
-    expect(source).toContain('UPDATE public.projects');
+    expect(source).toContain('UPDATE public.projects project');
     expect(source).toContain("SET status = 'quoting'");
-    expect(source).toContain("AND status IN ('dispatching', 'accepted', 'scheduling')");
+    expect(source).toContain("project.status IN ('accepted', 'scheduling')");
+    expect(source).toContain("project.status = 'dispatching'");
+    expect(source).toContain('slot.status NOT IN (\'filled\', \'scheduled\')');
     expect(source).toContain('CREATE TRIGGER sync_project_status_on_quote_submission_trigger');
     expect(source).toContain('AFTER INSERT OR UPDATE OF status ON public.quotes');
     expect(source).toContain("WHEN (NEW.status = 'pending')");
     expect(source).toContain('EXECUTE FUNCTION public.sync_project_status_on_quote_submission()');
+  });
+
+  it('keeps partially accepted trade-slot projects dispatching after the first quote', () => {
+    const source = fs.readFileSync(
+      path.join(__dirname, '../supabase/migrations/20260619033435_keep_partial_trade_projects_dispatching_on_quote.sql'),
+      'utf8',
+    );
+
+    expect(source).toContain('CREATE OR REPLACE FUNCTION public.sync_project_status_on_quote_submission()');
+    expect(source).toContain("project.status = 'dispatching'");
+    expect(source).toContain('NOT EXISTS (');
+    expect(source).toContain('FROM public.project_slots slot');
+    expect(source).toContain('slot.status NOT IN (\'filled\', \'scheduled\')');
   });
 
   it('submits company quote packages atomically with server-side ownership checks', () => {
@@ -582,10 +617,10 @@ describe('stripe-webhook source guards', () => {
     expect(source).toContain('return quoteRequiredSlots.every((slot) => (');
     expect(source).toContain('async function projectHasTradeSlots');
     expect(source).toContain("await updateStripeReadiness(adminClient, 'general_contractors', account.id, readiness);");
-    expect(source).toContain("const scheduleRequired = await projectHasTradeSlots(adminClient, project_id);");
+    expect(source).toContain("const scheduleRequired = await projectHasTradeSlots(adminClient, projectId);");
     expect(source).toContain(".select('id, scheduling_status')");
     expect(source).toContain('async function projectScheduleConfirmed');
-    expect(source).toContain("const scheduleConfirmed = !scheduleRequired || await projectScheduleConfirmed(adminClient, project_id);");
+    expect(source).toContain("const scheduleConfirmed = !scheduleRequired || await projectScheduleConfirmed(adminClient, projectId);");
     expect(source).toContain("const nextProjectState = scheduleConfirmed");
     expect(source).toContain("? { status: 'active' }");
     expect(source).toContain(": { status: 'scheduling', scheduling_status: 'pending_homeowner' };");
@@ -655,6 +690,21 @@ describe('send-push source guards', () => {
     expect(source).not.toContain(`Quote Approved ${String.fromCharCode(0x2014)} Project Active`);
     expect(source).toMatch(
       /case 'order_delivered':[\s\S]*?case 'gc_approval_requested':[\s\S]*?case 'gc_trade_negotiation_responded':[\s\S]*?return 'milestone_updates';/
+    );
+  });
+
+  it('keeps live notification types behind user push preferences', () => {
+    const source = fs.readFileSync(
+      path.join(__dirname, '../supabase/functions/send-push/index.ts'),
+      'utf8',
+    );
+    const preferenceMapper = source.slice(source.indexOf('function notificationPreferenceKey'));
+
+    expect(preferenceMapper).toMatch(
+      /case 'milestone_paid':[\s\S]*?case 'supplier_paid':[\s\S]*?case 'gc_concierge_payout_released':[\s\S]*?return 'payment_updates';/
+    );
+    expect(preferenceMapper).toMatch(
+      /case 'job_accepted':[\s\S]*?case 'slot_accepted':[\s\S]*?case 'dispute_raised':[\s\S]*?return 'milestone_updates';/
     );
   });
 });
@@ -963,7 +1013,7 @@ describe('accept-job source guards', () => {
     expect(source).toContain('let autoQuoteCreated = false;');
     expect(source).toContain('autoQuoteCreated = true;');
     expect(source).toContain('Job accepted but project AI budget is missing; manual quote is required.');
-    expect(source).toContain('needs_quote: !autoQuoteCreated || warnings.some');
+    expect(source).toContain('needs_quote: !isMasterModel && (!autoQuoteCreated || warnings.some');
   });
 });
 

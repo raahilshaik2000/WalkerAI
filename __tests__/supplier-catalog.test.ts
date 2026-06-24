@@ -53,26 +53,43 @@ describe('supplier catalog helpers', () => {
     const profile = fs.readFileSync(path.join(__dirname, '../src/app/(supplier)/profile/index.tsx'), 'utf8');
 
     expect(catalog).toContain("import { formatAppSafeErrorMessage } from '@/lib/supabase/functions';");
+    expect(catalog).toContain("import { getCurrentUser } from '@/lib/supabase/auth';");
+    expect(catalog).toContain('const currentUserId = user?.id ?? (await getCurrentUser())?.id ?? null;');
+    expect(catalog).toContain(".eq('user_id', currentUserId)");
     expect(catalog).toContain("setErrorMessage(formatAppSafeErrorMessage(supplierError, 'Could not load catalog.'))");
     expect(catalog).toContain("setErrorMessage(formatAppSafeErrorMessage(error, 'Could not load catalog.'))");
+    expect(catalog).toContain("setErrorMessage(formatAppSafeErrorMessage(err, 'Could not load catalog.'))");
     expect(catalog).toContain("if (error) throw error;");
     expect(catalog).toContain("Alert.alert('Could not update stock', formatAppSafeErrorMessage(err, 'Please try again.'))");
     expect(catalog).toContain("setItems((prev) => prev.map((i) => i.id === item.id ? { ...i, in_stock: item.in_stock } : i));");
+    expect(catalog).not.toContain(".eq('user_id', user.id)");
     expect(catalog).not.toContain('setErrorMessage(supplierError.message)');
     expect(catalog).not.toContain('setErrorMessage(error.message)');
     expect(catalog).not.toContain("Alert.alert('Could not update stock', error.message)");
 
     expect(addCatalog).toContain("import { formatAppSafeErrorMessage } from '@/lib/supabase/functions';");
+    expect(addCatalog).toContain("import { getCurrentUser } from '@/lib/supabase/auth';");
+    expect(addCatalog).toContain('const currentUserId = user?.id ?? (await getCurrentUser())?.id ?? null;');
+    expect(addCatalog).toContain('currentUserId = user?.id ?? (await getCurrentUser())?.id ?? null;');
+    expect(addCatalog).toContain(".eq('user_id', currentUserId)");
     expect(addCatalog).toContain("Alert.alert('Could not load supplier profile', formatAppSafeErrorMessage(error, 'Please try again.'))");
+    expect(addCatalog).toContain("Alert.alert('Could not load supplier profile', formatAppSafeErrorMessage(err, 'Please try again.'))");
+    expect(addCatalog).toContain("Alert.alert('Sign in required', formatAppSafeErrorMessage(err, 'Please sign in again before adding catalog items.'))");
     expect(addCatalog).toContain("Alert.alert('Could not save catalog item', formatAppSafeErrorMessage(err, 'Please try again.'))");
+    expect(addCatalog).not.toContain(".eq('user_id', user.id)");
     expect(addCatalog).not.toContain("Alert.alert('Could not load supplier profile', error.message)");
     expect(addCatalog).not.toContain("Alert.alert('Error', err instanceof Error ? err.message : 'Failed to save.')");
 
     expect(editCatalog).toContain("import { formatAppSafeErrorMessage } from '@/lib/supabase/functions';");
+    expect(editCatalog).toContain("import { getCurrentUser } from '@/lib/supabase/auth';");
+    expect(editCatalog).toContain('const currentUserId = user?.id ?? (await getCurrentUser())?.id ?? null;');
+    expect(editCatalog).toContain(".eq('user_id', currentUserId)");
     expect(editCatalog).toContain("Alert.alert('Could not load supplier profile', formatAppSafeErrorMessage(supplierResult.error, 'Please try again.'))");
     expect(editCatalog).toContain("Alert.alert('Could not load catalog item', formatAppSafeErrorMessage(error, 'Please try again.'))");
+    expect(editCatalog).toContain("Alert.alert('Could not load catalog item', formatAppSafeErrorMessage(err, 'Please try again.'))");
     expect(editCatalog).toContain("Alert.alert('Could not save catalog item', formatAppSafeErrorMessage(err, 'Please try again.'))");
     expect(editCatalog).toContain("Alert.alert('Could not delete catalog item', formatAppSafeErrorMessage(error, 'Please try again.'))");
+    expect(editCatalog).not.toContain(".eq('user_id', user.id)");
     expect(editCatalog).not.toContain("Alert.alert('Error', supplierResult.error.message)");
     expect(editCatalog).not.toContain("Alert.alert('Error', error?.message ?? 'Could not load item.')");
     expect(editCatalog).not.toContain("Alert.alert('Error', err instanceof Error ? err.message : 'Failed to save.')");

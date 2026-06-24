@@ -56,45 +56,59 @@ export default function CompanyWarrantiesScreen() {
   const [uploading, setUploading] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
+  const clearWarrantyState = useCallback(() => {
+    setWarranties([]);
+    setPreviewUrls({});
+    setSelectedUri(null);
+    setSelectedName(null);
+    setSelectedType(null);
+    setExpiryDate('');
+  }, []);
+
   const fetchWarranties = useCallback(async () => {
     if (!projectId) {
       setErrorMessage('Project is missing. Reopen warranties from the job page.');
+      clearWarrantyState();
       setLoading(false);
       return;
     }
 
-    setLoading(true);
-    setErrorMessage(null);
-    const { data, error } = await supabase
-      .from('warranties')
-      .select('id, document_url, expiry_date, created_at')
-      .eq('project_id', projectId)
-      .order('created_at', { ascending: false });
+    try {
+      setLoading(true);
+      setErrorMessage(null);
+      const { data, error } = await supabase
+        .from('warranties')
+        .select('id, document_url, expiry_date, created_at')
+        .eq('project_id', projectId)
+        .order('created_at', { ascending: false });
 
-    if (error) {
-      setWarranties([]);
-      setPreviewUrls({});
-      setErrorMessage(formatAppSafeErrorMessage(error, 'Could not load warranties.'));
-      setLoading(false);
-      return;
-    }
-
-    const rows = (data ?? []) as Warranty[];
-    const previews: Record<string, string> = {};
-    await Promise.all(rows.map(async (warranty) => {
-      try {
-        previews[warranty.id] = /^https?:\/\//i.test(warranty.document_url)
-          ? warranty.document_url
-          : await getSignedUrl('warranties', warranty.document_url, 3600);
-      } catch {
-        // Keep the warranty visible even if private preview signing fails.
+      if (error) {
+        clearWarrantyState();
+        setErrorMessage(formatAppSafeErrorMessage(error, 'Could not load warranties.'));
+        return;
       }
-    }));
 
-    setWarranties(rows);
-    setPreviewUrls(previews);
-    setLoading(false);
-  }, [projectId]);
+      const rows = (data ?? []) as Warranty[];
+      const previews: Record<string, string> = {};
+      await Promise.all(rows.map(async (warranty) => {
+        try {
+          previews[warranty.id] = /^https?:\/\//i.test(warranty.document_url)
+            ? warranty.document_url
+            : await getSignedUrl('warranties', warranty.document_url, 3600);
+        } catch {
+          // Keep the warranty visible even if private preview signing fails.
+        }
+      }));
+
+      setWarranties(rows);
+      setPreviewUrls(previews);
+    } catch (err) {
+      clearWarrantyState();
+      setErrorMessage(formatAppSafeErrorMessage(err, 'Could not load warranties.'));
+    } finally {
+      setLoading(false);
+    }
+  }, [clearWarrantyState, projectId]);
 
   useEffect(() => {
     fetchWarranties();

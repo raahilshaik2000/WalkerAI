@@ -15,6 +15,31 @@ const VALID_TRADES = [
 type TradeType = typeof VALID_TRADES[number];
 type GcProjectType = 'kitchen' | 'bathroom' | 'flooring' | 'painting' | 'basement' | 'addition' | 'other';
 
+// Canonical construction sequence. Trades execute strictly in this order — each
+// trade is paid before the next starts — so we sort the project's slots by this
+// rank and assign a compact 1-based work_order at creation time.
+const CONSTRUCTION_ORDER: Record<string, number> = {
+  demolition: 1,
+  plumber: 2,
+  electrician: 3,
+  drywall: 4,
+  cabinet_installer: 5,
+  tile_installer: 6,
+  flooring_installer: 7,
+  painter: 8,
+};
+
+function constructionRank(tradeType: string): number {
+  return CONSTRUCTION_ORDER[tradeType] ?? 99;
+}
+
+function isMissingColumnError(error: { message?: string } | null | undefined) {
+  const message = error?.message ?? '';
+  return /column .* does not exist/i.test(message)
+    || /could not find the .* column of/i.test(message)
+    || /schema cache/i.test(message);
+}
+
 interface TradeSlot {
   trade_type: TradeType;
   description: string;
@@ -391,11 +416,22 @@ Return ONLY valid JSON, no markdown.`;
     const { error: deleteErr } = await supabase.from('project_slots').delete().eq('project_id', project_id);
     if (deleteErr) throw deleteErr;
 
-    // Insert new slots
-    const { data: inserted, error: insertErr } = await supabase
+    // Order slots into the construction sequence and assign a compact 1-based
+    // work_order so trades execute strictly one at a time (demolition first).
+    const orderedSlots = [...slots].sort((a, b) => constructionRank(a.trade_type) - constructionRank(b.trade_type));
+
+    // Insert new slots (with work_order; fall back if the column isn't present yet).
+    let insertResult = await supabase
       .from('project_slots')
-      .insert(slots.map((s) => ({ ...s, project_id, status: 'open' })))
-      .select('id, trade_type, description, estimated_cost_min, estimated_cost_max, status');
+      .insert(orderedSlots.map((s, i) => ({ ...s, project_id, status: 'open', work_order: i + 1 })))
+      .select('id, trade_type, description, estimated_cost_min, estimated_cost_max, status, work_order');
+    if (isMissingColumnError(insertResult.error)) {
+      insertResult = await supabase
+        .from('project_slots')
+        .insert(orderedSlots.map((s) => ({ ...s, project_id, status: 'open' })))
+        .select('id, trade_type, description, estimated_cost_min, estimated_cost_max, status');
+    }
+    const { data: inserted, error: insertErr } = insertResult;
 
     if (insertErr) throw insertErr;
 

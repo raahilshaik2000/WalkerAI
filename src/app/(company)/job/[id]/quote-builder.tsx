@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import {
   Alert,
   KeyboardAvoidingView,
@@ -63,6 +63,14 @@ interface ExistingMilestone {
 
 interface CompanyProfileRef {
   id: string;
+}
+
+async function getCurrentUserId(cachedUserId?: string | null): Promise<string | null> {
+  if (cachedUserId) return cachedUserId;
+
+  const { data, error } = await supabase.auth.getUser();
+  if (error) throw error;
+  return data.user?.id ?? null;
 }
 
 function formatTotal(items: LineItem[]): number {
@@ -190,131 +198,169 @@ export default function QuoteBuilderScreen() {
   const navigation = useNavigation<any>();
   const { user } = useAuthStore();
   const acceptedCounterofferCents = positiveCentsParam(route.params?.accepted_counteroffer_cents);
+  const gcNegotiationNote = route.params?.gc_negotiation_note;
 
   const [lineItems, setLineItems] = useState<LineItem[]>(() => defaultLineItems(acceptedCounterofferCents));
   const [milestones, setMilestones] = useState<MilestoneInput[]>(() => defaultMilestones(acceptedCounterofferCents));
-  const [notes, setNotes] = useState(() => defaultNotes(route.params?.gc_negotiation_note));
+  const [notes, setNotes] = useState(() => defaultNotes(gcNegotiationNote));
   const [submitting, setSubmitting] = useState(false);
   const [loadingApprovedQuote, setLoadingApprovedQuote] = useState(true);
+  const [quoteReloadKey, setQuoteReloadKey] = useState(0);
+  const [quoteLoadError, setQuoteLoadError] = useState<string | null>(null);
   const [approvedQuote, setApprovedQuote] = useState<ExistingQuote | null>(null);
   const [editingPendingQuote, setEditingPendingQuote] = useState<ExistingQuote | null>(null);
   const [approvedLineItems, setApprovedLineItems] = useState<ExistingLineItem[]>([]);
   const [approvedMilestones, setApprovedMilestones] = useState<ExistingMilestone[]>([]);
+
+  const resetEditableQuoteDraft = useCallback(() => {
+    setLineItems(defaultLineItems(acceptedCounterofferCents));
+    setMilestones(defaultMilestones(acceptedCounterofferCents));
+    setNotes(defaultNotes(gcNegotiationNote));
+    setEditingPendingQuote(null);
+  }, [acceptedCounterofferCents, gcNegotiationNote]);
 
   useEffect(() => {
     let cancelled = false;
 
     async function loadApprovedQuote() {
       if (!projectId) {
+        setQuoteLoadError('Project is missing. Reopen this job from your dashboard.');
+        resetEditableQuoteDraft();
         setLoadingApprovedQuote(false);
         return;
       }
 
-      setLoadingApprovedQuote(true);
-      setEditingPendingQuote(null);
-      let companyId: string | null = null;
-      if (user?.id) {
-        const companyResult = await supabase
-          .from('companies')
-          .select('id')
-          .eq('user_id', user.id)
-          .order('created_at', { ascending: false })
-          .limit(1)
-          .maybeSingle();
+      try {
+        setQuoteLoadError(null);
+        setLoadingApprovedQuote(true);
+        setEditingPendingQuote(null);
+        let companyId: string | null = null;
+        const currentUserId = await getCurrentUserId(user?.id);
+        if (cancelled) return;
 
-        if (!cancelled && !companyResult.error && companyResult.data) {
-          companyId = (companyResult.data as CompanyProfileRef).id;
-        }
-      }
+        if (currentUserId) {
+          const companyResult = await supabase
+            .from('companies')
+            .select('id')
+            .eq('user_id', currentUserId)
+            .order('created_at', { ascending: false })
+            .limit(1)
+            .maybeSingle();
 
-      if (!companyId) {
-        setApprovedQuote(null);
-        setApprovedLineItems([]);
-        setApprovedMilestones([]);
-        setLoadingApprovedQuote(false);
-        return;
-      }
-
-      let query = supabase
-        .from('quotes')
-        .select('id, total_amount, status, submitted_at, stripe_payment_intent_id')
-        .eq('project_id', projectId)
-        .eq('company_id', companyId)
-        .or('status.eq.approved,stripe_payment_intent_id.not.is.null')
-        .order('submitted_at', { ascending: false })
-        .limit(1);
-
-      query = slotId ? query.eq('slot_id', slotId) : query.is('slot_id', null);
-
-      const { data, error } = await query.maybeSingle();
-      if (cancelled) return;
-      if (error || !data) {
-        setApprovedQuote(null);
-        setApprovedLineItems([]);
-        setApprovedMilestones([]);
-        if (!acceptedCounterofferCents) {
-          let pendingQuoteQuery = supabase
-            .from('quotes')
-            .select('id, total_amount, status, submitted_at, stripe_payment_intent_id')
-            .eq('project_id', projectId)
-            .eq('company_id', companyId)
-            .eq('status', 'pending')
-            .is('stripe_payment_intent_id', null)
-            .order('submitted_at', { ascending: false })
-            .limit(1);
-
-          pendingQuoteQuery = slotId ? pendingQuoteQuery.eq('slot_id', slotId) : pendingQuoteQuery.is('slot_id', null);
-
-          const pendingQuoteResult = await pendingQuoteQuery.maybeSingle();
-          if (!cancelled && !pendingQuoteResult.error && pendingQuoteResult.data) {
-            const quote = pendingQuoteResult.data as ExistingQuote;
-            const [itemsResult, milestonesResult] = await Promise.all([
-              supabase
-                .from('quote_line_items')
-                .select('id, description, total_cost, sort_order')
-                .eq('quote_id', quote.id)
-                .order('sort_order', { ascending: true }),
-              supabase
-                .from('milestones')
-                .select('id, title, amount, due_date, status, sort_order')
-                .eq('quote_id', quote.id)
-                .order('sort_order', { ascending: true }),
-            ]);
-
-            if (!cancelled) {
-              const existingLineItems = (itemsResult.data as ExistingLineItem[] | null) ?? [];
-              const existingMilestones = (milestonesResult.data as ExistingMilestone[] | null) ?? [];
-              setLineItems(editableLineItemsFromQuote(existingLineItems));
-              setMilestones(editableMilestonesFromQuote(existingMilestones));
-              setNotes(editableNotesFromQuote(existingLineItems));
-              setEditingPendingQuote(quote);
-            }
+          if (companyResult.error) throw companyResult.error;
+          if (!cancelled && companyResult.data) {
+            companyId = (companyResult.data as CompanyProfileRef).id;
           }
         }
+
+        if (!companyId) {
+          throw new Error('Company profile is required before quote pricing can be loaded.');
+        }
+
+        let query = supabase
+          .from('quotes')
+          .select('id, total_amount, status, submitted_at, stripe_payment_intent_id')
+          .eq('project_id', projectId)
+          .eq('company_id', companyId)
+          .or('status.eq.approved,stripe_payment_intent_id.not.is.null')
+          .order('submitted_at', { ascending: false })
+          .limit(1);
+
+        query = slotId ? query.eq('slot_id', slotId) : query.is('slot_id', null);
+
+        const { data, error } = await query.maybeSingle();
+        if (cancelled) return;
+        if (error || !data) {
+          if (error) throw error;
+          setApprovedQuote(null);
+          setApprovedLineItems([]);
+          setApprovedMilestones([]);
+          if (acceptedCounterofferCents) {
+            resetEditableQuoteDraft();
+          } else {
+            let pendingQuoteQuery = supabase
+              .from('quotes')
+              .select('id, total_amount, status, submitted_at, stripe_payment_intent_id')
+              .eq('project_id', projectId)
+              .eq('company_id', companyId)
+              .eq('status', 'pending')
+              .is('stripe_payment_intent_id', null)
+              .order('submitted_at', { ascending: false })
+              .limit(1);
+
+            pendingQuoteQuery = slotId ? pendingQuoteQuery.eq('slot_id', slotId) : pendingQuoteQuery.is('slot_id', null);
+
+            const pendingQuoteResult = await pendingQuoteQuery.maybeSingle();
+            if (cancelled) return;
+            if (pendingQuoteResult.error) throw pendingQuoteResult.error;
+            if (!cancelled && pendingQuoteResult.data) {
+              const quote = pendingQuoteResult.data as ExistingQuote;
+              const [itemsResult, milestonesResult] = await Promise.all([
+                supabase
+                  .from('quote_line_items')
+                  .select('id, description, total_cost, sort_order')
+                  .eq('quote_id', quote.id)
+                  .order('sort_order', { ascending: true }),
+                supabase
+                  .from('milestones')
+                  .select('id, title, amount, due_date, status, sort_order')
+                  .eq('quote_id', quote.id)
+                  .order('sort_order', { ascending: true }),
+              ]);
+
+              if (cancelled) return;
+              if (itemsResult.error) throw itemsResult.error;
+              if (milestonesResult.error) throw milestonesResult.error;
+
+              if (!cancelled) {
+                const existingLineItems = (itemsResult.data as ExistingLineItem[] | null) ?? [];
+                const existingMilestones = (milestonesResult.data as ExistingMilestone[] | null) ?? [];
+                setLineItems(editableLineItemsFromQuote(existingLineItems));
+                setMilestones(editableMilestonesFromQuote(existingMilestones));
+                setNotes(editableNotesFromQuote(existingLineItems));
+                setEditingPendingQuote(quote);
+              }
+            } else if (!cancelled) {
+              resetEditableQuoteDraft();
+            }
+          }
+          setLoadingApprovedQuote(false);
+          return;
+        }
+
+        const quote = data as ExistingQuote;
+        setApprovedQuote(quote);
+
+        const [itemsResult, milestonesResult] = await Promise.all([
+          supabase
+            .from('quote_line_items')
+            .select('id, description, total_cost, sort_order')
+            .eq('quote_id', quote.id)
+            .order('sort_order', { ascending: true }),
+          supabase
+            .from('milestones')
+            .select('id, title, amount, due_date, status, sort_order')
+            .eq('quote_id', quote.id)
+            .order('sort_order', { ascending: true }),
+        ]);
+
+        if (itemsResult.error) throw itemsResult.error;
+        if (milestonesResult.error) throw milestonesResult.error;
+
+        if (cancelled) return;
+        setApprovedLineItems((itemsResult.data as ExistingLineItem[] | null) ?? []);
+        setApprovedMilestones((milestonesResult.data as ExistingMilestone[] | null) ?? []);
         setLoadingApprovedQuote(false);
-        return;
+      } catch (err) {
+        if (!cancelled) {
+          setApprovedQuote(null);
+          setApprovedLineItems([]);
+          setApprovedMilestones([]);
+          setEditingPendingQuote(null);
+          setQuoteLoadError(formatAppSafeErrorMessage(err, 'Could not load quote pricing.'));
+          setLoadingApprovedQuote(false);
+        }
       }
-
-      const quote = data as ExistingQuote;
-      setApprovedQuote(quote);
-
-      const [itemsResult, milestonesResult] = await Promise.all([
-        supabase
-          .from('quote_line_items')
-          .select('id, description, total_cost, sort_order')
-          .eq('quote_id', quote.id)
-          .order('sort_order', { ascending: true }),
-        supabase
-          .from('milestones')
-          .select('id, title, amount, due_date, status, sort_order')
-          .eq('quote_id', quote.id)
-          .order('sort_order', { ascending: true }),
-      ]);
-
-      if (cancelled) return;
-      setApprovedLineItems((itemsResult.data as ExistingLineItem[] | null) ?? []);
-      setApprovedMilestones((milestonesResult.data as ExistingMilestone[] | null) ?? []);
-      setLoadingApprovedQuote(false);
     }
 
     loadApprovedQuote();
@@ -322,7 +368,7 @@ export default function QuoteBuilderScreen() {
     return () => {
       cancelled = true;
     };
-  }, [acceptedCounterofferCents, projectId, slotId, user?.id]);
+  }, [acceptedCounterofferCents, projectId, quoteReloadKey, resetEditableQuoteDraft, slotId, user?.id]);
 
   const addLineItem = () => {
     setLineItems((prev) => [...prev, { id: Date.now().toString(), description: '', amount: '' }]);
@@ -369,8 +415,14 @@ export default function QuoteBuilderScreen() {
       Alert.alert('Missing project', 'Reopen this job from your dashboard and try again.');
       return;
     }
-    if (!user) {
-      Alert.alert('Sign in required', 'Please sign in again before submitting a quote.');
+    try {
+      const currentUserId = await getCurrentUserId(user?.id);
+      if (!currentUserId) {
+        Alert.alert('Sign in required', 'Please sign in again before submitting a quote.');
+        return;
+      }
+    } catch (err) {
+      Alert.alert('Sign in required', formatAppSafeErrorMessage(err, 'Please sign in again before submitting a quote.'));
       return;
     }
 
@@ -507,6 +559,44 @@ export default function QuoteBuilderScreen() {
           <View style={styles.center}>
             <Text style={Typography.bodySecondary}>Loading quote...</Text>
           </View>
+        </SafeAreaView>
+      </GradientBackground>
+    );
+  }
+
+  if (quoteLoadError) {
+    return (
+      <GradientBackground glow="top-right">
+        <SafeAreaView style={styles.safe}>
+          <ScrollView contentContainerStyle={styles.scroll} showsVerticalScrollIndicator={false}>
+            <View style={styles.header}>
+              <TouchableOpacity onPress={() => navigation.goBack()}>
+                <Ionicons name="arrow-back" size={22} color={Colors.text.secondary} />
+              </TouchableOpacity>
+              <Text style={styles.title}>Quote Unavailable</Text>
+              <View style={styles.headerSpacer} />
+            </View>
+
+            <GlassCard style={styles.card}>
+              <Text style={styles.sectionTitle}>Could not load quote pricing</Text>
+              <Text style={styles.sectionSub}>{quoteLoadError}</Text>
+              <Text style={styles.sectionSub}>
+                Pricing is locked until WalkerAI can confirm whether this job already has an editable, approved, or funded quote.
+              </Text>
+            </GlassCard>
+
+            <GlassButton
+              label="Try Again"
+              onPress={() => {
+                setLoadingApprovedQuote(true);
+                setQuoteLoadError(null);
+                setQuoteReloadKey((current) => current + 1);
+              }}
+              fullWidth
+              size="lg"
+              haptic
+            />
+          </ScrollView>
         </SafeAreaView>
       </GradientBackground>
     );

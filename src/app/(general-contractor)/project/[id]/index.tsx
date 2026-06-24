@@ -175,6 +175,38 @@ export default function GeneralContractorProjectDetail() {
   const [gcReady, setGcReady] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
+  const clearProjectDetailState = useCallback(() => {
+    setProject(null);
+    setAssignment(null);
+    setSlots([]);
+    setChangeOrders([]);
+    setApprovalRequests([]);
+    setApprovalTitle('');
+    setApprovalDescription('');
+    setApprovalCostDelta('');
+    setApprovalTimelineDelta('');
+    setExternalSlotId(null);
+    setExternalTradeName('');
+    setExternalTradeCompany('');
+    setExternalTradeEmail('');
+    setExternalTradePhone('');
+    setExternalTradeNotes('');
+    setProposedBudgetMin('');
+    setProposedBudgetMax('');
+    setProposedMarkupPct('');
+    setProposedConciergeFeePct('');
+    setAccepting(false);
+    setSubmittingApproval(false);
+    setSubmittingBudget(false);
+    setSubmittingTerms(false);
+    setCancellingApprovalId(null);
+    setSavingExternalTrade(false);
+    setUploadingExternalDocSlotId(null);
+    setGcVerified(false);
+    setGcProfileComplete(false);
+    setGcReady(false);
+  }, []);
+
   const fetchData = useCallback(async () => {
     try {
       setErrorMessage(null);
@@ -249,19 +281,12 @@ export default function GeneralContractorProjectDetail() {
       setProposedConciergeFeePct(assignmentRow?.concierge_fee_pct != null ? Number(assignmentRow.concierge_fee_pct).toFixed(0) : '');
     } catch (err) {
       setErrorMessage(formatAppSafeErrorMessage(err, 'Could not load managed project.'));
-      setProject(null);
-      setAssignment(null);
-      setSlots([]);
-      setChangeOrders([]);
-      setApprovalRequests([]);
-      setGcVerified(false);
-      setGcProfileComplete(false);
-      setGcReady(false);
+      clearProjectDetailState();
     } finally {
       setLoading(false);
       setRefreshing(false);
     }
-  }, [projectId]);
+  }, [clearProjectDetailState, projectId]);
 
   useFocusEffect(
     useCallback(() => {
@@ -285,6 +310,25 @@ export default function GeneralContractorProjectDetail() {
   const pendingApprovals = pendingChangeOrders.length + pendingApprovalRequests.length;
   const pendingDecisionApprovalRequests = pendingApprovalRequests.slice(0, 5);
   const pendingDecisionChangeOrders = pendingChangeOrders.slice(0, Math.max(0, 5 - pendingDecisionApprovalRequests.length));
+
+  const requireCurrentGcRequestProfile = async () => {
+    const currentUser = (await supabase.auth.getUser()).data.user;
+    if (!currentUser?.id) throw new Error('Please sign in again before submitting approval requests.');
+
+    const { data: gc, error: gcError } = await supabase
+      .from('general_contractors')
+      .select(GENERAL_CONTRACTOR_READINESS_SELECT)
+      .eq('user_id', currentUser.id)
+      .maybeSingle();
+    if (gcError) throw gcError;
+    if (!gc?.id) throw new Error('GC profile not found.');
+    if (assignment?.general_contractor_id && gc.id !== assignment.general_contractor_id) {
+      throw new Error('Refresh this project before sending approval requests.');
+    }
+    if (gc.verified !== true) throw new Error('WalkerAI must verify your GC profile before approval requests can be sent.');
+    if (nextGeneralContractorOnboardingRoute(gc)) throw new Error('Complete your GC business, license, and insurance setup before sending approval requests.');
+    return gc.id;
+  };
 
   const handleAcceptInvite = async () => {
     if (!assignment?.id) return;
@@ -311,15 +355,20 @@ export default function GeneralContractorProjectDetail() {
           text: 'Accept',
           onPress: async () => {
             setAccepting(true);
-            const { error } = await supabase.rpc('accept_gc_management_invite', {
-              p_assignment_id: assignment.id,
-            });
-            if (error) {
-              Alert.alert('Could not accept invite', formatAppSafeErrorMessage(error, 'Please try again.'));
-            } else {
+            try {
+              const { error } = await supabase.rpc('accept_gc_management_invite', {
+                p_assignment_id: assignment.id,
+              });
+              if (error) {
+                Alert.alert('Could not accept invite', formatAppSafeErrorMessage(error, 'Please try again.'));
+                return;
+              }
               await fetchData();
+            } catch (err) {
+              Alert.alert('Could not accept invite', formatAppSafeErrorMessage(err, 'Please try again.'));
+            } finally {
+              setAccepting(false);
             }
-            setAccepting(false);
           },
         },
       ],
@@ -361,23 +410,9 @@ export default function GeneralContractorProjectDetail() {
       }
     }
 
-    const currentUser = (await supabase.auth.getUser()).data.user;
-    if (!currentUser?.id) {
-      Alert.alert('Sign in required', 'Please sign in again before submitting approval requests.');
-      return;
-    }
-
     setSubmittingApproval(true);
     try {
-      const { data: gc, error: gcError } = await supabase
-        .from('general_contractors')
-        .select(GENERAL_CONTRACTOR_READINESS_SELECT)
-        .eq('user_id', currentUser.id)
-        .maybeSingle();
-      if (gcError) throw gcError;
-      if (!gc?.id) throw new Error('GC profile not found.');
-      if (gc.verified !== true) throw new Error('WalkerAI must verify your GC profile before approval requests can be sent.');
-      if (nextGeneralContractorOnboardingRoute(gc)) throw new Error('Complete your GC business, license, and insurance setup before sending approval requests.');
+      const gcId = await requireCurrentGcRequestProfile();
       if (!project?.id) throw new Error('Project not loaded.');
 
       const { data: projectRow, error: projectError } = await supabase
@@ -390,7 +425,7 @@ export default function GeneralContractorProjectDetail() {
 
       const { error } = await supabase.from('project_approval_requests').insert({
         project_id: project.id,
-        requested_by_gc_id: gc.id,
+        requested_by_gc_id: gcId,
         homeowner_id: projectRow.homeowner_id,
         request_type: 'general_recommendation',
         title: approvalTitle.trim(),
@@ -436,20 +471,25 @@ export default function GeneralContractorProjectDetail() {
           style: 'destructive',
           onPress: async () => {
             setCancellingApprovalId(request.id);
-            const { error } = await supabase
-              .from('project_approval_requests')
-              .update({ status: 'cancelled' })
-              .eq('id', request.id)
-              .eq('project_id', projectId)
-              .eq('requested_by_gc_id', assignment.general_contractor_id)
-              .eq('status', 'pending');
+            try {
+              const { error } = await supabase
+                .from('project_approval_requests')
+                .update({ status: 'cancelled' })
+                .eq('id', request.id)
+                .eq('project_id', projectId)
+                .eq('requested_by_gc_id', assignment.general_contractor_id)
+                .eq('status', 'pending');
 
-            if (error) {
-              Alert.alert('Could not cancel request', formatAppSafeErrorMessage(error, 'Please try again.'));
-            } else {
+              if (error) {
+                Alert.alert('Could not cancel request', formatAppSafeErrorMessage(error, 'Please try again.'));
+                return;
+              }
               await fetchData();
+            } catch (err) {
+              Alert.alert('Could not cancel request', formatAppSafeErrorMessage(err, 'Please try again.'));
+            } finally {
+              setCancellingApprovalId(null);
             }
-            setCancellingApprovalId(null);
           },
         },
       ],
@@ -520,16 +560,16 @@ export default function GeneralContractorProjectDetail() {
       return;
     }
 
-    const result = await launchImageLibrary({
-      mediaType: 'photo',
-      quality: 0.8,
-      selectionLimit: 1,
-      assetRepresentationMode: 'compatible',
-    });
-    if (result.didCancel || !result.assets?.[0]) return;
-
-    setUploadingExternalDocSlotId(slot.id);
     try {
+      const result = await launchImageLibrary({
+        mediaType: 'photo',
+        quality: 0.8,
+        selectionLimit: 1,
+        assetRepresentationMode: 'compatible',
+      });
+      if (result.didCancel || !result.assets?.[0]) return;
+
+      setUploadingExternalDocSlotId(slot.id);
       const currentUser = (await supabase.auth.getUser()).data.user;
       if (!currentUser?.id) throw new Error('Please sign in again before uploading trade documents.');
 
@@ -582,6 +622,7 @@ export default function GeneralContractorProjectDetail() {
 
     setSubmittingTerms(true);
     try {
+      await requireCurrentGcRequestProfile();
       const { error } = await supabase.from('project_approval_requests').insert({
         project_id: projectId,
         requested_by_gc_id: assignment.general_contractor_id,
@@ -635,6 +676,7 @@ export default function GeneralContractorProjectDetail() {
 
     setSubmittingBudget(true);
     try {
+      await requireCurrentGcRequestProfile();
       const { error } = await supabase.from('project_approval_requests').insert({
         project_id: projectId,
         requested_by_gc_id: assignment.general_contractor_id,

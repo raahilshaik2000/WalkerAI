@@ -22,9 +22,9 @@ import type { GeneralContractor } from '@/types/database.types';
 import { Colors, Spacing, Typography } from '@/constants/theme';
 import { GC_PROJECT_TYPES, type GeneralContractorProjectType } from '@/constants/enums';
 
-function parsePercent(value: string, fallback: number): number | null {
+function parsePercent(value: string): number | null {
   const trimmed = value.trim();
-  if (!trimmed) return fallback;
+  if (!trimmed) return null;
   const normalized = trimmed.replace('%', '');
   if (!/^\d+(\.\d{1,2})?$/.test(normalized)) return null;
   const parsed = Number(normalized);
@@ -137,6 +137,7 @@ export default function GeneralContractorCreateProject() {
   };
 
   const handleCreate = async () => {
+    if (loading || profileLoading) return;
     if (!profileReady) {
       Alert.alert('GC profile required', 'Your verified GC profile must load before creating managed projects.');
       return;
@@ -165,12 +166,12 @@ export default function GeneralContractorCreateProject() {
       Alert.alert('Map location required', 'Select the address from search so the project has coordinates.');
       return;
     }
-    const parsedMarkup = parsePercent(markupPct, 15);
+    const parsedMarkup = parsePercent(markupPct);
     if (parsedMarkup == null || parsedMarkup < 0 || parsedMarkup > 50) {
       Alert.alert('Invalid management allowance', 'Management allowance must be between 0% and 50%.');
       return;
     }
-    const parsedConcierge = parsePercent(conciergeFeePct, 10);
+    const parsedConcierge = parsePercent(conciergeFeePct);
     if (parsedConcierge == null || parsedConcierge < 0 || parsedConcierge > 25) {
       Alert.alert('Invalid concierge allowance', 'Concierge allowance must be between 0% and 25%.');
       return;

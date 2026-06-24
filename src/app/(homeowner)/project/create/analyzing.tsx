@@ -8,9 +8,10 @@ import {
   View,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { useNavigation } from '@react-navigation/native';
+import { useNavigation, useRoute } from '@react-navigation/native';
 import Ionicons from 'react-native-vector-icons/Ionicons';
 import { supabase } from '@/lib/supabase/client';
+import { getSession } from '@/lib/supabase/auth';
 import { formatAppSafeErrorMessage, formatSupabaseFunctionError } from '@/lib/supabase/functions';
 import { uploadBase64 } from '@/lib/supabase/storage';
 import {
@@ -36,6 +37,7 @@ const ANALYSIS_STEPS = [
 ];
 
 const PROJECT_CREATE_ATTEMPTS = 3;
+const PHOTO_SAVE_ATTEMPTS = 3;
 
 function sleep(ms: number) {
   return new Promise((resolve) => setTimeout(resolve, ms));
@@ -55,6 +57,17 @@ function generateUuid() {
 function errorMessage(error: unknown, fallback = 'Something went wrong. Please try again.') {
   const err = error as { message?: string; details?: string; hint?: string; code?: string } | null;
   return err?.message || err?.details || err?.hint || err?.code || fallback;
+}
+
+function isTransientPhotoSaveError(error: unknown) {
+  const message = errorMessage(error).toLowerCase();
+  return message.includes('timed out')
+    || message.includes('timeout')
+    || message.includes('network')
+    || message.includes('fetch')
+    || message.includes('temporarily')
+    || message.includes('503')
+    || message.includes('504');
 }
 
 async function ensureDraftProjectId(params: {
@@ -99,11 +112,54 @@ async function ensureDraftProjectId(params: {
 
   if (!recoveryError && recoveredProject?.id) return recoveredProject.id as string;
 
-  throw new Error(`Project creation failed: ${errorMessage(recoveryError ?? lastError, 'The database did not confirm the draft project.')}`);
+  throw new Error(formatAppSafeErrorMessage(recoveryError ?? lastError, 'Project creation failed. Please try again.'));
+}
+
+async function saveProjectPhoto(params: {
+  projectId: string;
+  storagePath: string;
+  base64: string;
+  contentType: string;
+}): Promise<{ saved: boolean; retryableFailure: boolean; message: string | null }> {
+  const { projectId, storagePath, base64, contentType } = params;
+  let lastError: unknown = null;
+
+  for (let attempt = 1; attempt <= PHOTO_SAVE_ATTEMPTS; attempt += 1) {
+    try {
+      const { publicUrl, storagePath: savedStoragePath } = await uploadBase64(
+        'project-photos',
+        storagePath,
+        base64,
+        contentType,
+        { retries: 2 },
+      );
+      const { error: photoInsertError } = await supabase.from('project_photos').insert({
+        project_id: projectId,
+        url: publicUrl,
+        storage_path: savedStoragePath,
+      });
+
+      if (photoInsertError) throw photoInsertError;
+      return { saved: true, retryableFailure: false, message: null };
+    } catch (err) {
+      lastError = err;
+      console.warn(`[analyzing] photo save attempt ${attempt} failed:`, errorMessage(err));
+      if (attempt < PHOTO_SAVE_ATTEMPTS) await sleep(900 * attempt);
+    }
+  }
+
+  console.warn('[analyzing] photo save failed after retries:', errorMessage(lastError));
+  return {
+    saved: false,
+    retryableFailure: isTransientPhotoSaveError(lastError),
+    message: errorMessage(lastError),
+  };
 }
 
 export default function AnalyzingScreen() {
   const navigation = useNavigation<any>();
+  const route = useRoute<any>();
+  const measurementsSkipped = route.params?.measurementsSkipped === true;
   const { user } = useAuthStore();
   const { projectId, photos, roomType, setAnalysisResult, setQuestions } = useProjectWizardStore();
 
@@ -144,14 +200,21 @@ export default function AnalyzingScreen() {
 
     const runAnalysis = async () => {
       try {
-        if (!user?.id) {
+        try {
+          await supabase.auth.refreshSession();
+        } catch (refreshError) {
+          console.warn('[analyzing] session refresh skipped:', errorMessage(refreshError));
+        }
+
+        const currentUserId = user?.id ?? (await getSession())?.user?.id ?? null;
+        if (!currentUserId) {
           throw new Error('You need to be signed in to create a project.');
         }
 
         const selectedRoomType = roomType || 'kitchen';
         const pid = await ensureDraftProjectId({
           existingProjectId: projectId,
-          userId: user.id,
+          userId: currentUserId,
           roomType: selectedRoomType,
         });
 
@@ -162,36 +225,46 @@ export default function AnalyzingScreen() {
         const localPhotos = photos.filter((p) => p.status === 'done');
         if (localPhotos.length === 0) throw new Error('No photos found.');
 
-        // Upload photos to storage IN PARALLEL with AI call
-        const uploadPromise = Promise.all(
-          localPhotos.map(async (photo, i) => {
-            if (!photo.base64) return false;
-            try {
-              const extension = photo.extension ?? 'jpg';
-              const contentType = photo.contentType ?? 'image/jpeg';
-              const path = `${pid}/${i}_${Date.now()}.${extension}`;
-              const { publicUrl, storagePath } = await uploadBase64('project-photos', path, photo.base64, contentType);
-              const { error: photoInsertError } = await supabase.from('project_photos').insert({
-                project_id: pid,
-                url: publicUrl,
-                storage_path: storagePath,
-              });
-              if (photoInsertError) {
-                console.warn('[analyzing] photo metadata insert failed:', photoInsertError.message);
-                return false;
-              }
-              return true;
-            } catch (photoError) {
-              console.warn('[analyzing] photo upload failed:', errorMessage(photoError));
-              return false;
-            }
-          })
-        );
-
         const photoBase64s = buildPhotoAnalysisPayload(localPhotos);
 
         if (photoBase64s.length === 0) {
           throw new Error('No photo data found. Please go back and re-select your photos.');
+        }
+
+        const uploadedPhotoResults: Array<{ saved: boolean; retryableFailure: boolean; message: string | null }> = [];
+        const uploadRunId = Date.now();
+        for (const [i, photo] of localPhotos.entries()) {
+          if (!photo.base64) {
+            uploadedPhotoResults.push({ saved: false, retryableFailure: false, message: 'Missing local photo data.' });
+            continue;
+          }
+
+          const extension = photo.extension ?? 'jpg';
+          const contentType = photo.contentType ?? 'image/jpeg';
+          const storagePath = `${pid}/${i}_${uploadRunId}.${extension}`;
+          uploadedPhotoResults.push(await saveProjectPhoto({
+            projectId: pid,
+            storagePath,
+            base64: photo.base64,
+            contentType,
+          }));
+        }
+
+        const hasPersistedPhoto = uploadedPhotoResults.some((result) => result.saved);
+        const canContinueWithLocalPhotos =
+          photoBase64s.length > 0
+          && uploadedPhotoResults.length > 0
+          && uploadedPhotoResults.every((result) => result.retryableFailure);
+
+        if (!hasPersistedPhoto) {
+          if (!canContinueWithLocalPhotos) {
+            throw new Error('Project photos could not be saved. Please check your connection and try uploading the photos again.');
+          }
+
+          console.warn(
+            '[analyzing] continuing with local photo payload after transient photo persistence failures:',
+            uploadedPhotoResults.map((result) => result.message).filter(Boolean).join(' | '),
+          );
         }
 
         // Flatten to plain base64 strings so the request body works against both
@@ -210,17 +283,6 @@ export default function AnalyzingScreen() {
         const { data: analyzeData, error: analyzeError } = await supabase.functions.invoke('analyze-photos', {
           body: { project_id: pid, photo_base64s: photoBase64sFlat, room_type: selectedRoomType },
         });
-
-        // Wait for photo uploads to finish alongside the edge function call.
-        // At least one saved project_photos row is required so contractors can
-        // preview the job before accepting it.
-        const uploadedPhotoResults = await uploadPromise.catch((uploadError) => {
-          console.warn('[analyzing] photo upload batch failed:', errorMessage(uploadError));
-          return [] as boolean[];
-        });
-        if (!uploadedPhotoResults.some(Boolean)) {
-          throw new Error('Project photos could not be saved. Please check your connection and try uploading the photos again.');
-        }
 
         // Photo analysis is best-effort context for the brief, NOT a
         // blocker. If Claude is slow, the function times out, or the
@@ -279,12 +341,17 @@ export default function AnalyzingScreen() {
         useProjectWizardStore.getState().setStep(4);
         navigation.navigate('Questionnaire');
       } catch (err: any) {
-        setError(formatAppSafeErrorMessage(err, 'Analysis failed. Please try again.'));
+        setError(formatAppSafeErrorMessage(
+          err,
+          measurementsSkipped
+            ? 'Project setup timed out after skipping measurements. Your photos are still selected; retry analysis.'
+            : 'Analysis failed. Please try again.',
+        ));
       }
     };
 
     runAnalysis();
-  }, [analysisRunId, navigation, photos, projectId, roomType, setAnalysisResult, setQuestions, user]);
+  }, [analysisRunId, measurementsSkipped, navigation, photos, projectId, roomType, setAnalysisResult, setQuestions, user?.id]);
 
   const spin = rotateAnim.interpolate({
     inputRange: [0, 1],
@@ -451,7 +518,7 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     backgroundColor: Colors.accent,
   },
-  retryButtonText: { color: '#FFFFFF', fontSize: 15, fontWeight: '800' },
+  retryButtonText: { color: Colors.accentFg, fontSize: 15, fontWeight: '800' },
   backButton: {
     minHeight: 48,
     borderRadius: 14,

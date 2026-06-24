@@ -42,12 +42,21 @@ describe('warranty upload screens', () => {
 
     expect(companySource).toContain("import { formatAppSafeErrorMessage } from '@/lib/supabase/functions';");
     expect(companySource).toContain("setErrorMessage(formatAppSafeErrorMessage(error, 'Could not load warranties.'))");
+    expect(companySource).toContain('const clearWarrantyState = useCallback(() => {');
+    expect(companySource).toContain("setErrorMessage('Project is missing. Reopen warranties from the job page.');\n      clearWarrantyState();");
+    expect(companySource).toContain("setErrorMessage(formatAppSafeErrorMessage(err, 'Could not load warranties.'))");
+    expect(companySource).toContain("clearWarrantyState();\n        setErrorMessage(formatAppSafeErrorMessage(error, 'Could not load warranties.'))");
+    expect(companySource).toContain("clearWarrantyState();\n      setErrorMessage(formatAppSafeErrorMessage(err, 'Could not load warranties.'))");
     expect(companySource).toContain("Alert.alert('Upload failed', formatAppSafeErrorMessage(err, 'Please try again.'))");
     expect(companySource).not.toContain('setErrorMessage(error.message)');
     expect(companySource).not.toContain("Alert.alert('Upload failed', err instanceof Error ? err.message : 'Please try again.')");
 
     expect(homeownerSource).toContain("import { formatAppSafeErrorMessage } from '@/lib/supabase/functions';");
     expect(homeownerSource).toContain("setErrorMessage(formatAppSafeErrorMessage(error, 'Could not load warranties.'))");
+    expect(homeownerSource).toContain("setErrorMessage('Project is missing. Reopen warranties from the project page.');\n      setWarranties([]);\n      setPreviewUrls({});");
+    expect(homeownerSource).toContain("setErrorMessage(formatAppSafeErrorMessage(err, 'Could not load warranties.'))");
+    expect(homeownerSource).toContain("setWarranties([]);\n        setPreviewUrls({});\n        setErrorMessage(formatAppSafeErrorMessage(error, 'Could not load warranties.'))");
+    expect(homeownerSource).toContain("setWarranties([]);\n      setPreviewUrls({});\n      setErrorMessage(formatAppSafeErrorMessage(err, 'Could not load warranties.'))");
     expect(homeownerSource).not.toContain('setErrorMessage(error.message)');
   });
 });

@@ -239,8 +239,6 @@ export default function HomeownerSettings() {
               else Alert.alert('Password Reset', `A reset link has been sent to ${email}. Check your inbox.`);
             }} />
             <Divider />
-            <ToggleRow icon="finger-print-outline" iconColor="#A78BFA" label="Face ID / Touch ID" value={profile.faceId} onToggle={(v) => toggle('faceId', v)} />
-            <Divider />
             <LinkRow icon="shield-outline" iconColor="#F59E0B" label="Two-Factor Auth" badge="Coming Soon" onPress={() => Alert.alert('Coming Soon', 'Two-factor authentication will be available in a future update.')} />
           </GlassCard>
 

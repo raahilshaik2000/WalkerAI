@@ -16,6 +16,12 @@ interface UploadResult {
   storagePath: string;
 }
 
+interface UploadBase64Options {
+  retries?: number;
+  retryDelayMs?: number;
+  upsert?: boolean;
+}
+
 export interface StorageUploadAsset {
   uri?: string | null;
   fileName?: string | null;
@@ -167,6 +173,7 @@ export async function uploadBase64(
   path: string,
   base64: string,
   contentType: string = 'image/jpeg',
+  options: UploadBase64Options = {},
 ): Promise<UploadResult> {
   const cleanBase64 = base64.replace(/^data:[^;]+;base64,/, '');
   const binary = atob(cleanBase64);
@@ -174,13 +181,56 @@ export async function uploadBase64(
   for (let i = 0; i < binary.length; i++) {
     bytes[i] = binary.charCodeAt(i);
   }
-  const { error } = await supabase.storage.from(bucket).upload(path, bytes, {
-    contentType,
-    upsert: true,
-  });
-  if (error) throw error;
+  const retries = Math.max(1, options.retries ?? 3);
+  const retryDelayMs = options.retryDelayMs ?? 800;
+  let lastError: unknown = null;
+
+  for (let attempt = 1; attempt <= retries; attempt += 1) {
+    const { error } = await supabase.storage.from(bucket).upload(path, bytes, {
+      contentType,
+      upsert: options.upsert ?? false,
+    });
+
+    if (!error || isAlreadyUploadedError(error)) break;
+
+    lastError = error;
+    if (!isRetriableStorageError(error) || attempt === retries) {
+      throw error;
+    }
+
+    await new Promise((resolve) => setTimeout(resolve, retryDelayMs * attempt));
+  }
+
+  if (lastError && !isRetriableStorageError(lastError) && !isAlreadyUploadedError(lastError)) {
+    throw lastError;
+  }
+
   const { data } = supabase.storage.from(bucket).getPublicUrl(path);
   return { publicUrl: data.publicUrl, storagePath: path };
+}
+
+function storageErrorText(error: unknown): string {
+  const err = error as { message?: string; error?: string; statusCode?: string | number; code?: string } | null;
+  return `${err?.message ?? ''} ${err?.error ?? ''} ${err?.statusCode ?? ''} ${err?.code ?? ''}`.toLowerCase();
+}
+
+function isRetriableStorageError(error: unknown): boolean {
+  const text = storageErrorText(error);
+  return text.includes('timed out')
+    || text.includes('timeout')
+    || text.includes('network')
+    || text.includes('fetch')
+    || text.includes('temporarily')
+    || text.includes('503')
+    || text.includes('504');
+}
+
+function isAlreadyUploadedError(error: unknown): boolean {
+  const text = storageErrorText(error);
+  return text.includes('already exists')
+    || text.includes('resourcealreadyexists')
+    || text.includes('duplicate')
+    || text.includes('409');
 }
 
 export function getPublicUrl(bucket: StorageBucket, path: string): string {

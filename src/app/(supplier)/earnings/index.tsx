@@ -4,6 +4,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { useFocusEffect, useNavigation } from '@react-navigation/native';
 import Ionicons from 'react-native-vector-icons/Ionicons';
 import { supabase } from '@/lib/supabase/client';
+import { getCurrentUser } from '@/lib/supabase/auth';
 import { formatAppSafeErrorMessage, formatSupabaseFunctionError } from '@/lib/supabase/functions';
 import { joinedMaterialItemName } from '@/lib/material-orders';
 import { isStripePayoutLocallyReady } from '@/lib/payouts';
@@ -24,56 +25,56 @@ export default function SupplierEarnings() {
 
   const loadEarnings = useCallback(async ({ showSpinner = false } = {}) => {
     if (showSpinner) setLoading(true);
-    if (!user) {
-      setSupplier(null);
-      setOrders([]);
-      setErrorMessage('You need to be signed in to view supplier earnings.');
-      setLoading(false);
-      setRefreshing(false);
-      return;
-    }
-    await refreshStripeConnectStatus('supplier');
-    const { data: sup, error: supplierError } = await supabase
-      .from('suppliers')
-      .select('*')
-      .eq('user_id', user.id)
-      .order('created_at', { ascending: false })
-      .limit(1)
-      .maybeSingle();
-    if (supplierError) {
-      setSupplier(null);
-      setOrders([]);
-      setErrorMessage(formatAppSafeErrorMessage(supplierError, 'Could not load earnings.'));
-      setLoading(false);
-      setRefreshing(false);
-      return;
-    }
-    setSupplier(sup);
-    if (!sup) {
-      setOrders([]);
+    try {
+      const currentUserId = user?.id ?? (await getCurrentUser())?.id ?? null;
+      if (!currentUserId) {
+        setSupplier(null);
+        setOrders([]);
+        setErrorMessage('You need to be signed in to view supplier earnings.');
+        return;
+      }
+      await refreshStripeConnectStatus('supplier');
+      const { data: sup, error: supplierError } = await supabase
+        .from('suppliers')
+        .select('*')
+        .eq('user_id', currentUserId)
+        .order('created_at', { ascending: false })
+        .limit(1)
+        .maybeSingle();
+      if (supplierError) {
+        setSupplier(null);
+        setOrders([]);
+        setErrorMessage(formatAppSafeErrorMessage(supplierError, 'Could not load earnings.'));
+        return;
+      }
+      setSupplier(sup);
+      if (!sup) {
+        setOrders([]);
+        setErrorMessage(null);
+        return;
+      }
+      const { data, error } = await supabase
+        .from('material_orders')
+        .select('*, material:materials!material_orders_material_id_fkey(item)')
+        .eq('accepted_supplier_id', sup.id)
+        .in('status', ['confirmed', 'paid'])
+        .order('confirmed_at', { ascending: false });
+      if (error) {
+        setOrders([]);
+        setErrorMessage(formatAppSafeErrorMessage(error, 'Could not load earnings.'));
+        return;
+      }
+      setOrders((data as MaterialOrder[]) ?? []);
       setErrorMessage(null);
-      setLoading(false);
-      setRefreshing(false);
-      return;
-    }
-    const { data, error } = await supabase
-      .from('material_orders')
-      .select('*, material:materials!material_orders_material_id_fkey(item)')
-      .eq('accepted_supplier_id', sup.id)
-      .in('status', ['confirmed', 'paid'])
-      .order('confirmed_at', { ascending: false });
-    if (error) {
+    } catch (err) {
+      setSupplier(null);
       setOrders([]);
-      setErrorMessage(formatAppSafeErrorMessage(error, 'Could not load earnings.'));
+      setErrorMessage(formatAppSafeErrorMessage(err, 'Could not load earnings.'));
+    } finally {
       setLoading(false);
       setRefreshing(false);
-      return;
     }
-    setOrders((data as MaterialOrder[]) ?? []);
-    setErrorMessage(null);
-    setLoading(false);
-    setRefreshing(false);
-  }, [user]);
+  }, [user?.id]);
 
   useFocusEffect(
     useCallback(() => {
@@ -103,18 +104,23 @@ export default function SupplierEarnings() {
   const fmt = (cents: number) => `$${(cents / 100).toLocaleString('en-CA', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 
   const handleStripeConnect = async () => {
-    if (!user?.id || !supplier?.id) {
-      Alert.alert('Supplier profile required', 'Create your supplier profile before setting up payouts.');
-      return;
+    try {
+      const currentUserId = user?.id ?? (await getCurrentUser())?.id ?? null;
+      if (!currentUserId || !supplier?.id) {
+        Alert.alert('Supplier profile required', 'Create your supplier profile before setting up payouts.');
+        return;
+      }
+      const { data, error } = await supabase.functions.invoke('create-connect-account', {
+        body: { role: 'supplier' },
+      });
+      if (error || !data?.url) {
+        Alert.alert('Could not start payout setup', error ? await formatSupabaseFunctionError(error, 'Please try again.') : 'Please try again.');
+        return;
+      }
+      Linking.openURL(data.url);
+    } catch (err) {
+      Alert.alert('Could not start payout setup', formatAppSafeErrorMessage(err, 'Please try again.'));
     }
-    const { data, error } = await supabase.functions.invoke('create-connect-account', {
-      body: { role: 'supplier' },
-    });
-    if (error || !data?.url) {
-      Alert.alert('Could not start payout setup', error ? await formatSupabaseFunctionError(error, 'Please try again.') : 'Please try again.');
-      return;
-    }
-    Linking.openURL(data.url);
   };
 
   if (loading) return <View style={styles.center}><ActivityIndicator color={Colors.accent} size="large" /></View>;

@@ -58,10 +58,24 @@ export function formatAppSafeErrorMessage(error: unknown, fallback = 'Please try
     return appSafeFunctionMessage(error, fallback);
   }
 
-  if (error && typeof error === 'object' && 'message' in error) {
-    const message = (error as { message?: unknown }).message;
-    if (typeof message === 'string' && message.trim()) {
-      return appSafeFunctionMessage(message, fallback);
+  if (error && typeof error === 'object') {
+    const fields = error as {
+      message?: unknown;
+      details?: unknown;
+      hint?: unknown;
+      code?: unknown;
+    };
+    const messages = [fields.message, fields.details, fields.hint, fields.code]
+      .filter((message): message is string => typeof message === 'string' && message.trim().length > 0);
+
+    if (messages.some((message) => (
+      isTransientInfrastructureMessage(message) || isDatabaseInternalMessage(message)
+    ))) {
+      return fallback;
+    }
+
+    if (messages[0]) {
+      return appSafeFunctionMessage(messages[0], fallback);
     }
   }
 

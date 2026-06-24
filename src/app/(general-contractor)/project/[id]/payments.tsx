@@ -78,10 +78,20 @@ export default function GeneralContractorPaymentsScreen() {
   const [gcReady, setGcReady] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
+  const clearPaymentRequestState = useCallback(() => {
+    setAssignment(null);
+    setRequests([]);
+    setAmount('');
+    setTitle('');
+    setDescription('');
+    setCancellingRequestId(null);
+    setGcReady(false);
+  }, []);
+
   const fetchData = useCallback(async () => {
-    const currentUser = (await supabase.auth.getUser()).data.user;
-    if (!currentUser?.id) {
-      setErrorMessage('You need to be signed in to manage payment requests.');
+    if (!projectId) {
+      setErrorMessage('Project is missing. Reopen payment requests from the GC project page.');
+      clearPaymentRequestState();
       setLoading(false);
       setRefreshing(false);
       return;
@@ -89,6 +99,13 @@ export default function GeneralContractorPaymentsScreen() {
 
     try {
       setErrorMessage(null);
+      const currentUser = (await supabase.auth.getUser()).data.user;
+      if (!currentUser?.id) {
+        setErrorMessage('You need to be signed in to manage payment requests.');
+        clearPaymentRequestState();
+        return;
+      }
+
       const { data: gc, error: gcError } = await supabase
         .from('general_contractors')
         .select(GENERAL_CONTRACTOR_READINESS_SELECT)
@@ -119,14 +136,12 @@ export default function GeneralContractorPaymentsScreen() {
       setRequests((requestResult.data ?? []) as GcPaymentRequest[]);
     } catch (err) {
       setErrorMessage(formatAppSafeErrorMessage(err, 'Could not load payment requests.'));
-      setAssignment(null);
-      setRequests([]);
-      setGcReady(false);
+      clearPaymentRequestState();
     } finally {
       setLoading(false);
       setRefreshing(false);
     }
-  }, [projectId]);
+  }, [clearPaymentRequestState, projectId]);
 
   useFocusEffect(
     useCallback(() => {
@@ -203,23 +218,28 @@ export default function GeneralContractorPaymentsScreen() {
           style: 'destructive',
           onPress: async () => {
             setCancellingRequestId(request.id);
-            const { error } = await supabase
-              .from('gc_payment_requests')
-              .update({
-                status: 'cancelled',
-                cancelled_at: new Date().toISOString(),
-              })
-              .eq('id', request.id)
-              .eq('project_id', projectId)
-              .eq('general_contractor_id', assignment.general_contractor_id)
-              .eq('status', 'pending');
+            try {
+              const { error } = await supabase
+                .from('gc_payment_requests')
+                .update({
+                  status: 'cancelled',
+                  cancelled_at: new Date().toISOString(),
+                })
+                .eq('id', request.id)
+                .eq('project_id', projectId)
+                .eq('general_contractor_id', assignment.general_contractor_id)
+                .eq('status', 'pending');
 
-            if (error) {
-              Alert.alert('Could not cancel request', formatAppSafeErrorMessage(error, 'Please try again.'));
-            } else {
+              if (error) {
+                Alert.alert('Could not cancel request', formatAppSafeErrorMessage(error, 'Please try again.'));
+                return;
+              }
               await fetchData();
+            } catch (err) {
+              Alert.alert('Could not cancel request', formatAppSafeErrorMessage(err, 'Please try again.'));
+            } finally {
+              setCancellingRequestId(null);
             }
-            setCancellingRequestId(null);
           },
         },
       ],

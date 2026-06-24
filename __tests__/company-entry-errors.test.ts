@@ -39,6 +39,8 @@ describe('company entry and onboarding errors', () => {
 
     expect(license).toContain("import { formatAppSafeErrorMessage } from '@/lib/supabase/functions';");
     expect(license).toContain("Alert.alert('Could not save license', formatAppSafeErrorMessage(err, 'Please try again.'))");
+    expect(license).not.toContain("navigation.navigate('InsuranceOnboarding')\n            style={styles.skipButton}");
+    expect(license).not.toContain('Skip for now');
     expect(license).not.toContain("Alert.alert('Error', err instanceof Error ? err.message : 'Failed to save. Please try again.')");
 
     expect(insurance).toContain("import { formatAppSafeErrorMessage } from '@/lib/supabase/functions';");
@@ -47,6 +49,34 @@ describe('company entry and onboarding errors', () => {
 
     expect(jobDetail).toContain("formatSupabaseFunctionError(err, 'Failed to accept job.')");
     expect(jobDetail).toContain("Alert.alert('Try again', 'Another contractor is claiming this slot right now. Try again.')");
+    expect(jobDetail).toContain("Alert.alert('Could not accept job', msg)");
     expect(jobDetail).not.toContain("Alert.alert('Error', err instanceof Error ? err.message");
+    expect(jobDetail).not.toContain("Alert.alert('Error', msg)");
+  });
+
+  it('falls back to the active Supabase session on core company screens', () => {
+    const jobFeed = fs.readFileSync(
+      path.join(__dirname, '../src/app/(company)/index.tsx'),
+      'utf8',
+    );
+    const calendar = fs.readFileSync(
+      path.join(__dirname, '../src/app/(company)/calendar.tsx'),
+      'utf8',
+    );
+    const earnings = fs.readFileSync(
+      path.join(__dirname, '../src/app/(company)/earnings.tsx'),
+      'utf8',
+    );
+
+    [jobFeed, calendar, earnings].forEach((source) => {
+      expect(source).toContain("import { getCurrentUser");
+      expect(source).toContain('user?.id ?? (await getCurrentUser())?.id ?? null');
+      expect(source).not.toContain(".eq('user_id', user.id)");
+      expect(source).toContain('}, [user?.id]);');
+    });
+    expect(jobFeed).toContain("setErrorMessage('You need to be signed in to view jobs.');");
+    expect(jobFeed).toContain("setCompany(null);\n      setErrorMessage(formatAppSafeErrorMessage(err, 'Could not load jobs.'))");
+    expect(calendar).toContain("setErrorMessage(formatAppSafeErrorMessage(err, 'Could not load calendar.'))");
+    expect(earnings).toContain("setErrorMessage(formatAppSafeErrorMessage(err, 'Could not load earnings.'))");
   });
 });

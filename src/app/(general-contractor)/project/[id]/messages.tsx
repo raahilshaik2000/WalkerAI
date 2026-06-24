@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import {
   Alert,
   FlatList,
@@ -49,89 +49,105 @@ export default function GeneralContractorMessagesScreen() {
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const flatListRef = useRef<FlatList>(null);
 
+  const clearMessageState = useCallback((lockMessage: string, currentUser: string | null = null) => {
+    setMessages([]);
+    setBody('');
+    setSending(false);
+    setUploadingAttachment(false);
+    setCurrentUserId(currentUser);
+    setCanSendMessages(false);
+    setComposeLockMessage(lockMessage);
+  }, []);
+
   useEffect(() => {
     let cancelled = false;
 
     if (!projectId) {
       setErrorMessage('Project is missing. Reopen messages from the GC project page.');
-      setCanSendMessages(false);
-      setComposeLockMessage('Project is missing. Reopen messages from the GC project page.');
+      clearMessageState('Project is missing. Reopen messages from the GC project page.');
       return;
     }
 
     const load = async () => {
-      const currentUser = user ?? (await supabase.auth.getUser()).data.user;
-      if (!currentUser?.id) {
-        if (!cancelled) {
-          setCurrentUserId(null);
-          setErrorMessage('You need to be signed in to view project messages.');
-          setCanSendMessages(false);
-          setComposeLockMessage('Sign in to send project messages.');
+      try {
+        const currentUser = user ?? (await supabase.auth.getUser()).data.user;
+        if (!currentUser?.id) {
+          if (!cancelled) {
+            setErrorMessage('You need to be signed in to view project messages.');
+            clearMessageState('Sign in to send project messages.');
+          }
+          return;
         }
-        return;
-      }
-      setCurrentUserId(currentUser.id);
+        setCurrentUserId(currentUser.id);
 
-      const [messageResult, gcResult] = await Promise.all([
-        supabase
-          .from('messages')
-          .select('id, body, sender_id, sent_at, attachment_url')
+        const [messageResult, gcResult] = await Promise.all([
+          supabase
+            .from('messages')
+            .select('id, body, sender_id, sent_at, attachment_url')
+            .eq('project_id', projectId)
+            .order('sent_at', { ascending: true }),
+          supabase
+            .from('general_contractors')
+            .select(GENERAL_CONTRACTOR_READINESS_SELECT)
+            .eq('user_id', currentUser.id)
+            .maybeSingle(),
+        ]);
+
+        if (cancelled) return;
+
+        if (messageResult.error) {
+          setErrorMessage(`Could not load messages: ${formatAppSafeErrorMessage(messageResult.error, 'Please try again.')}`);
+          clearMessageState('Messages are unavailable right now. Try again shortly.', currentUser.id);
+          return;
+        } else {
+          setErrorMessage(null);
+          setMessages((messageResult.data ?? []) as Message[]);
+        }
+
+        if (gcResult.error || !gcResult.data?.id) {
+          setCanSendMessages(false);
+          setComposeLockMessage('GC profile is required before project messages can be sent.');
+          return;
+        }
+
+        const { data: assignment, error: assignmentError } = await supabase
+          .from('general_contractor_projects')
+          .select('status')
           .eq('project_id', projectId)
-          .order('sent_at', { ascending: true }),
-        supabase
-          .from('general_contractors')
-          .select(GENERAL_CONTRACTOR_READINESS_SELECT)
-          .eq('user_id', currentUser.id)
-          .maybeSingle(),
-      ]);
+          .eq('general_contractor_id', gcResult.data.id)
+          .in('status', ['invited', 'active', 'completed'])
+          .order('created_at', { ascending: false })
+          .limit(1)
+          .maybeSingle();
 
-      if (cancelled) return;
+        if (cancelled) return;
 
-      if (messageResult.error) {
-        setErrorMessage(`Could not load messages: ${formatAppSafeErrorMessage(messageResult.error, 'Please try again.')}`);
-      } else {
-        setErrorMessage(null);
-        setMessages((messageResult.data ?? []) as Message[]);
+        if (assignmentError || !assignment) {
+          setCanSendMessages(false);
+          setComposeLockMessage('GC project assignment is required before messages can be sent.');
+          return;
+        }
+
+        if (!isGeneralContractorReadyForProjectControls(gcResult.data)) {
+          setCanSendMessages(false);
+          setComposeLockMessage('Complete verified GC setup is required before GC project messages can be sent.');
+          return;
+        }
+
+        if (!['invited', 'active'].includes(assignment.status)) {
+          setCanSendMessages(false);
+          setComposeLockMessage('This project message thread is read-only for completed GC assignments.');
+          return;
+        }
+
+        setCanSendMessages(true);
+        setComposeLockMessage('');
+      } catch (err) {
+        if (!cancelled) {
+          setErrorMessage(formatAppSafeErrorMessage(err, 'Could not load messages.'));
+          clearMessageState('Messages are unavailable right now. Try again shortly.');
+        }
       }
-
-      if (gcResult.error || !gcResult.data?.id) {
-        setCanSendMessages(false);
-        setComposeLockMessage('GC profile is required before project messages can be sent.');
-        return;
-      }
-
-      const { data: assignment, error: assignmentError } = await supabase
-        .from('general_contractor_projects')
-        .select('status')
-        .eq('project_id', projectId)
-        .eq('general_contractor_id', gcResult.data.id)
-        .in('status', ['invited', 'active', 'completed'])
-        .order('created_at', { ascending: false })
-        .limit(1)
-        .maybeSingle();
-
-      if (cancelled) return;
-
-      if (assignmentError || !assignment) {
-        setCanSendMessages(false);
-        setComposeLockMessage('GC project assignment is required before messages can be sent.');
-        return;
-      }
-
-      if (!isGeneralContractorReadyForProjectControls(gcResult.data)) {
-        setCanSendMessages(false);
-        setComposeLockMessage('Complete verified GC setup is required before GC project messages can be sent.');
-        return;
-      }
-
-      if (!['invited', 'active'].includes(assignment.status)) {
-        setCanSendMessages(false);
-        setComposeLockMessage('This project message thread is read-only for completed GC assignments.');
-        return;
-      }
-
-      setCanSendMessages(true);
-      setComposeLockMessage('');
     };
     load();
 
@@ -153,7 +169,7 @@ export default function GeneralContractorMessagesScreen() {
       cancelled = true;
       supabase.removeChannel(channel);
     };
-  }, [projectId, user]);
+  }, [clearMessageState, projectId, user]);
 
   const sendMessage = async () => {
     if (!body.trim() || sending) return;
@@ -161,36 +177,36 @@ export default function GeneralContractorMessagesScreen() {
       Alert.alert('Messages locked', composeLockMessage || 'Project messages are currently read-only.');
       return;
     }
-    const currentUser = user ?? (await supabase.auth.getUser()).data.user;
-    if (!projectId || !currentUser?.id) {
-      Alert.alert('Unable to send', 'Please reopen this project and try again.');
-      return;
-    }
-    setSending(true);
-    const trimmed = body.trim();
-    setBody('');
+    let trimmed = '';
+    try {
+      const currentUser = user ?? (await supabase.auth.getUser()).data.user;
+      if (!projectId || !currentUser?.id) {
+        Alert.alert('Unable to send', 'Please reopen this project and try again.');
+        return;
+      }
+      setSending(true);
+      trimmed = body.trim();
+      setBody('');
 
-    // Append optimistically — realtime delivery isn't guaranteed.
-    const { data: inserted, error } = await supabase
-      .from('messages')
-      .insert({
+      // Append optimistically — realtime delivery isn't guaranteed.
+      const { data: inserted, error } = await supabase.from('messages').insert({
         project_id: projectId,
         sender_id: currentUser.id,
         body: trimmed,
-      })
-      .select('id, body, sender_id, sent_at, attachment_url')
-      .single();
-
-    if (error) {
-      setBody(trimmed);
-      Alert.alert('Message not sent', formatAppSafeErrorMessage(error, 'Please try again.'));
-    } else if (inserted) {
-      const sent = inserted as Message;
-      setMessages((prev) => prev.some((m) => m.id === sent.id) ? prev : [...prev, sent]);
-      setTimeout(() => flatListRef.current?.scrollToEnd({ animated: true }), 100);
+      }).select('id, body, sender_id, sent_at, attachment_url').single();
+      if (error) throw error;
+      if (inserted) {
+        const sent = inserted as Message;
+        setMessages((prev) => prev.some((m) => m.id === sent.id) ? prev : [...prev, sent]);
+        setTimeout(() => flatListRef.current?.scrollToEnd({ animated: true }), 100);
+      }
       ReactNativeHapticFeedback.trigger('impactLight');
+    } catch (err) {
+      if (trimmed) setBody(trimmed);
+      Alert.alert('Message not sent', formatAppSafeErrorMessage(err, 'Please try again.'));
+    } finally {
+      setSending(false);
     }
-    setSending(false);
   };
 
   const sendPhotoAttachment = async () => {
@@ -199,23 +215,23 @@ export default function GeneralContractorMessagesScreen() {
       Alert.alert('Messages locked', composeLockMessage || 'Project messages are currently read-only.');
       return;
     }
-    const currentUser = user ?? (await supabase.auth.getUser()).data.user;
-    if (!projectId || !currentUser?.id) {
-      Alert.alert('Unable to attach photo', 'Please reopen this project and try again.');
-      return;
-    }
 
-    const result = await launchImageLibrary({
-      mediaType: 'photo',
-      quality: 0.8,
-      selectionLimit: 1,
-      assetRepresentationMode: 'compatible',
-    });
-    if (result.didCancel || !result.assets?.[0]) return;
-
-    const caption = body.trim();
-    setUploadingAttachment(true);
     try {
+      const currentUser = user ?? (await supabase.auth.getUser()).data.user;
+      if (!projectId || !currentUser?.id) {
+        Alert.alert('Unable to attach photo', 'Please reopen this project and try again.');
+        return;
+      }
+      const result = await launchImageLibrary({
+        mediaType: 'photo',
+        quality: 0.8,
+        selectionLimit: 1,
+        assetRepresentationMode: 'compatible',
+      });
+      if (result.didCancel || !result.assets?.[0]) return;
+
+      const caption = body.trim();
+      setUploadingAttachment(true);
       const upload = getUploadMetadata(result.assets[0]);
       const path = `${projectId}/messages/${currentUser.id}-${Date.now()}.${upload.extension}`;
       const { publicUrl } = await uploadFile('project-photos', path, upload.uri, upload.contentType);

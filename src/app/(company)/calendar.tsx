@@ -14,6 +14,7 @@ import { supabase } from '@/lib/supabase/client';
 import { useAuthStore } from '@/stores/auth.store';
 import { isMissingSupabaseSchemaObjectError } from '@/lib/supabase/errors';
 import { formatAppSafeErrorMessage } from '@/lib/supabase/functions';
+import { getCurrentUser } from '@/lib/supabase/auth';
 import { formatCad } from '@/lib/formatters';
 import { gcProjectTypeIcon } from '@/lib/gc-project-type';
 import { mapCompanyCalendarMilestones, type CompanyCalendarMilestone } from '@/lib/company-calendar';
@@ -69,99 +70,97 @@ export default function CalendarScreen() {
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
   const fetchData = useCallback(async () => {
-    if (!user) {
-      setMilestones([]);
-      setHasCompanyProfile(false);
-      setErrorMessage('You need to be signed in to view your calendar.');
-      setLoading(false);
-      setRefreshing(false);
-      return;
-    }
-
-    // Get company
-    setErrorMessage(null);
-    const { data: co, error: companyError } = await supabase
-      .from('companies')
-      .select('id')
-      .eq('user_id', user.id)
-      .order('created_at', { ascending: false })
-      .limit(1)
-      .maybeSingle();
-
-    if (companyError) {
-      setMilestones([]);
-      setHasCompanyProfile(false);
-      setErrorMessage(formatAppSafeErrorMessage(companyError, 'Could not load company profile.'));
-      setLoading(false);
-      setRefreshing(false);
-      return;
-    }
-
-    if (!co) {
-      setMilestones([]);
-      setHasCompanyProfile(false);
-      setLoading(false);
-      setRefreshing(false);
-      return;
-    }
-
-    // Get milestones from approved quotes for this company
-    setHasCompanyProfile(true);
-    const { data, error } = await supabase
-      .from('milestones')
-      .select(`
-        id, title, amount, status, due_date,
-        quote:quotes!inner ( company_id, status, slot_id, project:projects ( id, address, city, room_type ) )
-      `)
-      .eq('quote.company_id', co.id)
-      .eq('quote.status', 'approved')
-      .not('status', 'eq', 'paid')
-      .order('due_date', { ascending: true, nullsFirst: false });
-    if (error) {
-      setMilestones([]);
-      setErrorMessage(formatAppSafeErrorMessage(error, 'Could not load calendar.'));
-      setLoading(false);
-      setRefreshing(false);
-      return;
-    }
-
-    // Flatten the nested join
-    let mapped = mapCompanyCalendarMilestones((data ?? []) as any[]);
-    const projectIds = Array.from(new Set(mapped.map((milestone) => milestone.project.id).filter(Boolean)));
-    if (projectIds.length > 0) {
-      const { data: gcRows, error: gcContextError } = await supabase
-        .from('general_contractor_projects')
-        .select('project_id, project_type')
-        .in('project_id', projectIds)
-        .neq('status', 'removed');
-
-      if (gcContextError && !isMissingSupabaseSchemaObjectError(gcContextError, 'general_contractor_projects')) {
+    try {
+      const currentUserId = user?.id ?? (await getCurrentUser())?.id ?? null;
+      if (!currentUserId) {
         setMilestones([]);
-        setErrorMessage(formatAppSafeErrorMessage(gcContextError, 'Could not load project management context.'));
-        setLoading(false);
-        setRefreshing(false);
+        setHasCompanyProfile(false);
+        setErrorMessage('You need to be signed in to view your calendar.');
         return;
       }
 
-      const gcProjectTypes = new Map<string, string | null>();
-      ((gcRows ?? []) as GcProjectTypeRow[]).forEach((row) => {
-        if (!gcProjectTypes.has(row.project_id)) {
-          gcProjectTypes.set(row.project_id, row.project_type);
-        }
-      });
-      mapped = mapped.map((milestone) => ({
-        ...milestone,
-        project: {
-          ...milestone.project,
-          gc_project_type: gcProjectTypes.get(milestone.project.id) ?? null,
-        },
-      }));
-    }
+      // Get company
+      setErrorMessage(null);
+      const { data: co, error: companyError } = await supabase
+        .from('companies')
+        .select('id')
+        .eq('user_id', currentUserId)
+        .order('created_at', { ascending: false })
+        .limit(1)
+        .maybeSingle();
 
-    setMilestones(mapped);
-    setLoading(false);
-    setRefreshing(false);
-  }, [user]);
+      if (companyError) {
+        setMilestones([]);
+        setHasCompanyProfile(false);
+        setErrorMessage(formatAppSafeErrorMessage(companyError, 'Could not load company profile.'));
+        return;
+      }
+
+      if (!co) {
+        setMilestones([]);
+        setHasCompanyProfile(false);
+        return;
+      }
+
+      // Get milestones from approved quotes for this company
+      setHasCompanyProfile(true);
+      const { data, error } = await supabase
+        .from('milestones')
+        .select(`
+          id, title, amount, status, due_date,
+          quote:quotes!inner ( company_id, status, slot_id, project:projects ( id, address, city, room_type ) )
+        `)
+        .eq('quote.company_id', co.id)
+        .eq('quote.status', 'approved')
+        .not('status', 'eq', 'paid')
+        .order('due_date', { ascending: true, nullsFirst: false });
+      if (error) {
+        setMilestones([]);
+        setErrorMessage(formatAppSafeErrorMessage(error, 'Could not load calendar.'));
+        return;
+      }
+
+      // Flatten the nested join
+      let mapped = mapCompanyCalendarMilestones((data ?? []) as any[]);
+      const projectIds = Array.from(new Set(mapped.map((milestone) => milestone.project.id).filter(Boolean)));
+      if (projectIds.length > 0) {
+        const { data: gcRows, error: gcContextError } = await supabase
+          .from('general_contractor_projects')
+          .select('project_id, project_type')
+          .in('project_id', projectIds)
+          .neq('status', 'removed');
+
+        if (gcContextError && !isMissingSupabaseSchemaObjectError(gcContextError, 'general_contractor_projects')) {
+          setMilestones([]);
+          setErrorMessage(formatAppSafeErrorMessage(gcContextError, 'Could not load project management context.'));
+          return;
+        }
+
+        const gcProjectTypes = new Map<string, string | null>();
+        ((gcRows ?? []) as GcProjectTypeRow[]).forEach((row) => {
+          if (!gcProjectTypes.has(row.project_id)) {
+            gcProjectTypes.set(row.project_id, row.project_type);
+          }
+        });
+        mapped = mapped.map((milestone) => ({
+          ...milestone,
+          project: {
+            ...milestone.project,
+            gc_project_type: gcProjectTypes.get(milestone.project.id) ?? null,
+          },
+        }));
+      }
+
+      setMilestones(mapped);
+    } catch (err) {
+      setMilestones([]);
+      setHasCompanyProfile(false);
+      setErrorMessage(formatAppSafeErrorMessage(err, 'Could not load calendar.'));
+    } finally {
+      setLoading(false);
+      setRefreshing(false);
+    }
+  }, [user?.id]);
 
   useEffect(() => { fetchData(); }, [fetchData]);
 

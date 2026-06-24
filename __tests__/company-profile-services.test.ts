@@ -38,4 +38,11 @@ describe('company profile services display', () => {
       /setErrorMessage\(null\);[\s\S]*?await refreshStripeConnectStatus\(\);[\s\S]*?co = await fetchCompanyProfile/
     );
   });
+
+  it('uses specific app-safe copy when company payout setup cannot start', () => {
+    expect(source).toContain("supabase.functions.invoke('create-connect-account')");
+    expect(source).toContain('if (error) throw new Error(await formatSupabaseFunctionError(error));');
+    expect(source).toContain("Alert.alert('Could not start payout setup', await formatSupabaseFunctionError(err, 'Please try again.'))");
+    expect(source).not.toContain("Alert.alert('Error', await formatSupabaseFunctionError(err, 'Could not start payout setup. Please try again.'))");
+  });
 });

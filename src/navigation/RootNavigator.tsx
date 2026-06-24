@@ -14,6 +14,7 @@ import Ionicons from 'react-native-vector-icons/Ionicons';
 import { useAuthStore } from '@/stores/auth.store';
 import { useProfileStore } from '@/stores/profile.store';
 import { supabase } from '@/lib/supabase/client';
+import { formatAppSafeErrorMessage } from '@/lib/supabase/functions';
 import { FloatingTabBar } from '@/components/ui/FloatingTabBar';
 import type { UserRole } from '@/constants/enums';
 import { toRootNotificationRoute } from '@/lib/notifications/navigation';
@@ -342,6 +343,7 @@ export function RootNavigator() {
   const updateProfile = useProfileStore((state) => state.updateProfile);
   const resetProfile = useProfileStore((state) => state.resetProfile);
   const [authRoleResolved, setAuthRoleResolved] = useState(false);
+  const [authErrorMessage, setAuthErrorMessage] = useState<string | null>(null);
   const appliedUserIdRef = useRef<string | null>(null);
 
   const applySession = useCallback(async (nextSession: typeof session) => {
@@ -353,6 +355,7 @@ export function RootNavigator() {
     const sameUser = appliedUserIdRef.current !== null && appliedUserIdRef.current === nextUserId;
     appliedUserIdRef.current = nextUserId;
     if (!sameUser) setAuthRoleResolved(false);
+    setAuthErrorMessage(null);
     setSession(nextSession);
     if (!nextSession?.user?.id) {
       setRole(null);
@@ -392,8 +395,19 @@ export function RootNavigator() {
         .maybeSingle();
     }
 
+    if (userResult.error) {
+      setAuthErrorMessage(formatAppSafeErrorMessage(userResult.error, 'Could not load your account. Please try again.'));
+      setRole(null);
+      resetProfile();
+      setHydrated(true);
+      setAuthRoleResolved(true);
+      return;
+    }
+
     const data = userResult.data;
-    if (data) {
+    if (!data) {
+      resetProfile();
+    } else {
       updateProfile({
         displayName: data.full_name ?? '',
         phone: data.phone ?? '',
@@ -407,6 +421,19 @@ export function RootNavigator() {
     setHydrated(true);
     setAuthRoleResolved(true);
   }, [resetProfile, setHydrated, setRole, setSession, updateProfile]);
+
+  const handleFallbackSignOut = useCallback(async () => {
+    try {
+      await supabase.auth.signOut();
+    } finally {
+      setSession(null);
+      setRole(null);
+      resetProfile();
+      setAuthErrorMessage(null);
+      setHydrated(true);
+      setAuthRoleResolved(true);
+    }
+  }, [resetProfile, setHydrated, setRole, setSession]);
 
   useEffect(() => {
     const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, newSession) => {
@@ -456,6 +483,23 @@ export function RootNavigator() {
 
   if (!hydrated || !authRoleResolved) return null;
 
+  if (session && authErrorMessage) {
+    return (
+      <View style={roleFallbackStyles.container}>
+        <Text style={roleFallbackStyles.title}>Account temporarily unavailable</Text>
+        <Text style={roleFallbackStyles.body}>{authErrorMessage}</Text>
+        <View style={roleFallbackStyles.actionRow}>
+          <TouchableOpacity style={roleFallbackStyles.secondaryButton} onPress={() => applySession(session)}>
+            <Text style={roleFallbackStyles.secondaryButtonText}>Try Again</Text>
+          </TouchableOpacity>
+          <TouchableOpacity style={roleFallbackStyles.button} onPress={handleFallbackSignOut}>
+            <Text style={roleFallbackStyles.buttonText}>Sign Out</Text>
+          </TouchableOpacity>
+        </View>
+      </View>
+    );
+  }
+
   const resolvedRole = role === 'homeowner'
     || role === 'company'
     || role === 'supplier'
@@ -469,7 +513,7 @@ export function RootNavigator() {
         <Text style={roleFallbackStyles.body}>
           Your account role is missing. Sign out and sign in again, or contact support if this keeps happening.
         </Text>
-        <TouchableOpacity style={roleFallbackStyles.button} onPress={() => supabase.auth.signOut()}>
+        <TouchableOpacity style={roleFallbackStyles.button} onPress={handleFallbackSignOut}>
           <Text style={roleFallbackStyles.buttonText}>Sign Out</Text>
         </TouchableOpacity>
       </View>
@@ -505,6 +549,7 @@ const roleFallbackStyles = StyleSheet.create({
   },
   title: { color: '#fff', fontSize: 22, fontWeight: '800', textAlign: 'center', marginBottom: 10 },
   body: { color: 'rgba(255,255,255,0.65)', fontSize: 15, lineHeight: 22, textAlign: 'center', marginBottom: 20 },
+  actionRow: { flexDirection: 'row', alignItems: 'center', gap: 10 },
   button: {
     minHeight: 48,
     paddingHorizontal: 28,
@@ -514,4 +559,15 @@ const roleFallbackStyles = StyleSheet.create({
     justifyContent: 'center',
   },
   buttonText: { color: '#000', fontSize: 15, fontWeight: '800' },
+  secondaryButton: {
+    minHeight: 48,
+    paddingHorizontal: 24,
+    borderRadius: 14,
+    backgroundColor: 'rgba(255,255,255,0.08)',
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.14)',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  secondaryButtonText: { color: '#fff', fontSize: 15, fontWeight: '800' },
 });

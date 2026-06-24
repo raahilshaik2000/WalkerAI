@@ -6,6 +6,13 @@ This document summarizes the work completed during the active goal to make Gener
 
 General Contractor should be a separate app account type, not a company trade fallback. The app should route, onboard, authorize, and display GC workflows through their own profile, project-management workspace, and backend authorization rules.
 
+## Latest Continuation Updates
+
+- Audited GC project detail and sub-screens for active-assignment, verified-profile, complete-setup, homeowner-approval, and read-only completed-project gates.
+- Confirmed schedule, discovery, materials, trade recommendations, payment requests, permit management, assistant summaries, and completion requests are gated by active GC management and complete verified GC setup where they mutate project state.
+- Fixed the GC Approvals tab so incomplete, missing, or unverified GC profiles now see an explicit setup-required empty state instead of a misleading "No approval requests" state.
+- Added a regression guard in `__tests__/general-contractor.test.ts` for the GC Approvals setup lock copy and state.
+
 ## Current Repo State When This Doc Was Created
 
 - Branch: `main`
@@ -453,6 +460,7 @@ Runtime fixes made from this pass:
 - Supplier profile metrics now render in a two-column grid so rating, reviews, on-time percentage, and average days are readable on mobile.
 - Homeowner approval/rejection of GC project recommendations now supports optional response notes, and those notes are visible in GC project detail and approvals inbox views.
 - Homeowner approval/rejection of GC payment authorization requests now supports optional response notes, while escrow and milestone release remain separate. Those notes are visible in the homeowner concierge history, the GC payment screen, project detail, and the GC approvals inbox.
+- Homeowner GC invite, concierge service request, management confirmation, and GC removal actions now clear their in-progress state and show app-safe copy even if the RPC or refresh path throws from a client/network failure.
 - Trade responses to GC counteroffers/revision requests now support optional response notes, and accepted counteroffers keep those notes visible while the trade builds the updated homeowner-facing quote package.
 - GC accept/reject responses for concierge service bookings now support optional response notes, and those notes are visible in the homeowner concierge request history.
 - GC-created project setup now uses stable existing-homeowner-account guidance and formats the missing-homeowner RPC error into actionable app copy instead of exposing backend wording.
@@ -461,31 +469,58 @@ Runtime fixes made from this pass:
 - The homeowner dashboard project carousel now formats both project-load and optional GC-context failures through app-safe copy before displaying them.
 - Company calendar milestones now attach optional GC project type context so GC-created projects such as flooring, painting, basement, and additions do not fall back to generic room-type icons; calendar load failures also use app-safe copy.
 - Company quote/pricing submission failures now use app-safe copy instead of surfacing raw backend or database messages when a trade submits or revises pricing during GC negotiation workflows.
+- Company quote/pricing now blocks editing if existing quote state cannot be loaded safely, including pending quote line items or milestone details, so trades do not replace pricing from an uncertain funded/pending state.
 - Company job detail load failures now use app-safe copy, covering the trade acceptance and GC quote-negotiation entry point without exposing raw backend errors.
+- Company job acceptance failures now keep race-condition guidance specific and use a clear `Could not accept job` title for other app-safe accept-job failures instead of a generic `Error` title.
 - Company job detail now scopes GC trade negotiation prompts to the active quote slot, preventing project-level pricing views from showing slot-specific negotiation prompts from a different trade path.
 - Company/trade responses to GC trade counteroffers and revision requests now clear their in-progress state even if the negotiation response RPC throws from a network/client failure.
 - Company material verification now formats material, supplier-order, supplier-review, quantity-save, and supplier-review submission failures through app-safe copy for GC-managed material sourcing workflows.
 - Supplier material order feed, detail, and active fulfillment screens now format supplier profile, order-load, eligibility, claim, processing, shipped, and delivered update failures through app-safe copy for GC-managed material order lifecycles.
+- Supplier open material order feed now catches thrown load/eligibility failures, clears the loading state reliably, and uses a specific `Could not claim order` title for non-race claim failures.
+- Supplier material order detail and active fulfillment screens now also catch thrown load failures and clear loading state reliably, so GC-managed material order views do not hang on transient client/network failures.
 - Homeowner material receipt and supplier-payment release now use app-safe copy for material order load failures and payout release failures, while keeping delivery-proof gating intact.
+- Homeowner material receipt now also catches thrown material-order load failures and clears loading state reliably before the homeowner reviews delivery proof or releases supplier payout.
+- Homeowner quote funding now catches thrown project/quote/line-item load failures and clears loading state reliably before payment start, while preserving existing Stripe PaymentSheet behavior.
 - Homeowner GC approval/rejection and GC payment authorization responses now clear their in-progress state even if the RPC throws from a network/client failure.
 - Homeowner project photo analysis now formats outer project-creation and upload failures through app-safe copy, so transient database timeouts no longer show raw backend wording on the analysis failure screen.
 - Supplier catalog stock toggles now roll back their optimistic UI update when the catalog update throws from a network/client failure, not only when Supabase returns an error object.
+- GC management invite acceptance, approval-request cancellation, trade-negotiation cancellation, and concierge booking responses now clear their in-progress state even if the RPC/update/fetch path throws.
+- GC payment-request cancellation now clears its in-progress state if the update or refresh throws, and GC permit status updates now show app-safe failure copy for thrown client/network errors.
+- GC native picker failures for license documents, insurance documents, permit uploads, project message attachments, and external-trade documents now route through app-safe alerts instead of bypassing upload error handling.
+- GC license and insurance onboarding now surfaces app-safe preload failures instead of silently showing blank existing document fields when the profile query fails.
+- GC business onboarding now surfaces app-safe preload failures instead of silently leaving default business, service-area, markup, and concierge values when the profile query fails.
+- GC business, license, and insurance onboarding save failures now use specific app-safe alert titles instead of the generic `Error` title.
+- Supplier sign-out now clears the full persisted auth state, including role, matching the homeowner, company, and GC sign-out paths and preventing stale supplier role state after leaving the fourth-account workflow.
+- Company payout setup failures now use the same specific app-safe alert pattern as supplier and GC payout setup, instead of a generic `Error` title on the trade account surface.
+- Root account fallback sign-out now explicitly clears local session, role, profile, and fallback error state after attempting Supabase sign-out, so temporary profile failures or missing-role states cannot leave stale role routing behind.
+- Root account role resolution now clears the persisted profile store when the auth session exists but no `public.users` profile row is returned, preventing stale display/profile data from a previous homeowner, company, supplier, or GC account while the setup-incomplete fallback is shown.
+- Supplier `new_message` notification taps now open the shared project message thread when the backend sends a `project_id`, matching the supplier project participant policy and the existing `SupplierProjectMessages` route.
+- Shared project message threads now catch thrown load/send failures and restore the typed draft while clearing the sending state, covering the homeowner project message surface and the supplier project-message route that reuses it.
+- Notification deep-link fallback parsing now recognizes generic `/project/:id/...` links emitted by project-message participant notifications, so supplier/homeowner/company/GC message notifications can still route when payload ids are missing.
+- GC project text-message sends now restore the typed draft and clear the sending state if auth lookup or message insert throws, and GC photo attachments now catch auth/client failures in the attachment error path.
+- GC project message-thread loading now catches thrown auth/client/query failures, shows app-safe load copy, and locks the composer with retry guidance instead of leaving the effect unhandled.
 - Homeowner schedule confirmation now uses app-safe copy for schedule load and confirmation failures, while preserving quote/payment-aware project activation behavior.
 - Homeowner permit/inspection records now use app-safe copy for permit load and upload failures while preserving signed document previews.
 - Homeowner and company milestone/payment workflows now use app-safe copy for milestone load, dispute, update, upload, and release failures; shared Supabase error formatting also hides database policy/schema/internal wording behind polished fallback copy.
 - Homeowner quote funding now uses app-safe copy for project, quote, and quote-line-item load failures before Stripe payment starts, while keeping the existing PaymentSheet and escrow funding flow intact.
 - Homeowner message list, homeowner project chat, and company job chat now use app-safe copy for message participant, message load, and message-send failures, matching the already-safe GC project chat behavior.
 - Company/trade earnings and profile screens now use app-safe copy for company profile, accepted-project, paid-milestone, and earnings load failures while keeping commission-derived payout math hidden from the app UI.
+- Company/trade job detail now clears stale slot state when the route is reused for a project-level job, preventing old trade-slot context from appearing on the project-level quote/pricing path.
 - Homeowner and company/trade change-order screens now use app-safe copy for change-order load, submit, sign, approve, and reject failures while preserving the explicit disclaimer that signed cost changes do not automatically alter funded escrow or milestone payments.
+- Homeowner change-order approvals now catch thrown load, approve, and reject failures, clear loading/responding state reliably, and show both approval buttons as in-progress while a response is being submitted.
 - Company/trade job feed plus business, license, and insurance onboarding now use app-safe copy for load/save/verification submission failures across the verified trade setup and accepted-job entry path.
+- Company/trade license onboarding no longer has a `Skip for now` bypass into insurance submission. Marketplace contractors must enter the required license number before continuing to verification, matching the verified-company job gate.
+- Company/trade change-order loading, submission, and contractor signature actions now catch thrown client/network failures as well as Supabase error objects, preventing stuck submitting states and raw backend error copy.
 - Supplier catalog, catalog item creation, earnings, and profile screens now use app-safe copy for supplier profile, catalog, stock toggle, payout setup, and earnings load/save failures across the material-sourcing account workflow.
 - Supplier business, license, and category onboarding plus catalog-item editing/deletion now use app-safe copy for profile load, setup save, catalog item load, save, and delete failures.
 - Homeowner/company warranty screens and the company-to-homeowner review screen now use app-safe copy for closeout warranty load/upload and review load/submit failures.
+- Root account routing now treats transient profile-load failures as retryable account-load errors instead of misclassifying valid homeowner, company, supplier, or GC accounts as missing a role.
 - GC completion approval submission now clears its loading state even if the approval insert throws from a network/client failure instead of returning a Supabase error object.
 - Homeowner edit profile, saved addresses, and project search now use app-safe copy for profile save, address save, avatar remove/upload, address load, and project search load failures.
 - Homeowner top-level schedule and legacy chat screens now use app-safe copy for schedule project/slot/milestone loads plus message load/send failures, aligning them with the newer project-specific schedule and message surfaces.
 - Homeowner DIY guide save/convert, project sharing, settings, voice address search, address save, and final project dispatch now use app-safe copy instead of showing raw Supabase, native share-sheet, or backend messages.
 - Homeowner project creation now uses app-safe copy for questionnaire voice failures, visual preview/render load failures, AI brief generation failures, material-detail save failures, and DIY guide generation failures.
+- Homeowner project creation now also uses app-safe copy for selected-render persistence, project render selection persistence, selected-render loading inside brief generation, and confidence-score/material override save failures, with a save-in-progress state to prevent duplicate render continuation taps.
 - Homeowner project overview and profile stats now use app-safe copy for project-list, milestone-progress, optional GC-context, and profile-stat load failures.
 - Supabase drift verification found the GC concierge payment functions were present locally and invoked by the app but missing remotely. `create-gc-concierge-payment-intent` and `gc-concierge-payout` were deployed and re-listed as ACTIVE on project `wgbloslndalmocckrejw`.
 - Remote-only Stripe Connect support functions `stripe-return` and `refresh-connect-status` were downloaded into `supabase/functions/` so the repo matches deployed backend surface area. `refresh-connect-status` now supports `general_contractor` and the GC profile refreshes Stripe payout readiness when the screen regains focus.
@@ -655,3 +690,708 @@ Latest validation after best-effort Stripe Connect refresh hardening:
 - `npx tsc --noEmit`
 - `npm test -- --runInBand`
 - `git diff --check`
+
+Latest validation after company/trade negotiation response hardening:
+
+- `npm test -- --runInBand __tests__/company-quote-copy.test.ts __tests__/general-contractor.test.ts`
+- `npx tsc --noEmit`
+- `npm test -- --runInBand`
+- `git diff --check`
+
+Latest validation after supplier stock toggle rollback hardening:
+
+- `npm test -- --runInBand __tests__/supplier-catalog.test.ts __tests__/material-orders.test.ts`
+- `npx tsc --noEmit`
+- `npm test -- --runInBand`
+- `git diff --check`
+
+Latest validation after GC action response-state hardening:
+
+- `npm test -- --runInBand __tests__/general-contractor.test.ts`
+- `npx tsc --noEmit`
+- `npm test -- --runInBand`
+- `git diff --check`
+
+Latest validation after GC payment and permit action hardening:
+
+- `npm test -- --runInBand __tests__/general-contractor.test.ts`
+- `npx tsc --noEmit`
+- `npm test -- --runInBand`
+- `git diff --check`
+
+Latest validation after GC native picker failure hardening:
+
+- `npm test -- --runInBand __tests__/general-contractor.test.ts`
+- `npx tsc --noEmit`
+- `npm test -- --runInBand`
+- `git diff --check`
+
+Latest validation after GC document preload error hardening:
+
+- `npm test -- --runInBand __tests__/general-contractor.test.ts`
+- `npx tsc --noEmit`
+- `npm test -- --runInBand`
+- `git diff --check`
+
+Latest validation after GC business preload error hardening:
+
+- `npm test -- --runInBand __tests__/general-contractor.test.ts`
+- `npx tsc --noEmit`
+- `npm test -- --runInBand`
+- `git diff --check`
+
+Latest validation after GC onboarding error-title polish:
+
+- `npm test -- --runInBand __tests__/general-contractor.test.ts`
+- `npx tsc --noEmit`
+- `npm test -- --runInBand`
+- `git diff --check`
+
+Latest validation after GC message send hardening:
+
+- `npm test -- --runInBand __tests__/messages.test.ts __tests__/general-contractor.test.ts`
+- `npx tsc --noEmit`
+- `npm test -- --runInBand`
+- `git diff --check`
+
+Latest validation after GC attachment auth hardening:
+
+- `npm test -- --runInBand __tests__/messages.test.ts __tests__/general-contractor.test.ts`
+- `npx tsc --noEmit`
+- `npm test -- --runInBand`
+- `git diff --check`
+
+Latest validation after supplier sign-out auth cleanup:
+
+- `npm test -- --runInBand __tests__/supplier-onboarding.test.ts`
+- `npx tsc --noEmit`
+- `npm test -- --runInBand`
+- `git diff --check`
+
+Latest validation after company payout setup error-copy alignment:
+
+- `npm test -- --runInBand __tests__/company-profile-services.test.ts`
+- `npx tsc --noEmit`
+- `npm test -- --runInBand`
+- `git diff --check`
+
+Latest validation after root fallback sign-out cleanup:
+
+- `npm test -- --runInBand __tests__/auth.test.ts`
+- `npx tsc --noEmit`
+- `npm test -- --runInBand`
+- `git diff --check`
+
+Latest validation after missing-role profile cleanup:
+
+- `npm test -- --runInBand __tests__/auth.test.ts`
+- `npx tsc --noEmit`
+- `npm test -- --runInBand`
+- `git diff --check`
+
+Latest validation after supplier message notification routing:
+
+- `npm test -- --runInBand __tests__/notifications-navigation.test.ts`
+- `npx tsc --noEmit`
+- `npm test -- --runInBand`
+- `git diff --check`
+
+Latest validation after shared project message failure hardening:
+
+- `npm test -- --runInBand __tests__/messages.test.ts`
+- `npx tsc --noEmit`
+- `npm test -- --runInBand`
+- `git diff --check`
+
+Latest validation after generic project message deep-link parsing:
+
+- `npm test -- --runInBand __tests__/notifications-navigation.test.ts`
+- `npx tsc --noEmit`
+- `npm test -- --runInBand`
+- `git diff --check`
+
+Latest validation after live notification preference routing:
+
+- `npm test -- --runInBand __tests__/supabase-functions.test.ts`
+- `npx tsc --noEmit`
+- `npm test -- --runInBand`
+- `git diff --check`
+
+Latest validation after company quote pending-load cancellation hardening:
+
+- `npm test -- --runInBand __tests__/company-quote-copy.test.ts`
+- `npx tsc --noEmit`
+- `npm test -- --runInBand`
+- `git diff --check`
+
+Latest validation after visual preview copy polish:
+
+- `npm test -- --runInBand __tests__/visual-preview.test.ts`
+- `npx tsc --noEmit`
+- `npm test -- --runInBand`
+- `git diff --check`
+
+Latest validation after 2D floor-plan snapped dimension correction:
+
+- `npm test -- --runInBand __tests__/room-scan.test.ts`
+- `npx tsc --noEmit`
+- `npm test -- --runInBand`
+- `git diff --check`
+
+Latest validation after company license onboarding bypass removal:
+
+- `npm test -- --runInBand __tests__/company-entry-errors.test.ts`
+- `npx tsc --noEmit`
+- `npm test -- --runInBand`
+- `git diff --check`
+
+Latest validation after company change-order thrown-failure hardening:
+
+- `npm test -- --runInBand __tests__/change-orders.test.ts`
+- `npx tsc --noEmit`
+- `npm test -- --runInBand`
+- `git diff --check`
+
+Latest validation after GC approvals setup-lock UX:
+
+- `npm test -- --runInBand __tests__/general-contractor.test.ts`
+- `npx tsc --noEmit`
+- `npm test -- --runInBand`
+- `git diff --check`
+- `xcodebuild -workspace ios/WalkerAI.xcworkspace -scheme WalkerAI -configuration Debug -sdk iphonesimulator -destination 'generic/platform=iOS Simulator' build CODE_SIGNING_ALLOWED=NO`
+
+Latest update after GC-created project validation audit:
+
+- Verified the contractor-initiated project screen and final `create_gc_managed_project` RPC still require a real `general_contractor` account, a complete verified GC profile, an existing homeowner account, project scope, contact context, and valid coordinates.
+- Tightened the create screen so blank management/concierge allowance inputs are rejected instead of silently falling back to default percentages.
+- Added a duplicate-submit guard while the GC profile or create request is loading.
+
+Latest validation after GC-created project validation hardening:
+
+- `npm test -- --runInBand __tests__/general-contractor.test.ts`
+- `npx tsc --noEmit`
+- `npm test -- --runInBand`
+- `git diff --check`
+
+Latest no-code audit pass:
+
+- Homeowner GC confirmation/removal: verified GC-created projects require homeowner confirmation, homeowner-created GC invites require GC acceptance, and both RPC paths re-check complete verified GC setup before activation.
+- Homeowner approval authority: verified the homeowner Concierge screen checks project ownership before responding to approvals, payment requests, bookings, GC confirmation, and GC removal. Approval of project-changing GC requests remains locked to an active complete verified GC assignment.
+- Company/trade pricing: verified trade-slot acceptance routes into the nested `QuoteBuilder`, quote params are normalized, pending unfunded quotes reopen editable, approved or payment-started quotes are read-only, and `submit_company_quote` atomically replaces pending quotes while preserving GC negotiation links.
+- Supplier workflow: verified order claiming requires verified supplier setup, category/service-area eligibility, and Stripe payout readiness. Fulfillment updates are scoped to the accepted supplier and current order status, and delivery proof is required before homeowner payout release.
+- Voice project creation: verified the iOS native `WalkerVoiceAssistant` module is present in the Xcode target with microphone and speech usage descriptions. The app disables voice controls when unavailable, confirms recognized questionnaire answers before applying them, and uses voice address input only as an address-search query.
+- Kitchen/bathroom customization: verified the optional visual-preview step uses the measured room model on iOS when scan data exists, falls back to the 2D finish customizer otherwise, and persists only homeowner-intent finish selections into pricing answers and the project brief. Current scope is a V1 finish/surface customizer, not a guaranteed semantic cabinet/countertop reconstruction from every LiDAR mesh.
+
+Latest update after 3D customizer material reapply hardening:
+
+- Found a native timing gap in `RoomCustomizer3D`: initial merged finish selections were dispatched immediately, but if the iOS native view had not laid out yet the first `findNodeHandle` path could drop those material commands.
+- Added native layout tracking so the 3D customizer re-applies questionnaire/default/selected materials after the native model view lays out, keeping the measured kitchen/bathroom preview aligned with wizard state on first display.
+- Added a regression assertion in `__tests__/visual-preview.test.ts`.
+
+Latest validation after 3D customizer material reapply hardening:
+
+- `npm test -- --runInBand __tests__/visual-preview.test.ts __tests__/room-customizer.test.ts`
+- `npx tsc --noEmit`
+- `npm test -- --runInBand`
+- `git diff --check`
+
+Latest no-code payment and closeout audit:
+
+- GC payment requests: verified the GC payment screen only allows deposits/progress/final payment requests while the assignment is active and the GC profile is complete/verified. The UI copy states that requests record homeowner authorization only and do not move escrow or milestone funds. Pending request cancellation is also scoped to the active verified GC assignment.
+- Homeowner payment authority: verified the homeowner concierge screen requires project ownership before approving/rejecting GC payment requests, locks approval to the active complete verified GC assignment, and states that approval does not bypass milestone escrow release.
+- Project completion: verified the GC closeout binder assembles permits, warranties, material receipts, approvals, payment requests, change orders, trade negotiations, quotes, and milestones from project records. Completion is sent as a homeowner approval request with `metadata.action = complete_project`; it does not release escrow funds.
+- Completion database guards: verified final completion still requires active complete verified GC management, an active project with an approved budget, no pending GC payment requests, no pending approval/change-order decisions, no open/unscheduled trade slots, no active permits/material orders, no pending trade negotiations/quotes, and no unpaid milestones before completion can apply.
+- GC-created project note: GC-created projects start as draft homeowner projects. Homeowner confirmation activates the GC assignment; project-level active status still comes from approved budget/trade workflow state, which matches the current closeout guard rather than silently completing a draft project.
+
+Latest update after partial trade quote dispatch fix:
+
+- Found a real multi-trade pricing/acceptance blocker: when the first accepted trade submitted a pending quote, `sync_project_status_on_quote_submission` moved the whole project from `dispatching` to `quoting`. The company accept flow requires the project to remain `dispatching` while other dispatched slots are still open, so remaining trades could be blocked from accepting their portions of the job.
+- Updated the original quote-status sync migration and added corrective migration `20260619033435_keep_partial_trade_projects_dispatching_on_quote.sql`. Pending quotes still move legacy accepted projects and fully filled/scheduling trade projects into `quoting`, but partially filled trade-slot projects stay `dispatching` until every slot is filled or scheduled.
+- Added a regression assertion in `__tests__/supabase-functions.test.ts` so this partial-slot quote path cannot silently regress.
+
+Latest validation after partial trade quote dispatch fix:
+
+- `npm test -- --runInBand __tests__/supabase-functions.test.ts`
+- `npx tsc --noEmit`
+- `npm test -- --runInBand`
+- `git diff --check`
+- Remote dry run before deployment showed only `20260619033435_keep_partial_trade_projects_dispatching_on_quote.sql` pending.
+- Applied `20260619033435_keep_partial_trade_projects_dispatching_on_quote.sql` to linked Supabase project `wgbloslndalmocckrejw` with `supabase db push --linked`.
+- Post-apply read-only verification attempts (`supabase db query --linked` and a no-op `supabase db push --linked --dry-run`) hit Supabase login-role `504` responses, so further remote polling was stopped to avoid unnecessary backend traffic.
+
+Latest update after company material verification stale-state hardening:
+
+- Hardened the company material verification screen used after a contractor accepts a project or trade slot. If materials, supplier orders, or supplier reviews fail to load, the screen now clears the stale local slice instead of leaving previously loaded materials/orders/reviews visible under a new project context.
+- Replaced generic `Error` auth prompts on material verification and supplier review actions with specific `Sign in required` alerts.
+- Added regression assertions in `__tests__/material-orders.test.ts`.
+
+Latest validation after company material verification stale-state hardening:
+
+- `npm test -- --runInBand __tests__/material-orders.test.ts __tests__/company-entry-errors.test.ts`
+- `npx tsc --noEmit`
+- `npm test -- --runInBand`
+- `git diff --check`
+
+Latest update after homeowner closeout review auth hardening:
+
+- Hardened the homeowner review screen used during project closeout. The submit path now verifies a signed-in homeowner before checking duplicate reviews or inserting a review, avoiding a crash from stale/missing auth state.
+- Replaced the generic review submission `Error` alert with a specific `Could not submit review` title.
+- Added regression assertions in `__tests__/project-review.test.ts` to keep `user!.id` out of the review submit path.
+
+Latest validation after homeowner closeout review auth hardening:
+
+- `npm test -- --runInBand __tests__/project-review.test.ts`
+- `npx tsc --noEmit`
+- `npm test -- --runInBand`
+- `git diff --check`
+
+Latest update after public four-role auth entry polish:
+
+- Tightened register/login validation alerts on the public entry screens used by homeowner, company, supplier, and general contractor accounts. Validation failures now use specific titles instead of generic `Error` titles while keeping existing app-safe Supabase error formatting for auth failures.
+- Confirmed the public registration test still covers `general_contractor` as a self-service signup role.
+- Added regression assertions in `__tests__/auth.test.ts`.
+
+Latest validation after public four-role auth entry polish:
+
+- `npm test -- --runInBand __tests__/auth.test.ts`
+- `npx tsc --noEmit`
+- `npm test -- --runInBand`
+- `git diff --check`
+
+Latest update after project message stale-state hardening:
+
+- Hardened the shared project message thread for homeowner, company/trade, and general contractor participants. If the project id is missing, message loading fails, the signed-in GC user disappears, or a message query throws, the screen now clears the visible local message list instead of leaving stale messages from a previous project/thread on screen.
+- Added exception handling to the company/trade message send path so a thrown client error restores the draft message, shows app-safe copy, and always releases the sending state.
+- Added regression assertions in `__tests__/messages.test.ts`.
+
+Latest validation after project message stale-state hardening:
+
+- `npm test -- --runInBand __tests__/messages.test.ts`
+- `npx tsc --noEmit`
+- `npm test -- --runInBand`
+- `git diff --check`
+
+Latest update after homeowner concierge authority-state hardening:
+
+- Hardened the homeowner concierge authority hub so missing-project, signed-out, or failed-load paths clear all project-specific context: current GC assignment, discoverable GCs, approval requests, GC payment requests, concierge bookings, cached homeowner id, and draft response notes.
+- This prevents stale approval/payment/booking context from surviving when the screen reloads under a different project or loses valid homeowner auth.
+- Added regression assertions in `__tests__/general-contractor.test.ts`.
+
+Latest validation after homeowner concierge authority-state hardening:
+
+- `npm test -- --runInBand __tests__/general-contractor.test.ts`
+- `npx tsc --noEmit`
+- `npm test -- --runInBand`
+- `git diff --check`
+
+Latest update after permit and schedule stale-state hardening:
+
+- Hardened the homeowner permit document screen so missing project ids, Supabase load errors, or thrown load exceptions clear permit rows and signed preview URLs instead of leaving stale permit records visible.
+- Hardened the GC schedule screen so missing project ids, signed-out auth state, or load failures clear assignment, trade slots, selected slot, pending date inputs, notes, and GC readiness before showing the scheduling error state.
+- Added regression assertions in `__tests__/homeowner-permits.test.ts` and `__tests__/general-contractor.test.ts`.
+
+Latest validation after permit and schedule stale-state hardening:
+
+- `npm test -- --runInBand __tests__/homeowner-permits.test.ts __tests__/general-contractor.test.ts`
+- `npx tsc --noEmit`
+- `npm test -- --runInBand`
+- `git diff --check`
+
+Latest update after GC payment request stale-state hardening:
+
+- Hardened the GC payment request screen so missing project ids, signed-out auth state, or load failures clear assignment, visible payment requests, draft request fields, pending cancellation state, and GC readiness before showing the payment error state.
+- This keeps payment authorization controls fail-closed if the screen reloads under a stale project or invalid GC session.
+- Added regression assertions in `__tests__/general-contractor.test.ts`.
+
+Latest validation after GC payment request stale-state hardening:
+
+- `npm test -- --runInBand __tests__/general-contractor.test.ts`
+- `npx tsc --noEmit`
+- `npm test -- --runInBand`
+- `git diff --check`
+
+Latest update after warranty closeout stale-state hardening:
+
+- Hardened homeowner warranty viewing so missing project ids, warranty load errors, or thrown load exceptions clear warranty rows and signed preview URLs instead of leaving stale closeout documents visible.
+- Hardened company warranty upload/viewing so missing project ids, warranty load errors, or thrown load exceptions clear warranty rows, signed preview URLs, selected upload file metadata, and draft expiry input.
+- Added regression assertions in `__tests__/warranty-upload.test.ts`.
+
+Latest validation after warranty closeout stale-state hardening:
+
+- `npm test -- --runInBand __tests__/warranty-upload.test.ts`
+- `npx tsc --noEmit`
+- `npm test -- --runInBand`
+- `git diff --check`
+
+Latest update after GC materials and discovery stale-state hardening:
+
+- Hardened the GC materials sourcing screen so missing project ids, signed-out auth state, or load failures clear assignment context, material rows, supplier orders, catalog suggestions, selected material, draft substitution fields, and GC readiness before showing an error.
+- Hardened the GC discovery/change-order screen so missing project ids, signed-out auth state, or load failures clear assignment context, visible discovery requests, draft approval request fields, and GC readiness before showing an error.
+- This prevents a General Contractor from seeing or acting on stale material/discovery project data after switching accounts, reopening a bad route, or losing auth.
+- Added regression assertions in `__tests__/general-contractor.test.ts`.
+
+Latest validation after GC materials and discovery stale-state hardening:
+
+- `npm test -- --runInBand __tests__/general-contractor.test.ts`
+- `npx tsc --noEmit`
+- `npm test -- --runInBand`
+- `git diff --check`
+
+Latest update after change-order stale-state hardening:
+
+- Hardened homeowner change orders so missing project ids, query errors, or thrown load exceptions clear visible change orders and pending response state before showing an approval error.
+- Hardened company/trade change orders so missing project/user context, company profile load failures, missing contractor onboarding, legacy schema fallback failures, query errors, or thrown load exceptions clear visible change orders, cached company id, and draft proposal form fields.
+- This keeps homeowner approval and trade pricing-change workflows from showing stale decision data when the account or project context becomes invalid.
+- Added regression assertions in `__tests__/change-orders.test.ts`.
+
+Latest validation after change-order stale-state hardening:
+
+- `npm test -- --runInBand __tests__/change-orders.test.ts`
+- `npx tsc --noEmit`
+- `npm test -- --runInBand`
+- `git diff --check`
+
+Latest update after company milestone stale-state hardening:
+
+- Hardened the company/trade milestone screen so missing project/user context, company profile load failures, missing company onboarding, quote load failures, missing approved quote context, or milestone load failures clear visible milestones and any active milestone update state.
+- This prevents stale milestone payment totals and release progress from remaining visible after the trade account loses valid job context.
+- Added regression assertions in `__tests__/company-milestone-upload.test.ts`.
+
+Latest validation after company milestone stale-state hardening:
+
+- `npm test -- --runInBand __tests__/company-milestone-upload.test.ts`
+- `npx tsc --noEmit`
+- `npm test -- --runInBand`
+- `git diff --check`
+
+Latest update after company quote-builder stale draft hardening:
+
+- Fixed a pricing-page stale draft case in the company/trade quote builder. When a reused quote screen opens a different project/slot that has no approved/funded quote and no editable pending quote, the editable line items, milestone split, notes, and pending-quote marker now reset to defaults for the current route instead of reusing the previous project draft.
+- The reset also applies when an accepted GC counteroffer route is opened without an existing quote and when the quote builder is opened without a valid project id.
+- Existing pending quotes still load into the editable form, and approved/funded/payment-started quotes still render read-only.
+- Added regression assertions in `__tests__/company-quote-copy.test.ts`.
+
+Latest validation after company quote-builder stale draft hardening:
+
+- `npm test -- --runInBand __tests__/company-quote-copy.test.ts`
+- `npx tsc --noEmit`
+- `npm test -- --runInBand`
+- `git diff --check`
+
+Latest update after 2D room model opening attachment hardening:
+
+- Fixed the 2D floor-plan renderer so doors and windows attach to the nearest wall segment by perpendicular distance to the wall line, not by distance to the wall midpoint.
+- This prevents openings near the end of a long wall from snapping to a shorter perpendicular wall whose midpoint happens to be closer.
+- Added reusable room-scan geometry helpers in `src/lib/room-scan/floorPlanGeometry.ts`.
+- Added regression assertions in `__tests__/room-scan.test.ts`.
+
+Latest validation after 2D room model opening attachment hardening:
+
+- `npm test -- --runInBand __tests__/room-scan.test.ts`
+- `npx tsc --noEmit`
+- `npm test -- --runInBand`
+- `git diff --check`
+
+Latest update after Stripe Connect refresh role-boundary hardening:
+
+- Hardened the `refresh-connect-status` edge function so payout readiness refreshes now verify the authenticated app user's `users.role` matches the requested payout role before selecting or updating `companies`, `suppliers`, or `general_contractors`.
+- This aligns the cheap status-refresh path with `create-connect-account`, which already rejects mismatched payout setup requests.
+- Added regression assertions in `__tests__/supabase-functions.test.ts`.
+
+Latest validation after Stripe Connect refresh role-boundary hardening:
+
+- `npm test -- --runInBand __tests__/supabase-functions.test.ts`
+- `npx tsc --noEmit`
+- `npm test -- --runInBand`
+- `git diff --check`
+
+Latest update after homeowner GC review target polish:
+
+- Hardened the homeowner project review closeout screen so missing project ids clear contractor review targets, selected target state, and project completion state instead of leaving stale recipients visible.
+- Updated GC review target labels to use the shared GC project type formatter, so homeowners see labels like `GC management · Flooring` instead of raw stored values like `GC management · flooring`.
+- Added regression assertions in `__tests__/project-review.test.ts`.
+
+Latest validation after homeowner GC review target polish:
+
+- `npm test -- --runInBand __tests__/project-review.test.ts`
+- `npx tsc --noEmit`
+- `npm test -- --runInBand`
+- `git diff --check`
+
+Latest update after homeowner analysis database-error copy hardening:
+
+- Hardened the shared Supabase error formatter so it checks `message`, `details`, `hint`, and `code` fields before showing copy in the app. If any field contains transient infrastructure wording or database-internal details, the UI falls back to polished app-safe copy.
+- Hardened the homeowner project analysis draft-project creation path so final project-create failures no longer wrap raw Supabase text into the visible error body.
+- This directly protects the screenshot case where the analysis screen could show database timeout wording under the `Analysis failed` title.
+- Added regression assertions in `__tests__/supabase-functions.test.ts` and `__tests__/project-creation-flow.test.ts`.
+
+Latest validation after homeowner analysis database-error copy hardening:
+
+- `npm test -- --runInBand __tests__/supabase-functions.test.ts`
+- `npm test -- --runInBand __tests__/project-creation-flow.test.ts`
+- `npx tsc --noEmit`
+- `npm test -- --runInBand`
+- `git diff --check`
+
+Latest update after GC trade-management stale-state hardening:
+
+- Verified the external trade workflow is already represented across migrations, GC trade UI, homeowner notices, scheduling, assistant risk summaries, and closeout logic.
+- Hardened the GC trade-management screen so signed-out auth context or load failures clear previously visible assignments, project budget, slots, quotes, quote negotiations, selected slot/quote state, draft recommendation fields, counteroffer fields, cancellation state, and GC readiness.
+- This prevents a verified GC account’s prior trade data from remaining visible if the app loses or switches account context.
+- Added regression assertions in `__tests__/general-contractor.test.ts`.
+
+Latest validation after GC trade-management stale-state hardening:
+
+- `npm test -- --runInBand __tests__/general-contractor.test.ts`
+- `npx tsc --noEmit`
+- `npm test -- --runInBand`
+- `git diff --check`
+
+Latest update after GC dashboard stale-state hardening:
+
+- Hardened the GC dashboard so signed-out auth context or dashboard load failures clear the cached GC profile, managed-project cards, and pending-approval metric before showing the error state.
+- This prevents one GC account's dashboard data from remaining in memory if the app loses or switches the active account.
+- Added regression assertions in `__tests__/general-contractor.test.ts`.
+
+Latest validation after GC dashboard stale-state hardening:
+
+- `npm test -- --runInBand __tests__/general-contractor.test.ts`
+- `npx tsc --noEmit`
+- `npm test -- --runInBand`
+- `git diff --check`
+
+Latest update after GC profile and approvals stale-state hardening:
+
+- Hardened the GC profile screen so signed-out account context or profile load failures clear the cached GC profile, managed count, completed count, and in-flight payout setup state before showing the error.
+- Hardened the GC approvals inbox so signed-out account context, missing GC profiles, incomplete GC setup, or approval load failures clear homeowner approval rows, payment requests, concierge booking requests, booking response draft notes, active booking response state, and concierge eligibility.
+- This prevents one GC account's profile metrics, inbox rows, or concierge response drafts from remaining visible if the app loses or switches account context.
+- Added regression assertions in `__tests__/general-contractor.test.ts`.
+
+Latest validation after GC profile and approvals stale-state hardening:
+
+- `npm test -- --runInBand __tests__/general-contractor.test.ts`
+- `npx tsc --noEmit`
+- `npm test -- --runInBand`
+- `git diff --check`
+
+Latest update after GC project detail stale-draft hardening:
+
+- Hardened the GC managed-project detail screen so project load failures clear project records, assignment context, slots, change orders, approval requests, generic approval draft fields, external-trade draft fields, proposed budget and terms fields, in-flight action flags, and GC readiness flags.
+- This prevents stale homeowner approval drafts, external trade forms, or project-control state from remaining visible if the GC loses auth context or opens an invalid/unavailable managed project.
+- Added regression assertions in `__tests__/general-contractor.test.ts`.
+
+Latest validation after GC project detail stale-draft hardening:
+
+- `npm test -- --runInBand __tests__/general-contractor.test.ts`
+- `npx tsc --noEmit`
+- `npm test -- --runInBand`
+- `git diff --check`
+
+Latest update after GC completion binder stale-state hardening:
+
+- Hardened the GC completion binder so load failures clear project summary, assignment context, permits, warranties, material orders, trade slots, trade negotiations, quotes, approvals, payment requests, change orders, the completion-submit flag, and GC readiness through a single reset path.
+- This prevents stale closeout readiness data or a stuck completion-submit state from remaining visible if a GC loses auth context or opens an unavailable completion binder.
+- Added regression assertions in `__tests__/general-contractor.test.ts`.
+
+Latest validation after GC completion binder stale-state hardening:
+
+- `npm test -- --runInBand __tests__/general-contractor.test.ts`
+- `npx tsc --noEmit`
+- `npm test -- --runInBand`
+- `git diff --check`
+
+Latest update after GC permits stale-state hardening:
+
+- Hardened the GC permits and inspections screen so signed-out auth context, assignment lock states, or permit load failures clear stale permit rows, preview URLs, add-permit draft text, save state, upload state, and GC readiness through explicit reset helpers.
+- The reset is split so unsupported assignment states can clear permit records and draft controls without erasing the current assignment lock message.
+- Added regression assertions in `__tests__/general-contractor.test.ts`.
+
+Latest validation after GC permits stale-state hardening:
+
+- `npm test -- --runInBand __tests__/general-contractor.test.ts`
+- `npx tsc --noEmit`
+- `npm test -- --runInBand`
+- `git diff --check`
+
+Latest update after GC messages fail-closed state hardening:
+
+- Hardened the GC project messages screen so missing project context, signed-out auth context, message load failures, and thrown load failures clear stale messages, compose text, sending state, attachment upload state, current user marker, and send permissions through a shared reset helper.
+- Message load failures now return immediately after locking the composer, preventing the later GC assignment checks from re-enabling message sending while the message list failed to load.
+- Added regression assertions in `__tests__/general-contractor.test.ts` and updated `__tests__/messages.test.ts` to cover the new helper-based reset.
+
+Latest validation after GC messages fail-closed state hardening:
+
+- `npm test -- --runInBand __tests__/messages.test.ts`
+- `npm test -- --runInBand __tests__/general-contractor.test.ts`
+- `npx tsc --noEmit`
+- `npm test -- --runInBand`
+- `git diff --check`
+
+Latest update after GC auth-loader stale-state hardening:
+
+- Hardened the GC dashboard, GC profile, GC approvals inbox, trade management, schedule, discovery, materials, and payment request loaders so `supabase.auth.getUser()` failures now run through the same app-safe catch/finally paths as backend load failures.
+- Signed-out states still show the existing account-specific lock copy, but thrown auth/session failures now clear stale GC dashboard data, profile metrics, approval rows, trade state, scheduling drafts, discovery drafts, material recommendation drafts, and payment request drafts instead of bypassing reset logic.
+- Added regression assertions in `__tests__/general-contractor.test.ts` to keep auth lookup inside the guarded loader path for each affected GC screen.
+
+Latest validation after GC auth-loader stale-state hardening:
+
+- `npm test -- --runInBand __tests__/general-contractor.test.ts`
+- `npx tsc --noEmit`
+- `npm test -- --runInBand`
+- `git diff --check`
+
+Latest update after GC project approval submission hardening:
+
+- Hardened the GC managed-project detail screen so generic homeowner approval request submission enters the protected submit/finally path before checking the current auth session.
+- If the auth lookup throws or the session disappears during submit, the screen now shows app-safe error copy and clears `submittingApproval` instead of bypassing the reset path.
+- Added a regression assertion in `__tests__/general-contractor.test.ts` for the protected auth lookup and submit-state cleanup.
+
+Latest validation after GC project approval submission hardening:
+
+- `npm test -- --runInBand __tests__/general-contractor.test.ts`
+- `npx tsc --noEmit`
+- `npm test -- --runInBand`
+- `git diff --check`
+
+Latest update after GC live request-profile recheck:
+
+- Hardened the GC managed-project detail screen so generic homeowner approval, project terms update, and budget update submissions all re-check the current signed-in GC profile immediately before inserting homeowner approval requests.
+- The recheck confirms the active auth session, matching GC assignment, WalkerAI verification, and complete business/license/insurance setup before project-changing recommendations are created.
+- Added regression assertions in `__tests__/general-contractor.test.ts` so terms and budget requests cannot rely only on stale loaded `gcReady` state.
+
+Latest validation after GC live request-profile recheck:
+
+- `npm test -- --runInBand __tests__/general-contractor.test.ts`
+- `npx tsc --noEmit`
+- `npm test -- --runInBand`
+- `git diff --check`
+
+Latest update after homeowner GC concierge load-state hardening:
+
+- Hardened the homeowner Concierge GC screen so auth/session lookup during load runs inside the same app-safe catch/finally path as project, assignment, approval, payment, and concierge booking queries.
+- The shared concierge reset now also clears invite, booking request, booking payment, payout release, and approval/payment response in-flight ids so stale homeowner GC action state cannot remain visible after losing valid project or account context.
+- Added regression assertions in `__tests__/general-contractor.test.ts` for the protected homeowner concierge auth lookup and expanded reset path.
+
+Latest validation after homeowner GC concierge load-state hardening:
+
+- `npm test -- --runInBand __tests__/general-contractor.test.ts __tests__/dashboard-data.test.ts`
+- `npx tsc --noEmit`
+- `npm test -- --runInBand`
+- `git diff --check`
+
+Latest update after company GC quote auth fallback hardening:
+
+- Hardened the company job detail screen so a stale in-memory auth store no longer makes an otherwise signed-in company lose the GC trade negotiation and pricing context. The loader now falls back to the active Supabase session before loading the company payout profile, job, quotes, and GC negotiation rows.
+- Hardened the company quote builder so pricing load and quote submission also fall back to the active Supabase session before deciding the company is signed out.
+- This directly protects the GC counteroffer flow where a trade accepts GC pricing, opens the quote builder, and submits an updated quote package for homeowner review.
+- Added regression assertions in `__tests__/company-quote-copy.test.ts`.
+
+Latest validation after company GC quote auth fallback hardening:
+
+- `npm test -- --runInBand __tests__/company-quote-copy.test.ts`
+- `npx tsc --noEmit`
+- `npm test -- --runInBand`
+- `git diff --check`
+
+Latest update after supplier material-order auth fallback hardening:
+
+- Hardened the supplier open-order feed, active-order list, and order-detail screen so a stale in-memory auth store no longer hides material orders or shows a false signed-out state when the Supabase session is still valid.
+- Active supplier orders now track the actual session state separately from the auth store so a supplier with a valid session and no profile is sent to setup instead of being told to sign in again.
+- Supplier order detail now clears stale claim eligibility when the order is missing, unavailable, or the supplier profile cannot be loaded.
+- This protects the GC material-sourcing workflow because supplier fulfillment, shipment, delivery proof, and GC material notifications depend on those screens staying reachable after app refresh/navigation.
+- Added regression assertions in `__tests__/material-orders.test.ts`.
+
+Latest validation after supplier material-order auth fallback hardening:
+
+- `npm test -- --runInBand __tests__/material-orders.test.ts`
+- `npx tsc --noEmit`
+- `npm test -- --runInBand`
+- `git diff --check`
+
+Latest update after company core-screen auth fallback hardening:
+
+- Hardened the company job feed, company calendar, and company earnings screens so a stale in-memory auth store no longer hides dispatched jobs, accepted jobs, approved-quote milestones, or paid milestone history when the Supabase session is still valid.
+- The company job feed now clears stale company, pending-job, and active-job rows when the user is genuinely signed out or a load fails.
+- The calendar and earnings screens now route auth/session failures through guarded catch/finally paths so they clear stale rows and cannot stay stuck loading after a session lookup error.
+- This protects the company side of the GC workflow after a trade accepts work, submits pricing, tracks approved milestones, and sees paid milestone history.
+- Added regression assertions in `__tests__/company-entry-errors.test.ts`.
+
+Latest validation after company core-screen auth fallback hardening:
+
+- `npm test -- --runInBand __tests__/company-entry-errors.test.ts __tests__/company-calendar.test.ts __tests__/company-profile-services.test.ts`
+- `npx tsc --noEmit`
+- `npm test -- --runInBand`
+- `git diff --check`
+
+Latest update after homeowner project-generation auth fallback hardening:
+
+- Hardened the homeowner renovation photo-analysis step so draft project creation falls back to the active Supabase session before deciding the homeowner is signed out.
+- Hardened the homeowner DIY guide generator so both modern and legacy draft-project insert paths use the same active-session fallback.
+- This protects project creation from failing before the existing analysis fallback can run when the app session is valid but the local auth store has not hydrated yet.
+- Added regression assertions in `__tests__/project-creation-flow.test.ts`.
+
+Latest validation after homeowner project-generation auth fallback hardening:
+
+- `npm test -- --runInBand __tests__/project-creation-flow.test.ts __tests__/diy-guide.test.ts __tests__/project-analysis.test.ts`
+- `npx tsc --noEmit`
+- `npm test -- --runInBand`
+- `git diff --check`
+
+Latest update after supplier profile and earnings auth fallback hardening:
+
+- Hardened supplier earnings so paid/confirmed material-order payout history and Stripe readiness reload through the active Supabase session instead of relying only on the local auth store.
+- Hardened supplier payout setup so auth lookup failures show app-safe copy instead of throwing out of the Connect button handler.
+- Hardened supplier profile loading with the same active-session fallback and guarded catch/finally cleanup.
+- This keeps supplier setup, payout readiness, and order payment history reachable after app refresh/navigation in GC material-sourcing workflows.
+- Added regression assertions in `__tests__/material-orders.test.ts` and `__tests__/supplier-onboarding.test.ts`.
+
+Latest validation after supplier profile and earnings auth fallback hardening:
+
+- `npm test -- --runInBand __tests__/material-orders.test.ts __tests__/supplier-onboarding.test.ts`
+- `npx tsc --noEmit`
+- `npm test -- --runInBand`
+- `git diff --check`
+
+Latest update after shared notification auth fallback hardening:
+
+- Hardened the shared notifications screen so notification loads and bulk "mark all read" updates fall back to the active Supabase session before deciding the user is signed out.
+- Hardened the notification bell badge so unread-count loads and realtime subscriptions use the active session id and avoid stale count updates after unmount.
+- Kept notification routing unchanged; existing GC approval, concierge, material, and trade-negotiation routes remain covered by the notification routing tests.
+- Added regression assertions in `__tests__/notifications-navigation.test.ts`.
+
+Latest validation after shared notification auth fallback hardening:
+
+- `npm test -- --runInBand __tests__/notifications-navigation.test.ts __tests__/notifications-meta.test.ts`
+- `npx tsc --noEmit`
+- `npm test -- --runInBand`
+- `git diff --check`
+
+Latest update after supplier catalog auth fallback hardening:
+
+- Hardened the supplier catalog list so it falls back to the active Supabase session before deciding a supplier is signed out.
+- Hardened supplier catalog add/edit setup checks so verified suppliers can continue adding and editing products after app refresh/navigation even if the local auth store has not hydrated yet.
+- Added guarded catch/finally cleanup around supplier catalog profile and item loading so catalog screens do not stay stuck loading after unexpected auth/session failures.
+- Kept the existing catalog prerequisite flow unchanged: suppliers still need a supplier profile, license, and supply categories before adding catalog items.
+- Added regression assertions in `__tests__/supplier-catalog.test.ts`.
+
+Latest validation after supplier catalog auth fallback hardening:
+
+- `npm test -- --runInBand __tests__/supplier-catalog.test.ts __tests__/supplier-onboarding.test.ts`
+- `npx tsc --noEmit`
+- `npm test -- --runInBand`
+- `git diff --check`
+
+Latest update after GC onboarding auth fallback hardening:
+
+- Hardened the GC business onboarding screen so resumed profile loading and profile saving fall back to the active Supabase session before deciding the GC is signed out.
+- Hardened GC license and insurance onboarding so document preload, validation, upload storage paths, and save queries all use the active session id even when the local auth store has not hydrated yet.
+- Kept the existing GC onboarding requirements unchanged: business profile, service address coordinates, license document, and insurance document are still required before project controls and marketplace eligibility unlock.
+- Added regression assertions in `__tests__/general-contractor.test.ts`.
+
+Latest validation after GC onboarding auth fallback hardening:
+
+- `npm test -- --runInBand __tests__/general-contractor.test.ts __tests__/auth.test.ts`
+- `npx tsc --noEmit`
+- Full validation pending in this slice:
+  - `npm test -- --runInBand`
+  - `git diff --check`

@@ -80,10 +80,20 @@ export default function GeneralContractorScheduleScreen() {
   const [gcReady, setGcReady] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
+  const clearScheduleState = useCallback(() => {
+    setAssignment(null);
+    setSlots([]);
+    setSelectedSlotId(null);
+    setStartDate('');
+    setEndDate('');
+    setNote('');
+    setGcReady(false);
+  }, []);
+
   const fetchData = useCallback(async () => {
-    const currentUser = (await supabase.auth.getUser()).data.user;
-    if (!currentUser?.id) {
-      setErrorMessage('You need to be signed in to view scheduling.');
+    if (!projectId) {
+      setErrorMessage('Project is missing. Reopen scheduling from the GC project page.');
+      clearScheduleState();
       setLoading(false);
       setRefreshing(false);
       return;
@@ -91,6 +101,13 @@ export default function GeneralContractorScheduleScreen() {
 
     try {
       setErrorMessage(null);
+      const currentUser = (await supabase.auth.getUser()).data.user;
+      if (!currentUser?.id) {
+        setErrorMessage('You need to be signed in to view scheduling.');
+        clearScheduleState();
+        return;
+      }
+
       const { data: gc, error: gcError } = await supabase
         .from('general_contractors')
         .select(GENERAL_CONTRACTOR_READINESS_SELECT)
@@ -124,14 +141,12 @@ export default function GeneralContractorScheduleScreen() {
       setSlots((slotResult.data ?? []) as Slot[]);
     } catch (err) {
       setErrorMessage(formatAppSafeErrorMessage(err, 'Could not load schedule.'));
-      setAssignment(null);
-      setSlots([]);
-      setGcReady(false);
+      clearScheduleState();
     } finally {
       setLoading(false);
       setRefreshing(false);
     }
-  }, [projectId]);
+  }, [clearScheduleState, projectId]);
 
   useFocusEffect(
     useCallback(() => {

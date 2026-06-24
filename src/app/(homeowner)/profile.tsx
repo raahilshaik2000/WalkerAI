@@ -132,6 +132,8 @@ export default function HomeownerProfile() {
             <MenuRow icon="folder-outline" label="My Projects" onPress={() => navigation.navigate('HomeownerTabs', { screen: 'Projects' })} />
             <Divider />
             <MenuRow icon="star-outline" label="My Reviews" onPress={() => navigation.navigate('MyReviews')} />
+            <Divider />
+            <MenuRow icon="location-outline" label="Saved Addresses" onPress={() => navigation.navigate('SavedAddresses')} />
           </GlassCard>
 
           {/* Support */}

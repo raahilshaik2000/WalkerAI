@@ -15,6 +15,7 @@ import { useNavigation } from '@react-navigation/native';
 import { launchImageLibrary } from 'react-native-image-picker';
 import Ionicons from 'react-native-vector-icons/Ionicons';
 import { supabase } from '@/lib/supabase/client';
+import { getCurrentUser } from '@/lib/supabase/auth';
 import { formatAppSafeErrorMessage } from '@/lib/supabase/functions';
 import { getUploadMetadata, uploadFile, type StorageUploadAsset } from '@/lib/supabase/storage';
 import { isValidGeneralContractorDocumentReference } from '@/lib/general-contractor';
@@ -30,20 +31,26 @@ export default function GeneralContractorInsuranceOnboarding() {
   const [loading, setLoading] = useState(false);
 
   useEffect(() => {
-    if (!user?.id) return;
-
     let cancelled = false;
     const loadExistingInsurance = async () => {
+      const currentUserId = user?.id ?? (await getCurrentUser())?.id ?? null;
+      if (!currentUserId) return;
+
       const { data, error } = await supabase
         .from('general_contractors')
         .select('insurance_doc_url')
-        .eq('user_id', user.id)
+        .eq('user_id', currentUserId)
         .maybeSingle();
-      if (cancelled || error || !data) return;
+      if (error) throw error;
+      if (cancelled || !data) return;
       setDocumentUrl(data.insurance_doc_url ?? '');
     };
 
-    loadExistingInsurance().catch(() => undefined);
+    loadExistingInsurance().catch((err) => {
+      if (!cancelled) {
+        Alert.alert('Could not load insurance details', formatAppSafeErrorMessage(err, 'Please try again.'));
+      }
+    });
 
     return () => {
       cancelled = true;
@@ -51,23 +58,26 @@ export default function GeneralContractorInsuranceOnboarding() {
   }, [user?.id]);
 
   const pickDocument = async () => {
-    const result = await launchImageLibrary({
-      mediaType: 'photo',
-      quality: 0.8,
-      selectionLimit: 1,
-      assetRepresentationMode: 'compatible',
-    });
-    if (!result.didCancel && result.assets?.[0]) {
-      setSelectedDocument(result.assets[0]);
+    try {
+      const result = await launchImageLibrary({
+        mediaType: 'photo',
+        quality: 0.8,
+        selectionLimit: 1,
+        assetRepresentationMode: 'compatible',
+      });
+      if (!result.didCancel && result.assets?.[0]) {
+        setSelectedDocument(result.assets[0]);
+      }
+    } catch (err) {
+      Alert.alert('Could not select document', formatAppSafeErrorMessage(err, 'Please try again.'));
     }
   };
 
-  const uploadSelectedDocument = async (): Promise<string | null> => {
+  const uploadSelectedDocument = async (currentUserId: string): Promise<string | null> => {
     if (!selectedDocument) return documentUrl.trim() || null;
-    if (!user?.id) throw new Error('Please sign in again before uploading GC documents.');
 
     const upload = getUploadMetadata(selectedDocument);
-    const path = `general-contractors/${user.id}/insurance-${Date.now()}.${upload.extension}`;
+    const path = `general-contractors/${currentUserId}/insurance-${Date.now()}.${upload.extension}`;
     const { storagePath } = await uploadFile('company-docs', path, upload.uri, upload.contentType);
     return storagePath;
   };
@@ -77,11 +87,18 @@ export default function GeneralContractorInsuranceOnboarding() {
       Alert.alert('Insurance required', 'Upload an insurance document before submitting for review.');
       return;
     }
-    if (!user?.id) {
+    let currentUserId: string | null = null;
+    try {
+      currentUserId = user?.id ?? (await getCurrentUser())?.id ?? null;
+    } catch (err) {
+      Alert.alert('Sign in required', formatAppSafeErrorMessage(err, 'Please sign in again before continuing.'));
+      return;
+    }
+    if (!currentUserId) {
       Alert.alert('Sign in required', 'Please sign in again before continuing.');
       return;
     }
-    if (!selectedDocument && !isValidGeneralContractorDocumentReference(documentUrl, user.id, 'insurance')) {
+    if (!selectedDocument && !isValidGeneralContractorDocumentReference(documentUrl, currentUserId, 'insurance')) {
       Alert.alert('Invalid insurance document', 'Upload the insurance document or provide an HTTPS secure document link.');
       return;
     }
@@ -91,7 +108,7 @@ export default function GeneralContractorInsuranceOnboarding() {
       const { data: gc, error: profileError } = await supabase
         .from('general_contractors')
         .select('id')
-        .eq('user_id', user.id)
+        .eq('user_id', currentUserId)
         .maybeSingle();
       if (profileError) throw profileError;
       if (!gc?.id) {
@@ -99,7 +116,7 @@ export default function GeneralContractorInsuranceOnboarding() {
         return;
       }
 
-      const uploadedDocumentPath = await uploadSelectedDocument();
+      const uploadedDocumentPath = await uploadSelectedDocument(currentUserId);
       if (!uploadedDocumentPath) throw new Error('Insurance document was not uploaded.');
       const { error } = await supabase
         .from('general_contractors')
@@ -108,7 +125,7 @@ export default function GeneralContractorInsuranceOnboarding() {
       if (error) throw error;
       navigation.navigate('GeneralContractorTabs', { screen: 'GeneralContractorProfile' });
     } catch (err) {
-      Alert.alert('Error', formatAppSafeErrorMessage(err, 'Could not save insurance details.'));
+      Alert.alert('Could not save insurance details', formatAppSafeErrorMessage(err, 'Please try again.'));
     } finally {
       setLoading(false);
     }

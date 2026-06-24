@@ -61,30 +61,34 @@ export default function MaterialsScreen() {
   const fetchOrders = useCallback(async () => {
     setLoading(true);
     setErrorMessage(null);
-    if (!projectId) {
+    try {
+      if (!projectId) {
+        setOrders([]);
+        setErrorMessage('Project is missing. Reopen materials from the project page.');
+        return;
+      }
+      const { data, error } = await supabase
+        .from('material_orders')
+        .select(`
+          id, status, quantity_needed, unit, quality_tier, offered_price, final_price,
+          delivery_deadline, tracking_number, carrier, delivery_photo_url,
+          material:materials!material_orders_material_id_fkey(item, quantity, unit, quality_tier),
+          accepted_supplier:suppliers!accepted_supplier_id(business_name, rating)
+        `)
+        .eq('project_id', projectId)
+        .order('created_at');
+      if (error) {
+        setOrders([]);
+        setErrorMessage(formatAppSafeErrorMessage(error, 'Could not load material orders.'));
+        return;
+      }
+      setOrders((data as any) ?? []);
+    } catch (err) {
       setOrders([]);
-      setErrorMessage('Project is missing. Reopen materials from the project page.');
+      setErrorMessage(formatAppSafeErrorMessage(err, 'Could not load material orders.'));
+    } finally {
       setLoading(false);
-      return;
     }
-    const { data, error } = await supabase
-      .from('material_orders')
-      .select(`
-        id, status, quantity_needed, unit, quality_tier, offered_price, final_price,
-        delivery_deadline, tracking_number, carrier, delivery_photo_url,
-        material:materials!material_orders_material_id_fkey(item, quantity, unit, quality_tier),
-        accepted_supplier:suppliers!accepted_supplier_id(business_name, rating)
-      `)
-      .eq('project_id', projectId)
-      .order('created_at');
-    if (error) {
-      setOrders([]);
-      setErrorMessage(formatAppSafeErrorMessage(error, 'Could not load material orders.'));
-      setLoading(false);
-      return;
-    }
-    setOrders((data as any) ?? []);
-    setLoading(false);
   }, [projectId]);
 
   useEffect(() => {

@@ -12,7 +12,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { useFocusEffect, useNavigation } from '@react-navigation/native';
 import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
 import { supabase } from '@/lib/supabase/client';
-import { signOut } from '@/lib/supabase/auth';
+import { getCurrentUser, signOut } from '@/lib/supabase/auth';
 import { useAuthStore } from '@/stores/auth.store';
 import { formatCad, formatStatusLabel } from '@/lib/formatters';
 import { formatGcProjectType, gcProjectTypeIcon } from '@/lib/gc-project-type';
@@ -130,19 +130,21 @@ export default function CompanyJobFeed() {
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
   const fetchData = useCallback(async () => {
-    if (!user) {
-      setLoading(false);
-      setRefreshing(false);
-      return;
-    }
-
     try {
       setErrorMessage(null);
+      const currentUserId = user?.id ?? (await getCurrentUser())?.id ?? null;
+      if (!currentUserId) {
+        setCompany(null);
+        setJobs([]);
+        setActiveJobs([]);
+        setErrorMessage('You need to be signed in to view jobs.');
+        return;
+      }
 
       const { data: co, error: companyError } = await supabase
         .from('companies')
         .select('id, verified, name, license_number, insurance_doc_url')
-        .eq('user_id', user.id)
+        .eq('user_id', currentUserId)
         .order('created_at', { ascending: false })
         .limit(1)
         .maybeSingle();
@@ -299,6 +301,7 @@ export default function CompanyJobFeed() {
       setJobs(pendingDispatchRows.map(enrichDispatchProject));
       setActiveJobs(Array.from(byKey.values()));
     } catch (err) {
+      setCompany(null);
       setErrorMessage(formatAppSafeErrorMessage(err, 'Could not load jobs.'));
       setJobs([]);
       setActiveJobs([]);
@@ -306,7 +309,7 @@ export default function CompanyJobFeed() {
       setLoading(false);
       setRefreshing(false);
     }
-  }, [user]);
+  }, [user?.id]);
 
   useFocusEffect(
     useCallback(() => {

@@ -34,17 +34,23 @@ export default function GeneralContractorProfile() {
   const [refreshing, setRefreshing] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
-  const fetchData = useCallback(async () => {
-    const currentUser = user ?? (await supabase.auth.getUser()).data.user;
-    if (!currentUser) {
-      setErrorMessage('You need to be signed in to view your GC profile.');
-      setLoading(false);
-      setRefreshing(false);
-      return;
-    }
+  const clearProfileState = useCallback(() => {
+    setGc(null);
+    setManagedCount(0);
+    setCompletedCount(0);
+    setStartingPayoutSetup(false);
+  }, []);
 
+  const fetchData = useCallback(async () => {
     try {
       setErrorMessage(null);
+      const currentUser = user ?? (await supabase.auth.getUser()).data.user;
+      if (!currentUser) {
+        setErrorMessage('You need to be signed in to view your GC profile.');
+        clearProfileState();
+        return;
+      }
+
       await refreshStripeConnectStatus('general_contractor');
       const { data: profile, error } = await supabase
         .from('general_contractors')
@@ -68,14 +74,12 @@ export default function GeneralContractorProfile() {
       }
     } catch (err) {
       setErrorMessage(formatAppSafeErrorMessage(err, 'Could not load GC profile.'));
-      setGc(null);
-      setManagedCount(0);
-      setCompletedCount(0);
+      clearProfileState();
     } finally {
       setLoading(false);
       setRefreshing(false);
     }
-  }, [user]);
+  }, [clearProfileState, user]);
 
   useFocusEffect(
     useCallback(() => {

@@ -186,13 +186,6 @@ export default function LicenseOnboardingScreen() {
             size="lg"
             style={styles.cta}
           />
-
-          <TouchableOpacity
-            onPress={() => navigation.navigate('InsuranceOnboarding')}
-            style={styles.skipButton}
-          >
-            <Text style={styles.skipText}>Skip for now</Text>
-          </TouchableOpacity>
         </ScrollView>
       </SafeAreaView>
     </GradientBackground>
@@ -248,6 +241,4 @@ const styles = StyleSheet.create({
   removePhoto: { alignSelf: 'center', marginTop: 10 },
   removeText: { color: Colors.error, fontSize: 13 },
   cta: { marginTop: Spacing.xs },
-  skipButton: { alignSelf: 'center', marginTop: Spacing.sm },
-  skipText: { color: Colors.text.tertiary, fontSize: 14 },
 });

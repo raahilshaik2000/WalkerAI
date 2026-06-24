@@ -7,11 +7,35 @@ describe('notification navigation', () => {
   it('keeps shared notification load and read failures app-safe', () => {
     const source = fs.readFileSync(path.join(__dirname, '../src/app/notifications.tsx'), 'utf8');
 
+    expect(source).toContain("import { getSession } from '@/lib/supabase/auth';");
     expect(source).toContain("import { formatAppSafeErrorMessage } from '@/lib/supabase/functions';");
     expect(source).toContain("setErrorMessage(formatAppSafeErrorMessage(error, 'Could not load notifications.'))");
+    expect(source).toContain("setErrorMessage(formatAppSafeErrorMessage(err, 'Could not load notifications.'))");
     expect(source).toContain("setErrorMessage(formatAppSafeErrorMessage(error, 'Could not mark notification as read.'))");
     expect(source).toContain("setErrorMessage(formatAppSafeErrorMessage(error, 'Could not mark notifications as read.'))");
+    expect(source).toContain("setErrorMessage(formatAppSafeErrorMessage(err, 'Could not mark notifications as read.'))");
     expect(source).not.toContain('setErrorMessage(error.message)');
+  });
+
+  it('falls back to the active Supabase session for notification loads and bulk read updates', () => {
+    const source = fs.readFileSync(path.join(__dirname, '../src/app/notifications.tsx'), 'utf8');
+    const button = fs.readFileSync(path.join(__dirname, '../src/components/notifications/NotificationButton.tsx'), 'utf8');
+
+    expect(source).toContain('const currentUserId = user?.id ?? null;');
+    expect(source).toContain('const activeUserId = currentUserId ?? (await getSession())?.user?.id ?? null;');
+    expect(source).toContain(".eq('user_id', activeUserId)");
+    expect(source).toContain("filter: `user_id=eq.${currentUserId}`");
+    expect(source).not.toContain(".eq('user_id', user.id)");
+    expect(source).not.toContain("filter: `user_id=eq.${user.id}`");
+
+    expect(button).toContain("import { getSession } from '@/lib/supabase/auth';");
+    expect(button).toContain('const activeUserId = user?.id ?? (await getSession())?.user?.id ?? null;');
+    expect(button).toContain('subscribe().catch(() => {');
+    expect(button).toContain(".eq('user_id', activeUserId)");
+    expect(button).toContain("filter: `user_id=eq.${activeUserId}`");
+    expect(button).toContain('if (!cancelled) setUnreadCount(count ?? 0);');
+    expect(button).not.toContain(".eq('user_id', user.id)");
+    expect(button).not.toContain("filter: `user_id=eq.${user.id}`");
   });
 
   it('routes homeowner quote notifications to the quote screen', () => {
@@ -48,6 +72,17 @@ describe('notification navigation', () => {
     expect(resolveNotificationRoute('supplier_paid', { order_id: 'order-1' }, 'supplier')).toEqual({
       name: 'SupplierTabs',
       params: { screen: 'SupplierEarnings' },
+    });
+  });
+
+  it('routes supplier project message notifications to the shared project thread', () => {
+    expect(resolveNotificationRoute('new_message', { project_id: 'project-1' }, 'supplier')).toEqual({
+      name: 'SupplierProjectMessages',
+      params: { id: 'project-1' },
+    });
+
+    expect(resolveNotificationRoute('new_message', {}, 'supplier')).toEqual({
+      name: 'SupplierTabs',
     });
   });
 
@@ -207,6 +242,15 @@ describe('notification navigation', () => {
 
   it('falls back to WalkerAI deep links when GC push payload ids are missing', () => {
     expect(resolveNotificationRoute(
+      'new_message',
+      { deep_link: '/project/project-1/messages' },
+      'supplier',
+    )).toEqual({
+      name: 'SupplierProjectMessages',
+      params: { id: 'project-1' },
+    });
+
+    expect(resolveNotificationRoute(
       'order_delivered',
       { deep_link: '/(general-contractor)/project/project-1/materials' },
       'general_contractor',
@@ -298,6 +342,15 @@ describe('notification navigation', () => {
           screen: 'JobDetailMain',
           params: { id: 'project-1', slot: 'slot-1' },
         },
+      },
+    });
+
+    const supplierRoute = resolveNotificationRoute('new_message', { project_id: 'project-1' }, 'supplier');
+    expect(toRootNotificationRoute(supplierRoute, 'supplier')).toEqual({
+      name: 'Supplier',
+      params: {
+        screen: 'SupplierProjectMessages',
+        params: { id: 'project-1' },
       },
     });
   });

@@ -47,6 +47,27 @@ describe('company quote copy', () => {
     expect(source).not.toContain('err instanceof Error');
   });
 
+  it('falls back to the active Supabase session when company auth store is stale', () => {
+    const repoRoot = path.resolve(__dirname, '..');
+    const jobDetail = fs.readFileSync(
+      path.join(repoRoot, 'src/app/(company)/job/[id]/index.tsx'),
+      'utf8'
+    );
+    const quoteBuilder = fs.readFileSync(
+      path.join(repoRoot, 'src/app/(company)/job/[id]/quote-builder.tsx'),
+      'utf8'
+    );
+
+    expect(jobDetail).toContain('const { data: authData, error: authError } = await supabase.auth.getUser();');
+    expect(jobDetail).toContain('if (authError) throw authError;');
+    expect(jobDetail).toContain('fetchCompanyPayoutProfile(currentUserId)');
+    expect(jobDetail).not.toContain('if (!projectId || !user?.id)');
+    expect(quoteBuilder).toContain('async function getCurrentUserId');
+    expect(quoteBuilder).toContain('await supabase.auth.getUser();');
+    expect(quoteBuilder).toContain('const currentUserId = await getCurrentUserId(user?.id);');
+    expect(quoteBuilder).not.toContain("if (!user) {\n      Alert.alert('Sign in required'");
+  });
+
   it('lets companies replace unfunded pending quotes for GC-requested revisions', () => {
     const repoRoot = path.resolve(__dirname, '..');
     const screenSource = fs.readFileSync(
@@ -148,6 +169,57 @@ describe('company quote copy', () => {
     expect(jobDetail).toContain('const [hasEditablePendingQuote, setHasEditablePendingQuote] = useState(false);');
     expect(jobDetail).toContain('setHasEditablePendingQuote(!!pendingQuoteResult.data);');
     expect(jobDetail).toContain("hasEditablePendingQuote ? 'Edit pending' : 'Build quote'");
+  });
+
+  it('resets editable quote drafts when the current project has no quote pricing state', () => {
+    const repoRoot = path.resolve(__dirname, '..');
+    const quoteBuilder = fs.readFileSync(
+      path.join(repoRoot, 'src/app/(company)/job/[id]/quote-builder.tsx'),
+      'utf8'
+    );
+
+    expect(quoteBuilder).toContain('const resetEditableQuoteDraft = useCallback(() => {');
+    expect(quoteBuilder).toContain('setLineItems(defaultLineItems(acceptedCounterofferCents));');
+    expect(quoteBuilder).toContain('setMilestones(defaultMilestones(acceptedCounterofferCents));');
+    expect(quoteBuilder).toContain('setNotes(defaultNotes(gcNegotiationNote));');
+    expect(quoteBuilder).toContain("setQuoteLoadError('Project is missing. Reopen this job from your dashboard.');\n        resetEditableQuoteDraft();");
+    expect(quoteBuilder).toContain('if (acceptedCounterofferCents) {\n            resetEditableQuoteDraft();');
+    expect(quoteBuilder).toContain('} else if (!cancelled) {\n              resetEditableQuoteDraft();');
+    expect(quoteBuilder).toContain('}, [acceptedCounterofferCents, projectId, quoteReloadKey, resetEditableQuoteDraft, slotId, user?.id]);');
+  });
+
+  it('blocks quote editing when pricing state cannot be safely loaded', () => {
+    const repoRoot = path.resolve(__dirname, '..');
+    const quoteBuilder = fs.readFileSync(
+      path.join(repoRoot, 'src/app/(company)/job/[id]/quote-builder.tsx'),
+      'utf8'
+    );
+
+    expect(quoteBuilder).toContain('const [quoteLoadError, setQuoteLoadError] = useState<string | null>(null);');
+    expect(quoteBuilder).toContain("setQuoteLoadError(formatAppSafeErrorMessage(err, 'Could not load quote pricing.'))");
+    expect(quoteBuilder).toContain('if (quoteLoadError) {');
+    expect(quoteBuilder).toContain('Quote Unavailable');
+    expect(quoteBuilder).toContain('Pricing is locked until WalkerAI can confirm whether this job already has an editable, approved, or funded quote.');
+    expect(quoteBuilder).toContain('setQuoteReloadKey((current) => current + 1);');
+    expect(quoteBuilder).toContain('if (pendingQuoteResult.error) throw pendingQuoteResult.error;');
+    expect(quoteBuilder).toContain('if (itemsResult.error) throw itemsResult.error;');
+    expect(quoteBuilder).toContain('if (milestonesResult.error) throw milestonesResult.error;');
+    expect(quoteBuilder).not.toContain('!pendingQuoteResult.error && pendingQuoteResult.data');
+  });
+
+  it('does not update quote loading state after pending quote loads are cancelled', () => {
+    const repoRoot = path.resolve(__dirname, '..');
+    const quoteBuilder = fs.readFileSync(
+      path.join(repoRoot, 'src/app/(company)/job/[id]/quote-builder.tsx'),
+      'utf8'
+    );
+
+    expect(quoteBuilder).toMatch(
+      /const pendingQuoteResult = await pendingQuoteQuery\.maybeSingle\(\);[\s\S]*?if \(cancelled\) return;[\s\S]*?if \(pendingQuoteResult\.error\) throw pendingQuoteResult\.error;/
+    );
+    expect(quoteBuilder).toMatch(
+      /const \[itemsResult, milestonesResult\] = await Promise\.all\([\s\S]*?if \(cancelled\) return;[\s\S]*?if \(itemsResult\.error\) throw itemsResult\.error;/
+    );
   });
 
   it('does not show duplicate legacy active jobs when a slot assignment exists for the same project', () => {
@@ -280,6 +352,17 @@ describe('company quote copy', () => {
     expect(jobDetail).toContain("const negotiationResult = slotId");
     expect(jobDetail).toContain("await negotiationQuery.eq('slot_id', slotId)");
     expect(jobDetail).toContain("await negotiationQuery.is('slot_id', null)");
+  });
+
+  it('clears stale slot state when a reused job detail screen opens project-level pricing', () => {
+    const repoRoot = path.resolve(__dirname, '..');
+    const jobDetail = fs.readFileSync(
+      path.join(repoRoot, 'src/app/(company)/job/[id]/index.tsx'),
+      'utf8'
+    );
+
+    expect(jobDetail).toContain('setSlot(slotData ? (slotData as Slot) : null);');
+    expect(jobDetail).not.toContain('if (slotData) setSlot(slotData as Slot);');
   });
 
   it('locks GC counteroffer acceptance after quote approval or payment start', () => {

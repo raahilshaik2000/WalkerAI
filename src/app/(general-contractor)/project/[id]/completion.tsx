@@ -124,6 +124,22 @@ export default function GeneralContractorCompletionScreen() {
   const [gcReady, setGcReady] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
+  const clearCompletionState = useCallback(() => {
+    setProject(null);
+    setAssignment(null);
+    setPermits([]);
+    setWarranties([]);
+    setMaterialOrders([]);
+    setProjectSlots([]);
+    setTradeNegotiations([]);
+    setQuotes([]);
+    setApprovals([]);
+    setPaymentRequests([]);
+    setChangeOrders([]);
+    setSubmittingCompletion(false);
+    setGcReady(false);
+  }, []);
+
   const fetchData = useCallback(async () => {
     try {
       setErrorMessage(null);
@@ -245,23 +261,12 @@ export default function GeneralContractorCompletionScreen() {
       setChangeOrders((changeOrderResult.data ?? []) as ChangeOrder[]);
     } catch (err) {
       setErrorMessage(formatAppSafeErrorMessage(err, 'Could not load completion binder.'));
-      setProject(null);
-      setAssignment(null);
-      setPermits([]);
-      setWarranties([]);
-      setMaterialOrders([]);
-      setProjectSlots([]);
-      setTradeNegotiations([]);
-      setQuotes([]);
-      setApprovals([]);
-      setPaymentRequests([]);
-      setChangeOrders([]);
-      setGcReady(false);
+      clearCompletionState();
     } finally {
       setLoading(false);
       setRefreshing(false);
     }
-  }, [projectId]);
+  }, [clearCompletionState, projectId]);
 
   useFocusEffect(
     useCallback(() => {

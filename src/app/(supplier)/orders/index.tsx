@@ -18,6 +18,7 @@ import { formatCadCents } from '@/lib/currency';
 import { formatAppSafeErrorMessage, formatSupabaseFunctionError } from '@/lib/supabase/functions';
 import { joinedMaterialItemName } from '@/lib/material-orders';
 import { isStripePayoutLocallyReady } from '@/lib/payouts';
+import { getCurrentUser } from '@/lib/supabase/auth';
 import { useAuthStore } from '@/stores/auth.store';
 import { Colors, Radius, Spacing, Typography } from '@/constants/theme';
 import { NotificationButton } from '@/components/notifications/NotificationButton';
@@ -82,65 +83,63 @@ export default function SupplierOrderFeed() {
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
   const fetchData = useCallback(async () => {
-    if (!user) {
-      setSupplier(null);
-      setOrders([]);
-      setErrorMessage('You need to be signed in to view supplier orders.');
-      setLoading(false);
-      return;
-    }
-    setErrorMessage(null);
-    const { data: sup, error: supplierError } = await supabase
-      .from('suppliers')
-      .select('*')
-      .eq('user_id', user.id)
-      .order('created_at', { ascending: false })
-      .limit(1)
-      .maybeSingle();
-
-    if (supplierError) {
-      setSupplier(null);
-      setOrders([]);
-      setErrorMessage(formatAppSafeErrorMessage(supplierError, 'Could not load supplier profile.'));
-      setLoading(false);
-      return;
-    }
-
-    setSupplier(sup);
-    if (!sup) {
-      setOrders([]);
-      setLoading(false);
-      return;
-    }
-
-    if (!sup?.verified) {
-      setOrders([]);
-      setLoading(false);
-      return;
-    }
-
-    const { data, error } = await supabase
-      .from('material_orders')
-      .select('*, material:materials!material_orders_material_id_fkey(*)')
-      .eq('status', 'open')
-      .order('delivery_deadline', { ascending: true });
-
-    if (error) {
-      setOrders([]);
-      setErrorMessage(formatAppSafeErrorMessage(error, 'Could not load open material orders.'));
-      setLoading(false);
-      return;
-    }
-
     try {
+      const currentUserId = user?.id ?? (await getCurrentUser())?.id ?? null;
+      if (!currentUserId) {
+        setSupplier(null);
+        setOrders([]);
+        setErrorMessage('You need to be signed in to view supplier orders.');
+        return;
+      }
+      setErrorMessage(null);
+      const { data: sup, error: supplierError } = await supabase
+        .from('suppliers')
+        .select('*')
+        .eq('user_id', currentUserId)
+        .order('created_at', { ascending: false })
+        .limit(1)
+        .maybeSingle();
+
+      if (supplierError) {
+        setSupplier(null);
+        setOrders([]);
+        setErrorMessage(formatAppSafeErrorMessage(supplierError, 'Could not load supplier profile.'));
+        return;
+      }
+
+      setSupplier(sup);
+      if (!sup) {
+        setOrders([]);
+        return;
+      }
+
+      if (!sup?.verified) {
+        setOrders([]);
+        return;
+      }
+
+      const { data, error } = await supabase
+        .from('material_orders')
+        .select('*, material:materials!material_orders_material_id_fkey(*)')
+        .eq('status', 'open')
+        .order('delivery_deadline', { ascending: true });
+
+      if (error) {
+        setOrders([]);
+        setErrorMessage(formatAppSafeErrorMessage(error, 'Could not load open material orders.'));
+        return;
+      }
+
       const claimableOrders = await filterClaimableOrders(sup, (data as MaterialOrder[]) ?? []);
       setOrders(claimableOrders);
-    } catch (eligibilityError) {
+    } catch (err) {
+      setSupplier(null);
       setOrders([]);
-      setErrorMessage(formatAppSafeErrorMessage(eligibilityError, 'Could not verify supplier eligibility for open orders.'));
+      setErrorMessage(formatAppSafeErrorMessage(err, 'Could not load open material orders.'));
+    } finally {
+      setLoading(false);
     }
-    setLoading(false);
-  }, [user]);
+  }, [user?.id]);
 
   useFocusEffect(
     useCallback(() => {
@@ -172,7 +171,7 @@ export default function SupplierOrderFeed() {
       if (msg.includes('ORDER_CLAIMED') || msg.includes('no longer available')) {
         Alert.alert('Order taken', 'Another supplier just claimed this order.');
       } else {
-        Alert.alert('Error', msg);
+        Alert.alert('Could not claim order', msg);
       }
     } finally {
       setClaiming(null);

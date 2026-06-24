@@ -158,6 +158,7 @@ export default function MeasurementsStep() {
   const [floorTileArea, setFloorTileArea] = useState('');
   const [wallTileArea, setWallTileArea] = useState('');
   const [showAdvanced, setShowAdvanced] = useState(false);
+  const [submitting, setSubmitting] = useState(false);
 
   const kitchenValues = [
     upperCabHeight, lowerCabHeight, cabDepth, upperLinearFt, lowerLinearFt,
@@ -219,6 +220,8 @@ export default function MeasurementsStep() {
   };
 
   const handleContinue = () => {
+    if (submitting) return;
+
     const invalidLabels = invalidMeasurementLabels();
     if (invalidLabels.length > 0) {
       Alert.alert(
@@ -228,6 +231,7 @@ export default function MeasurementsStep() {
       return;
     }
 
+    setSubmitting(true);
     if (hasAnyValue) {
       setMeasurements({
         lengthFt: roomLength,
@@ -265,14 +269,17 @@ export default function MeasurementsStep() {
     }
     setRoomScanData(null);
     useProjectWizardStore.getState().setStep(3);
-    navigation.navigate('Analyzing');
+    navigation.navigate('Analyzing', { measurementsSkipped: false });
   };
 
   const handleSkip = () => {
+    if (submitting) return;
+
+    setSubmitting(true);
     setMeasurements(null);
     setRoomScanData(null);
     useProjectWizardStore.getState().setStep(3);
-    navigation.navigate('Analyzing');
+    navigation.navigate('Analyzing', { measurementsSkipped: true });
   };
 
   return (
@@ -467,12 +474,18 @@ export default function MeasurementsStep() {
             <GlassButton
               label="Continue"
               onPress={handleContinue}
+              loading={submitting}
               fullWidth
               size="lg"
               style={styles.cta}
             />
 
-            <TouchableOpacity onPress={handleSkip} style={styles.skipBtn} activeOpacity={0.7}>
+            <TouchableOpacity
+              onPress={handleSkip}
+              style={[styles.skipBtn, submitting && styles.skipBtnDisabled]}
+              activeOpacity={0.7}
+              disabled={submitting}
+            >
               <Text style={styles.skipText}>Skip measurements</Text>
             </TouchableOpacity>
           </ScrollView>
@@ -562,6 +575,7 @@ const styles = StyleSheet.create({
 
   cta: { marginBottom: 12 },
   skipBtn: { alignItems: 'center', paddingVertical: 8 },
+  skipBtnDisabled: { opacity: 0.5 },
   skipText: { fontSize: 14, color: Colors.text.tertiary, fontWeight: '500' },
 
   lidarCard: {

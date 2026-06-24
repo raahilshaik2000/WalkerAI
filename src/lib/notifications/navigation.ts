@@ -26,7 +26,7 @@ function firstDeepLinkMatch(value: unknown, pattern: RegExp): string | undefined
 }
 
 function projectIdFromDeepLink(value: unknown): string | undefined {
-  return firstDeepLinkMatch(value, /\/(?:\(homeowner\)\/project|\(company\)\/job|\(general-contractor\)\/project)\/([^/?#]+)/);
+  return firstDeepLinkMatch(value, /\/(?:project|\(homeowner\)\/project|\(company\)\/job|\(general-contractor\)\/project)\/([^/?#]+)/);
 }
 
 function slotIdFromDeepLink(value: unknown): string | undefined {
@@ -68,6 +68,8 @@ export function resolveNotificationRoute(
 
   if (role === 'supplier') {
     switch (type) {
+      case 'new_message':
+        return projectId ? { name: 'SupplierProjectMessages', params: { id: projectId } } : { name: 'SupplierTabs' };
       case 'new_material_order':
         return { name: 'SupplierTabs', params: { screen: 'SupplierOrders' } };
       case 'supplier_paid':

@@ -14,16 +14,26 @@ describe('project review closeout screens', () => {
     );
 
     expect(source).toContain('const [targetError, setTargetError]');
+    expect(source).toContain('const clearReviewTargets = useCallback(() => {');
+    expect(source).toContain('setTargets([]);');
+    expect(source).toContain('setSelectedTargetKey(null);');
+    expect(source).toContain('setProjectStatus(null);');
+    expect(source).toContain('if (!projectId) {\n      clearReviewTargets();');
     expect(source).toContain("isMissingSupabaseSchemaObjectError(gcRes.error, 'general_contractor_projects')");
     expect(source).toContain('const loadError = quotesRes.error ?? slotsRes.error ?? legacyRes.error ?? (gcContextUnavailable ? null : gcRes.error)');
     expect(source).toContain("import { formatAppSafeErrorMessage } from '@/lib/supabase/functions'");
     expect(source).toContain("setTargetError(formatAppSafeErrorMessage(loadError, 'Could not load contractor review targets.'))");
     expect(source).toContain('Could not load contractors');
     expect(source).toContain("disabled={!!targetError || !selectedTarget || projectStatus !== 'completed'}");
+    expect(source).toContain("Alert.alert('Sign in required', 'Please sign in again before submitting a contractor review.')");
+    expect(source).toContain(".eq('reviewer_id', user.id)");
+    expect(source).toContain('reviewer_id: user.id');
     expect(source).toContain("throw new Error(formatAppSafeErrorMessage(existingError, 'Could not check existing reviews.'))");
-    expect(source).toContain("Alert.alert('Error', formatAppSafeErrorMessage(err, 'Please try again.'))");
+    expect(source).toContain("Alert.alert('Could not submit review', formatAppSafeErrorMessage(err, 'Please try again.'))");
     expect(source).not.toContain('setTargetError(loadError.message)');
     expect(source).not.toContain('existingError.message');
+    expect(source).not.toContain('user!.id');
+    expect(source).not.toContain("Alert.alert('Error', formatAppSafeErrorMessage(err, 'Please try again.'))");
     expect(source).not.toContain("err instanceof Error ? err.message : 'Please try again.'");
   });
 
@@ -44,6 +54,9 @@ describe('project review closeout screens', () => {
     expect(source).toContain("general_contractor:general_contractors(id, user_id, business_name)");
     expect(source).toContain("target_type: 'general_contractor'");
     expect(source).toContain('for (const assignment of gcContextUnavailable ? [] : gcRes.data ?? [])');
+    expect(source).toContain("import { formatGcProjectType } from '@/lib/gc-project-type';");
+    expect(source).toContain('trade_type: `GC management · ${formatGcProjectType((assignment as any).project_type)}`');
+    expect(source).not.toContain("trade_type: (assignment as any).project_type ? `GC management · ${(assignment as any).project_type}` : 'GC management'");
     expect(source).toContain("selectedTarget.target_type === 'company'");
     expect(source).toContain("p_company_id: selectedTarget.target_id");
 

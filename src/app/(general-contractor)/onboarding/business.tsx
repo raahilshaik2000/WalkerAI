@@ -14,6 +14,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { useNavigation, useRoute } from '@react-navigation/native';
 import Ionicons from 'react-native-vector-icons/Ionicons';
 import { supabase } from '@/lib/supabase/client';
+import { getCurrentUser } from '@/lib/supabase/auth';
 import { formatAppSafeErrorMessage } from '@/lib/supabase/functions';
 import { useAuthStore } from '@/stores/auth.store';
 import { Colors, Spacing, Typography } from '@/constants/theme';
@@ -68,20 +69,22 @@ export default function GeneralContractorBusinessOnboarding() {
   };
 
   useEffect(() => {
-    if (!user?.id) return;
-
     let cancelled = false;
     const loadExistingProfile = async () => {
+      const currentUserId = user?.id ?? (await getCurrentUser())?.id ?? null;
+      if (!currentUserId) return;
+
       const { data, error } = await supabase
         .from('general_contractors')
         .select(`
           business_name, address, city, province, postal_code, service_radius_km,
           default_markup_pct, default_concierge_fee_pct, concierge_enabled, lat, lng
         `)
-        .eq('user_id', user.id)
+        .eq('user_id', currentUserId)
         .maybeSingle();
 
-      if (cancelled || error || !data) return;
+      if (error) throw error;
+      if (cancelled || !data) return;
       setBusinessName(data.business_name ?? '');
       setAddress(data.address ?? '');
       setCity(data.city ?? '');
@@ -95,7 +98,11 @@ export default function GeneralContractorBusinessOnboarding() {
       setLng(data.lng ?? null);
     };
 
-    loadExistingProfile().catch(() => undefined);
+    loadExistingProfile().catch((err) => {
+      if (!cancelled) {
+        Alert.alert('Could not load business profile', formatAppSafeErrorMessage(err, 'Please try again.'));
+      }
+    });
 
     return () => {
       cancelled = true;
@@ -131,7 +138,14 @@ export default function GeneralContractorBusinessOnboarding() {
       Alert.alert('Invalid concierge allowance', 'Default concierge allowance must be between 0% and 25%.');
       return;
     }
-    if (!user?.id) {
+    let currentUserId: string | null = null;
+    try {
+      currentUserId = user?.id ?? (await getCurrentUser())?.id ?? null;
+    } catch (err) {
+      Alert.alert('Sign in required', formatAppSafeErrorMessage(err, 'Please sign in again before continuing.'));
+      return;
+    }
+    if (!currentUserId) {
       Alert.alert('Sign in required', 'Please sign in again before continuing.');
       return;
     }
@@ -139,7 +153,7 @@ export default function GeneralContractorBusinessOnboarding() {
     setLoading(true);
     try {
       const payload = {
-        user_id: user.id,
+        user_id: currentUserId,
         business_name: businessName.trim(),
         address: address.trim() || null,
         city: city.trim(),
@@ -156,7 +170,7 @@ export default function GeneralContractorBusinessOnboarding() {
       const { data: existing, error: existingError } = await supabase
         .from('general_contractors')
         .select('id')
-        .eq('user_id', user.id)
+        .eq('user_id', currentUserId)
         .maybeSingle();
       if (existingError) throw existingError;
 
@@ -172,7 +186,7 @@ export default function GeneralContractorBusinessOnboarding() {
         navigation.navigate('GeneralContractorLicenseOnboarding');
       }
     } catch (err) {
-      Alert.alert('Error', formatAppSafeErrorMessage(err, 'Failed to save. Please try again.'));
+      Alert.alert('Could not save business profile', formatAppSafeErrorMessage(err, 'Please try again.'));
     } finally {
       setLoading(false);
     }

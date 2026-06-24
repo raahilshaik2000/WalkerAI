@@ -122,18 +122,22 @@ describe('supplier material order payout math', () => {
     expect(feedSource).toContain("import { formatAppSafeErrorMessage, formatSupabaseFunctionError } from '@/lib/supabase/functions'");
     expect(feedSource).toContain("setErrorMessage(formatAppSafeErrorMessage(supplierError, 'Could not load supplier profile.'))");
     expect(feedSource).toContain("setErrorMessage(formatAppSafeErrorMessage(error, 'Could not load open material orders.'))");
-    expect(feedSource).toContain("setErrorMessage(formatAppSafeErrorMessage(eligibilityError, 'Could not verify supplier eligibility for open orders.'))");
+    expect(feedSource).toContain("setErrorMessage(formatAppSafeErrorMessage(err, 'Could not load open material orders.'))");
+    expect(feedSource).toContain("} finally {\n      setLoading(false);");
     expect(feedSource).toContain("const msg = await formatSupabaseFunctionError(err, 'Failed to claim order')");
     expect(feedSource).toContain("Alert.alert('Order taken', 'Another supplier just claimed this order.')");
+    expect(feedSource).toContain("Alert.alert('Could not claim order', msg)");
     expect(feedSource).not.toContain('setErrorMessage(supplierError.message)');
     expect(feedSource).not.toContain('setErrorMessage(error.message)');
     expect(feedSource).not.toContain('eligibilityError instanceof Error');
     expect(feedSource).not.toContain("Alert.alert('Error', err instanceof Error ? err.message");
+    expect(feedSource).not.toContain("Alert.alert('Error', msg)");
 
     expect(detailSource).toContain("import { formatAppSafeErrorMessage, formatSupabaseFunctionError } from '@/lib/supabase/functions'");
     expect(detailSource).toContain("setErrorMessage(formatAppSafeErrorMessage(orderResult.error, 'Could not load material order.'))");
     expect(detailSource).toContain("setErrorMessage(formatAppSafeErrorMessage(supplierResult.error, 'Could not load supplier profile.'))");
-    expect(detailSource).toContain("setErrorMessage(formatAppSafeErrorMessage(eligibilityError, 'Could not verify supplier eligibility for this order.'))");
+    expect(detailSource).toContain("setErrorMessage(formatAppSafeErrorMessage(err, 'Could not load material order.'))");
+    expect(detailSource).toContain("} finally {\n      setLoading(false);");
     expect(detailSource).toContain("Alert.alert('Could not claim order', await formatSupabaseFunctionError(err, 'Please try again.'))");
     expect(detailSource).not.toContain('setErrorMessage(orderResult.error.message)');
     expect(detailSource).not.toContain('setErrorMessage(supplierResult.error.message)');
@@ -143,6 +147,8 @@ describe('supplier material order payout math', () => {
     expect(activeSource).toContain("import { formatAppSafeErrorMessage } from '@/lib/supabase/functions'");
     expect(activeSource).toContain("setErrorMessage(formatAppSafeErrorMessage(supplierError, 'Could not load supplier profile.'))");
     expect(activeSource).toContain("setErrorMessage(formatAppSafeErrorMessage(error, 'Could not load active supplier orders.'))");
+    expect(activeSource).toContain("setErrorMessage(formatAppSafeErrorMessage(err, 'Could not load active supplier orders.'))");
+    expect(activeSource).toContain("} finally {\n      setLoading(false);");
     expect(activeSource).toContain("Alert.alert('Could not update order', formatAppSafeErrorMessage(err, 'Please try again.'))");
     expect(activeSource).toContain("Alert.alert('Could not mark order shipped', formatAppSafeErrorMessage(err, 'Please try again.'))");
     expect(activeSource).toContain("Alert.alert('Could not mark order delivered', formatAppSafeErrorMessage(err, 'Please try again.'))");
@@ -151,6 +157,47 @@ describe('supplier material order payout math', () => {
     expect(activeSource).not.toContain("Alert.alert('Error', err instanceof Error ? err.message : 'Failed to update order.')");
     expect(activeSource).not.toContain("Alert.alert('Error', err instanceof Error ? err.message : 'Failed to mark order shipped.')");
     expect(activeSource).not.toContain("Alert.alert('Error', err instanceof Error ? err.message : 'Failed to mark order delivered.')");
+  });
+
+  it('falls back to the active Supabase session on supplier material order screens', () => {
+    const feedSource = fs.readFileSync(
+      path.join(__dirname, '../src/app/(supplier)/orders/index.tsx'),
+      'utf8',
+    );
+    const detailSource = fs.readFileSync(
+      path.join(__dirname, '../src/app/(supplier)/orders/[id]/index.tsx'),
+      'utf8',
+    );
+    const activeSource = fs.readFileSync(
+      path.join(__dirname, '../src/app/(supplier)/orders/active.tsx'),
+      'utf8',
+    );
+
+    [feedSource, detailSource, activeSource].forEach((source) => {
+      expect(source).toContain("import { getCurrentUser } from '@/lib/supabase/auth';");
+      expect(source).toContain('user?.id ?? (await getCurrentUser())?.id ?? null');
+      expect(source).not.toContain(".eq('user_id', user.id)");
+    });
+    expect(feedSource).toContain("const currentUserId = user?.id ?? (await getCurrentUser())?.id ?? null;");
+    expect(activeSource).toContain('const [hasActiveSession, setHasActiveSession] = useState(false);');
+    expect(activeSource).toContain('setHasActiveSession(true);');
+    expect(activeSource).toContain(') : !hasActiveSession ? (');
+    expect(detailSource).toContain('setCanClaimOpenOrder(false);');
+  });
+
+  it('falls back to the active Supabase session on supplier earnings and payout setup', () => {
+    const earningsSource = fs.readFileSync(
+      path.join(__dirname, '../src/app/(supplier)/earnings/index.tsx'),
+      'utf8',
+    );
+
+    expect(earningsSource).toContain("import { getCurrentUser } from '@/lib/supabase/auth';");
+    expect(earningsSource).toContain('user?.id ?? (await getCurrentUser())?.id ?? null');
+    expect(earningsSource).toContain("setErrorMessage(formatAppSafeErrorMessage(err, 'Could not load earnings.'))");
+    expect(earningsSource).toContain("Alert.alert('Could not start payout setup', formatAppSafeErrorMessage(err, 'Please try again.'))");
+    expect(earningsSource).not.toContain(".eq('user_id', user.id)");
+    expect(earningsSource).not.toContain('if (!user?.id || !supplier?.id)');
+    expect(earningsSource).toContain('}, [user?.id]);');
   });
 
   it('uses explicit material relationship names on company supplier-delivery queries', () => {
@@ -170,9 +217,14 @@ describe('supplier material order payout math', () => {
     );
 
     expect(companyMaterialsSource).toContain("import { formatAppSafeErrorMessage, formatSupabaseFunctionError } from '@/lib/supabase/functions'");
+    expect(companyMaterialsSource).toContain("setMaterials([]);\n      setQuantities({});\n      Alert.alert('Could not load materials', formatAppSafeErrorMessage(materialsResult.error, 'Please try again.'))");
+    expect(companyMaterialsSource).toContain("setSupplierOrders([]);\n      setExistingReviews({});\n      Alert.alert('Could not load supplier orders', formatAppSafeErrorMessage(ordersResult.error, 'Please try again.'))");
+    expect(companyMaterialsSource).toContain("setExistingReviews({});\n          Alert.alert('Could not load supplier reviews', formatAppSafeErrorMessage(reviewsError, 'Please try again.'))");
     expect(companyMaterialsSource).toContain("Alert.alert('Could not load materials', formatAppSafeErrorMessage(materialsResult.error, 'Please try again.'))");
     expect(companyMaterialsSource).toContain("Alert.alert('Could not load supplier orders', formatAppSafeErrorMessage(ordersResult.error, 'Please try again.'))");
     expect(companyMaterialsSource).toContain("Alert.alert('Could not load supplier reviews', formatAppSafeErrorMessage(reviewsError, 'Please try again.'))");
+    expect(companyMaterialsSource).toContain("Alert.alert('Sign in required', 'You need to be signed in to verify materials.')");
+    expect(companyMaterialsSource).toContain("Alert.alert('Sign in required', 'You need to be signed in to review a supplier.')");
     expect(companyMaterialsSource).toContain("throw new Error(formatAppSafeErrorMessage(error, `Could not save ${m.item}.`))");
     expect(companyMaterialsSource).toContain("throw new Error(formatAppSafeErrorMessage(orderError, `Could not load ${m.item} order.`))");
     expect(companyMaterialsSource).toContain("throw new Error(formatAppSafeErrorMessage(error, `Could not sync ${m.item} order.`))");
@@ -181,6 +233,8 @@ describe('supplier material order payout math', () => {
     expect(companyMaterialsSource).not.toContain("Alert.alert('Error', materialsResult.error.message)");
     expect(companyMaterialsSource).not.toContain("Alert.alert('Error', ordersResult.error.message)");
     expect(companyMaterialsSource).not.toContain("Alert.alert('Error', reviewsError.message)");
+    expect(companyMaterialsSource).not.toContain("Alert.alert('Error', 'You need to be signed in to verify materials.')");
+    expect(companyMaterialsSource).not.toContain("Alert.alert('Error', 'You need to be signed in to review a supplier.')");
     expect(companyMaterialsSource).not.toContain("Alert.alert('Error', err instanceof Error ? err.message : 'Failed to save quantities.')");
     expect(companyMaterialsSource).not.toContain("Alert.alert('Error', err instanceof Error ? err.message : 'Failed to submit supplier review.')");
   });
@@ -256,6 +310,8 @@ describe('supplier material order payout math', () => {
 
     expect(homeownerMaterialsSource).toContain("import { formatAppSafeErrorMessage, formatSupabaseFunctionError } from '@/lib/supabase/functions'");
     expect(homeownerMaterialsSource).toContain("setErrorMessage(formatAppSafeErrorMessage(error, 'Could not load material orders.'))");
+    expect(homeownerMaterialsSource).toContain("setErrorMessage(formatAppSafeErrorMessage(err, 'Could not load material orders.'))");
+    expect(homeownerMaterialsSource).toContain("} finally {\n      setLoading(false);");
     expect(homeownerMaterialsSource).toContain("Alert.alert('Release failed', await formatSupabaseFunctionError(err, 'Please try again.'))");
     expect(homeownerMaterialsSource).not.toContain('setErrorMessage(error.message)');
     expect(homeownerMaterialsSource).not.toContain("Alert.alert('Error', await formatSupabaseFunctionError(err, 'Failed to release payment.'))");

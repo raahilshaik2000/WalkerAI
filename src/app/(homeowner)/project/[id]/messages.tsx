@@ -46,21 +46,28 @@ export default function MessagesScreen() {
   useEffect(() => {
     if (!projectId) {
       setErrorMessage('Project is missing. Reopen messages from the project page.');
+      setMessages([]);
       return;
     }
 
     const loadMessages = async () => {
-      const { data, error } = await supabase
-        .from('messages')
-        .select('id, body, sender_id, sent_at, attachment_url')
-        .eq('project_id', projectId)
-        .order('sent_at', { ascending: true });
-      if (error) {
-        setErrorMessage(formatAppSafeErrorMessage(error, 'Could not load messages.'));
-        return;
+      try {
+        const { data, error } = await supabase
+          .from('messages')
+          .select('id, body, sender_id, sent_at, attachment_url')
+          .eq('project_id', projectId)
+          .order('sent_at', { ascending: true });
+        if (error) {
+          setErrorMessage(formatAppSafeErrorMessage(error, 'Could not load messages.'));
+          setMessages([]);
+          return;
+        }
+        setErrorMessage(null);
+        setMessages(data ?? []);
+      } catch (err) {
+        setErrorMessage(formatAppSafeErrorMessage(err, 'Could not load messages.'));
+        setMessages([]);
       }
-      setErrorMessage(null);
-      setMessages(data ?? []);
     };
     loadMessages();
 
@@ -92,28 +99,31 @@ export default function MessagesScreen() {
     const trimmed = body.trim();
     setBody('');
 
-    // Append optimistically — realtime delivery isn't guaranteed, so don't rely
-    // on it to show the message we just sent.
-    const { data: inserted, error } = await supabase
-      .from('messages')
-      .insert({
-        project_id: projectId,
-        sender_id: user.id,
-        body: trimmed,
-      })
-      .select('id, body, sender_id, sent_at, attachment_url')
-      .single();
-
-    if (error) {
-      setBody(trimmed); // restore on error
-      Alert.alert('Message not sent', formatAppSafeErrorMessage(error, 'Please try again.'));
-    } else if (inserted) {
-      const sent = inserted as Message;
-      setMessages((prev) => prev.some((m) => m.id === sent.id) ? prev : [...prev, sent]);
-      setTimeout(() => flatListRef.current?.scrollToEnd({ animated: true }), 100);
+    try {
+      // Append optimistically — realtime delivery isn't guaranteed, so don't rely
+      // on it to show the message we just sent.
+      const { data: inserted, error } = await supabase
+        .from('messages')
+        .insert({
+          project_id: projectId,
+          sender_id: user.id,
+          body: trimmed,
+        })
+        .select('id, body, sender_id, sent_at, attachment_url')
+        .single();
+      if (error) throw error;
+      if (inserted) {
+        const sent = inserted as Message;
+        setMessages((prev) => prev.some((m) => m.id === sent.id) ? prev : [...prev, sent]);
+        setTimeout(() => flatListRef.current?.scrollToEnd({ animated: true }), 100);
+      }
       ReactNativeHapticFeedback.trigger('impactLight');
+    } catch (err) {
+      setBody(trimmed); // restore on error
+      Alert.alert('Message not sent', formatAppSafeErrorMessage(err, 'Please try again.'));
+    } finally {
+      setSending(false);
     }
-    setSending(false);
   };
 
   const openAttachment = async (url: string) => {

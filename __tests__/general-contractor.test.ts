@@ -97,11 +97,32 @@ describe('general contractor account type', () => {
     expect(homeownerProjectDetail).toContain("Could not load GC project context: ${formatAppSafeErrorMessage(gcContextResult.error, 'Please try again.')}");
     expect(homeownerProjectDetail).not.toContain('Could not load GC project context: ${gcContextResult.error.message}');
     expect(homeownerConcierge).toContain("import { formatAppSafeErrorMessage, formatSupabaseFunctionError } from '@/lib/supabase/functions'");
+    expect(homeownerConcierge).toContain('const clearConciergeState = useCallback(() => {');
+    expect(homeownerConcierge).toContain('setProjectHomeownerId(null);');
+    expect(homeownerConcierge).toContain('setApprovalResponseNotes({});');
+    expect(homeownerConcierge).toContain('setPaymentResponseNotes({});');
+    expect(homeownerConcierge).toContain('setInvitingId(null);');
+    expect(homeownerConcierge).toContain('setBookingId(null);');
+    expect(homeownerConcierge).toContain('setPayingBookingId(null);');
+    expect(homeownerConcierge).toContain('setReleasingBookingId(null);');
+    expect(homeownerConcierge).toContain('setRespondingId(null);');
+    expect(homeownerConcierge).toContain("setErrorMessage('Project is missing. Reopen concierge from your project details.');\n      clearConciergeState();");
+    expect(homeownerConcierge).toContain("try {\n      setErrorMessage(null);\n      const currentUser = user ?? (await supabase.auth.getUser()).data.user;");
+    expect(homeownerConcierge).toContain("setErrorMessage('You need to be signed in to manage concierge support.');\n        clearConciergeState();");
     expect(homeownerConcierge).toContain("setErrorMessage(formatAppSafeErrorMessage(err, 'Could not load concierge options.'))");
+    expect(homeownerConcierge).toContain("setErrorMessage(formatAppSafeErrorMessage(err, 'Could not load concierge options.'));\n      clearConciergeState();");
     expect(homeownerConcierge).toContain("Alert.alert('Could not invite GC', formatAppSafeErrorMessage(error, 'Please try again.'))");
+    expect(homeownerConcierge).toContain("Alert.alert('Could not invite GC', formatAppSafeErrorMessage(err, 'Please try again.'))");
+    expect(homeownerConcierge).toContain("} finally {\n              setInvitingId(null);");
+    expect(homeownerConcierge).toContain("Alert.alert('Could not request service', formatAppSafeErrorMessage(error, 'Please try again.'))");
+    expect(homeownerConcierge).toContain("Alert.alert('Could not request service', formatAppSafeErrorMessage(err, 'Please try again.'))");
+    expect(homeownerConcierge).toContain("} finally {\n              setBookingId(null);");
     expect(homeownerConcierge).toContain("Alert.alert('Could not confirm GC', formatAppSafeErrorMessage(error, 'Please try again.'))");
+    expect(homeownerConcierge).toContain("Alert.alert('Could not confirm GC', formatAppSafeErrorMessage(err, 'Please try again.'))");
     expect(homeownerConcierge).toContain("Alert.alert('Could not remove GC', formatAppSafeErrorMessage(error, 'Please try again.'))");
+    expect(homeownerConcierge).toContain("Alert.alert('Could not remove GC', formatAppSafeErrorMessage(err, 'Please try again.'))");
     expect(homeownerConcierge).not.toContain("Alert.alert('Could not invite GC', error.message)");
+    expect(homeownerConcierge).not.toContain("Alert.alert('Could not request service', error.message)");
     expect(homeownerConcierge).not.toContain("Alert.alert('Could not confirm GC', error.message)");
     expect(homeownerConcierge).not.toContain("Alert.alert('Could not remove GC', error.message)");
     expect(homeownerConcierge).not.toContain("setErrorMessage(err instanceof Error ? err.message : 'Could not load concierge options.')");
@@ -127,16 +148,41 @@ describe('general contractor account type', () => {
     expect(isGeneralContractorReadyForProjectControls({ ...completeGcSetup, verified: false })).toBe(false);
     expect(isGeneralContractorReadyForProjectControls({ ...completeGcSetup, verified: true, insurance_doc_url: ' ' })).toBe(false);
     expect(businessOnboarding).toContain("from('general_contractors')");
+    expect(businessOnboarding).toContain("import { getCurrentUser } from '@/lib/supabase/auth';");
+    expect(businessOnboarding).toContain('const currentUserId = user?.id ?? (await getCurrentUser())?.id ?? null;');
+    expect(businessOnboarding).toContain(".eq('user_id', currentUserId)");
+    expect(businessOnboarding).toContain('user_id: currentUserId');
     expect(businessOnboarding).toContain('business_name, address, city, province, postal_code, service_radius_km');
     expect(businessOnboarding).toContain('setBusinessName(data.business_name');
     expect(businessOnboarding).toContain('setDefaultMarkup(data.default_markup_pct');
     expect(businessOnboarding).toContain('setConciergeEnabled(data.concierge_enabled === true)');
+    expect(businessOnboarding).toContain("Alert.alert('Could not load business profile', formatAppSafeErrorMessage(err, 'Please try again.'))");
+    expect(businessOnboarding).toContain("Alert.alert('Sign in required', formatAppSafeErrorMessage(err, 'Please sign in again before continuing.'))");
+    expect(businessOnboarding).toContain("Alert.alert('Could not save business profile', formatAppSafeErrorMessage(err, 'Please try again.'))");
+    expect(businessOnboarding).not.toContain('loadExistingProfile().catch(() => undefined)');
+    expect(businessOnboarding).not.toContain(".eq('user_id', user.id)");
+    expect(businessOnboarding).not.toContain('user_id: user.id');
+    expect(businessOnboarding).not.toContain("Alert.alert('Error'");
     expect(businessOnboarding).toContain('existing?.id');
     expect(businessOnboarding).toContain('returnToProfile');
     expect(businessOnboarding).toContain('Concierge marketplace');
     expect(businessOnboarding).toContain('concierge_enabled: conciergeEnabled');
     expect(businessOnboarding).not.toContain('concierge_enabled: true');
     expect(businessOnboarding).toContain("navigation.navigate('GeneralContractorTabs', { screen: 'GeneralContractorProfile' })");
+  });
+
+  it('clears stale GC profile state when account context is unavailable', () => {
+    const gcProfile = fs.readFileSync(
+      path.join(repoRoot, 'src/app/(general-contractor)/profile.tsx'),
+      'utf8',
+    );
+
+    expect(gcProfile).toContain('const clearProfileState = useCallback(() => {');
+    expect(gcProfile).toContain("try {\n      setErrorMessage(null);\n      const currentUser = user ?? (await supabase.auth.getUser()).data.user;");
+    expect(gcProfile).toContain("setErrorMessage('You need to be signed in to view your GC profile.');\n        clearProfileState();");
+    expect(gcProfile).toContain("setErrorMessage(formatAppSafeErrorMessage(err, 'Could not load GC profile.'));\n      clearProfileState();");
+    expect(gcProfile).toContain('setStartingPayoutSetup(false);');
+    expect(gcProfile).toContain('}, [clearProfileState, user]);');
   });
 
   it('keeps the GC account role out of company trade onboarding defaults', () => {
@@ -198,22 +244,48 @@ describe('general contractor account type', () => {
     );
 
     expect(licenseOnboarding).toContain("select('license_number, license_doc_url')");
+    expect(licenseOnboarding).toContain("import { getCurrentUser } from '@/lib/supabase/auth';");
+    expect(licenseOnboarding).toContain('const currentUserId = user?.id ?? (await getCurrentUser())?.id ?? null;');
+    expect(licenseOnboarding).toContain('currentUserId = user?.id ?? (await getCurrentUser())?.id ?? null;');
+    expect(licenseOnboarding).toContain(".eq('user_id', currentUserId)");
     expect(licenseOnboarding).toContain("setLicenseNumber(data.license_number ?? '')");
     expect(licenseOnboarding).toContain("setDocumentUrl(data.license_doc_url ?? '')");
+    expect(licenseOnboarding).toContain("Alert.alert('Could not load license details', formatAppSafeErrorMessage(err, 'Please try again.'))");
+    expect(licenseOnboarding).not.toContain('loadExistingLicense().catch(() => undefined)');
     expect(licenseOnboarding).toContain("launchImageLibrary");
+    expect(licenseOnboarding).toContain("Alert.alert('Could not select document', formatAppSafeErrorMessage(err, 'Please try again.'))");
+    expect(licenseOnboarding).toContain("Alert.alert('Sign in required', formatAppSafeErrorMessage(err, 'Please sign in again before continuing.'))");
+    expect(licenseOnboarding).toContain("Alert.alert('Could not save license details', formatAppSafeErrorMessage(err, 'Please try again.'))");
     expect(licenseOnboarding).toContain("uploadFile('company-docs'");
-    expect(licenseOnboarding).toContain('general-contractors/${user.id}/license-');
+    expect(licenseOnboarding).toContain('general-contractors/${currentUserId}/license-');
+    expect(licenseOnboarding).toContain("isValidGeneralContractorDocumentReference(documentUrl, currentUserId, 'license')");
     expect(licenseOnboarding).toContain('License document required');
     expect(licenseOnboarding).toContain('Invalid license document');
     expect(licenseOnboarding).toContain('License Document URL');
+    expect(licenseOnboarding).not.toContain(".eq('user_id', user.id)");
+    expect(licenseOnboarding).not.toContain('general-contractors/${user.id}/license-');
     expect(insuranceOnboarding).toContain("select('insurance_doc_url')");
+    expect(insuranceOnboarding).toContain("import { getCurrentUser } from '@/lib/supabase/auth';");
+    expect(insuranceOnboarding).toContain('const currentUserId = user?.id ?? (await getCurrentUser())?.id ?? null;');
+    expect(insuranceOnboarding).toContain('currentUserId = user?.id ?? (await getCurrentUser())?.id ?? null;');
+    expect(insuranceOnboarding).toContain(".eq('user_id', currentUserId)");
     expect(insuranceOnboarding).toContain("setDocumentUrl(data.insurance_doc_url ?? '')");
+    expect(insuranceOnboarding).toContain("Alert.alert('Could not load insurance details', formatAppSafeErrorMessage(err, 'Please try again.'))");
+    expect(insuranceOnboarding).not.toContain('loadExistingInsurance().catch(() => undefined)');
     expect(insuranceOnboarding).toContain("launchImageLibrary");
+    expect(insuranceOnboarding).toContain("Alert.alert('Could not select document', formatAppSafeErrorMessage(err, 'Please try again.'))");
+    expect(insuranceOnboarding).toContain("Alert.alert('Sign in required', formatAppSafeErrorMessage(err, 'Please sign in again before continuing.'))");
+    expect(insuranceOnboarding).toContain("Alert.alert('Could not save insurance details', formatAppSafeErrorMessage(err, 'Please try again.'))");
     expect(insuranceOnboarding).toContain("uploadFile('company-docs'");
-    expect(insuranceOnboarding).toContain('general-contractors/${user.id}/insurance-');
+    expect(insuranceOnboarding).toContain('general-contractors/${currentUserId}/insurance-');
+    expect(insuranceOnboarding).toContain("isValidGeneralContractorDocumentReference(documentUrl, currentUserId, 'insurance')");
     expect(insuranceOnboarding).toContain('Invalid insurance document');
+    expect(insuranceOnboarding).not.toContain(".eq('user_id', user.id)");
+    expect(insuranceOnboarding).not.toContain('general-contractors/${user.id}/insurance-');
     expect(licenseOnboarding).not.toContain('until native upload is wired');
     expect(insuranceOnboarding).not.toContain('until native upload is wired');
+    expect(licenseOnboarding).not.toContain("Alert.alert('Error'");
+    expect(insuranceOnboarding).not.toContain("Alert.alert('Error'");
   });
 
   it('validates typed GC document references before setup can continue', () => {
@@ -276,7 +348,7 @@ describe('general contractor account type', () => {
     expect(privateHelperMigration).toContain('DROP FUNCTION IF EXISTS public.can_access_company_doc_path(TEXT)');
     expect(companyLicense).toContain('const path = `${user.id}/license-${Date.now()}.${upload.extension}`');
     expect(supplierLicense).toContain('supplier-licenses/${user.id}/license');
-    expect(gcLicense).toContain('general-contractors/${user.id}/license-');
+    expect(gcLicense).toContain('general-contractors/${currentUserId}/license-');
     expect(gcProjectDetail).toContain('external-trades/${currentUser.id}/${projectId}');
   });
 
@@ -438,6 +510,7 @@ describe('general contractor account type', () => {
     expect(gcProjectDetail).toContain('Accept Management Invite');
     expect(gcProjectDetail).toContain("supabase.rpc('accept_gc_management_invite'");
     expect(gcProjectDetail).toContain('p_assignment_id: assignment.id');
+    expect(gcProjectDetail).toContain("} catch (err) {\n              Alert.alert('Could not accept invite', formatAppSafeErrorMessage(err, 'Please try again.'));\n            } finally {\n              setAccepting(false);");
     expect(gcProjectDetail).not.toContain("update({ status: 'active' })");
     expect(gcProjectDetail).toContain('GC management terms');
     expect(gcProjectDetail).toContain('setGcReady(isGeneralContractorReadyForProjectControls(gc))');
@@ -446,6 +519,7 @@ describe('general contractor account type', () => {
     expect(gcProjectDetail).toContain('Controls unlock after homeowner confirmation');
     expect(gcProjectDetail).toContain('Schedule, permit, payment, material, trade, discovery, assistant, and completion tools become available once GC management is active.');
     expect(gcProjectDetail).toContain('Coordinate with the homeowner while management approval is pending');
+    expect(gcProjectDetail).toContain("} catch (err) {\n              Alert.alert('Could not cancel request', formatAppSafeErrorMessage(err, 'Please try again.'));\n            } finally {\n              setCancellingApprovalId(null);");
     expect(activationMigration).toContain('DROP POLICY IF EXISTS "gc_projects_participant_update"');
     expect(activationMigration).toContain('CREATE POLICY "gc_projects_homeowner_update"');
     expect(activationMigration).toContain('CREATE OR REPLACE FUNCTION public.accept_gc_management_invite');
@@ -576,6 +650,35 @@ describe('general contractor account type', () => {
     expect(projectDetail).toContain('{assignmentIsActive ? (');
   });
 
+  it('clears GC material and discovery state when project context becomes unavailable', () => {
+    const gcMaterials = fs.readFileSync(
+      path.join(repoRoot, 'src/app/(general-contractor)/project/[id]/materials.tsx'),
+      'utf8',
+    );
+    const gcDiscovery = fs.readFileSync(
+      path.join(repoRoot, 'src/app/(general-contractor)/project/[id]/discovery.tsx'),
+      'utf8',
+    );
+
+    expect(gcMaterials).toContain('const clearMaterialsState = useCallback(() => {');
+    expect(gcMaterials).toContain('setSelectedMaterialId(null);');
+    expect(gcMaterials).toContain("setProductName('');");
+    expect(gcMaterials).toContain("setErrorMessage('Project is missing. Reopen materials from the GC project page.');\n      clearMaterialsState();");
+    expect(gcMaterials).toContain("try {\n      setErrorMessage(null);\n      const currentUser = (await supabase.auth.getUser()).data.user;");
+    expect(gcMaterials).toContain("setErrorMessage('You need to be signed in to source materials.');\n        clearMaterialsState();");
+    expect(gcMaterials).toContain("setErrorMessage(formatAppSafeErrorMessage(err, 'Could not load materials.'));\n      clearMaterialsState();");
+    expect(gcMaterials).toContain('}, [clearMaterialsState, projectId]);');
+
+    expect(gcDiscovery).toContain('const clearDiscoveryState = useCallback(() => {');
+    expect(gcDiscovery).toContain("setRequestType('change_order');");
+    expect(gcDiscovery).toContain("setTitle('');");
+    expect(gcDiscovery).toContain("setErrorMessage('Project is missing. Reopen discoveries from the GC project page.');\n      clearDiscoveryState();");
+    expect(gcDiscovery).toContain("try {\n      setErrorMessage(null);\n      const currentUser = (await supabase.auth.getUser()).data.user;");
+    expect(gcDiscovery).toContain("setErrorMessage('You need to be signed in to manage discoveries.');\n        clearDiscoveryState();");
+    expect(gcDiscovery).toContain("setErrorMessage(formatAppSafeErrorMessage(err, 'Could not load discoveries.'));\n      clearDiscoveryState();");
+    expect(gcDiscovery).toContain('}, [clearDiscoveryState, projectId]);');
+  });
+
   it('adds generic homeowner approval requests for GC recommendations', () => {
     const migration = fs.readFileSync(
       path.join(repoRoot, 'supabase/migrations/20260615000300_add_project_approval_requests.sql'),
@@ -596,6 +699,10 @@ describe('general contractor account type', () => {
     expect(gcProjectDetail).toContain('Send for Homeowner Approval');
     expect(gcProjectDetail).toContain("from('project_approval_requests').insert");
     expect(gcProjectDetail).toContain("request_type: 'general_recommendation'");
+    expect(gcProjectDetail).toContain('const requireCurrentGcRequestProfile = async () => {');
+    expect(gcProjectDetail).toContain("if (assignment?.general_contractor_id && gc.id !== assignment.general_contractor_id) {\n      throw new Error('Refresh this project before sending approval requests.');");
+    expect(gcProjectDetail).toContain("setSubmittingApproval(true);\n    try {\n      const gcId = await requireCurrentGcRequestProfile();");
+    expect(gcProjectDetail).toContain("Alert.alert('Could not submit approval request', formatAppSafeErrorMessage(err, 'Please try again.'));\n    } finally {\n      setSubmittingApproval(false);");
     expect(gcProjectDetail).toContain('Use this only for general recommendations that do not need schedule, trade, material, discovery, payment, or completion metadata.');
     expect(gcProjectDetail).toContain('Use the dedicated project-control screens for workflow changes so homeowner approval has the required data to apply cleanly.');
     expect(gcProjectDetail).not.toContain('const APPROVAL_TYPES');
@@ -1124,6 +1231,13 @@ describe('general contractor account type', () => {
     expect(createProject).toContain('Scope required');
     expect(createProject).toContain('p_homeowner_contact_name: contactName');
     expect(createProject).toContain('p_homeowner_contact_phone: contactPhone || null');
+    expect(createProject).toContain('if (loading || profileLoading) return;');
+    expect(createProject).toContain('function parsePercent(value: string): number | null');
+    expect(createProject).toContain('if (!trimmed) return null;');
+    expect(createProject).toContain('const parsedMarkup = parsePercent(markupPct);');
+    expect(createProject).toContain('const parsedConcierge = parsePercent(conciergeFeePct);');
+    expect(createProject).not.toContain('const parsedMarkup = parsePercent(markupPct, 15);');
+    expect(createProject).not.toContain('const parsedConcierge = parsePercent(conciergeFeePct, 10);');
     expect(createProject).toContain("import { formatAppSafeErrorMessage } from '@/lib/supabase/functions'");
     expect(createProject).toContain("formatAppSafeErrorMessage(err, 'Please try again.')");
     expect(createProject).not.toContain("Alert.alert('Could not create project', err instanceof Error ? err.message : 'Please try again.')");
@@ -1316,6 +1430,11 @@ describe('general contractor account type', () => {
       'utf8',
     );
 
+    expect(dashboard).toContain('const clearDashboardState = useCallback(() => {');
+    expect(dashboard).toContain("try {\n      setErrorMessage(null);\n      const currentUser = user ?? (await supabase.auth.getUser()).data.user;");
+    expect(dashboard).toContain("setErrorMessage('You need to be signed in to view GC projects.');\n        clearDashboardState();");
+    expect(dashboard).toContain("setErrorMessage(formatAppSafeErrorMessage(err, 'Could not load GC dashboard.'));\n      clearDashboardState();");
+    expect(dashboard).toContain('}, [clearDashboardState, user]);');
     expect(dashboard).toContain('if (!loading && errorMessage)');
     expect(dashboard).toContain('Could not load GC desk');
     expect(dashboard).toContain('<Text style={styles.pendingSubtitle}>{errorMessage}</Text>');
@@ -1375,6 +1494,8 @@ describe('general contractor account type', () => {
     expect(gcProjectDetail).toContain('Terms request pending');
     expect(gcProjectDetail).toContain("Alert.alert('Could not request terms update', formatAppSafeErrorMessage(err, 'Please try again.'))");
     expect(gcProjectDetail).toContain("Alert.alert('Could not request budget update', formatAppSafeErrorMessage(err, 'Please try again.'))");
+    expect(gcProjectDetail).toContain("setSubmittingTerms(true);\n    try {\n      await requireCurrentGcRequestProfile();");
+    expect(gcProjectDetail).toContain("setSubmittingBudget(true);\n    try {\n      await requireCurrentGcRequestProfile();");
     expect(gcProjectDetail).not.toContain("Alert.alert('Could not request terms update', err instanceof Error ? err.message : 'Please try again.')");
     expect(gcProjectDetail).not.toContain("Alert.alert('Could not request budget update', err instanceof Error ? err.message : 'Please try again.')");
     expect(gcProjectDetail).toContain("from('project_approval_requests').insert");
@@ -1493,7 +1614,7 @@ describe('general contractor account type', () => {
     expect(homeownerProject).toContain("slot.external_trade_name ?? slot.external_trade_company ?? 'External trade'");
     expect(homeownerSchedule).toContain('function isSchedulableSlot(slot: Slot)');
     expect(homeownerSchedule).toContain("slot.fulfillment_type === 'external'");
-    expect(homeownerSchedule).toContain('walkerAiSchedulableSlots');
+    expect(homeownerSchedule).toContain('isExternalSlot');
     expect(homeownerSchedule).toContain('External scope is not managed by WalkerAI escrow.');
   });
 
@@ -1549,6 +1670,8 @@ describe('general contractor account type', () => {
     expect(pathRestrictionMigration).toContain("v_document_parts[4] NOT LIKE v_slot.id::TEXT || '-%'");
     expect(pathRestrictionMigration).toContain('External trade document path does not match this GC project slot');
     expect(gcProjectDetail).toContain("uploadFile('company-docs'");
+    expect(gcProjectDetail).toContain("try {\n      const result = await launchImageLibrary({");
+    expect(gcProjectDetail).toContain("Alert.alert('Upload failed', formatAppSafeErrorMessage(err, 'Please try again.'))");
     expect(gcProjectDetail).toContain('Please sign in again before uploading trade documents.');
     expect(gcProjectDetail).toContain('external-trades/${currentUser.id}/${projectId}/${slot.id}-');
     expect(gcProjectDetail).toContain("supabase.rpc('add_external_trade_document'");
@@ -1631,6 +1754,11 @@ describe('general contractor account type', () => {
     expect(gcSchedule).toContain('function slotParticipantName(slot: Slot)');
     expect(gcSchedule).toContain('external_trade_name, external_trade_company');
     expect(gcSchedule).toContain("slot.external_trade_name ?? slot.external_trade_company ?? 'External trade'");
+    expect(gcSchedule).toContain('const clearScheduleState = useCallback(() => {');
+    expect(gcSchedule).toContain("setErrorMessage('Project is missing. Reopen scheduling from the GC project page.');\n      clearScheduleState();");
+    expect(gcSchedule).toContain("try {\n      setErrorMessage(null);\n      const currentUser = (await supabase.auth.getUser()).data.user;");
+    expect(gcSchedule).toContain("setErrorMessage('You need to be signed in to view scheduling.');\n        clearScheduleState();");
+    expect(gcSchedule).toContain("setErrorMessage(formatAppSafeErrorMessage(err, 'Could not load schedule.'));\n      clearScheduleState();");
     expect(gcSchedule).toContain('Assign a WalkerAI trade or mark this scope externally managed before recommending schedule dates.');
     expect(gcSchedule).toContain("request_type: 'schedule_change'");
     expect(gcSchedule).toContain('Send Schedule for Approval');
@@ -1704,6 +1832,14 @@ describe('general contractor account type', () => {
     expect(completeDirectToolsMigration).toContain("NULLIF(TRIM(gc.insurance_doc_url), '') IS NOT NULL");
     expect(navigator).toContain('GeneralContractorPermits');
     expect(gcProjectDetail).toContain("navigation.navigate('GeneralContractorPermits'");
+    expect(gcPermits).toContain('const clearPermitRecordState = useCallback(() => {');
+    expect(gcPermits).toContain('const clearPermitState = useCallback(() => {');
+    expect(gcPermits).toContain("if (!currentUser?.id) {\n        clearPermitState();\n        setErrorMessage('You need to be signed in to manage permits.');");
+    expect(gcPermits).toContain("setErrorMessage(formatAppSafeErrorMessage(err, 'Could not load permits.'))");
+    expect(gcPermits).toContain('setPermitType(\'\');');
+    expect(gcPermits).toContain('setSaving(false);');
+    expect(gcPermits).toContain('setUploadingId(null);');
+    expect(gcPermits).toContain('}, [clearPermitRecordState, clearPermitState, projectId]);');
     expect(gcPermits).toContain("select('id, status')");
     expect(gcPermits).toContain("const canViewPermits = assignment?.status === 'active' || assignment?.status === 'completed';");
     expect(gcPermits).toContain("!['active', 'completed'].includes(assignmentRow?.status ?? '')");
@@ -1712,6 +1848,9 @@ describe('general contractor account type', () => {
     expect(gcPermits).toContain('The homeowner must confirm active GC management before permits, inspections, or uploaded documents can be managed.');
     expect(gcPermits).toContain("from('permits').insert");
     expect(gcPermits).toContain("assignment?.status !== 'active'");
+    expect(gcPermits).toContain("} catch (err) {\n      Alert.alert('Could not update status', formatAppSafeErrorMessage(err, 'Please try again.'));\n    }");
+    expect(gcPermits).toContain("try {\n      const result = await launchImageLibrary({");
+    expect(gcPermits).toContain("Alert.alert('Upload failed', formatAppSafeErrorMessage(err, 'Please try again.'))");
     expect(gcPermits).toContain('Upload Document');
     expect(gcPermits).toContain('inspection_scheduled');
     expect(gcPermits).toContain('handleOpenDocument(previewUrl)');
@@ -1755,6 +1894,11 @@ describe('general contractor account type', () => {
     expect((gcPayments.match(/\.eq\('general_contractor_id', gc\.id\)/g) ?? []).length).toBeGreaterThanOrEqual(2);
     expect(gcPayments).toContain("from('gc_payment_requests').insert");
     expect(gcPayments).toContain('handleCancelRequest');
+    expect(gcPayments).toContain('const clearPaymentRequestState = useCallback(() => {');
+    expect(gcPayments).toContain("setErrorMessage('Project is missing. Reopen payment requests from the GC project page.');\n      clearPaymentRequestState();");
+    expect(gcPayments).toContain("try {\n      setErrorMessage(null);\n      const currentUser = (await supabase.auth.getUser()).data.user;");
+    expect(gcPayments).toContain("setErrorMessage('You need to be signed in to manage payment requests.');\n        clearPaymentRequestState();");
+    expect(gcPayments).toContain("setErrorMessage(formatAppSafeErrorMessage(err, 'Could not load payment requests.'));\n      clearPaymentRequestState();");
     expect(gcPayments).toContain("const canManagePaymentRequests = assignment?.status === 'active' && gcReady;");
     expect(gcPayments).toContain("status: 'cancelled'");
     expect(gcPayments).toContain('cancelled_at: new Date().toISOString()');
@@ -1762,6 +1906,7 @@ describe('general contractor account type', () => {
     expect(gcPayments).toContain('No escrow or milestone funds are moved.');
     expect(gcPayments).toContain('pending && canManagePaymentRequests');
     expect(gcPayments).toContain('disabled={!canManagePaymentRequests || !!cancellingRequestId}');
+    expect(gcPayments).toContain("} catch (err) {\n              Alert.alert('Could not cancel request', formatAppSafeErrorMessage(err, 'Please try again.'));\n            } finally {\n              setCancellingRequestId(null);");
     expect(gcPayments).toContain('Funds are still released through existing escrow milestones');
     expect(gcApprovals).toContain("from('gc_payment_requests')");
     expect(gcApprovals).toContain('Payment requests');
@@ -1961,14 +2106,30 @@ describe('general contractor account type', () => {
     expect(completeDirectToolsMigration).toContain("NULLIF(TRIM(gc.insurance_doc_url), '') IS NOT NULL");
     expect(navigator).toContain('GeneralContractorMessages');
     expect(gcProjectDetail).toContain("navigation.navigate('GeneralContractorMessages'");
-    expect(gcMessages).toContain("from('messages')");
-    expect(gcMessages).toContain(".insert({");
+    expect(gcMessages).toContain("from('messages').insert");
+    expect(gcMessages).toContain('const clearMessageState = useCallback((lockMessage: string, currentUser: string | null = null) => {');
+    expect(gcMessages).toContain("setErrorMessage('Project is missing. Reopen messages from the GC project page.');\n      clearMessageState('Project is missing. Reopen messages from the GC project page.');");
+    expect(gcMessages).toContain("setErrorMessage('You need to be signed in to view project messages.');\n            clearMessageState('Sign in to send project messages.');");
+    expect(gcMessages).toContain("setErrorMessage(formatAppSafeErrorMessage(err, 'Could not load messages.'))");
+    expect(gcMessages).toContain("clearMessageState('Messages are unavailable right now. Try again shortly.', currentUser.id);\n          return;");
+    expect(gcMessages).toContain('setBody(\'\');');
+    expect(gcMessages).toContain('setSending(false);');
+    expect(gcMessages).toContain('setUploadingAttachment(false);');
+    expect(gcMessages).toContain('}, [clearMessageState, projectId, user]);');
+    expect(gcMessages).toContain("let trimmed = '';");
+    expect(gcMessages).toContain('if (error) throw error;');
+    expect(gcMessages).toContain("if (trimmed) setBody(trimmed);");
+    expect(gcMessages).toContain("Alert.alert('Message not sent', formatAppSafeErrorMessage(err, 'Please try again.'))");
+    expect(gcMessages).toContain("} finally {\n      setSending(false);");
     expect(gcMessages).toContain("channel(`gc-messages:${projectId}`)");
     expect(gcMessages).toContain("import { launchImageLibrary } from 'react-native-image-picker'");
     expect(gcMessages).toContain("const [uploadingAttachment, setUploadingAttachment] = useState(false)");
     expect(gcMessages).toContain('const sendPhotoAttachment = async () =>');
+    expect(gcMessages).toContain("try {\n      const currentUser = user ?? (await supabase.auth.getUser()).data.user;\n      if (!projectId || !currentUser?.id) {\n        Alert.alert('Unable to attach photo', 'Please reopen this project and try again.');");
+    expect(gcMessages).toContain("const result = await launchImageLibrary({");
     expect(gcMessages).toContain("const path = `${projectId}/messages/${currentUser.id}-${Date.now()}.${upload.extension}`");
     expect(gcMessages).toContain("await uploadFile('project-photos', path, upload.uri, upload.contentType)");
+    expect(gcMessages).toContain("Alert.alert('Attachment not sent', formatAppSafeErrorMessage(err, 'Please try again.'))");
     expect(gcMessages).toContain('attachment_url: publicUrl');
     expect(gcMessages).toContain('body: caption || null');
     expect(gcMessages).toContain('const [currentUserId, setCurrentUserId] = useState<string | null>(user?.id ?? null)');
@@ -2066,6 +2227,10 @@ describe('general contractor account type', () => {
     expect(gcCompletion).toContain(".neq('status', 'removed')");
     expect(gcCompletion).toContain("if (!['active', 'completed'].includes(assignmentRow.status))");
     expect(gcCompletion).toContain('Active or completed GC management is required before the completion binder is available.');
+    expect(gcCompletion).toContain('const clearCompletionState = useCallback(() => {');
+    expect(gcCompletion).toContain("setErrorMessage(formatAppSafeErrorMessage(err, 'Could not load completion binder.'));\n      clearCompletionState();");
+    expect(gcCompletion).toContain('setSubmittingCompletion(false);');
+    expect(gcCompletion).toContain('}, [clearCompletionState, projectId]);');
     expect(gcCompletion).toContain(".eq('requested_by_gc_id', gc.id)");
     expect(gcCompletion).toContain("from('gc_payment_requests')");
     expect(gcCompletion).toContain(".eq('general_contractor_id', gc.id)");
@@ -2169,6 +2334,13 @@ describe('general contractor account type', () => {
     expect(gcTrades).toContain("from('project_slots')");
     expect(gcTrades).toContain("from('projects')");
     expect(gcTrades).toContain("select('ai_cost_min, ai_cost_max')");
+    expect(gcTrades).toContain('const clearTradeManagementState = useCallback(() => {');
+    expect(gcTrades).toContain("try {\n      setErrorMessage(null);\n      const currentUser = (await supabase.auth.getUser()).data.user;");
+    expect(gcTrades).toContain("setErrorMessage('You need to be signed in to manage trades.');\n        clearTradeManagementState();");
+    expect(gcTrades).toContain("setErrorMessage(formatAppSafeErrorMessage(err, 'Could not load trade management.'));\n      clearTradeManagementState();");
+    expect(gcTrades).toContain('setSelectedSlotId(null);');
+    expect(gcTrades).toContain('setSelectedQuoteId(null);');
+    expect(gcTrades).toContain('setCancellingNegotiationId(null);');
     expect(gcTrades).toContain('const projectBudgetReady = (projectBudget?.ai_cost_min ?? 0) > 0 && (projectBudget?.ai_cost_max ?? 0) > 0;');
     expect(gcTrades).toContain("return 'Estimate pending';");
     expect(gcTrades).toContain("from('quotes')");
@@ -2260,9 +2432,21 @@ describe('general contractor account type', () => {
     expect(migration).toContain('GRANT EXECUTE ON FUNCTION public.respond_to_gc_concierge_booking(UUID, TEXT, TEXT) TO authenticated');
     expect(gcApprovals).toContain("import { isGeneralContractorReadyForProjectControls } from '@/lib/general-contractor';");
     expect(gcApprovals).toContain(".select('id, verified, concierge_enabled, business_name, city, province, lat, lng, license_number, license_doc_url, insurance_doc_url')");
+    expect(gcApprovals).toContain('const clearApprovalsState = useCallback(() => {');
+    expect(gcApprovals).toContain("try {\n      setErrorMessage(null);\n      setSetupLockMessage(null);\n      const currentUser = user ?? (await supabase.auth.getUser()).data.user;");
+    expect(gcApprovals).toContain("setErrorMessage('You need to be signed in to view approvals.');\n        clearApprovalsState();");
+    expect(gcApprovals).toContain("setErrorMessage(formatAppSafeErrorMessage(err, 'Could not load approvals.'));\n      clearApprovalsState();");
+    expect(gcApprovals).toContain('setRespondingBookingId(null);');
+    expect(gcApprovals).toContain('setBookingResponseNotes({});');
+    expect(gcApprovals).toContain('}, [clearApprovalsState, user]);');
     expect(gcApprovals).toContain('setCanAcceptConciergeBookings(hasCompleteGcConciergeProfile(gc))');
     expect(gcApprovals).toContain('isGeneralContractorReadyForProjectControls(gc)');
     expect(gcApprovals).toContain('const gcReadyForProjectControls = isGeneralContractorReadyForProjectControls(gc);');
+    expect(gcApprovals).toContain('const [setupLockMessage, setSetupLockMessage] = useState<string | null>(null);');
+    expect(gcApprovals).toContain("setSetupLockMessage('Create your GC business profile before approvals, payment requests, and concierge bookings can be reviewed.')");
+    expect(gcApprovals).toContain("setSetupLockMessage('Complete verified GC setup is required before approvals, payment requests, and concierge bookings can be reviewed.')");
+    expect(gcApprovals).toContain('title="GC setup required"');
+    expect(gcApprovals).toContain('body={setupLockMessage}');
     expect(gcApprovals).toContain('if (!gcReadyForProjectControls)');
     expect(gcApprovals.indexOf('if (!gcReadyForProjectControls)')).toBeLessThan(
       gcApprovals.indexOf("from('general_contractor_projects')"),
@@ -2274,6 +2458,7 @@ describe('general contractor account type', () => {
     expect(gcApprovals).toContain('WalkerAI verification, concierge marketplace access, and complete business, license, and insurance setup are required before this request can be accepted.');
     expect(gcApprovals).toContain('disabled={!canAcceptConciergeBookings || !!respondingBookingId}');
     expect(gcApprovals).toContain('disabled={!!respondingBookingId}');
+    expect(gcApprovals).toContain("} catch (err) {\n              Alert.alert('Could not respond', formatAppSafeErrorMessage(err, 'Please try again.'));\n            } finally {\n              setRespondingBookingId(null);");
     expect(homeownerConcierge).toContain('license_number, license_doc_url, insurance_doc_url');
     expect(homeownerConcierge).toContain('function hasCompleteGcConciergeProfile');
     expect(homeownerConcierge).toContain('const assignedGcConciergeEligible = hasCompleteGcConciergeProfile(assignedGc)');
@@ -2372,6 +2557,14 @@ describe('general contractor account type', () => {
     );
 
     expect(gcProjectDetail).toContain('You need to be signed in to view managed projects.');
+    expect(gcProjectDetail).toContain('const clearProjectDetailState = useCallback(() => {');
+    expect(gcProjectDetail).toContain("setErrorMessage(formatAppSafeErrorMessage(err, 'Could not load managed project.'));\n      clearProjectDetailState();");
+    expect(gcProjectDetail).toContain('setApprovalTitle(\'\');');
+    expect(gcProjectDetail).toContain('setExternalSlotId(null);');
+    expect(gcProjectDetail).toContain('setProposedBudgetMin(\'\');');
+    expect(gcProjectDetail).toContain('setProposedMarkupPct(\'\');');
+    expect(gcProjectDetail).toContain('setUploadingExternalDocSlotId(null);');
+    expect(gcProjectDetail).toContain('}, [clearProjectDetailState, projectId]);');
     expect(gcProjectDetail).toContain("const pendingApprovalRequests = approvalRequests.filter((request) => request.status === 'pending');");
     expect(gcProjectDetail).toContain(".eq('requested_by_gc_id', gc.id)");
     expect(gcProjectDetail).toContain('const pendingApprovals = pendingChangeOrders.length + pendingApprovalRequests.length;');
@@ -2557,6 +2750,7 @@ describe('general contractor account type', () => {
     expect(gcTrades).toContain('It does not change the homeowner-facing quote.');
     expect(gcTrades).toContain("const canManageTradeRequests = assignment?.status === 'active' && gcReady;");
     expect(gcTrades).toContain('disabled={!canManageTradeRequests || !!cancellingNegotiationId}');
+    expect(gcTrades).toContain("} catch (err) {\n              Alert.alert('Could not cancel negotiation', formatAppSafeErrorMessage(err, 'Please try again.'));\n            } finally {\n              setCancellingNegotiationId(null);");
     expect(gcTrades).toContain('Counteroffer / revision request');
     expect(companyJob).toContain("from('gc_trade_quote_negotiations')");
     expect(companyJob).toContain("import { formatAppSafeErrorMessage, formatSupabaseFunctionError } from '@/lib/supabase/functions'");

@@ -19,7 +19,6 @@ import { supabase } from '@/lib/supabase/client';
 import { isValidIsoDate } from '@/lib/dates';
 import { formatAppSafeErrorMessage } from '@/lib/supabase/functions';
 import { getRequiredStringParam } from '@/lib/navigation-params';
-import { allSchedulableSlotsHaveApprovedQuotes } from '@/lib/project-activation';
 import { formatTradeLabel } from '@/lib/trade-labels';
 import { GlassButton, GradientBackground } from '@/components/ui';
 import { Colors, Radius, Spacing, Typography } from '@/constants/theme';
@@ -36,12 +35,6 @@ interface Slot {
   scheduled_start_date: string | null;
   scheduled_end_date: string | null;
   companies?: { name: string; user_id: string } | Array<{ name: string; user_id: string }> | null;
-}
-
-interface QuoteApprovalRow {
-  id: string;
-  slot_id?: string | null;
-  company_id: string | null;
 }
 
 function formatDate(iso: string | null) {
@@ -71,10 +64,6 @@ function slotParticipantName(slot: Slot) {
     return slot.external_trade_name ?? slot.external_trade_company ?? 'Externally managed trade';
   }
   return getCompany(slot)?.name ?? 'Waiting for contractor';
-}
-
-function isMissingColumnError(error: { message?: string } | null | undefined) {
-  return !!error?.message && /column .* does not exist/i.test(error.message);
 }
 
 export default function ScheduleScreen() {
@@ -144,7 +133,6 @@ export default function ScheduleScreen() {
     }
 
     const schedulableSlots = slots.filter(isSchedulableSlot);
-    const walkerAiSchedulableSlots = schedulableSlots.filter((s) => !!s.assigned_company_id && !isExternalSlot(s));
     const unassignedSlots = slots.filter((s) => !isSchedulableSlot(s));
 
     if (slots.length === 0) {
@@ -209,52 +197,16 @@ export default function ScheduleScreen() {
         .filter((date): date is string => !!date)
         .sort();
 
-      const { data: pendingQuotes, error: pendingQuoteError } = await supabase
-        .from('quotes')
-        .select('id')
-        .eq('project_id', projectId)
-        .eq('status', 'pending')
-        .limit(1);
-      if (pendingQuoteError) throw pendingQuoteError;
+      // Master-quote projects activate on payment (payment_status='funded').
+      const { data: paymentInfo, error: paymentInfoError } = await supabase
+        .from('projects')
+        .select('payment_status')
+        .eq('id', projectId)
+        .maybeSingle();
+      if (paymentInfoError) throw paymentInfoError;
+      const projectPaymentStatus = (paymentInfo as any)?.payment_status ?? null;
 
-      const hasPendingQuotes = (pendingQuotes?.length ?? 0) > 0;
-      let allRequiredQuotesApproved = false;
-      if (!hasPendingQuotes) {
-        let approvedQuotes: QuoteApprovalRow[] = [];
-        const approvedQuoteResult = await supabase
-          .from('quotes')
-          .select('id, slot_id, company_id')
-          .eq('project_id', projectId)
-          .eq('status', 'approved');
-
-        if (isMissingColumnError(approvedQuoteResult.error)) {
-          const legacyApprovedQuoteResult = await supabase
-            .from('quotes')
-            .select('id, company_id')
-            .eq('project_id', projectId)
-            .eq('status', 'approved');
-          if (legacyApprovedQuoteResult.error) throw legacyApprovedQuoteResult.error;
-          approvedQuotes = (legacyApprovedQuoteResult.data ?? []).map((quote) => ({
-            id: quote.id,
-            slot_id: null,
-            company_id: quote.company_id,
-          }));
-        } else {
-          if (approvedQuoteResult.error) throw approvedQuoteResult.error;
-          approvedQuotes = (approvedQuoteResult.data ?? []) as QuoteApprovalRow[];
-        }
-
-        allRequiredQuotesApproved = allSchedulableSlotsHaveApprovedQuotes(
-          walkerAiSchedulableSlots,
-          approvedQuotes
-        );
-      }
-
-      const nextProjectStatus = hasPendingQuotes
-        ? 'quoting'
-        : allRequiredQuotesApproved
-        ? 'active'
-        : 'scheduling';
+      const nextProjectStatus = projectPaymentStatus === 'funded' ? 'active' : 'scheduling';
 
       // Confirm dates only. Stripe payment approval is the authority that activates the project.
       const { error: projectUpdateError } = await supabase

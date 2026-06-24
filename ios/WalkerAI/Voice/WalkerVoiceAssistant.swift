@@ -14,6 +14,8 @@ class WalkerVoiceAssistant: NSObject, AVSpeechSynthesizerDelegate {
   private var speechResolve: RCTPromiseResolveBlock?
   private var lastTranscript = ""
   private var finishTimer: Timer?
+  private var silenceTimer: Timer?
+  private let silenceFinishDelay: TimeInterval = 1.15
 
   override init() {
     super.init()
@@ -73,10 +75,12 @@ class WalkerVoiceAssistant: NSObject, AVSpeechSynthesizerDelegate {
       }
 
       let utterance = AVSpeechUtterance(string: trimmedText)
-      utterance.voice = AVSpeechSynthesisVoice(language: "en-CA") ?? AVSpeechSynthesisVoice(language: "en-US")
+      utterance.voice = self.preferredVoice()
       utterance.rate = AVSpeechUtteranceDefaultSpeechRate * 0.92
-      utterance.pitchMultiplier = 1.0
+      utterance.pitchMultiplier = 1.02
       utterance.volume = 1.0
+      utterance.preUtteranceDelay = 0.04
+      utterance.postUtteranceDelay = 0.08
       self.speechSynthesizer.speak(utterance)
     }
   }
@@ -91,9 +95,20 @@ class WalkerVoiceAssistant: NSObject, AVSpeechSynthesizerDelegate {
     }
   }
 
+  @objc func cancelListening(
+    _ resolve: @escaping RCTPromiseResolveBlock,
+    rejecter reject: @escaping RCTPromiseRejectBlock
+  ) {
+    DispatchQueue.main.async { [weak self] in
+      self?.resolveActiveListening(cancelled: true)
+      resolve(["cancelled": true])
+    }
+  }
+
   @objc func listenOnce(
     _ locale: String,
     durationSeconds: NSNumber,
+    contextualStrings: [String],
     resolver resolve: @escaping RCTPromiseResolveBlock,
     rejecter reject: @escaping RCTPromiseRejectBlock
   ) {
@@ -123,6 +138,9 @@ class WalkerVoiceAssistant: NSObject, AVSpeechSynthesizerDelegate {
 
       let request = SFSpeechAudioBufferRecognitionRequest()
       request.shouldReportPartialResults = true
+      request.contextualStrings = contextualStrings
+        .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
+        .filter { !$0.isEmpty }
       self.recognitionRequest = request
 
       let inputNode = self.audioEngine.inputNode
@@ -145,6 +163,7 @@ class WalkerVoiceAssistant: NSObject, AVSpeechSynthesizerDelegate {
         guard let self = self else { return }
         if let result = result {
           self.lastTranscript = result.bestTranscription.formattedString
+          self.scheduleSilenceFinishIfNeeded()
           if result.isFinal {
             self.finishListening()
           }
@@ -165,17 +184,65 @@ class WalkerVoiceAssistant: NSObject, AVSpeechSynthesizerDelegate {
     }
   }
 
+  private func scheduleSilenceFinishIfNeeded() {
+    let transcript = lastTranscript.trimmingCharacters(in: .whitespacesAndNewlines)
+    guard !transcript.isEmpty else { return }
+
+    silenceTimer?.invalidate()
+    silenceTimer = Timer.scheduledTimer(withTimeInterval: silenceFinishDelay, repeats: false) { [weak self] _ in
+      self?.finishListening()
+    }
+  }
+
   private func finishListening() {
+    resolveActiveListening(cancelled: false)
+  }
+
+  private func resolveActiveListening(cancelled: Bool) {
     let transcript = lastTranscript
     let resolve = activeResolve
     stopRecognition()
-    resolve?(["transcript": transcript])
+    resolve?(["transcript": transcript, "cancelled": cancelled])
   }
 
   private func resolveSpeech(spoken: Bool) {
     let resolve = speechResolve
     speechResolve = nil
     resolve?(["spoken": spoken])
+  }
+
+  private func preferredVoice() -> AVSpeechSynthesisVoice? {
+    let preferredLanguages = ["en-CA", "en-US", "en-GB"]
+    let preferredNames = ["Samantha", "Ava", "Allison", "Joelle", "Karen", "Moira", "Daniel"]
+    let voices = AVSpeechSynthesisVoice.speechVoices()
+
+    let rankedVoices = voices
+      .filter { preferredLanguages.contains($0.language) }
+      .sorted { lhs, rhs in
+        let lhsLanguageRank = preferredLanguages.firstIndex(of: lhs.language) ?? preferredLanguages.count
+        let rhsLanguageRank = preferredLanguages.firstIndex(of: rhs.language) ?? preferredLanguages.count
+        if lhsLanguageRank != rhsLanguageRank {
+          return lhsLanguageRank < rhsLanguageRank
+        }
+
+        if lhs.quality.rawValue != rhs.quality.rawValue {
+          return lhs.quality.rawValue > rhs.quality.rawValue
+        }
+
+        let lhsNameRank = preferredNames.firstIndex(where: { lhs.name.localizedCaseInsensitiveContains($0) }) ?? preferredNames.count
+        let rhsNameRank = preferredNames.firstIndex(where: { rhs.name.localizedCaseInsensitiveContains($0) }) ?? preferredNames.count
+        if lhsNameRank != rhsNameRank {
+          return lhsNameRank < rhsNameRank
+        }
+
+        return lhs.name < rhs.name
+      }
+
+    if let voice = rankedVoices.first {
+      return voice
+    }
+
+    return AVSpeechSynthesisVoice(language: "en-CA") ?? AVSpeechSynthesisVoice(language: "en-US")
   }
 
   private func cancelActiveSpeech() {
@@ -196,6 +263,8 @@ class WalkerVoiceAssistant: NSObject, AVSpeechSynthesizerDelegate {
   private func stopRecognition() {
     finishTimer?.invalidate()
     finishTimer = nil
+    silenceTimer?.invalidate()
+    silenceTimer = nil
     activeResolve = nil
     activeReject = nil
     recognitionTask?.cancel()

@@ -70,15 +70,26 @@ export default function GeneralContractorPermitsScreen() {
   const [gcReady, setGcReady] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
+  const clearPermitRecordState = useCallback(() => {
+    setPermits([]);
+    setPreviewUrls({});
+    setPermitType('');
+    setSaving(false);
+    setUploadingId(null);
+  }, []);
+
+  const clearPermitState = useCallback(() => {
+    setAssignment(null);
+    clearPermitRecordState();
+    setGcReady(false);
+  }, [clearPermitRecordState]);
+
   const fetchPermits = useCallback(async () => {
     try {
       setErrorMessage(null);
       const currentUser = (await supabase.auth.getUser()).data.user;
       if (!currentUser?.id) {
-        setAssignment(null);
-        setPermits([]);
-        setPreviewUrls({});
-        setGcReady(false);
+        clearPermitState();
         setErrorMessage('You need to be signed in to manage permits.');
         return;
       }
@@ -102,8 +113,7 @@ export default function GeneralContractorPermitsScreen() {
 
       setAssignment(assignmentRow as Assignment | null);
       if (!['active', 'completed'].includes(assignmentRow?.status ?? '')) {
-        setPermits([]);
-        setPreviewUrls({});
+        clearPermitRecordState();
         return;
       }
 
@@ -131,16 +141,13 @@ export default function GeneralContractorPermitsScreen() {
       }));
       setPreviewUrls(previews);
     } catch (err) {
-      setAssignment(null);
-      setPermits([]);
-      setPreviewUrls({});
-      setGcReady(false);
+      clearPermitState();
       setErrorMessage(formatAppSafeErrorMessage(err, 'Could not load permits.'));
     } finally {
       setLoading(false);
       setRefreshing(false);
     }
-  }, [projectId]);
+  }, [clearPermitRecordState, clearPermitState, projectId]);
 
   useFocusEffect(
     useCallback(() => {
@@ -192,16 +199,17 @@ export default function GeneralContractorPermitsScreen() {
       Alert.alert('Complete setup required', 'Complete verified GC setup is required before permit statuses can be updated.');
       return;
     }
-    const { error } = await supabase
-      .from('permits')
-      .update({ status })
-      .eq('id', permit.id)
-      .eq('project_id', projectId);
-    if (error) {
-      Alert.alert('Could not update status', formatAppSafeErrorMessage(error, 'Please try again.'));
-      return;
+    try {
+      const { error } = await supabase
+        .from('permits')
+        .update({ status })
+        .eq('id', permit.id)
+        .eq('project_id', projectId);
+      if (error) throw error;
+      await fetchPermits();
+    } catch (err) {
+      Alert.alert('Could not update status', formatAppSafeErrorMessage(err, 'Please try again.'));
     }
-    await fetchPermits();
   };
 
   const handleUpload = async (permit: Permit) => {
@@ -213,16 +221,16 @@ export default function GeneralContractorPermitsScreen() {
       Alert.alert('Complete setup required', 'Complete verified GC setup is required before permit documents can be uploaded.');
       return;
     }
-    const result = await launchImageLibrary({
-      mediaType: 'photo',
-      quality: 0.8,
-      selectionLimit: 1,
-      assetRepresentationMode: 'compatible',
-    });
-    if (result.didCancel || !result.assets?.[0]) return;
-
-    setUploadingId(permit.id);
     try {
+      const result = await launchImageLibrary({
+        mediaType: 'photo',
+        quality: 0.8,
+        selectionLimit: 1,
+        assetRepresentationMode: 'compatible',
+      });
+      if (result.didCancel || !result.assets?.[0]) return;
+
+      setUploadingId(permit.id);
       const upload = getUploadMetadata(result.assets[0]);
       const path = `${projectId}/${permit.id}-${Date.now()}.${upload.extension}`;
       const { storagePath } = await uploadFile('permits', path, upload.uri, upload.contentType);

@@ -35,4 +35,22 @@ describe('supplier onboarding helpers', () => {
     expect(categories).toContain("Alert.alert('Could not save categories', formatAppSafeErrorMessage(err, 'Please try again.'))");
     expect(categories).not.toContain("Alert.alert('Error', err instanceof Error ? err.message : 'Failed to save. Try again.')");
   });
+
+  it('clears the full auth session on supplier sign out', () => {
+    const profile = fs.readFileSync(path.join(__dirname, '../src/app/(supplier)/profile/index.tsx'), 'utf8');
+
+    expect(profile).toContain('const { user, clearSession } = useAuthStore();');
+    expect(profile).toContain('await supabase.auth.signOut(); clearSession();');
+    expect(profile).not.toContain('setSession(null)');
+  });
+
+  it('falls back to the active Supabase session on supplier profile load', () => {
+    const profile = fs.readFileSync(path.join(__dirname, '../src/app/(supplier)/profile/index.tsx'), 'utf8');
+
+    expect(profile).toContain("import { getCurrentUser } from '@/lib/supabase/auth';");
+    expect(profile).toContain('user?.id ?? (await getCurrentUser())?.id ?? null');
+    expect(profile).toContain("setErrorMessage(formatAppSafeErrorMessage(err, 'Could not load supplier profile.'))");
+    expect(profile).not.toContain(".eq('user_id', user.id)");
+    expect(profile).toContain('}, [user?.id]);');
+  });
 });
