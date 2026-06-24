@@ -127,6 +127,9 @@ interface ProjectWizardState {
 
   step: 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8;
 
+  // Photo save failure flag (set when all photo saves fail transiently during creation)
+  photoSaveFailed: boolean;
+
   // Actions
   setAddress: (address: string, coordinates?: WizardCoordinates | null, province?: string) => void;
   setRoomType: (roomType: RoomType) => void;
@@ -147,6 +150,7 @@ interface ProjectWizardState {
   setSurfaceSelection: (selection: SurfaceSelection) => void;
   setProjectId: (id: string) => void;
   setStep: (step: ProjectWizardState['step']) => void;
+  setPhotoSaveFailed: (failed: boolean) => void;
   reset: () => void;
 }
 
@@ -154,7 +158,7 @@ const initialState: Omit<ProjectWizardState,
   | 'setAddress' | 'setRoomType' | 'addPhoto' | 'updatePhoto' | 'removePhoto'
   | 'setAnalysisResult' | 'setQuestions' | 'setAnswer' | 'nextQuestion'
   | 'previousQuestion'
-  | 'setSelectedRender' | 'setMeasurements' | 'setRoomScanData' | 'setMaterialOverride' | 'setSurfaceSelection' | 'setProjectId' | 'setStep' | 'reset'
+  | 'setSelectedRender' | 'setMeasurements' | 'setRoomScanData' | 'setMaterialOverride' | 'setSurfaceSelection' | 'setProjectId' | 'setStep' | 'setPhotoSaveFailed' | 'reset'
 > = {
   address: '',
   coordinates: null,
@@ -172,6 +176,7 @@ const initialState: Omit<ProjectWizardState,
   surfaceSelections: {},
   projectId: null,
   step: 1,
+  photoSaveFailed: false,
 };
 
 export const useProjectWizardStore = create<ProjectWizardState>()((set, get) => ({
@@ -238,6 +243,8 @@ export const useProjectWizardStore = create<ProjectWizardState>()((set, get) => 
   setProjectId: (projectId) => set({ projectId }),
 
   setStep: (step) => set({ step }),
+
+  setPhotoSaveFailed: (photoSaveFailed) => set({ photoSaveFailed }),
 
   reset: () => set(initialState),
 }));

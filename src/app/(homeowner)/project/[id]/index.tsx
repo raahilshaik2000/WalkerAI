@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import {
+  ActivityIndicator,
   Alert,
   Animated,
   Dimensions,
@@ -16,9 +17,11 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { useNavigation } from '@react-navigation/native'
 import { useRoute } from '@react-navigation/native';
 import Ionicons from 'react-native-vector-icons/Ionicons';
+import { launchImageLibrary } from 'react-native-image-picker';
 import { supabase } from '@/lib/supabase/client';
 import { isMissingSupabaseSchemaObjectError } from '@/lib/supabase/errors';
 import { formatAppSafeErrorMessage, formatSupabaseFunctionError } from '@/lib/supabase/functions';
+import { uploadBase64 } from '@/lib/supabase/storage';
 import { restartProjectDispatch } from '@/lib/project-dispatch';
 import { getRequiredStringParam } from '@/lib/navigation-params';
 import { formatGcProjectType } from '@/lib/gc-project-type';
@@ -204,6 +207,7 @@ export default function ProjectDetailScreen() {
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [redispatching, setRedispatching] = useState(false);
   const [deleting, setDeleting] = useState(false);
+  const [addingPhotos, setAddingPhotos] = useState(false);
   const finishSelections = readPersistedSurfaceSelections(project?.questionnaire_answers);
 
   const fetchProject = useCallback(async () => {
@@ -369,6 +373,54 @@ export default function ProjectDetailScreen() {
     ]);
   };
 
+  const handleAddPhotos = async () => {
+    let result;
+    try {
+      result = await launchImageLibrary({ mediaType: 'photo', quality: 0.3, includeBase64: true, selectionLimit: 8 });
+    } catch (err) {
+      Alert.alert('Could not open photos', formatAppSafeErrorMessage(err, 'Please try again.'));
+      return;
+    }
+
+    if (result.didCancel || !result.assets || result.assets.length === 0) return;
+
+    setAddingPhotos(true);
+    try {
+      const uploadTimestamp = Date.now();
+      for (let i = 0; i < result.assets.length; i += 1) {
+        const asset = result.assets[i];
+        if (!asset.base64) continue;
+
+        const rawType = asset.type ?? 'image/jpeg';
+        const contentType = rawType === 'image/jpg' ? 'image/jpeg' : rawType;
+        const ext = asset.fileName?.match(/\.([a-zA-Z0-9]+)(?:[?#].*)?$/)?.[1]?.toLowerCase() ?? 'jpg';
+        const storagePath = `${id}/added-${uploadTimestamp}-${i}.${ext}`;
+
+        const { publicUrl, storagePath: savedStoragePath } = await uploadBase64(
+          'project-photos',
+          storagePath,
+          asset.base64,
+          contentType,
+          { retries: 3, upsert: true },
+        );
+
+        const { error: insertError } = await supabase.from('project_photos').insert({
+          project_id: id,
+          url: publicUrl,
+          storage_path: savedStoragePath,
+        });
+
+        if (insertError) throw insertError;
+      }
+
+      await fetchProject();
+    } catch (err) {
+      Alert.alert('Upload failed', formatAppSafeErrorMessage(err, 'Could not save photos. Please try again.'));
+    } finally {
+      setAddingPhotos(false);
+    }
+  };
+
   if (loading) {
     return (
       <GradientBackground>
@@ -446,6 +498,23 @@ export default function ProjectDetailScreen() {
 
           {/* Photo gallery */}
           <PhotoGallery urls={getOrderedPhotoUrls(project)} />
+
+          {/* Add Photos */}
+          <TouchableOpacity
+            style={[styles.addPhotosBtn, addingPhotos && styles.addPhotosBtnDisabled]}
+            onPress={handleAddPhotos}
+            disabled={addingPhotos}
+            activeOpacity={0.8}
+          >
+            {addingPhotos ? (
+              <ActivityIndicator size="small" color={Colors.accent} />
+            ) : (
+              <Ionicons name="add-circle-outline" size={16} color={Colors.accent} />
+            )}
+            <Text style={styles.addPhotosBtnText}>
+              {addingPhotos ? 'Uploading...' : '+ Add photos'}
+            </Text>
+          </TouchableOpacity>
 
           {/* Dispatch radar */}
           {isDispatching && (
@@ -622,6 +691,21 @@ const styles = StyleSheet.create({
     width: 18,
     backgroundColor: Colors.accent,
   },
+  addPhotosBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    alignSelf: 'center',
+    gap: 6,
+    paddingHorizontal: Spacing.md,
+    paddingVertical: 8,
+    borderRadius: Radius.item,
+    borderWidth: 1,
+    borderColor: Colors.accent,
+    backgroundColor: 'rgba(255, 107, 0, 0.08)',
+    marginBottom: Spacing.sm,
+  },
+  addPhotosBtnDisabled: { opacity: 0.5 },
+  addPhotosBtnText: { color: Colors.accent, fontSize: 13, fontWeight: '700' },
   roomType: { ...Typography.h2, textTransform: 'capitalize', marginBottom: 6 },
   address: { ...Typography.bodySecondary, marginBottom: Spacing.md },
   card: { marginBottom: Spacing.sm },

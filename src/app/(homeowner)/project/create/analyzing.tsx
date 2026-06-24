@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import {
+  Alert,
   Animated,
   Easing,
   StyleSheet,
@@ -37,7 +38,7 @@ const ANALYSIS_STEPS = [
 ];
 
 const PROJECT_CREATE_ATTEMPTS = 3;
-const PHOTO_SAVE_ATTEMPTS = 3;
+const PHOTO_SAVE_ATTEMPTS = 5;
 
 function sleep(ms: number) {
   return new Promise((resolve) => setTimeout(resolve, ms));
@@ -264,6 +265,10 @@ export default function AnalyzingScreen() {
           console.warn(
             '[analyzing] continuing with local photo payload after transient photo persistence failures:',
             uploadedPhotoResults.map((result) => result.message).filter(Boolean).join(' | '),
+          );
+          Alert.alert(
+            'Photos not saved',
+            'We could not save your photos due to a connection issue. Your project was still created — you can add photos from the project page.',
           );
         }
 
