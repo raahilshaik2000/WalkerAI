@@ -91,6 +91,36 @@ function getOrderedPhotoUrls(project: Pick<Project, 'renders' | 'project_photos'
   return [...new Set(urls)];
 }
 
+function PhotoGallery({ urls }: { urls: string[] }) {
+  const [active, setActive] = useState(0);
+  if (urls.length === 0) return null;
+  return (
+    <View style={styles.galleryWrap}>
+      <FlatList
+        data={urls}
+        keyExtractor={(_, i) => `photo-${i}`}
+        horizontal
+        pagingEnabled
+        showsHorizontalScrollIndicator={false}
+        style={styles.galleryList}
+        onMomentumScrollEnd={(e) =>
+          setActive(Math.round(e.nativeEvent.contentOffset.x / GALLERY_WIDTH))
+        }
+        renderItem={({ item: uri }) => (
+          <Image source={{ uri }} style={styles.galleryImage} resizeMode="cover" />
+        )}
+      />
+      {urls.length > 1 && (
+        <View style={styles.galleryDots}>
+          {urls.map((_, i) => (
+            <View key={i} style={[styles.galleryDot, i === active && styles.galleryDotActive]} />
+          ))}
+        </View>
+      )}
+    </View>
+  );
+}
+
 function formatCad(cents: number) {
   return new Intl.NumberFormat('en-CA', { style: 'currency', currency: 'CAD', maximumFractionDigits: 0 }).format(cents / 100);
 }
@@ -150,7 +180,7 @@ function DispatchRadar() {
         <Animated.View key={i} style={[radarStyles.ring, ringStyle(r)]} />
       ))}
       <View style={radarStyles.core}>
-        <Text style={radarStyles.coreText}>📡</Text>
+        <Ionicons name="search" size={24} color={Colors.accent} />
       </View>
     </View>
   );
@@ -415,32 +445,7 @@ export default function ProjectDetailScreen() {
           <Text style={styles.address}>{project.address}</Text>
 
           {/* Photo gallery */}
-          {(() => {
-            const photoUrls = getOrderedPhotoUrls(project);
-            if (photoUrls.length === 0) return null;
-            if (photoUrls.length === 1) {
-              return (
-                <Image
-                  source={{ uri: photoUrls[0] }}
-                  style={styles.heroSingle}
-                  resizeMode="cover"
-                />
-              );
-            }
-            return (
-              <FlatList
-                data={photoUrls}
-                keyExtractor={(_, i) => `photo-${i}`}
-                horizontal
-                pagingEnabled
-                showsHorizontalScrollIndicator={false}
-                style={styles.galleryList}
-                renderItem={({ item: uri }) => (
-                  <Image source={{ uri }} style={styles.galleryImage} resizeMode="cover" />
-                )}
-              />
-            );
-          })()}
+          <PhotoGallery urls={getOrderedPhotoUrls(project)} />
 
           {/* Dispatch radar */}
           {isDispatching && (
@@ -566,7 +571,8 @@ export default function ProjectDetailScreen() {
   );
 }
 
-const GALLERY_HEIGHT = 200;
+const GALLERY_WIDTH = SCREEN_WIDTH - Spacing.sm * 2;
+const GALLERY_HEIGHT = Math.round((GALLERY_WIDTH * 3) / 4);
 
 const styles = StyleSheet.create({
   safe: { flex: 1 },
@@ -587,21 +593,34 @@ const styles = StyleSheet.create({
     backgroundColor: 'rgba(224,11,11,0.08)',
   },
   deleteBtnDisabled: { opacity: 0.4 },
-  heroSingle: {
-    width: '100%',
-    height: GALLERY_HEIGHT,
-    borderRadius: Radius.card,
-    marginBottom: Spacing.sm,
+  galleryWrap: {
+    marginVertical: Spacing.sm,
+    alignItems: 'center',
   },
   galleryList: {
-    marginHorizontal: -Spacing.sm,
-    marginBottom: Spacing.sm,
+    width: GALLERY_WIDTH,
   },
   galleryImage: {
-    width: SCREEN_WIDTH - Spacing.sm * 2,
+    width: GALLERY_WIDTH,
     height: GALLERY_HEIGHT,
-    marginHorizontal: Spacing.sm,
     borderRadius: Radius.card,
+  },
+  galleryDots: {
+    flexDirection: 'row',
+    gap: 6,
+    marginTop: Spacing.sm,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  galleryDot: {
+    width: 6,
+    height: 6,
+    borderRadius: 3,
+    backgroundColor: 'rgba(255,255,255,0.3)',
+  },
+  galleryDotActive: {
+    width: 18,
+    backgroundColor: Colors.accent,
   },
   roomType: { ...Typography.h2, textTransform: 'capitalize', marginBottom: 6 },
   address: { ...Typography.bodySecondary, marginBottom: Spacing.md },
