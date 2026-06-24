@@ -90,8 +90,13 @@ export default function DIYGuideScreen() {
     );
   };
 
-  const tools = guide.materials.filter((m) => m.is_tool);
-  const supplies = guide.materials.filter((m) => !m.is_tool);
+  // Guard against a malformed AI guide (missing arrays) so the screen never
+  // crashes to a blank view.
+  const materials = Array.isArray(guide.materials) ? guide.materials : [];
+  const steps = Array.isArray(guide.steps) ? guide.steps : [];
+  const safetyWarnings = Array.isArray(guide.safety_warnings) ? guide.safety_warnings : [];
+  const tools = materials.filter((m) => m.is_tool);
+  const supplies = materials.filter((m) => !m.is_tool);
 
   return (
     <GradientBackground>
@@ -141,13 +146,13 @@ export default function DIYGuideScreen() {
           )}
 
           {/* Safety warnings */}
-          {guide.safety_warnings.length > 0 && (
+          {safetyWarnings.length > 0 && (
             <View style={styles.warningBox}>
               <View style={styles.warningHeader}>
                 <Ionicons name="warning-outline" size={18} color="#F59E0B" />
                 <Text style={styles.warningTitle}>Safety First</Text>
               </View>
-              {guide.safety_warnings.map((w, i) => (
+              {safetyWarnings.map((w, i) => (
                 <View key={i} style={styles.warningItem}>
                   <Text style={styles.warningDot}>•</Text>
                   <Text style={styles.warningText}>{w}</Text>
@@ -169,7 +174,7 @@ export default function DIYGuideScreen() {
               onPress={() => setTab('materials')}
             >
               <Text style={[styles.tabText, tab === 'materials' && styles.tabTextActive]}>
-                Materials ({guide.materials.length})
+                Materials ({materials.length})
               </Text>
             </TouchableOpacity>
           </View>
@@ -177,7 +182,7 @@ export default function DIYGuideScreen() {
           {/* Steps tab */}
           {tab === 'steps' && (
             <View style={styles.stepsContainer}>
-              {guide.steps.map((step) => (
+              {steps.map((step) => (
                 <View key={step.step_number} style={styles.stepCard}>
                   <View style={styles.stepNum}>
                     <Text style={styles.stepNumText}>{step.step_number}</Text>
