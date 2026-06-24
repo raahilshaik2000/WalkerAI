@@ -23,17 +23,18 @@ describe('homeowner quote status copy', () => {
     expect(projectsSource).toContain("quoting:     'Quote ready to review'");
   });
 
-  it('does not claim the whole project is active when only one multi-trade quote is paid', () => {
+  it('shows master-total price and Pay to WalkerAI CTA on the quote screen', () => {
     const source = fs.readFileSync(
       path.join(__dirname, '../src/app/(homeowner)/project/[id]/quote.tsx'),
       'utf8',
     );
 
-    expect(source).toContain("const paidBannerText = project?.status === 'active'");
-    expect(source).toContain('Payment received — fund remaining contractor quotes to start');
-    expect(source).toContain('Payment received — project activation is processing');
-    expect(source).toContain('<Text style={styles.paidBannerText}>{paidBannerText}</Text>');
-    expect(source).not.toContain('<Text style={styles.paidBannerText}>Payment received — project is active</Text>');
+    expect(source).toContain('master_total_cents: number | null;');
+    expect(source).toContain('const isFunded = project?.payment_status === \'funded\';');
+    expect(source).toContain("Pay ${formatCad(masterTotal)} to WalkerAI");
+    expect(source).toContain('const canPayMaster = !isFunded && allTradesJoined && masterTotal > 0;');
+    expect(source).not.toContain('stripe_payment_intent_id: string | null;');
+    expect(source).not.toContain("quote ? 'Selected Contractor Quote' : 'WalkerAI Estimate'");
   });
 
   it('does not present contractor pricing as a fixed AI price', () => {
@@ -42,25 +43,22 @@ describe('homeowner quote status copy', () => {
       'utf8',
     );
 
-    expect(source).toContain("quote ? 'Selected Contractor Quote' : 'WalkerAI Estimate'");
-    expect(source).toContain('const headlinePrice = quote?.total_amount');
-    expect(source).toContain('Project estimate: ${projectEstimate}');
-    expect(source).toContain("{quote.company_name ?? 'Contractor'} quote");
+    expect(source).toContain('ai_cost_min');
+    expect(source).toContain('ai_cost_max');
     expect(source).not.toContain('Walker AI Fixed Price');
     expect(source).not.toContain('Set by AI · confirmed by your contractor');
   });
 
-  it('labels payment-started pending quotes as a continuation instead of a fresh payment', () => {
+  it('shows funded escrow banner when project is paid', () => {
     const source = fs.readFileSync(
       path.join(__dirname, '../src/app/(homeowner)/project/[id]/quote.tsx'),
       'utf8',
     );
 
-    expect(source).toContain('stripe_payment_intent_id: string | null;');
-    expect(source).toContain('submitted_at, stripe_payment_intent_id, companies(name)');
-    expect(source).toContain("if (quote.status === 'pending' && quote.stripe_payment_intent_id) return 'Payment started';");
-    expect(source).toContain('const paymentStarted = quote?.status === \'pending\' && !!quote.stripe_payment_intent_id;');
-    expect(source).toContain('paymentStarted ? `Continue Payment — ${formatCad(quote.total_amount)}` : `Pay ${formatCad(quote.total_amount)} to Start`');
+    expect(source).toContain("Paid — held in escrow");
+    expect(source).toContain("Payment received");
+    expect(source).toContain('<Text style={styles.paidBannerText}>');
+    expect(source).not.toContain("Payment received — fund remaining contractor quotes to start");
   });
 
   it('uses app-safe copy for quote funding screen load failures', () => {
@@ -71,12 +69,8 @@ describe('homeowner quote status copy', () => {
 
     expect(source).toContain("import { formatAppSafeErrorMessage, formatSupabaseFunctionError } from '@/lib/supabase/functions';");
     expect(source).toContain("setErrorMessage(formatAppSafeErrorMessage(projectError, 'Could not load quote.'))");
-    expect(source).toContain("setErrorMessage(formatAppSafeErrorMessage(quoteError, 'Could not load quote.'))");
-    expect(source).toContain("setErrorMessage(formatAppSafeErrorMessage(itemsError, 'Could not load quote details.'))");
     expect(source).toContain("setErrorMessage(formatAppSafeErrorMessage(err, 'Could not load quote.'))");
     expect(source).toContain("} finally {\n      setLoading(false);");
     expect(source).not.toContain('setErrorMessage(projectError.message)');
-    expect(source).not.toContain('setErrorMessage(quoteError.message)');
-    expect(source).not.toContain('setErrorMessage(itemsError.message)');
   });
 });

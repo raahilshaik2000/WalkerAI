@@ -32,8 +32,9 @@ describe('company payout math', () => {
     expect(source).not.toContain("import { companyEstimatedNetPayoutCents } from '@/lib/company-payouts'");
     expect(source).not.toContain('commission_rate');
     expect(source).not.toContain('const netPayout = (milestone: Milestone) => companyEstimatedNetPayoutCents');
-    expect(source).toContain("label: 'Released'");
-    expect(source).toContain('Payments Released');
+    // Master-path shows payout_cents directly, no commission math
+    expect(source).toContain('Your Payout');
+    expect(source).toContain('payout_cents');
     expect(source).not.toContain('Payments Received');
     expect(source).not.toContain("label: 'Net paid'");
     expect(source).not.toContain("label: 'Net total'");

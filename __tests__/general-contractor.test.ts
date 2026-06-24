@@ -1614,7 +1614,7 @@ describe('general contractor account type', () => {
     expect(homeownerProject).toContain("slot.external_trade_name ?? slot.external_trade_company ?? 'External trade'");
     expect(homeownerSchedule).toContain('function isSchedulableSlot(slot: Slot)');
     expect(homeownerSchedule).toContain("slot.fulfillment_type === 'external'");
-    expect(homeownerSchedule).toContain('walkerAiSchedulableSlots');
+    expect(homeownerSchedule).toContain('isExternalSlot');
     expect(homeownerSchedule).toContain('External scope is not managed by WalkerAI escrow.');
   });
 
