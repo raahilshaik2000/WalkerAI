@@ -39,7 +39,11 @@ interface Slot {
 
 function formatDate(iso: string | null) {
   if (!iso) return 'Not set';
-  return new Date(iso).toLocaleDateString('en-CA', { month: 'short', day: 'numeric', year: 'numeric' });
+  // Parse the YYYY-MM-DD as a LOCAL date. `new Date('2026-08-15')` is parsed as
+  // UTC midnight, which renders as the previous day in any timezone behind UTC.
+  const [y, m, d] = iso.slice(0, 10).split('-').map(Number);
+  if (!y || !m || !d) return 'Not set';
+  return new Date(y, m - 1, d).toLocaleDateString('en-CA', { month: 'short', day: 'numeric', year: 'numeric' });
 }
 
 function getCompany(slot: Slot) {

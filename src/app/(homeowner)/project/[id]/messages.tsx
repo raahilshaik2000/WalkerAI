@@ -80,7 +80,8 @@ export default function MessagesScreen() {
         table: 'messages',
         filter: `project_id=eq.${projectId}`,
       }, (payload) => {
-        setMessages((prev) => [...prev, payload.new as Message]);
+        const incoming = payload.new as Message;
+        setMessages((prev) => prev.some((m) => m.id === incoming.id) ? prev : [...prev, incoming]);
         setTimeout(() => flatListRef.current?.scrollToEnd({ animated: true }), 100);
       })
       .subscribe();
@@ -99,12 +100,23 @@ export default function MessagesScreen() {
     setBody('');
 
     try {
-      const { error } = await supabase.from('messages').insert({
-        project_id: projectId,
-        sender_id: user.id,
-        body: trimmed,
-      });
+      // Append optimistically — realtime delivery isn't guaranteed, so don't rely
+      // on it to show the message we just sent.
+      const { data: inserted, error } = await supabase
+        .from('messages')
+        .insert({
+          project_id: projectId,
+          sender_id: user.id,
+          body: trimmed,
+        })
+        .select('id, body, sender_id, sent_at, attachment_url')
+        .single();
       if (error) throw error;
+      if (inserted) {
+        const sent = inserted as Message;
+        setMessages((prev) => prev.some((m) => m.id === sent.id) ? prev : [...prev, sent]);
+        setTimeout(() => flatListRef.current?.scrollToEnd({ animated: true }), 100);
+      }
       ReactNativeHapticFeedback.trigger('impactLight');
     } catch (err) {
       setBody(trimmed); // restore on error
@@ -144,7 +156,7 @@ export default function MessagesScreen() {
               <Ionicons
                 name="image-outline"
                 size={15}
-                color={isMe ? '#FFFFFF' : Colors.text.secondary}
+                color={isMe ? Colors.accentFg : Colors.text.secondary}
               />
               <Text style={[styles.attachmentText, isMe ? styles.attachmentTextMe : styles.attachmentTextThem]}>
                 View attachment
@@ -253,7 +265,7 @@ const styles = StyleSheet.create({
     borderBottomLeftRadius: 4,
   },
   bubbleText: { fontSize: 15, lineHeight: 22 },
-  bubbleTextMe: { color: '#FFFFFF' },
+  bubbleTextMe: { color: Colors.accentFg }, // accent bubble is white — text must be dark
   bubbleTextThem: { color: Colors.text.primary },
   attachmentCard: {
     width: 220,
@@ -267,10 +279,10 @@ const styles = StyleSheet.create({
   attachmentImage: { width: '100%', height: 150, backgroundColor: Colors.bg.secondary },
   attachmentFooter: { flexDirection: 'row', alignItems: 'center', gap: 6, paddingHorizontal: 10, paddingVertical: 8 },
   attachmentText: { fontSize: 13, fontWeight: '600' },
-  attachmentTextMe: { color: '#FFFFFF' },
+  attachmentTextMe: { color: Colors.accentFg },
   attachmentTextThem: { color: Colors.text.secondary },
   timeText: { fontSize: 11, color: 'rgba(255,255,255,0.6)', marginTop: 4, textAlign: 'right' },
-  timeTextMe: { color: 'rgba(255,255,255,0.6)' },
+  timeTextMe: { color: 'rgba(0,0,0,0.45)' },
   emptyState: { flex: 1, alignItems: 'center', justifyContent: 'center', paddingTop: 60, gap: 12 },
   emptyIcon: { fontSize: 40 },
   emptyText: { ...Typography.bodySecondary, textAlign: 'center' },

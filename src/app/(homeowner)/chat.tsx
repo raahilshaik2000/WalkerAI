@@ -109,7 +109,8 @@ export default function ChatScreen() {
         'postgres_changes',
         { event: 'INSERT', schema: 'public', table: 'messages', filter: `project_id=eq.${projectId}` },
         (payload) => {
-          setMessages((prev) => [...prev, payload.new as DBMessage]);
+          const incoming = payload.new as DBMessage;
+          setMessages((prev) => prev.some((m) => m.id === incoming.id) ? prev : [...prev, incoming]);
           setTimeout(() => listRef.current?.scrollToEnd({ animated: true }), 100);
         },
       )
@@ -128,10 +129,20 @@ export default function ChatScreen() {
     setText('');
     setSending(true);
 
-    const { error } = await supabase.from('messages').insert({ project_id: projectId, sender_id: user.id, body });
+    // Append optimistically — realtime delivery isn't guaranteed, so don't rely
+    // on it to show the message we just sent.
+    const { data: inserted, error } = await supabase
+      .from('messages')
+      .insert({ project_id: projectId, sender_id: user.id, body })
+      .select('id, project_id, sender_id, body, sent_at, attachment_url')
+      .single();
     if (error) {
       setText(body);
       Alert.alert('Message not sent', formatAppSafeErrorMessage(error, 'Please try again.'));
+    } else if (inserted) {
+      const sent = inserted as DBMessage;
+      setMessages((prev) => prev.some((m) => m.id === sent.id) ? prev : [...prev, sent]);
+      setTimeout(() => listRef.current?.scrollToEnd({ animated: true }), 100);
     }
     setSending(false);
   };
