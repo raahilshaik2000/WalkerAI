@@ -78,7 +78,7 @@ export default function ConfirmStep() {
                 { icon: 'location-outline', label: 'LOCATION', value: address ?? 'Not set' },
                 { icon: 'time-outline', label: 'RESPONSE WINDOW', value: '2 hours' },
                 { icon: 'trophy-outline', label: 'HOW IT WORKS', value: 'Each trade slot is filled independently — first qualified contractor per trade wins' },
-                { icon: 'card-outline', label: 'PAYMENT', value: "You'll be notified when a contractor submits a quote \u2014 pay only after reviewing it" },
+                { icon: 'card-outline', label: 'PAYMENT', value: 'Review your AI Project Price, then pay \u2014 funds are held in escrow and released as work is approved' },
               ] as { icon: string; label: string; value: string }[]).map((item, i) => (
                 <View key={i} style={[styles.infoRow, i < 3 && styles.infoRowBorder]}>
                   <Ionicons name={item.icon} size={20} color={Colors.text.secondary} style={styles.infoIcon} />

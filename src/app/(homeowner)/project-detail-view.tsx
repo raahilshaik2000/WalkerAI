@@ -138,7 +138,7 @@ const PHASE_ICON: Record<string, string> = {
 const ACTIONS = [
   { screen: 'Milestones',   icon: 'flag-outline',               label: 'Milestones' },
   { screen: 'Messages',     icon: 'chatbubble-outline',          label: 'Messages'   },
-  { screen: 'Quote',        icon: 'document-text-outline',       label: 'Quote'      },
+  { screen: 'Quote',        icon: 'document-text-outline',       label: 'Project Breakdown' },
   { screen: 'Permits',      icon: 'shield-checkmark-outline',    label: 'Permits'    },
   { screen: 'ChangeOrders', icon: 'swap-horizontal-outline',     label: 'Changes'    },
 ];
@@ -481,18 +481,18 @@ export default function ProjectDetailViewScreen() {
             </GlassCard>
           ) : null}
 
-          {/* Quote review is the authoritative payment path. */}
+          {/* AI Project Price review is the authoritative payment path. */}
           {project.status === 'accepted' && project.ai_cost_min && project.ai_cost_max && (
             <GlassCard style={[styles.section, styles.acceptedPaymentCard]}>
-              <Text style={styles.sectionLabel}>CONTRACTOR ACCEPTED</Text>
+              <Text style={styles.sectionLabel}>TRADE ASSIGNED</Text>
               <Text style={styles.paymentTitle}>
-                Your contractor is ready for the next step. Review the submitted quote before funding any work.
+                Your trade is ready for the next step. Review your AI Project Price before funding any work.
               </Text>
               <Text style={styles.paymentSub}>
-                WalkerAI only charges the actual contractor quote. Funds are held in escrow and released milestone by milestone.
+                The price is set by WalkerAI from your measurements & materials. Funds are held in escrow and released as work is approved.
               </Text>
               <GlassButton
-                label="Review Contractor Quote"
+                label="Review Project Breakdown"
                 onPress={() => navigation.navigate('ProjectDetail', { screen: 'Quote', params: { id: project.id } })}
                 fullWidth
                 size="lg"

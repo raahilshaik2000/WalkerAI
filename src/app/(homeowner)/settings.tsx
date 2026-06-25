@@ -222,7 +222,7 @@ export default function HomeownerSettings() {
           <GlassCard padding={0}>
             <ToggleRow icon="flag-outline" iconColor="#F59E0B" label="Milestone Updates" value={profile.milestoneAlerts} onToggle={(v) => toggle('milestoneAlerts', v)} />
             <Divider />
-            <ToggleRow icon="document-text-outline" iconColor="#FF6B00" label="Quote Notifications" value={profile.quoteAlerts} onToggle={(v) => toggle('quoteAlerts', v)} />
+            <ToggleRow icon="document-text-outline" iconColor="#FF6B00" label="Price Update Notifications" value={profile.quoteAlerts} onToggle={(v) => toggle('quoteAlerts', v)} />
             <Divider />
             <ToggleRow icon="chatbubbles-outline" iconColor="#60A5FA" label="Message Alerts" value={profile.messageAlerts} onToggle={(v) => toggle('messageAlerts', v)} />
           </GlassCard>

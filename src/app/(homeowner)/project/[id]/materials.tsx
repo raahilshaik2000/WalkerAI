@@ -176,7 +176,7 @@ export default function MaterialsScreen() {
               <Text style={styles.emptyIcon}>📦</Text>
               <Text style={styles.emptyTitle}>No material orders yet</Text>
               <Text style={styles.emptyBody}>
-                They'll appear here once your project is active and a contractor quote has been approved.
+                They'll appear here once your project is active and funded.
               </Text>
             </GlassCard>
           )}
