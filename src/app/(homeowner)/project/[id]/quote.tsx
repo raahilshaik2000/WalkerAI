@@ -64,7 +64,7 @@ export default function CostBreakdownScreen() {
     try {
       if (!projectId) {
         setProject(null);
-        setErrorMessage('Project is missing. Reopen the quote from the project page.');
+        setErrorMessage('Project is missing. Reopen the project breakdown from the project page.');
         setLoading(false);
         return;
       }
@@ -74,7 +74,7 @@ export default function CostBreakdownScreen() {
         .eq('id', projectId)
         .maybeSingle();
       if (projectError) {
-        setErrorMessage(formatAppSafeErrorMessage(projectError, 'Could not load quote.'));
+        setErrorMessage(formatAppSafeErrorMessage(projectError, 'Could not load project breakdown.'));
         setProject(null);
         setLoading(false);
         return;
@@ -111,7 +111,7 @@ export default function CostBreakdownScreen() {
       setProject(proj as any);
       setMasterSlots(slots);
     } catch (err) {
-      setErrorMessage(formatAppSafeErrorMessage(err, 'Could not load quote.'));
+      setErrorMessage(formatAppSafeErrorMessage(err, 'Could not load project breakdown.'));
       setProject(null);
     } finally {
       setLoading(false);
@@ -198,7 +198,7 @@ export default function CostBreakdownScreen() {
         <SafeAreaView style={styles.safe}>
           <View style={styles.center}>
             <Ionicons name="alert-circle-outline" size={42} color={Colors.text.tertiary} />
-            <Text style={Typography.h3}>Could not load quote</Text>
+            <Text style={Typography.h3}>Could not load project breakdown</Text>
             <Text style={[Typography.bodySecondary, styles.errorText]}>{errorMessage}</Text>
           </View>
         </SafeAreaView>
@@ -224,7 +224,7 @@ export default function CostBreakdownScreen() {
             <TouchableOpacity style={styles.backBtn} onPress={() => navigation.goBack()}>
               <Ionicons name="chevron-back" size={22} color="#fff" />
             </TouchableOpacity>
-            <Text style={styles.headerTitle}>Project Quote</Text>
+            <Text style={styles.headerTitle}>Project Breakdown</Text>
             <View style={{ width: 36 }} />
           </View>
 
@@ -236,8 +236,8 @@ export default function CostBreakdownScreen() {
                   <Ionicons name="sparkles" size={20} color="#FF6B00" />
                 </View>
                 <View style={{ flex: 1 }}>
-                  <Text style={styles.priceLabel}>Project Total</Text>
-                  <Text style={styles.priceSubLabel}>One price for your whole renovation</Text>
+                  <Text style={styles.priceLabel}>AI Project Price</Text>
+                  <Text style={styles.priceSubLabel}>Set by WalkerAI from your measurements & materials</Text>
                 </View>
               </View>
               <Text style={styles.priceRange}>{masterTotal > 0 ? formatCad(masterTotal) : '—'}</Text>

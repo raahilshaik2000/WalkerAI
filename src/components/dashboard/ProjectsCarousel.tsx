@@ -31,7 +31,7 @@ const STATUS_META: Record<string, { label: string; color: string }> = {
   draft:       { label: 'Setting up',          color: '#6B7280' },
   brief_ready: { label: 'Ready to send',        color: '#F59E0B' },
   dispatching: { label: 'Finding contractor',  color: '#A78BFA' },
-  quoting:     { label: 'Quote ready',          color: '#F59E0B' },
+  quoting:     { label: 'Price ready',          color: '#F59E0B' },
   accepted:    { label: 'Contractor reviewing', color: '#60A5FA' },
   scheduling:  { label: 'Schedule needed',      color: '#38BDF8' },
   active:      { label: 'In progress',          color: '#22C55E' },
@@ -72,7 +72,7 @@ function getContractorStatus(status: string) {
     return 'Contractor assigned';
   }
   if (status === 'quoting') {
-    return 'Quote ready to review';
+    return 'Price ready to review';
   }
   if (status === 'accepted') {
     return 'Contractor reviewing';

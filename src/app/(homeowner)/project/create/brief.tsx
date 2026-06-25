@@ -412,14 +412,14 @@ RULES:
             </GlassCard>
           )}
 
-          {/* Cost Range */}
+          {/* AI Project Price */}
           <GlassCard style={styles.section}>
-            <Text style={styles.sectionTitle}>Estimated Cost</Text>
+            <Text style={styles.sectionTitle}>AI Project Price</Text>
             <Text style={styles.costRange}>
-              {formatCad(brief.ai_cost_min)} – {formatCad(brief.ai_cost_max)}
+              {formatCad(Math.round((brief.ai_cost_min + brief.ai_cost_max) / 2))}
             </Text>
             <Text style={styles.costNote}>
-              Pricing engine estimate · exact price confirmed by contractor quote
+              Set by WalkerAI from your measurements & materials
             </Text>
             {brief.confidence_score != null && (
               <View style={styles.confidenceRow}>
