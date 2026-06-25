@@ -453,7 +453,7 @@ export default function ProjectDetailScreen() {
   const actions = [
     { label: 'Milestones', iconName: 'reader-outline', screen: 'Milestones' },
     { label: 'Messages',   iconName: 'chatbubbles-outline', screen: 'Messages'   },
-    { label: 'Quote',      iconName: 'document-text-outline', screen: 'Quote'      },
+    { label: 'Project Breakdown', iconName: 'document-text-outline', screen: 'Quote' },
     { label: 'Materials',  iconName: 'cube-outline', screen: 'Materials'  },
     { label: 'Concierge',  iconName: 'compass-outline', screen: 'Concierge'  },
     ...(shouldShowScheduleAction
@@ -590,14 +590,14 @@ export default function ProjectDetailScreen() {
             </GlassCard>
           ) : null}
 
-          {/* Cost estimate */}
+          {/* AI Project Price — single WalkerAI-set price (no quotes/ballpark) */}
           {project.ai_cost_min && project.ai_cost_max && (
             <GlassCard style={styles.card}>
-              <Text style={styles.sectionTitle}>AI Cost Estimate</Text>
+              <Text style={styles.sectionTitle}>AI Project Price</Text>
               <Text style={styles.costRange}>
-                {formatCad(project.ai_cost_min)} – {formatCad(project.ai_cost_max)}
+                {formatCad(Math.round((project.ai_cost_min + project.ai_cost_max) / 2))}
               </Text>
-              <Text style={styles.costNote}>Final price set by contractor quote</Text>
+              <Text style={styles.costNote}>Set by WalkerAI from your measurements & materials</Text>
             </GlassCard>
           )}
 
