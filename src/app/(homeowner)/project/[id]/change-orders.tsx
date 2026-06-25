@@ -1,9 +1,11 @@
 import { useCallback, useEffect, useState } from 'react';
 import {
   Alert,
+  Modal,
   ScrollView,
   StyleSheet,
   Text,
+  TextInput,
   TouchableOpacity,
   View,
 } from 'react-native';
@@ -33,6 +35,9 @@ export default function HomeownerChangeOrdersScreen() {
   const [loading, setLoading] = useState(true);
   const [responding, setResponding] = useState<string | null>(null);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  const [requestOpen, setRequestOpen] = useState(false);
+  const [requestText, setRequestText] = useState('');
+  const [submittingRequest, setSubmittingRequest] = useState(false);
 
   const clearChangeOrderState = useCallback(() => {
     setChangeOrders([]);
@@ -158,6 +163,42 @@ export default function HomeownerChangeOrdersScreen() {
     );
   };
 
+  const handleSubmitRequest = async () => {
+    const description = requestText.trim();
+    if (!projectId) {
+      Alert.alert('Project missing', 'Reopen change orders from the project page and try again.');
+      return;
+    }
+    if (description.length < 8) {
+      Alert.alert('Add details', 'Describe the change you want (materials, finishes, scope, upgrades, etc.).');
+      return;
+    }
+    setSubmittingRequest(true);
+    try {
+      // Homeowner requests don't set a price — WalkerAI / the trade prices it,
+      // then it's documented and approved as a Change Order.
+      const { error } = await supabase.from('change_orders').insert({
+        project_id: projectId,
+        description,
+        status: 'proposed',
+        signed_by_homeowner: true,
+        signed_by_company: false,
+      });
+      if (error) {
+        Alert.alert('Could not submit request', formatAppSafeErrorMessage(error, 'Please try again.'));
+        return;
+      }
+      ReactNativeHapticFeedback.trigger('notificationSuccess');
+      setRequestText('');
+      setRequestOpen(false);
+      await fetchChangeOrders();
+    } catch (err) {
+      Alert.alert('Could not submit request', formatAppSafeErrorMessage(err, 'Please try again.'));
+    } finally {
+      setSubmittingRequest(false);
+    }
+  };
+
   return (
     <GradientBackground glow="top-right">
       <SafeAreaView style={styles.safe}>
@@ -171,8 +212,16 @@ export default function HomeownerChangeOrdersScreen() {
           </View>
 
           <Text style={styles.explainerText}>
-            Change orders document scope changes proposed by your contractor. Signing records approval for the changed work; it does not automatically change funded escrow or milestone payments.
+            Request changes to your project — materials, finishes, scope, upgrades, additions, or removals. Trades can also flag unforeseen issues (discoveries) found after work starts. Every change is documented here as a Change Order; WalkerAI prices it and you approve before it proceeds. Signing records approval for the changed work; it does not automatically change funded escrow or milestone payments.
           </Text>
+
+          <GlassButton
+            label="Request a Change"
+            onPress={() => { setRequestText(''); setRequestOpen(true); }}
+            fullWidth
+            style={styles.requestBtn}
+            haptic
+          />
 
           {loading ? (
             <View style={styles.center}>
@@ -189,7 +238,7 @@ export default function HomeownerChangeOrdersScreen() {
               <Text style={styles.emptyIcon}>📝</Text>
               <Text style={styles.emptyTitle}>No change orders</Text>
               <Text style={styles.emptySub}>
-                Your contractor will submit change orders here if the scope of work changes.
+                Tap "Request a Change" above to ask for materials, finishes, scope, or upgrade changes — or a trade will add one if they discover an unforeseen issue.
               </Text>
             </View>
           ) : (
@@ -272,6 +321,46 @@ export default function HomeownerChangeOrdersScreen() {
             })
           )}
         </ScrollView>
+
+        <Modal
+          visible={requestOpen}
+          transparent
+          animationType="fade"
+          onRequestClose={() => setRequestOpen(false)}
+        >
+          <View style={styles.modalOverlay}>
+            <View style={styles.modalCard}>
+              <Text style={styles.modalTitle}>Request a Change</Text>
+              <Text style={styles.modalBody}>
+                Describe the change you'd like (materials, finishes, scope, upgrades, additions, or removals). WalkerAI prices it, then you approve it as a Change Order.
+              </Text>
+              <TextInput
+                value={requestText}
+                onChangeText={setRequestText}
+                placeholder="e.g. Upgrade to quartz countertops instead of laminate"
+                placeholderTextColor={Colors.text.tertiary}
+                multiline
+                style={styles.input}
+              />
+              <View style={styles.modalActions}>
+                <GlassButton
+                  label="Cancel"
+                  onPress={() => setRequestOpen(false)}
+                  variant="secondary"
+                  size="sm"
+                  style={styles.modalButton}
+                />
+                <GlassButton
+                  label="Submit Request"
+                  onPress={handleSubmitRequest}
+                  loading={submittingRequest}
+                  size="sm"
+                  style={styles.modalButton}
+                />
+              </View>
+            </View>
+          </View>
+        </Modal>
       </SafeAreaView>
     </GradientBackground>
   );
@@ -285,7 +374,22 @@ const styles = StyleSheet.create({
   },
   backText: { color: Colors.text.secondary, fontSize: 15, width: 48 },
   title: { ...Typography.h2 },
-  explainerText: { ...Typography.bodySecondary, lineHeight: 22, marginBottom: Spacing.md },
+  explainerText: { ...Typography.bodySecondary, lineHeight: 22, marginBottom: Spacing.sm },
+  requestBtn: { marginBottom: Spacing.md },
+  modalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.65)', justifyContent: 'center', paddingHorizontal: Spacing.md },
+  modalCard: {
+    backgroundColor: Colors.bg.secondary, borderRadius: 16, borderWidth: 1,
+    borderColor: Colors.glass.border, padding: Spacing.md,
+  },
+  modalTitle: { ...Typography.h3, marginBottom: 8 },
+  modalBody: { ...Typography.bodySecondary, lineHeight: 20, marginBottom: 12 },
+  input: {
+    minHeight: 110, borderRadius: 12, borderWidth: 1, borderColor: Colors.glass.border,
+    backgroundColor: Colors.glass.surface, color: Colors.text.primary, padding: 12,
+    textAlignVertical: 'top', marginBottom: 12,
+  },
+  modalActions: { flexDirection: 'row', gap: 10 },
+  modalButton: { flex: 1 },
   orderCard: { marginBottom: 10 },
   orderCardAction: {
     borderColor: 'rgba(255, 107, 0, 0.35)',

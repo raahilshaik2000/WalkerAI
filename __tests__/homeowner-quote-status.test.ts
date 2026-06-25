@@ -17,10 +17,10 @@ describe('homeowner quote status copy', () => {
       'utf8',
     );
 
-    expect(carouselSource).toContain("quoting:     { label: 'Quote ready'");
-    expect(carouselSource).toContain("if (status === 'quoting') {\n    return 'Quote ready to review';\n  }");
-    expect(projectsSource).toContain("quoting:     { label: 'Quote ready'");
-    expect(projectsSource).toContain("quoting:     'Quote ready to review'");
+    expect(carouselSource).toContain("quoting:     { label: 'Price ready'");
+    expect(carouselSource).toContain("if (status === 'quoting') {\n    return 'Price ready to review';\n  }");
+    expect(projectsSource).toContain("quoting:     { label: 'Price ready'");
+    expect(projectsSource).toContain("quoting:     'Price ready to review'");
   });
 
   it('shows master-total price and Pay to WalkerAI CTA on the quote screen', () => {
@@ -68,8 +68,8 @@ describe('homeowner quote status copy', () => {
     );
 
     expect(source).toContain("import { formatAppSafeErrorMessage, formatSupabaseFunctionError } from '@/lib/supabase/functions';");
-    expect(source).toContain("setErrorMessage(formatAppSafeErrorMessage(projectError, 'Could not load quote.'))");
-    expect(source).toContain("setErrorMessage(formatAppSafeErrorMessage(err, 'Could not load quote.'))");
+    expect(source).toContain("setErrorMessage(formatAppSafeErrorMessage(projectError, 'Could not load project breakdown.'))");
+    expect(source).toContain("setErrorMessage(formatAppSafeErrorMessage(err, 'Could not load project breakdown.'))");
     expect(source).toContain("} finally {\n      setLoading(false);");
     expect(source).not.toContain('setErrorMessage(projectError.message)');
   });
