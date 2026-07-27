@@ -8,6 +8,10 @@
     "lint": "eslint .",
     "qa:check": "node scripts/check-qa-credentials.mjs",
     "qa:reset": "node scripts/reset-qa-credentials.mjs",
+    "secrets:check": "node scripts/check-client-secrets.mjs",
+    "prestart": "node scripts/check-client-secrets.mjs",
+    "preios": "node scripts/check-client-secrets.mjs",
+    "preandroid": "node scripts/check-client-secrets.mjs",
     "start": "react-native start",
     "test": "jest"
   },
