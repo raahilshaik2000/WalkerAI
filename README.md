@@ -1,5 +1,42 @@
 This is a new [**React Native**](https://reactnative.dev) project, bootstrapped using [`@react-native-community/cli`](https://github.com/react-native-community/cli).
 
+# Environment variables & API keys
+
+The app needs the keys below. **Values are never committed.** Copy `.env.example` to `.env` and fill it in locally. `react-native-config` compiles every value in `.env` into the app binary, so **only publishable / public keys belong there** — real secrets live as Supabase Edge Function secrets. `npm run secrets:check` (also runs before `start`/`ios`/`android`) fails the build if a server secret ends up in `.env`.
+
+### 1. Client `.env` (publishable / public only — shipped in the app binary)
+
+| Key | What it is |
+| --- | --- |
+| `SUPABASE_URL` | Supabase project URL (public) |
+| `SUPABASE_ANON_KEY` | Supabase publishable/anon key (safe in clients; protected by RLS) |
+| `STRIPE_PUBLISHABLE_KEY` | Stripe publishable key (`pk_...`; a committed fallback also exists in `src/lib/stripe.ts`) |
+
+Do **not** put any secret (`sk-...`, service role, Stripe secret, etc.) here. There is no Google Maps key — address lookup uses keyless OpenStreetMap.
+
+### 2. Supabase Edge Function secrets (server-side — `supabase secrets set ...`)
+
+These are read with `Deno.env.get(...)` in `supabase/functions/*` and never reach the client. `SUPABASE_URL`, `SUPABASE_ANON_KEY`, and `SUPABASE_SERVICE_ROLE_KEY` are auto-injected by Supabase, so you typically only set the rest.
+
+| Key | Used by |
+| --- | --- |
+| `ANTHROPIC_API_KEY` (opt. `ANTHROPIC_VISION_MODEL`) | AI photo analysis + DIY guide generation |
+| `OPENAI_API_KEY` | AI features |
+| `REIMAGINE_API_KEY` | Room re-imagine renders |
+| `STRIPE_SECRET_KEY` | Payments / payouts / Connect |
+| `STRIPE_WEBHOOK_SECRET` | Verifying Stripe webhook signatures |
+| `APNS_KEY`, `APNS_KEY_ID`, `APNS_TEAM_ID`, `APNS_BUNDLE_ID`, `APNS_USE_PRODUCTION` | iOS push (APNs) via the `send-push` function |
+| `QA_SEED_SECRET` | QA seeding functions (also mirrored in `.env` for `npm run qa:*`) |
+
+### 3. Supabase Vault secrets (for the notifications → push bridge)
+
+Set in the SQL editor so the `notifications` INSERT trigger can call `send-push`:
+
+| Secret name | What it is |
+| --- | --- |
+| `send_push_url` | The deployed `send-push` function URL |
+| `service_role_key` | Service-role key used by the trigger to authenticate its call |
+
 # Getting Started
 
 > **Note**: Make sure you have completed the [Set Up Your Environment](https://reactnative.dev/docs/set-up-your-environment) guide before proceeding.
