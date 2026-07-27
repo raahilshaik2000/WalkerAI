@@ -363,6 +363,40 @@ describe('notification navigation', () => {
     expect(toRootNotificationRoute(companyRoute, 'admin')).toBeNull();
   });
 
+  it('routes "trade on the way" and normalized payment types to the right screens', () => {
+    // Homeowner: contractor is on the way -> schedule/timeline.
+    expect(resolveNotificationRoute('trade_en_route', { project_id: 'project-1', slot_id: 'slot-1' }, 'homeowner')).toEqual({
+      name: 'ProjectDetail',
+      params: { screen: 'ProjectSchedule', params: { id: 'project-1' } },
+    });
+
+    // Homeowner: trade complete, approval needed -> milestones.
+    expect(resolveNotificationRoute('trade_needs_approval', { project_id: 'project-1' }, 'homeowner')).toEqual({
+      name: 'ProjectDetail',
+      params: { screen: 'Milestones', params: { id: 'project-1' } },
+    });
+
+    // Homeowner: funding/payment updates -> project detail.
+    expect(resolveNotificationRoute('project_funded', { project_id: 'project-1' }, 'homeowner')).toEqual({
+      name: 'ProjectDetail',
+      params: { screen: 'ProjectDetailMain', params: { id: 'project-1' } },
+    });
+    expect(resolveNotificationRoute('payment_failed', { project_id: 'project-1' }, 'homeowner')).toEqual({
+      name: 'ProjectDetail',
+      params: { screen: 'ProjectDetailMain', params: { id: 'project-1' } },
+    });
+
+    // Company: payout released -> job milestones; next-turn -> job detail.
+    expect(resolveNotificationRoute('trade_payout_paid', { project_id: 'project-1', slot_id: 'slot-1' }, 'company')).toEqual({
+      name: 'JobDetail',
+      params: { screen: 'JobMilestones', params: { id: 'project-1', slot: 'slot-1' } },
+    });
+    expect(resolveNotificationRoute('trade_turn_started', { project_id: 'project-1', slot_id: 'slot-1' }, 'company')).toEqual({
+      name: 'JobDetail',
+      params: { screen: 'JobDetailMain', params: { id: 'project-1', slot: 'slot-1' } },
+    });
+  });
+
   it('keeps push tap role state in sync after auth role hydration', () => {
     const rootNavigator = fs.readFileSync(
       path.join(__dirname, '../src/navigation/RootNavigator.tsx'),

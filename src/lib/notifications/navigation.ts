@@ -144,12 +144,15 @@ export function resolveNotificationRoute(
       case 'slot_dispatched':
       case 'job_accepted':
       case 'slot_accepted':
+      case 'project_funded':
+      case 'trade_turn_started':
       case 'gc_trade_negotiation_requested':
         return jobDetailRoute('JobDetailMain', projectId, slotParams);
       case 'quote_approved':
       case 'milestone_paid':
       case 'milestone_needs_approval':
       case 'milestone_completed':
+      case 'trade_payout_paid':
       case 'dispute_raised':
         return jobDetailRoute('JobMilestones', projectId, slotParams);
       case 'material_order_claimed':
@@ -184,9 +187,17 @@ export function resolveNotificationRoute(
     case 'milestone_needs_approval':
     case 'milestone_paid':
     case 'milestone_completed':
+    case 'trade_needs_approval':
       return projectDetailRoute('Milestones', projectId);
     case 'dispute_raised':
       return projectDetailRoute('Milestones', projectId);
+    case 'trade_en_route':
+      return projectDetailRoute('ProjectSchedule', projectId);
+    case 'project_funded':
+    case 'payment_failed':
+    case 'payment_disputed':
+    case 'payment_dispute_resolved':
+      return projectDetailRoute('ProjectDetailMain', projectId);
     case 'all_slots_filled':
     case 'schedule_confirmed':
       return projectDetailRoute('ProjectSchedule', projectId);

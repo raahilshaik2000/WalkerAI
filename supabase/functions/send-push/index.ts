@@ -481,6 +481,54 @@ function buildNotificationContent(
         priority: 'normal',
       };
     }
+    case 'trade_en_route':
+      return {
+        title: 'Your Contractor Is on the Way',
+        body: `${textValue(payload.company_name, 'Your contractor')} is heading to your project now.`,
+        priority: 'high',
+      };
+    case 'trade_needs_approval':
+      return {
+        title: 'Trade Complete, Approval Needed',
+        body: 'Your contractor marked their work complete. Review the photos and approve to release payment.',
+        priority: 'high',
+      };
+    case 'trade_payout_paid':
+      return {
+        title: '💰 Payout Released',
+        body: `$${formatCad(payload.amount)} is being deposited to your account.`,
+        priority: 'normal',
+      };
+    case 'trade_turn_started':
+      return {
+        title: 'Your Turn to Start',
+        body: 'The previous trade is done. You can begin your work now.',
+        priority: 'high',
+      };
+    case 'project_funded':
+      return {
+        title: 'Project Funded',
+        body: 'The project is funded and ready to move forward.',
+        priority: 'high',
+      };
+    case 'payment_failed':
+      return {
+        title: "Payment Didn't Go Through",
+        body: textValue(payload.message, 'Your payment did not go through. Please try again or use a different card.'),
+        priority: 'high',
+      };
+    case 'payment_disputed':
+      return {
+        title: '⚠️ Payment Dispute Opened',
+        body: textValue(payload.message, 'A payment dispute was opened on this project.'),
+        priority: 'high',
+      };
+    case 'payment_dispute_resolved':
+      return {
+        title: 'Payment Dispute Resolved',
+        body: `The payment dispute on your project was resolved${payload.outcome ? ` (${textValue(payload.outcome, 'closed')})` : ''}.`,
+        priority: 'normal',
+      };
     default:
       return {
         title: 'WalkerAI',
@@ -509,11 +557,19 @@ function notificationPreferenceKey(type: string): string | null {
     case 'milestone_paid':
     case 'supplier_paid':
     case 'gc_concierge_payout_released':
+    case 'trade_payout_paid':
+    case 'project_funded':
+    case 'payment_failed':
+    case 'payment_disputed':
+    case 'payment_dispute_resolved':
       return 'payment_updates';
     case 'job_accepted':
     case 'slot_accepted':
     case 'milestone_needs_approval':
     case 'milestone_completed':
+    case 'trade_needs_approval':
+    case 'trade_turn_started':
+    case 'trade_en_route':
     case 'dispute_raised':
     case 'project_complete':
     case 'all_slots_filled':

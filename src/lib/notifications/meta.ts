@@ -273,6 +273,62 @@ const META: Record<string, NotificationDisplayMeta> = {
     color: '#6B7280',
     timelineLabel: 'Supplier bid not selected',
   },
+  trade_en_route: {
+    emoji: '🚗',
+    title: 'Contractor on the way',
+    timelineIcon: 'car-outline',
+    color: '#60A5FA',
+    timelineLabel: 'Your contractor is on the way',
+  },
+  trade_needs_approval: {
+    emoji: '✅',
+    title: 'Trade complete, approval needed',
+    timelineIcon: 'flag-outline',
+    color: '#60A5FA',
+    timelineLabel: 'Trade completed, approve to release payment',
+  },
+  trade_payout_paid: {
+    emoji: '💰',
+    title: 'Payout released',
+    timelineIcon: 'cash-outline',
+    color: '#34D399',
+    timelineLabel: 'Trade payout released',
+  },
+  trade_turn_started: {
+    emoji: '🔨',
+    title: 'Your turn to start',
+    timelineIcon: 'hammer-outline',
+    color: '#60A5FA',
+    timelineLabel: 'Previous trade done, you can start',
+  },
+  project_funded: {
+    emoji: '✅',
+    title: 'Project funded',
+    timelineIcon: 'checkmark-circle-outline',
+    color: '#34D399',
+    timelineLabel: 'Project funded and moving forward',
+  },
+  payment_failed: {
+    emoji: '⚠️',
+    title: "Payment didn't go through",
+    timelineIcon: 'alert-circle-outline',
+    color: '#F87171',
+    timelineLabel: 'Payment failed',
+  },
+  payment_disputed: {
+    emoji: '⚠️',
+    title: 'Payment dispute opened',
+    timelineIcon: 'alert-circle-outline',
+    color: '#F87171',
+    timelineLabel: 'Payment dispute opened',
+  },
+  payment_dispute_resolved: {
+    emoji: '✅',
+    title: 'Payment dispute resolved',
+    timelineIcon: 'checkmark-circle-outline',
+    color: '#34D399',
+    timelineLabel: 'Payment dispute resolved',
+  },
 };
 
 export function fallbackNotificationTitle(type: string) {
