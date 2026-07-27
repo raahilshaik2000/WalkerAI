@@ -47,6 +47,38 @@ describe('notification display metadata', () => {
     expect(enums).toContain("| 'milestone_completed'");
   });
 
+  it('registers "trade on the way" and normalized payment types across every registry', () => {
+    const enums = fs.readFileSync(path.join(__dirname, '../src/constants/enums.ts'), 'utf8');
+    const navigation = fs.readFileSync(path.join(__dirname, '../src/lib/notifications/navigation.ts'), 'utf8');
+    const sendPush = fs.readFileSync(path.join(__dirname, '../supabase/functions/send-push/index.ts'), 'utf8');
+
+    const newTypes = [
+      'trade_en_route',
+      'trade_needs_approval',
+      'trade_payout_paid',
+      'trade_turn_started',
+      'project_funded',
+      'payment_failed',
+      'payment_disputed',
+      'payment_dispute_resolved',
+    ];
+
+    for (const type of newTypes) {
+      // In the shared type union.
+      expect(enums).toContain(`| '${type}'`);
+      // Handled by the push sender (has real copy, not the generic fallback).
+      expect(sendPush).toContain(`case '${type}'`);
+      // Routed (either an explicit case or a role default handles it).
+      // Display metadata is not the generic fallback bell.
+      expect(notificationDisplayMeta(type).emoji).not.toBe('🔔');
+    }
+
+    // New event has a dedicated, on-brand label.
+    expect(notificationDisplayMeta('trade_en_route').title).toBe('Contractor on the way');
+    // "on the way" is explicitly routed for the homeowner.
+    expect(navigation).toContain("case 'trade_en_route'");
+  });
+
   it('falls back to readable text for unknown notification types', () => {
     expect(notificationDisplayMeta('custom_internal_type')).toMatchObject({
       title: 'custom internal type',

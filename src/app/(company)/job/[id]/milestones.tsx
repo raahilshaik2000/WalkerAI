@@ -31,6 +31,7 @@ interface MasterSlotPayout {
   payout_cents: number | null;
   payout_status: string | null;
   completion_submitted_at: string | null;
+  en_route_at: string | null;
   stripe_transfer_id: string | null;
   work_order: number | null;
 }
@@ -108,7 +109,7 @@ export default function CompanyMilestonesScreen() {
     if (slotId) {
       const { data: slot, error: slotError } = await supabase
         .from('project_slots')
-        .select('id, trade_type, status, payout_cents, payout_status, completion_submitted_at, stripe_transfer_id, work_order')
+        .select('id, trade_type, status, payout_cents, payout_status, completion_submitted_at, en_route_at, stripe_transfer_id, work_order')
         .eq('id', slotId)
         .eq('assigned_company_id', company.id)
         .maybeSingle();
@@ -216,6 +217,51 @@ export default function CompanyMilestonesScreen() {
     }
   };
 
+  const handleMarkEnRoute = async () => {
+    if (!projectId || !slotId) {
+      Alert.alert('Missing job', 'Reopen this job and try again.');
+      return;
+    }
+    setUpdating(`enroute:${slotId}`);
+    try {
+      // Only the first tap sets the timestamp (is('en_route_at', null)); a repeat
+      // tap is a harmless no-op so the homeowner is not notified twice.
+      const { error } = await supabase
+        .from('project_slots')
+        .update({ en_route_at: new Date().toISOString() })
+        .eq('id', slotId)
+        .is('en_route_at', null);
+      if (error) throw error;
+
+      const { data: project, error: projectError } = await supabase
+        .from('projects')
+        .select('homeowner_id')
+        .eq('id', projectId)
+        .maybeSingle();
+      if (projectError) throw projectError;
+      if (project?.homeowner_id) {
+        const { error: notificationError } = await supabase.from('notifications').insert({
+          user_id: project.homeowner_id,
+          type: 'trade_en_route',
+          payload: {
+            project_id: projectId,
+            slot_id: slotId,
+            trade_type: masterSlot?.trade_type ?? null,
+            deep_link: `/(homeowner)/project/${projectId}`,
+          },
+        });
+        if (notificationError) console.warn('trade_en_route notification failed:', notificationError);
+      }
+
+      ReactNativeHapticFeedback.trigger('notificationSuccess');
+      setMasterSlot((prev) => prev ? { ...prev, en_route_at: new Date().toISOString() } : prev);
+    } catch (err) {
+      Alert.alert('Could not update', formatAppSafeErrorMessage(err, 'Please try again.'));
+    } finally {
+      setUpdating(null);
+    }
+  };
+
   const handleMarkSlotComplete = async () => {
     if (!projectId || !slotId) {
       Alert.alert('Missing job', 'Reopen this job and try again.');
@@ -282,7 +328,9 @@ export default function CompanyMilestonesScreen() {
   const submitted = !!masterSlot?.completion_submitted_at;
   const isPaid = payoutStatus === 'paid' || !!masterSlot?.stripe_transfer_id;
   const isApproved = payoutStatus === 'approved';
+  const enRoute = !!masterSlot?.en_route_at;
   const slotUpdating = updating === slotId;
+  const enRouteUpdating = updating === `enroute:${slotId}`;
   const badgeVariant: 'pending' | 'active' | 'completed' | 'paid' = isPaid ? 'paid' : isApproved ? 'completed' : 'pending';
   const badgeLabel = isPaid ? 'Paid' : isApproved ? 'Approved' : submitted ? 'Awaiting approval' : 'In progress';
 
@@ -355,24 +403,43 @@ export default function CompanyMilestonesScreen() {
                   Waiting for earlier trades — you can mark this complete once the previous trade has finished and been paid.
                 </Text>
               ) : (
-                <View style={styles.milestoneActions}>
-                  <GlassButton
-                    label="Mark Complete"
-                    onPress={handleMarkSlotComplete}
-                    loading={slotUpdating}
-                    size="sm"
-                    haptic
-                    style={styles.actionBtn}
-                  />
-                  <GlassButton
-                    label="Photo"
-                    icon={<Icon name="camera-outline" size={16} color={Colors.text.primary} />}
-                    onPress={handleUploadSlotPhoto}
-                    variant="secondary"
-                    size="sm"
-                    style={styles.actionBtn}
-                  />
-                </View>
+                <>
+                  {enRoute ? (
+                    <View style={styles.enRouteSent}>
+                      <Icon name="car" size={14} color={Colors.success} />
+                      <Text style={styles.enRouteSentText}>Homeowner notified you're on the way</Text>
+                    </View>
+                  ) : (
+                    <GlassButton
+                      label="I'm on my way"
+                      icon={<Icon name="car-outline" size={16} color={Colors.text.primary} />}
+                      onPress={handleMarkEnRoute}
+                      loading={enRouteUpdating}
+                      variant="secondary"
+                      size="sm"
+                      haptic
+                      style={styles.enRouteBtn}
+                    />
+                  )}
+                  <View style={styles.milestoneActions}>
+                    <GlassButton
+                      label="Mark Complete"
+                      onPress={handleMarkSlotComplete}
+                      loading={slotUpdating}
+                      size="sm"
+                      haptic
+                      style={styles.actionBtn}
+                    />
+                    <GlassButton
+                      label="Photo"
+                      icon={<Icon name="camera-outline" size={16} color={Colors.text.primary} />}
+                      onPress={handleUploadSlotPhoto}
+                      variant="secondary"
+                      size="sm"
+                      style={styles.actionBtn}
+                    />
+                  </View>
+                </>
               )}
 
               <Text style={styles.waitingText}>
@@ -427,6 +494,11 @@ const styles = StyleSheet.create({
     borderTopWidth: 1, borderTopColor: Colors.glass.border,
   },
   paidText: { color: Colors.success, fontSize: 13, fontWeight: '600' },
+  enRouteBtn: { marginTop: 12 },
+  enRouteSent: {
+    flexDirection: 'row', alignItems: 'center', gap: 6, marginTop: 12,
+  },
+  enRouteSentText: { color: Colors.success, fontSize: 13, fontWeight: '600' },
   milestoneActions: {
     flexDirection: 'row', gap: 8, marginTop: 12,
     paddingTop: 12, borderTopWidth: 1, borderTopColor: Colors.glass.border,

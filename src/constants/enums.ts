@@ -130,4 +130,12 @@ export type NotificationType =
   | 'gc_concierge_booking_paid'
   | 'gc_concierge_payout_released'
   | 'gc_trade_negotiation_requested'
-  | 'gc_trade_negotiation_responded';
+  | 'gc_trade_negotiation_responded'
+  | 'trade_en_route'
+  | 'trade_needs_approval'
+  | 'trade_payout_paid'
+  | 'trade_turn_started'
+  | 'project_funded'
+  | 'payment_failed'
+  | 'payment_disputed'
+  | 'payment_dispute_resolved';
