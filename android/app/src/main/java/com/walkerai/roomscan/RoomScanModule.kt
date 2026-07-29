@@ -90,7 +90,7 @@ class RoomScanModule(private val reactContext: ReactApplicationContext) :
 
     @ReactMethod
     fun startScan(promise: Promise) {
-        val activity = currentActivity
+        val activity = getCurrentActivity()
         if (activity == null) {
             promise.reject("NO_ACTIVITY", "No current activity")
             return
@@ -127,7 +127,7 @@ class RoomScanModule(private val reactContext: ReactApplicationContext) :
         // Required for RN event emitter
     }
 
-    override fun onActivityResult(activity: Activity?, requestCode: Int, resultCode: Int, data: Intent?) {
+    override fun onActivityResult(activity: Activity, requestCode: Int, resultCode: Int, data: Intent?) {
         if (requestCode != REQUEST_CODE_SCAN) return
 
         when (resultCode) {
@@ -156,5 +156,5 @@ class RoomScanModule(private val reactContext: ReactApplicationContext) :
         }
     }
 
-    override fun onNewIntent(intent: Intent?) {}
+    override fun onNewIntent(intent: Intent) {}
 }

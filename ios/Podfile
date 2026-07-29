@@ -71,6 +71,13 @@ target 'WalkerAI' do
         if config.build_settings['IPHONEOS_DEPLOYMENT_TARGET'].to_f < 13.4
           config.build_settings['IPHONEOS_DEPLOYMENT_TARGET'] = '13.4'
         end
+        if target.name == 'fmt'
+          definitions = config.build_settings['GCC_PREPROCESSOR_DEFINITIONS'] || ['$(inherited)']
+          definitions = [definitions] unless definitions.is_a?(Array)
+          definitions << 'FMT_USE_CONSTEVAL=0' unless definitions.include?('FMT_USE_CONSTEVAL=0')
+          config.build_settings['GCC_PREPROCESSOR_DEFINITIONS'] = definitions
+          config.build_settings['CLANG_CXX_LANGUAGE_STANDARD'] = 'c++17'
+        end
       end
     end
 

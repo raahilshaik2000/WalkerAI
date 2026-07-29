@@ -39,8 +39,22 @@ const BANNED_VALUE_PATTERNS = [
   { re: /sk-(proj-)?[A-Za-z0-9]{20}/, label: 'OpenAI secret key (sk-...)' },
   { re: /sk_(live|test)_[A-Za-z0-9]{20}/, label: 'Stripe SECRET key (sk_live/sk_test_...)' },
   { re: /\bservice_role\b/, label: 'Supabase service_role key' },
-  { re: /eyJ[A-Za-z0-9_-]{20,}\.[A-Za-z0-9_-]{20,}\.[A-Za-z0-9_-]{10,}/, label: 'JWT (possible service_role / legacy secret)' },
 ];
+
+const JWT_PATTERN = /eyJ[A-Za-z0-9_-]{20,}\.[A-Za-z0-9_-]{20,}\.[A-Za-z0-9_-]{10,}/;
+
+function decodeJwtPayload(value) {
+  const [, payload] = value.split('.');
+  if (!payload) return null;
+
+  try {
+    const base64 = payload.replace(/-/g, '+').replace(/_/g, '/');
+    const padded = base64.padEnd(Math.ceil(base64.length / 4) * 4, '=');
+    return JSON.parse(Buffer.from(padded, 'base64').toString('utf8'));
+  } catch {
+    return null;
+  }
+}
 
 const lines = fs.readFileSync(envPath, 'utf8').split(/\r?\n/);
 const violations = [];
@@ -61,6 +75,14 @@ lines.forEach((raw, i) => {
     if (re.test(value)) {
       violations.push(`  line ${i + 1}: value of "${name}" looks like a ${label}`);
     }
+  }
+
+  if (JWT_PATTERN.test(value)) {
+    const payload = decodeJwtPayload(value);
+    if (name === 'SUPABASE_ANON_KEY' && payload?.role === 'anon') {
+      return;
+    }
+    violations.push(`  line ${i + 1}: value of "${name}" looks like a JWT (possible service_role / legacy secret)`);
   }
 });
 
