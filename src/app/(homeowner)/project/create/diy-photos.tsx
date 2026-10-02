@@ -10,9 +10,9 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useNavigation } from '@react-navigation/native';
-import { launchImageLibrary } from 'react-native-image-picker';
 import Ionicons from 'react-native-vector-icons/Ionicons';
 import { useDIYWizardStore } from '@/stores/diy-wizard.store';
+import { pickPhotosWithSource } from '@/lib/media-picker';
 import { getUploadMetadata } from '@/lib/supabase/storage';
 import { GlassButton, GradientBackground } from '@/components/ui';
 import { Colors, Radius, Spacing, Typography } from '@/constants/theme';
@@ -26,51 +26,45 @@ export default function DIYPhotosScreen() {
   const [submitting, setSubmitting] = useState(false);
 
   const pickPhotos = async () => {
-    const result = await launchImageLibrary({
-      mediaType: 'photo',
-      selectionLimit: MAX_PHOTOS - photos.length,
-      quality: 1,
+    const assets = await pickPhotosWithSource({
+      selectionLimit: Math.max(1, MAX_PHOTOS - photos.length),
+      quality: 0.3,
+      maxWidth: 1024,
+      maxHeight: 1024,
       includeBase64: true,
-      assetRepresentationMode: 'compatible',
     });
+    if (!assets) return;
 
-    if (result.errorCode) {
-      Alert.alert('Photo picker failed', result.errorMessage ?? 'Please try selecting your photos again.');
-      return;
+    let skipped = 0;
+    for (const asset of assets) {
+      try {
+        const upload = getUploadMetadata(asset);
+        if (!asset.base64) {
+          skipped += 1;
+          continue;
+        }
+        const id = `diy_${Date.now()}_${Math.random()}`;
+        addPhoto({
+          id,
+          uri: upload.uri,
+          base64: asset.base64,
+          fileName: asset.fileName ?? undefined,
+          extension: upload.extension,
+          contentType: upload.contentType,
+          status: 'done',
+          progress: 100,
+          url: '',
+        }, asset.base64);
+      } catch {
+        skipped += 1;
+      }
     }
 
-    if (!result.didCancel && result.assets) {
-      let skipped = 0;
-      for (const asset of result.assets) {
-        try {
-          const upload = getUploadMetadata(asset);
-          if (!asset.base64) {
-            skipped += 1;
-            continue;
-          }
-          const id = `diy_${Date.now()}_${Math.random()}`;
-          addPhoto({
-            id,
-            uri: upload.uri,
-            base64: asset.base64,
-            fileName: asset.fileName ?? undefined,
-            extension: upload.extension,
-            contentType: upload.contentType,
-            status: 'done',
-            progress: 100,
-            url: '',
-          }, asset.base64);
-        } catch {
-          skipped += 1;
-        }
-      }
-
-      if (skipped > 0) {
-        Alert.alert(
-          'Some photos were skipped',
-          'WalkerAI could not read one or more selected photos. Please re-select them from your camera roll.'
-        );
-      }
+    if (skipped > 0) {
+      Alert.alert(
+        'Some photos were skipped',
+        'WalkerAI could not read one or more selected photos. Please re-select them or take them again.',
+      );
     }
   };
 

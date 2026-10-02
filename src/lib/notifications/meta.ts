@@ -37,10 +37,10 @@ const META: Record<string, NotificationDisplayMeta> = {
   },
   quote_submitted: {
     emoji: '📄',
-    title: 'Your quote is ready',
+    title: 'Your project estimate is ready',
     timelineIcon: 'document-text-outline',
     color: '#F59E0B',
-    timelineLabel: 'New quote received from contractor',
+    timelineLabel: 'Project estimate available',
   },
   quote_approved: {
     emoji: '✅',

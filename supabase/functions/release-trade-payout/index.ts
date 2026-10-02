@@ -284,7 +284,7 @@ Deno.serve(async (req) => {
       .select(`
         id, trade_type, status, payout_cents, payout_status, completion_submitted_at,
         stripe_transfer_id, estimated_cost_min, estimated_cost_max, assigned_company_id, work_order,
-        project:projects ( id, homeowner_id, status, payment_model, payment_status ),
+        project:projects ( id, homeowner_id, status, payment_model, payment_status, admin_paused ),
         company:companies ( id, user_id, stripe_account_id, province )
       `)
       .eq('id', slot_id)
@@ -295,6 +295,7 @@ Deno.serve(async (req) => {
     const project = (Array.isArray(slot.project) ? slot.project[0] : slot.project) as {
       id: string; homeowner_id: string; status: string;
       payment_model: string | null; payment_status: string | null;
+      admin_paused?: boolean | null;
     } | null;
     const company = (Array.isArray(slot.company) ? slot.company[0] : slot.company) as {
       id: string; user_id: string; stripe_account_id: string | null; province: string | null;
@@ -315,6 +316,12 @@ Deno.serve(async (req) => {
     // Only the homeowner can release.
     if (project.homeowner_id !== user.id) {
       return jsonResponse({ error: 'Forbidden' }, 403);
+    }
+
+    if (project.admin_paused) {
+      return jsonResponse({
+        error: 'Payment release is restricted by Walker AI admin. Contact support to release the hold.',
+      }, 400);
     }
 
     // No release while a dispute is active on the project.

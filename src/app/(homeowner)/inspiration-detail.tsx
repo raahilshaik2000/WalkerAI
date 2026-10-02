@@ -3,11 +3,14 @@ import {
   Dimensions,
   FlatList,
   Image,
+  Modal,
   NativeScrollEvent,
   NativeSyntheticEvent,
+  Platform,
   ScrollView,
   StyleSheet,
   Text,
+  TouchableOpacity,
   View,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -26,6 +29,8 @@ export default function InspirationDetailScreen() {
   const route = useRoute<any>();
   const item = route.params?.item as InspirationItem | undefined;
   const [activeIndex, setActiveIndex] = useState(0);
+  const [fullScreenVisible, setFullScreenVisible] = useState(false);
+  const [fullScreenIndex, setFullScreenIndex] = useState(0);
 
   if (!item) {
     return (
@@ -73,8 +78,16 @@ export default function InspirationDetailScreen() {
               showsHorizontalScrollIndicator={false}
               onScroll={onScroll}
               scrollEventThrottle={16}
-              renderItem={({ item: uri }) => (
-                <Image source={{ uri }} style={styles.heroImage} />
+              renderItem={({ item: uri, index: imgIndex }) => (
+                <TouchableOpacity
+                  activeOpacity={0.95}
+                  onPress={() => {
+                    setFullScreenIndex(imgIndex);
+                    setFullScreenVisible(true);
+                  }}
+                >
+                  <Image source={{ uri }} style={styles.heroImage} />
+                </TouchableOpacity>
               )}
             />
             <LinearGradient
@@ -88,7 +101,16 @@ export default function InspirationDetailScreen() {
               <AnimatedPressable style={styles.iconBtn} haptic onPress={() => navigation.goBack()}>
                 <Ionicons name="arrow-back" size={20} color="#fff" />
               </AnimatedPressable>
-              <View style={styles.iconBtnSpacer} />
+              <TouchableOpacity
+                style={styles.iconBtn}
+                onPress={() => {
+                  setFullScreenIndex(activeIndex);
+                  setFullScreenVisible(true);
+                }}
+                activeOpacity={0.8}
+              >
+                <Ionicons name="expand-outline" size={18} color="#fff" />
+              </TouchableOpacity>
             </SafeAreaView>
 
             {/* Page dots */}
@@ -135,6 +157,67 @@ export default function InspirationDetailScreen() {
             </View>
           </View>
         </ScrollView>
+
+        {/* Full-Screen Image Viewer Modal */}
+        <Modal
+          visible={fullScreenVisible}
+          transparent={false}
+          animationType="fade"
+          onRequestClose={() => setFullScreenVisible(false)}
+        >
+          <View style={styles.fullScreenContainer}>
+            <FlatList
+              data={images}
+              keyExtractor={(_, i) => `fullscreen-img-${i}`}
+              horizontal
+              pagingEnabled
+              showsHorizontalScrollIndicator={false}
+              initialScrollIndex={fullScreenIndex}
+              getItemLayout={(_, index) => ({
+                length: SCREEN_WIDTH,
+                offset: SCREEN_WIDTH * index,
+                index,
+              })}
+              onMomentumScrollEnd={(e) => {
+                const idx = Math.round(e.nativeEvent.contentOffset.x / SCREEN_WIDTH);
+                setFullScreenIndex(idx);
+              }}
+              renderItem={({ item: uri }) => (
+                <TouchableOpacity
+                  activeOpacity={1}
+                  onPress={() => setFullScreenVisible(false)}
+                  style={styles.fullScreenImageWrapper}
+                >
+                  <Image source={{ uri }} style={styles.fullScreenImage} resizeMode="contain" />
+                </TouchableOpacity>
+              )}
+            />
+
+            <View style={styles.fullScreenHeader} pointerEvents="auto">
+              <TouchableOpacity
+                style={styles.fullScreenCloseBtn}
+                onPress={() => setFullScreenVisible(false)}
+                activeOpacity={0.7}
+                hitSlop={{ top: 20, bottom: 20, left: 20, right: 20 }}
+              >
+                <Ionicons name="close" size={26} color="#fff" />
+              </TouchableOpacity>
+              {images.length > 1 && (
+                <Text style={styles.fullScreenCounter}>
+                  {fullScreenIndex + 1} / {images.length}
+                </Text>
+              )}
+              <TouchableOpacity
+                style={styles.fullScreenDoneBtn}
+                onPress={() => setFullScreenVisible(false)}
+                activeOpacity={0.7}
+                hitSlop={{ top: 20, bottom: 20, left: 20, right: 20 }}
+              >
+                <Text style={styles.fullScreenDoneText}>Done</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </Modal>
       </View>
     </GradientBackground>
   );
@@ -294,5 +377,67 @@ const styles = StyleSheet.create({
     color: Colors.text.secondary,
     lineHeight: 20,
     textAlign: 'center',
+  },
+
+  // Full-screen Image Viewer
+  fullScreenContainer: {
+    flex: 1,
+    backgroundColor: '#000',
+  },
+  fullScreenHeader: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    zIndex: 9999,
+    elevation: 20,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: 16,
+    paddingTop: Platform.OS === 'ios' ? 56 : 28,
+    paddingBottom: 14,
+    backgroundColor: 'rgba(0,0,0,0.65)',
+  },
+  fullScreenCloseBtn: {
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    backgroundColor: 'rgba(255,255,255,0.25)',
+    alignItems: 'center',
+    justifyContent: 'center',
+    zIndex: 10000,
+    elevation: 25,
+  },
+  fullScreenDoneBtn: {
+    paddingHorizontal: 14,
+    paddingVertical: 8,
+    borderRadius: 16,
+    backgroundColor: 'rgba(255,255,255,0.25)',
+    alignItems: 'center',
+    justifyContent: 'center',
+    zIndex: 10000,
+    elevation: 25,
+  },
+  fullScreenDoneText: {
+    color: '#fff',
+    fontSize: 14,
+    fontWeight: '700',
+  },
+  fullScreenCounter: {
+    fontSize: 15,
+    fontWeight: '600',
+    color: '#fff',
+  },
+  fullScreenImageWrapper: {
+    width: SCREEN_WIDTH,
+    height: SCREEN_HEIGHT,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#000',
+  },
+  fullScreenImage: {
+    width: SCREEN_WIDTH,
+    height: '100%',
   },
 });

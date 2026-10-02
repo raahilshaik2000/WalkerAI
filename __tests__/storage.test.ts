@@ -59,7 +59,10 @@ describe('storage upload metadata', () => {
     expect(source).toContain('upsert?: boolean;');
     expect(source).toContain('const retries = Math.max(1, options.retries ?? 3);');
     expect(source).toContain('upsert: options.upsert ?? false');
+    expect(source).toContain('uniquePathOnRetry?: boolean');
+    expect(source).toContain('function attemptStoragePath');
     expect(source).toContain('function isRetriableStorageError(error: unknown): boolean');
     expect(source).toContain('function isAlreadyUploadedError(error: unknown): boolean');
+    expect(source).toContain('export async function uploadPickerAsset');
   });
 });

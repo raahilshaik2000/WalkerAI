@@ -1,5 +1,6 @@
 import { Linking, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import { useNavigation } from '@react-navigation/native';
 import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
 import { Colors, Spacing, Typography } from '@/constants/theme';
 import { GlassCard, GradientBackground } from '@/components/ui';
@@ -12,6 +13,8 @@ const STEPS = [
 ];
 
 export default function PendingVerificationScreen() {
+  const navigation = useNavigation<any>();
+
   return (
     <GradientBackground glow="center">
       <SafeAreaView style={styles.safe}>
@@ -33,8 +36,16 @@ export default function PendingVerificationScreen() {
             ))}
           </GlassCard>
 
+          <TouchableOpacity
+            style={styles.refreshBtn}
+            onPress={() => navigation.navigate('CompanyTabs')}
+            activeOpacity={0.85}
+          >
+            <Text style={styles.refreshBtnText}>Check approval status</Text>
+          </TouchableOpacity>
+
           <Text style={styles.note}>
-            Questions? Email{' '}
+            Still waiting or need to update documents? Email{' '}
           </Text>
           <TouchableOpacity onPress={() => Linking.openURL('mailto:support@walkerai.ca')}>
             <Text style={styles.emailLink}>support@walkerai.ca</Text>
@@ -76,4 +87,14 @@ const styles = StyleSheet.create({
   checkText: { ...Typography.body },
   note: { ...Typography.caption, textAlign: 'center' },
   emailLink: { color: Colors.accent, fontSize: 13, fontWeight: '600', marginTop: 4 },
+  refreshBtn: {
+    minHeight: 48,
+    paddingHorizontal: 24,
+    borderRadius: 14,
+    backgroundColor: Colors.accent,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: Spacing.md,
+  },
+  refreshBtnText: { color: Colors.accentFg, fontSize: 15, fontWeight: '800' },
 });

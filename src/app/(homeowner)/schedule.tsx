@@ -1,19 +1,15 @@
-import { useCallback, useEffect, useState } from 'react';
-import { ActivityIndicator, RefreshControl, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { useState } from 'react';
+import { RefreshControl, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import Ionicons from 'react-native-vector-icons/Ionicons';
 import { useNavigation } from '@react-navigation/native';
-import { supabase } from '@/lib/supabase/client';
 import { formatAppSafeErrorMessage } from '@/lib/supabase/functions';
 import { useAuthStore } from '@/stores/auth.store';
 import { formatCad, formatStatusLabel } from '@/lib/formatters';
-import {
-  groupHomeownerScheduleItems,
-  mapHomeownerScheduleItems,
-  type HomeownerScheduleItem,
-  type ScheduleProject,
-} from '@/lib/homeowner-schedule';
-import { GlassCard, GradientBackground, StatusBadge } from '@/components/ui';
+import { groupHomeownerScheduleItems } from '@/lib/homeowner-schedule';
+import { useHomeownerSchedule } from '@/lib/homeowner-data';
+import { useSilentFocusRefetch } from '@/lib/silent-focus-refetch';
+import { GlassButton, GlassCard, GradientBackground, ListItemSkeleton, StatusBadge } from '@/components/ui';
 import { Colors, Radius, Spacing } from '@/constants/theme';
 
 function formatDate(value: string) {
@@ -30,82 +26,21 @@ function statusVariant(status: string) {
 export default function ScheduleScreen() {
   const navigation = useNavigation<any>();
   const { user } = useAuthStore();
-  const [items, setItems] = useState<HomeownerScheduleItem[]>([]);
-  const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
-  const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  const scheduleQuery = useHomeownerSchedule(user?.id);
+  useSilentFocusRefetch(scheduleQuery.refetch);
+  const items = scheduleQuery.data ?? [];
+  const showSkeleton = !!user?.id && !scheduleQuery.data && scheduleQuery.isLoading;
+  const errorMessage = !user?.id
+    ? 'Sign in again to view your schedule.'
+    : scheduleQuery.error
+      ? formatAppSafeErrorMessage(scheduleQuery.error, 'Could not load schedule.')
+      : null;
 
-  const loadSchedule = useCallback(async () => {
-    if (!user) {
-      setItems([]);
-      setErrorMessage('Sign in again to view your schedule.');
-      setLoading(false);
-      setRefreshing(false);
-      return;
-    }
-
-    setErrorMessage(null);
-    const { data: projectsData, error: projectsError } = await supabase
-      .from('projects')
-      .select('id, address, city, room_type')
-      .eq('homeowner_id', user.id)
-      .not('status', 'eq', 'diy_saved')
-      .order('created_at', { ascending: false });
-
-    if (projectsError) {
-      setItems([]);
-      setErrorMessage(formatAppSafeErrorMessage(projectsError, 'Could not load schedule.'));
-      setLoading(false);
-      setRefreshing(false);
-      return;
-    }
-
-    const projects = (projectsData ?? []) as ScheduleProject[];
-    const projectIds = projects.map((project) => project.id);
-    if (projectIds.length === 0) {
-      setItems([]);
-      setLoading(false);
-      setRefreshing(false);
-      return;
-    }
-
-    const [slotsResult, milestonesResult] = await Promise.all([
-      supabase
-        .from('project_slots')
-        .select('id, project_id, trade_type, status, scheduled_start_date, scheduled_end_date, companies(name)')
-        .in('project_id', projectIds)
-        .not('scheduled_start_date', 'is', null)
-        .order('scheduled_start_date', { ascending: true }),
-      supabase
-        .from('milestones')
-        .select('id, title, amount, status, due_date, quote:quotes!inner(project_id, status)')
-        .in('quote.project_id', projectIds)
-        .eq('quote.status', 'approved')
-        .not('due_date', 'is', null)
-        .not('status', 'eq', 'paid')
-        .order('due_date', { ascending: true }),
-    ]);
-
-    if (slotsResult.error || milestonesResult.error) {
-      setItems([]);
-      setErrorMessage(formatAppSafeErrorMessage(slotsResult.error ?? milestonesResult.error, 'Could not load schedule.'));
-      setLoading(false);
-      setRefreshing(false);
-      return;
-    }
-
-    setItems(mapHomeownerScheduleItems(projects, (slotsResult.data ?? []) as any[], (milestonesResult.data ?? []) as any[]));
-    setLoading(false);
-    setRefreshing(false);
-  }, [user]);
-
-  useEffect(() => {
-    loadSchedule();
-  }, [loadSchedule]);
-
-  const onRefresh = () => {
+  const onRefresh = async () => {
     setRefreshing(true);
-    loadSchedule();
+    await scheduleQuery.refetch();
+    setRefreshing(false);
   };
 
   const groups = groupHomeownerScheduleItems(items);
@@ -121,9 +56,11 @@ export default function ScheduleScreen() {
           <View style={{ width: 36 }} />
         </View>
 
-        {loading ? (
-          <View style={styles.empty}>
-            <ActivityIndicator color={Colors.accent} />
+        {showSkeleton ? (
+          <View style={styles.skeletonWrap}>
+            <ListItemSkeleton style={styles.skeletonItem} />
+            <ListItemSkeleton style={styles.skeletonItem} />
+            <ListItemSkeleton style={styles.skeletonItem} />
           </View>
         ) : (
           <ScrollView
@@ -136,6 +73,7 @@ export default function ScheduleScreen() {
                 <Ionicons name="alert-circle-outline" size={48} color={Colors.text.tertiary} />
                 <Text style={styles.emptyTitle}>Could not load schedule</Text>
                 <Text style={styles.emptySub}>{errorMessage}</Text>
+                <GlassButton label="Try Again" onPress={() => { void scheduleQuery.refetch(); }} size="sm" style={{ marginTop: 8 }} />
               </View>
             ) : groups.length === 0 ? (
               <View style={styles.emptyCard}>
@@ -199,6 +137,8 @@ const styles = StyleSheet.create({
   backBtn: { width: 36, height: 36, borderRadius: 18, backgroundColor: 'rgba(255,255,255,0.08)', alignItems: 'center', justifyContent: 'center' },
   headerTitle: { fontSize: 20, fontWeight: '700', color: '#fff' },
   empty: { flex: 1, alignItems: 'center', justifyContent: 'center', paddingHorizontal: 32, gap: 10 },
+  skeletonWrap: { paddingHorizontal: 16, paddingTop: 8 },
+  skeletonItem: { marginBottom: 12 },
   scroll: { flexGrow: 1, paddingHorizontal: 16, paddingBottom: 120 },
   emptyCard: { flex: 1, minHeight: 420, alignItems: 'center', justifyContent: 'center', paddingHorizontal: 16, gap: 10 },
   emptyTitle: { fontSize: 16, fontWeight: '600', color: '#fff' },

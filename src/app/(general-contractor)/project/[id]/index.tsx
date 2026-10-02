@@ -1,4 +1,4 @@
-import { useCallback, useState } from 'react';
+import { useCallback, useRef, useState } from 'react';
 import {
   Alert,
   RefreshControl,
@@ -10,7 +10,6 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useFocusEffect, useNavigation, useRoute } from '@react-navigation/native';
-import { launchImageLibrary } from 'react-native-image-picker';
 import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
 import { supabase } from '@/lib/supabase/client';
 import { formatAppSafeErrorMessage } from '@/lib/supabase/functions';
@@ -19,6 +18,7 @@ import { formatSignedCadCents, parseNonNegativeCadToCents, parseSignedCadToCents
 import { calculateGcMarkup } from '@/lib/gc-markup';
 import { formatGcProjectType } from '@/lib/gc-project-type';
 import { getRequiredStringParam } from '@/lib/navigation-params';
+import { pickPhotosWithSource } from '@/lib/media-picker';
 import { formatTradeLabel } from '@/lib/trade-labels';
 import {
   GENERAL_CONTRACTOR_READINESS_SELECT,
@@ -27,7 +27,7 @@ import {
 } from '@/lib/general-contractor';
 import { getUploadMetadata, uploadFile } from '@/lib/supabase/storage';
 import { Colors, Spacing, Typography } from '@/constants/theme';
-import { GradientBackground, GlassButton, GlassCard, GlassInput, StatusBadge } from '@/components/ui';
+import { CardSkeleton, GradientBackground, GlassButton, GlassCard, GlassInput, StatusBadge } from '@/components/ui';
 import { TradeMetricStrip } from '@/components/company/TradeUI';
 import type { ApprovalRequestType } from '@/constants/enums';
 
@@ -37,6 +37,7 @@ interface ProjectDetail {
   city: string | null;
   room_type: string | null;
   status: string;
+  admin_paused?: boolean | null;
   ai_cost_min: number | null;
   ai_cost_max: number | null;
   questionnaire_answers: Record<string, unknown> | null;
@@ -174,6 +175,7 @@ export default function GeneralContractorProjectDetail() {
   const [gcProfileComplete, setGcProfileComplete] = useState(false);
   const [gcReady, setGcReady] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  const hasLoadedRef = useRef(false);
 
   const clearProjectDetailState = useCallback(() => {
     setProject(null);
@@ -209,6 +211,7 @@ export default function GeneralContractorProjectDetail() {
 
   const fetchData = useCallback(async () => {
     try {
+      if (!hasLoadedRef.current) setLoading(true);
       setErrorMessage(null);
       const currentUser = (await supabase.auth.getUser()).data.user;
       if (!currentUser?.id) {
@@ -225,10 +228,10 @@ export default function GeneralContractorProjectDetail() {
       setGcProfileComplete(nextGeneralContractorOnboardingRoute(gc) === null);
       setGcReady(isGeneralContractorReadyForProjectControls(gc));
 
-      const [projectResult, slotResult, changeOrderResult, approvalResult] = await Promise.all([
+      const [projectResultRaw, slotResult, changeOrderResult, approvalResult] = await Promise.all([
         supabase
           .from('projects')
-          .select('id, address, city, room_type, status, ai_cost_min, ai_cost_max, questionnaire_answers, created_at')
+          .select('id, address, city, room_type, status, admin_paused, ai_cost_min, ai_cost_max, questionnaire_answers, created_at')
           .eq('id', projectId)
           .maybeSingle(),
         supabase
@@ -254,6 +257,15 @@ export default function GeneralContractorProjectDetail() {
           .eq('requested_by_gc_id', gc.id)
           .order('created_at', { ascending: false }),
       ]);
+
+      let projectResult = projectResultRaw;
+      if (projectResult.error && /admin_paused/i.test(projectResult.error.message)) {
+        projectResult = await supabase
+          .from('projects')
+          .select('id, address, city, room_type, status, ai_cost_min, ai_cost_max, questionnaire_answers, created_at')
+          .eq('id', projectId)
+          .maybeSingle();
+      }
 
       if (projectResult.error) throw projectResult.error;
       if (slotResult.error) throw slotResult.error;
@@ -281,8 +293,9 @@ export default function GeneralContractorProjectDetail() {
       setProposedConciergeFeePct(assignmentRow?.concierge_fee_pct != null ? Number(assignmentRow.concierge_fee_pct).toFixed(0) : '');
     } catch (err) {
       setErrorMessage(formatAppSafeErrorMessage(err, 'Could not load managed project.'));
-      clearProjectDetailState();
+      if (!hasLoadedRef.current) clearProjectDetailState();
     } finally {
+      hasLoadedRef.current = true;
       setLoading(false);
       setRefreshing(false);
     }
@@ -561,19 +574,17 @@ export default function GeneralContractorProjectDetail() {
     }
 
     try {
-      const result = await launchImageLibrary({
-        mediaType: 'photo',
+      const assets = await pickPhotosWithSource({
         quality: 0.8,
         selectionLimit: 1,
-        assetRepresentationMode: 'compatible',
       });
-      if (result.didCancel || !result.assets?.[0]) return;
+      if (!assets?.[0]) return;
 
       setUploadingExternalDocSlotId(slot.id);
       const currentUser = (await supabase.auth.getUser()).data.user;
       if (!currentUser?.id) throw new Error('Please sign in again before uploading trade documents.');
 
-      const upload = getUploadMetadata(result.assets[0]);
+      const upload = getUploadMetadata(assets[0]);
       const path = `external-trades/${currentUser.id}/${projectId}/${slot.id}-${Date.now()}.${upload.extension}`;
       const { storagePath } = await uploadFile('company-docs', path, upload.uri, upload.contentType);
       const { error } = await supabase.rpc('add_external_trade_document', {
@@ -760,11 +771,21 @@ export default function GeneralContractorProjectDetail() {
               <Text style={styles.bodyText}>{errorMessage}</Text>
             </GlassCard>
           ) : loading ? (
-            <GlassCard style={styles.card}>
-              <Text style={styles.bodyText}>Loading managed project...</Text>
-            </GlassCard>
+            <View style={{ gap: 12 }}>
+              <CardSkeleton />
+              <CardSkeleton />
+            </View>
           ) : (
             <>
+              {project?.admin_paused ? (
+                <GlassCard style={styles.card}>
+                  <Text style={styles.sectionTitle}>Project on admin hold</Text>
+                  <Text style={styles.bodyText}>
+                    Walker AI admin has paused this project. Payouts and some actions stay blocked until the hold is lifted.
+                  </Text>
+                </GlassCard>
+              ) : null}
+
               <TradeMetricStrip
                 items={[
                   { label: 'Estimate', value: estimate, tone: project?.ai_cost_min || project?.ai_cost_max ? 'success' : 'muted' },

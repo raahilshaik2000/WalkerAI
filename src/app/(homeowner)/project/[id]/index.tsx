@@ -17,7 +17,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { useNavigation } from '@react-navigation/native'
 import { useRoute } from '@react-navigation/native';
 import Ionicons from 'react-native-vector-icons/Ionicons';
-import { launchImageLibrary } from 'react-native-image-picker';
+import { pickPhotosWithSource } from '@/lib/media-picker';
 import { supabase } from '@/lib/supabase/client';
 import { isMissingSupabaseSchemaObjectError } from '@/lib/supabase/errors';
 import { formatAppSafeErrorMessage, formatSupabaseFunctionError } from '@/lib/supabase/functions';
@@ -28,7 +28,7 @@ import { formatGcProjectType } from '@/lib/gc-project-type';
 import { readPersistedSurfaceSelections, surfaceSelectionSourceLabel } from '@/lib/room-customizer';
 import { formatTradeLabel } from '@/lib/trade-labels';
 import { Colors, Radius, Spacing, Typography } from '@/constants/theme';
-import { GlassCard, GradientBackground, StatusBadge, CardSkeleton } from '@/components/ui';
+import { GlassButton, GlassCard, GradientBackground, StatusBadge, CardSkeleton } from '@/components/ui';
 import type { ProjectStatus } from '@/constants/enums';
 
 interface Project {
@@ -37,6 +37,7 @@ interface Project {
   room_type: string | null;
   status: ProjectStatus;
   scheduling_status: 'pending_homeowner' | 'confirmed' | null;
+  payment_status?: 'unpaid' | 'funded' | 'refunded' | null;
   ai_cost_min: number | null;
   ai_cost_max: number | null;
   questionnaire_answers: Record<string, unknown> | null;
@@ -48,6 +49,16 @@ interface Project {
   } | null;
   project_photos: Array<{ url: string }>;
   renders: Array<{ url: string; selected?: boolean | null }>;
+}
+
+export interface SubmittedQuoteSummary {
+  id: string;
+  slot_id: string | null;
+  company_id: string;
+  company_name: string | null;
+  total_amount: number;
+  status: 'pending' | 'approved';
+  submitted_at: string | null;
 }
 
 interface GcProjectContext {
@@ -203,6 +214,7 @@ export default function ProjectDetailScreen() {
   const [project, setProject] = useState<Project | null>(null);
   const [gcProjectContext, setGcProjectContext] = useState<GcProjectContext | null>(null);
   const [assignedTradeSlots, setAssignedTradeSlots] = useState<AssignedTradeSlot[]>([]);
+  const [submittedQuotes, setSubmittedQuotes] = useState<SubmittedQuoteSummary[]>([]);
   const [loading, setLoading] = useState(true);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [redispatching, setRedispatching] = useState(false);
@@ -216,15 +228,16 @@ export default function ProjectDetailScreen() {
       setProject(null);
       setGcProjectContext(null);
       setAssignedTradeSlots([]);
+      setSubmittedQuotes([]);
       setLoading(false);
       return;
     }
 
-    const [projectResult, slotsResult, gcContextResult] = await Promise.all([
+    const [projectResult, slotsResult, gcContextResult, quotesResult] = await Promise.all([
       supabase
         .from('projects')
         .select(`
-          id, address, room_type, status, scheduling_status, ai_cost_min, ai_cost_max, questionnaire_answers, created_at, assigned_company_id,
+          id, address, room_type, status, scheduling_status, ai_cost_min, ai_cost_max, payment_status, questionnaire_answers, created_at, assigned_company_id,
           assigned_company:companies!assigned_company_id ( name, rating, total_reviews ),
           project_photos ( url ),
           renders ( url, selected )
@@ -249,6 +262,15 @@ export default function ProjectDetailScreen() {
         .order('created_at', { ascending: false })
         .limit(1)
         .maybeSingle(),
+      supabase
+        .from('quotes')
+        .select(`
+          id, slot_id, company_id, total_amount, status, submitted_at,
+          companies(name)
+        `)
+        .eq('project_id', id)
+        .in('status', ['pending', 'approved'])
+        .order('submitted_at', { ascending: false }),
     ]);
 
     if (projectResult.error) {
@@ -256,6 +278,7 @@ export default function ProjectDetailScreen() {
       setProject(null);
       setGcProjectContext(null);
       setAssignedTradeSlots([]);
+      setSubmittedQuotes([]);
       setLoading(false);
       return;
     }
@@ -264,6 +287,7 @@ export default function ProjectDetailScreen() {
       setProject(null);
       setGcProjectContext(null);
       setAssignedTradeSlots([]);
+      setSubmittedQuotes([]);
       setLoading(false);
       return;
     }
@@ -273,6 +297,7 @@ export default function ProjectDetailScreen() {
         setProject(null);
         setGcProjectContext(null);
         setAssignedTradeSlots([]);
+        setSubmittedQuotes([]);
         setLoading(false);
         return;
       }
@@ -280,8 +305,23 @@ export default function ProjectDetailScreen() {
 
     const row = projectResult.data as ProjectRow | null;
     const slotRows = (slotsResult.data ?? []) as AssignedTradeSlotRow[];
+    const rawQuotes = (quotesResult.data ?? []) as any[];
+    const parsedQuotes: SubmittedQuoteSummary[] = rawQuotes.map((q) => {
+      const company = Array.isArray(q.companies) ? q.companies[0] : q.companies;
+      return {
+        id: q.id,
+        slot_id: q.slot_id ?? null,
+        company_id: q.company_id,
+        company_name: company?.name ?? null,
+        total_amount: q.total_amount ?? 0,
+        status: q.status ?? 'pending',
+        submitted_at: q.submitted_at ?? null,
+      };
+    });
+
     setErrorMessage(null);
     setGcProjectContext(gcContextResult.error ? null : (gcContextResult.data as GcProjectContext | null) ?? null);
+    setSubmittedQuotes(parsedQuotes);
     setProject(row
       ? {
           ...row,
@@ -309,10 +349,16 @@ export default function ProjectDetailScreen() {
 
     fetchProject();
 
-    // Realtime subscription for status changes
+    // Realtime subscription for project, quotes, and slot updates
     const channel = supabase
       .channel(`project:${id}`)
-      .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'projects', filter: `id=eq.${id}` }, () => {
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'projects', filter: `id=eq.${id}` }, () => {
+        fetchProject();
+      })
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'quotes', filter: `project_id=eq.${id}` }, () => {
+        fetchProject();
+      })
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'project_slots', filter: `project_id=eq.${id}` }, () => {
         fetchProject();
       })
       .subscribe();
@@ -374,21 +420,27 @@ export default function ProjectDetailScreen() {
   };
 
   const handleAddPhotos = async () => {
-    let result;
+    let assets;
     try {
-      result = await launchImageLibrary({ mediaType: 'photo', quality: 0.3, includeBase64: true, selectionLimit: 8 });
+      assets = await pickPhotosWithSource({
+        selectionLimit: 8,
+        quality: 0.3,
+        includeBase64: true,
+        maxWidth: 1024,
+        maxHeight: 1024,
+      });
     } catch (err) {
       Alert.alert('Could not open photos', formatAppSafeErrorMessage(err, 'Please try again.'));
       return;
     }
 
-    if (result.didCancel || !result.assets || result.assets.length === 0) return;
+    if (!assets || assets.length === 0) return;
 
     setAddingPhotos(true);
     try {
       const uploadTimestamp = Date.now();
-      for (let i = 0; i < result.assets.length; i += 1) {
-        const asset = result.assets[i];
+      for (let i = 0; i < assets.length; i += 1) {
+        const asset = assets[i];
         if (!asset.base64) continue;
 
         const rawType = asset.type ?? 'image/jpeg';
@@ -435,10 +487,20 @@ export default function ProjectDetailScreen() {
 
   if (!project) {
     return (
-      <GradientBackground>
+      <GradientBackground glow="top-right">
         <SafeAreaView style={styles.safe}>
+          <View style={styles.header}>
+            <TouchableOpacity
+              onPress={() => (navigation.canGoBack() ? navigation.goBack() : navigation.reset({ index: 0, routes: [{ name: 'HomeownerTabs' }] }))}
+              style={styles.backBtn}
+            >
+              <Text style={styles.backText}>← Back</Text>
+            </TouchableOpacity>
+          </View>
           <View style={styles.center}>
-            <Text style={Typography.h2}>{errorMessage ?? 'Project not found'}</Text>
+            <Ionicons name="alert-circle-outline" size={42} color={Colors.text.tertiary} />
+            <Text style={[Typography.h2, { marginTop: 12, textAlign: 'center' }]}>{errorMessage ?? 'Project not found'}</Text>
+            <GlassButton label="Try Again" onPress={() => { void fetchProject(); }} size="sm" style={{ marginTop: 16 }} />
           </View>
         </SafeAreaView>
       </GradientBackground>
@@ -446,6 +508,12 @@ export default function ProjectDetailScreen() {
   }
 
   const isDispatching = project.status === 'dispatching';
+  const pendingQuotes = submittedQuotes.filter((q) => q.status === 'pending');
+  const hasPendingQuote = pendingQuotes.length > 0;
+  const isQuoting = hasPendingQuote || project.status === 'quoting';
+  const showQuoteCard =
+    (['accepted', 'quoting', 'scheduling'].includes(project.status) || hasPendingQuote) &&
+    project.payment_status !== 'funded';
   const projectTitle = formatGcProjectType(gcProjectContext?.project_type, project.room_type);
   const shouldShowScheduleAction =
     project.status === 'scheduling' ||
@@ -460,6 +528,7 @@ export default function ProjectDetailScreen() {
       ? [{ label: 'Schedule', iconName: 'calendar-outline', screen: 'ProjectSchedule' }]
       : []),
     { label: 'Permits',    iconName: 'business-outline', screen: 'Permits'    },
+    { label: 'Site Check', iconName: 'clipboard-outline', screen: 'InspectionAdjustment' },
     { label: 'Warranties', iconName: 'shield-checkmark-outline', screen: 'Warranties' },
     { label: 'Changes',    iconName: 'create-outline', screen: 'ChangeOrders' },
     ...(project.status === 'completed'
@@ -471,9 +540,11 @@ export default function ProjectDetailScreen() {
     <GradientBackground glow="top-right">
       <SafeAreaView style={styles.safe}>
         <ScrollView contentContainerStyle={styles.scroll} showsVerticalScrollIndicator={false}>
-          {/* Header */}
           <View style={styles.header}>
-            <TouchableOpacity onPress={() => navigation.goBack()} style={styles.backBtn}>
+            <TouchableOpacity
+              onPress={() => (navigation.canGoBack() ? navigation.goBack() : navigation.reset({ index: 0, routes: [{ name: 'HomeownerTabs' }] }))}
+              style={styles.backBtn}
+            >
               <Text style={styles.backText}>← Back</Text>
             </TouchableOpacity>
             <View style={styles.headerRight}>
@@ -493,8 +564,8 @@ export default function ProjectDetailScreen() {
             </View>
           </View>
 
-          <Text style={styles.roomType}>{projectTitle}</Text>
-          <Text style={styles.address}>{project.address}</Text>
+          <Text style={styles.roomType} numberOfLines={2}>{projectTitle}</Text>
+          <Text style={styles.address} numberOfLines={2}>{project.address}</Text>
 
           {/* Photo gallery */}
           <PhotoGallery urls={getOrderedPhotoUrls(project)} />
@@ -516,8 +587,63 @@ export default function ProjectDetailScreen() {
             </Text>
           </TouchableOpacity>
 
+          {/* Quote review and Stripe Escrow funding card */}
+          {showQuoteCard && (
+            <GlassCard style={[styles.card, styles.acceptedPaymentCard]}>
+              <View style={styles.quoteHeaderRow}>
+                <View style={[styles.quoteBadge, isQuoting ? styles.quoteBadgeOrange : styles.quoteBadgeBlue]}>
+                  <Ionicons
+                    name={isQuoting ? 'document-text-outline' : 'checkmark-circle-outline'}
+                    size={16}
+                    color={isQuoting ? '#FF6B00' : '#60A5FA'}
+                  />
+                  <Text style={[styles.quoteBadgeLabel, { color: isQuoting ? '#FF6B00' : '#60A5FA' }]}>
+                    {project.status === 'quoting' || hasPendingQuote ? 'QUOTE SUBMITTED' : 'TRADE ASSIGNED'}
+                  </Text>
+                </View>
+              </View>
+
+              <Text style={styles.paymentTitle}>
+                {project.status === 'quoting' || hasPendingQuote
+                  ? 'Your contractor has submitted their quote. Review your project breakdown to fund escrow.'
+                  : 'Your trade is ready for the next step. Review your AI Project Price before funding any work.'}
+              </Text>
+
+              {hasPendingQuote && (
+                <View style={styles.pendingQuotesSummary}>
+                  {pendingQuotes.map((q) => (
+                    <View key={q.id} style={styles.pendingQuoteRow}>
+                      <View style={{ flex: 1 }}>
+                        <Text style={styles.pendingQuoteCompany}>{q.company_name ?? 'Assigned contractor'}</Text>
+                        <Text style={styles.pendingQuoteMeta}>Quote submitted · Awaiting escrow funding</Text>
+                      </View>
+                      <Text style={styles.pendingQuoteAmount}>{formatCad(q.total_amount)}</Text>
+                    </View>
+                  ))}
+                </View>
+              )}
+
+              <Text style={styles.paymentSub}>
+                Funds are held securely in Stripe Escrow and released to each trade only after you approve their completed work.
+              </Text>
+
+              <TouchableOpacity
+                style={styles.paymentButton}
+                onPress={() => navigation.navigate('Quote', { id: project.id })}
+                activeOpacity={0.85}
+              >
+                <Ionicons name="card-outline" size={18} color="#000" />
+                <Text style={styles.paymentButtonText}>
+                  {hasPendingQuote && pendingQuotes.length === 1
+                    ? `Review & Fund Quote ${formatCad(pendingQuotes[0].total_amount)} (Stripe Escrow)`
+                    : 'Review Quote & Fund Escrow (Stripe Escrow)'}
+                </Text>
+              </TouchableOpacity>
+            </GlassCard>
+          )}
+
           {/* Dispatch radar */}
-          {isDispatching && (
+          {isDispatching && !hasPendingQuote && (
             <GlassCard style={styles.card}>
               <DispatchRadar />
               <Text style={styles.dispatchTitle}>Finding your contractor</Text>
@@ -764,4 +890,88 @@ const styles = StyleSheet.create({
     gap: 8,
   },
   actionLabel: { ...Typography.label },
+  acceptedPaymentCard: {
+    borderColor: 'rgba(255, 107, 0, 0.35)',
+    backgroundColor: 'rgba(255, 107, 0, 0.06)',
+  },
+  quoteHeaderRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 8,
+  },
+  quoteBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    borderRadius: Radius.pill,
+  },
+  quoteBadgeOrange: {
+    backgroundColor: 'rgba(255, 107, 0, 0.15)',
+  },
+  quoteBadgeBlue: {
+    backgroundColor: 'rgba(96, 165, 250, 0.15)',
+  },
+  quoteBadgeLabel: {
+    fontSize: 12,
+    fontWeight: '800',
+    letterSpacing: 0.8,
+  },
+  paymentTitle: {
+    fontSize: 16,
+    fontWeight: '700',
+    color: '#fff',
+    lineHeight: 22,
+    marginBottom: 6,
+  },
+  paymentSub: {
+    fontSize: 13,
+    color: Colors.text.secondary,
+    lineHeight: 18,
+    marginBottom: 14,
+  },
+  paymentButton: {
+    backgroundColor: Colors.accent,
+    borderRadius: Radius.item,
+    paddingVertical: 14,
+    paddingHorizontal: Spacing.md,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+  },
+  paymentButtonText: {
+    color: '#000',
+    fontWeight: '700',
+    fontSize: 15,
+  },
+  pendingQuotesSummary: {
+    marginVertical: 10,
+    padding: 10,
+    borderRadius: Radius.item,
+    backgroundColor: 'rgba(0, 0, 0, 0.25)',
+    gap: 8,
+  },
+  pendingQuoteRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+  },
+  pendingQuoteCompany: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: '#fff',
+  },
+  pendingQuoteMeta: {
+    fontSize: 12,
+    color: Colors.text.tertiary,
+    marginTop: 2,
+  },
+  pendingQuoteAmount: {
+    fontSize: 15,
+    fontWeight: '700',
+    color: '#34D399',
+    marginLeft: 8,
+  },
 });

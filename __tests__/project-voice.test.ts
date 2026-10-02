@@ -406,6 +406,8 @@ describe('project voice answer matching', () => {
     expect(terms).toContain('you decide');
     expect(terms).toContain('go back');
     expect(terms).toContain('change my last answer');
+    expect(terms).toContain('stop');
+    expect(terms).toContain('stop voice');
     expect(countertopTerms).toContain('porcelain slab');
     expect(countertopTerms).toContain('keep countertops');
   });
@@ -421,10 +423,31 @@ describe('project voice answer matching', () => {
     const source = readNativeVoiceSource();
 
     expect(source).toContain('private var silenceTimer: Timer?');
-    expect(source).toContain('private let silenceFinishDelay: TimeInterval = 1.15');
-    expect(source).toContain('self.scheduleSilenceFinishIfNeeded()');
-    expect(source).toContain('silenceTimer = Timer.scheduledTimer(withTimeInterval: silenceFinishDelay');
+    expect(source).toContain('private let silenceFinishDelay: TimeInterval = 2.6');
+    expect(source).toContain('private let bargeInSilenceDelay: TimeInterval = 1.8');
+    expect(source).toContain('private let maxListenDuration: TimeInterval = 30.0');
+    expect(source).toContain('private let minListenDuration: TimeInterval = 12.0');
+    expect(source).toContain('Do not finish on isFinal alone');
+    expect(source).toContain('scheduleSilenceFinishIfNeeded(delay:');
+    expect(source).toContain('silenceTimer = Timer.scheduledTimer(withTimeInterval: delay');
     expect(source).toContain('silenceTimer?.invalidate()');
+    expect(source).toContain('isBargeInIntent');
+    expect(source).toContain('hasUsableTranscript');
+    expect(source).toContain('mode: .default');
+    expect(source).not.toContain('mode: .voiceChat');
+    expect(source).not.toContain('if result.isFinal {\n              self.finishListening()');
+    expect(source).not.toContain('mode: .measurement');
+  });
+
+  it('keeps TTS loud while listening for stop/option barge-in', () => {
+    const source = readNativeVoiceSource();
+
+    expect(source).toContain('configureSpeakAndListenSession()');
+    expect(source).toContain('overrideOutputAudioPort(.speaker)');
+    expect(source).toContain('User can say "stop voice" / an option while the prompt is still talking');
+    expect(source).toContain('isBargeInIntent');
+    expect(source).toContain('looksLikePromptEcho');
+    expect(source).toContain('speechSynthesizer.stopSpeaking(at: .word)');
   });
 
   it('asks again before giving up on an unmatched voice answer', () => {
@@ -461,10 +484,10 @@ describe('project voice answer matching', () => {
     const voiceSource = readNativeVoiceType();
     const nativeSource = readNativeVoiceSource();
 
-    expect(voiceSource).toContain('You can say an option number, answer in your own words, ask me to repeat, or say help me choose.');
+    expect(voiceSource).toContain('Option ${index + 1}: ${label}');
     expect(nativeSource).toContain('let preferredNames = ["Samantha", "Ava", "Allison", "Joelle", "Karen", "Moira", "Daniel"]');
-    expect(nativeSource).toContain('utterance.preUtteranceDelay = 0.04');
-    expect(nativeSource).toContain('utterance.postUtteranceDelay = 0.08');
+    expect(nativeSource).toContain('utterance.preUtteranceDelay = 0.08');
+    expect(nativeSource).toContain('utterance.postUtteranceDelay = 0.12');
   });
 
   it('keeps voice walkthrough navigable without manual taps', () => {
@@ -515,8 +538,19 @@ describe('project voice answer matching', () => {
     expect(questionnaireSource).toContain("selectVoiceOption(correctedMatch.optionId, correctedTranscript, 'your correction')");
     expect(questionnaireSource).toContain('transcriptAcceptsRecommendation(confirmationTranscript)');
     expect(questionnaireSource).toContain("selectVoiceOption(recommended.id, confirmationTranscript, 'the recommendation')");
-    expect(questionnaireSource).toContain('selectVoiceOption(optionId, transcript');
     expect(questionnaireSource).toContain('await speakProjectDecisionHelp(activeQuestion);');
     expect(questionnaireSource).toContain("setVoiceTranscript('Explaining the options.');");
+  });
+
+  it('supports speak-and-listen barge-in for stop voice and options', () => {
+    const voiceSource = readNativeVoiceType();
+    const nativeSource = readNativeVoiceSource();
+
+    expect(voiceSource).toContain('speakAndListen?: (text: string, locale: string, durationSeconds: number, contextualStrings: string[])');
+    expect(voiceSource).toContain('export async function speakAndListenForProjectAnswer(');
+    expect(nativeSource).toContain('@objc func speakAndListen(');
+    expect(nativeSource).toContain('isBargeInIntent');
+    expect(nativeSource).toContain('stop voice');
+    expect(nativeSource).toContain('speechSynthesizer.stopSpeaking(at: .word)');
   });
 });

@@ -1,4 +1,4 @@
-import { useCallback, useState } from 'react';
+import { useCallback, useRef, useState } from 'react';
 import {
   Alert,
   RefreshControl,
@@ -23,7 +23,7 @@ import { formatCadCents, formatSignedCadCents } from '@/lib/currency';
 import { formatGcProjectType } from '@/lib/gc-project-type';
 import { getRequiredStringParam } from '@/lib/navigation-params';
 import { Colors, Spacing, Typography } from '@/constants/theme';
-import { GlassButton, GlassCard, GlassInput, GradientBackground, StatusBadge } from '@/components/ui';
+import { CardSkeleton, GlassButton, GlassCard, GlassInput, GradientBackground, StatusBadge } from '@/components/ui';
 
 type GcTrustProfile = Pick<GeneralContractor, 'verified' | 'business_name' | 'city' | 'province' | 'lat' | 'lng' | 'license_number' | 'license_doc_url' | 'insurance_doc_url'>;
 type AssignedGeneralContractor = Pick<GeneralContractor, 'id' | 'business_name' | 'city' | 'province' | 'lat' | 'lng' | 'rating' | 'total_reviews' | 'concierge_enabled' | 'verified' | 'license_number' | 'license_doc_url' | 'insurance_doc_url'>;
@@ -123,7 +123,11 @@ async function fetchDiscoverableGeneralContractors(projectId: string): Promise<D
   // usable, while new deployments use the server-side service-area filter.
   const fallback = await supabase
     .from('general_contractors')
-    .select('*')
+    .select(`
+      id, business_name, city, province, lat, lng, rating, total_reviews,
+      concierge_enabled, verified, license_number, license_doc_url, insurance_doc_url,
+      service_radius_km, created_at
+    `)
     .eq('verified', true)
     .order('rating', { ascending: false, nullsFirst: false })
     .order('created_at', { ascending: false });
@@ -231,6 +235,7 @@ export default function ProjectConciergeScreen() {
   const [releasingBookingId, setReleasingBookingId] = useState<string | null>(null);
   const [respondingId, setRespondingId] = useState<string | null>(null);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  const hasLoadedRef = useRef(false);
 
   const clearConciergeState = useCallback(() => {
     setProjectHomeownerId(null);
@@ -258,6 +263,7 @@ export default function ProjectConciergeScreen() {
     }
 
     try {
+      if (!hasLoadedRef.current) setLoading(true);
       setErrorMessage(null);
       const currentUser = user ?? (await supabase.auth.getUser()).data.user;
       if (!currentUser) {
@@ -266,7 +272,7 @@ export default function ProjectConciergeScreen() {
         return;
       }
 
-      const [projectResult, assignmentResult, gcList, approvalResult, paymentResult, bookingResult] = await Promise.all([
+      const [projectResult, assignmentResult, approvalResult, paymentResult, bookingResult] = await Promise.all([
         supabase
           .from('projects')
           .select('id, homeowner_id')
@@ -286,7 +292,6 @@ export default function ProjectConciergeScreen() {
           .order('created_at', { ascending: false })
           .limit(1)
           .maybeSingle(),
-        fetchDiscoverableGeneralContractors(projectId),
         supabase
           .from('project_approval_requests')
           .select('id, requested_by_gc_id, request_type, title, description, cost_delta, timeline_delta_days, status, response_note, metadata')
@@ -313,6 +318,13 @@ export default function ProjectConciergeScreen() {
           .order('created_at', { ascending: false }),
       ]);
 
+      const gcList = (
+        assignmentResult.data
+        && ['invited', 'active', 'completed'].includes((assignmentResult.data as CurrentAssignment).status)
+      )
+        ? []
+        : await fetchDiscoverableGeneralContractors(projectId);
+
       if (projectResult.error) throw projectResult.error;
       if (assignmentResult.error) throw assignmentResult.error;
       if (approvalResult.error) throw approvalResult.error;
@@ -325,9 +337,10 @@ export default function ProjectConciergeScreen() {
       setApprovalRequests((approvalResult.data ?? []) as ApprovalRequest[]);
       setPaymentRequests((paymentResult.data ?? []) as GcPaymentRequest[]);
       setBookingRequests((bookingResult.data ?? []) as ConciergeBookingWithGc[]);
+      hasLoadedRef.current = true;
     } catch (err) {
       setErrorMessage(formatAppSafeErrorMessage(err, 'Could not load concierge options.'));
-      clearConciergeState();
+      if (!hasLoadedRef.current) clearConciergeState();
     } finally {
       setLoading(false);
       setRefreshing(false);
@@ -428,6 +441,16 @@ export default function ProjectConciergeScreen() {
     }
     if (!isBookingGcConciergeEligible(booking)) {
       Alert.alert('Payout locked', 'WalkerAI verification, concierge marketplace access, and complete business, license, and insurance setup are required before this GC can receive concierge payouts.');
+      return;
+    }
+
+    const { data: projectHold } = await supabase
+      .from('projects')
+      .select('admin_paused')
+      .eq('id', projectId)
+      .maybeSingle();
+    if (projectHold?.admin_paused) {
+      Alert.alert('Payment held', 'Walker AI admin has restricted payouts on this project. Contact support to release the hold.');
       return;
     }
 
@@ -855,9 +878,10 @@ export default function ProjectConciergeScreen() {
               <Text style={styles.bodyText}>{errorMessage}</Text>
             </GlassCard>
           ) : loading ? (
-            <GlassCard style={styles.card}>
-              <Text style={styles.bodyText}>Loading concierge options...</Text>
-            </GlassCard>
+            <View style={{ gap: 12 }}>
+              <CardSkeleton />
+              <CardSkeleton />
+            </View>
           ) : assignedGc && currentAssignment ? (
             <>
               <GlassCard style={styles.card}>

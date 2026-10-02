@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import {
   Alert,
   KeyboardAvoidingView,
@@ -12,6 +12,7 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useNavigation } from '@react-navigation/native';
 import Ionicons from 'react-native-vector-icons/Ionicons';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { supabase } from '@/lib/supabase/client';
 import { formatAppSafeErrorMessage } from '@/lib/supabase/functions';
 import { useAuthStore } from '@/stores/auth.store';
@@ -55,6 +56,8 @@ export default function BusinessOnboardingScreen() {
   const navigation = useNavigation<any>();
   const { user } = useAuthStore();
 
+  const DRAFT_KEY = 'walkerai.company-onboarding.business';
+
   const [companyName, setCompanyName] = useState('');
   const [address, setAddress] = useState('');
   const [city, setCity] = useState('');
@@ -65,6 +68,53 @@ export default function BusinessOnboardingScreen() {
   const [lng, setLng] = useState<number | null>(null);
   const [selectedTrades, setSelectedTrades] = useState<TradeType[]>(['plumber']);
   const [loading, setLoading] = useState(false);
+  const [hydrated, setHydrated] = useState(false);
+
+  useEffect(() => {
+    let cancelled = false;
+    AsyncStorage.getItem(DRAFT_KEY).then((raw) => {
+      if (cancelled || !raw) {
+        setHydrated(true);
+        return;
+      }
+      try {
+        const draft = JSON.parse(raw) as {
+          companyName?: string;
+          address?: string;
+          city?: string;
+          province?: string;
+          postalCode?: string;
+          serviceRadius?: string;
+          lat?: number | null;
+          lng?: number | null;
+          selectedTrades?: TradeType[];
+        };
+        if (draft.companyName) setCompanyName(draft.companyName);
+        if (draft.address) setAddress(draft.address);
+        if (draft.city) setCity(draft.city);
+        if (draft.province) setProvince(draft.province);
+        if (draft.postalCode) setPostalCode(draft.postalCode);
+        if (draft.serviceRadius) setServiceRadius(draft.serviceRadius);
+        if (typeof draft.lat === 'number') setLat(draft.lat);
+        if (typeof draft.lng === 'number') setLng(draft.lng);
+        if (Array.isArray(draft.selectedTrades) && draft.selectedTrades.length > 0) {
+          setSelectedTrades(draft.selectedTrades);
+        }
+      } catch {
+        // Ignore a corrupt draft and keep empty form values.
+      } finally {
+        setHydrated(true);
+      }
+    });
+    return () => { cancelled = true; };
+  }, []);
+
+  useEffect(() => {
+    if (!hydrated) return;
+    void AsyncStorage.setItem(DRAFT_KEY, JSON.stringify({
+      companyName, address, city, province, postalCode, serviceRadius, lat, lng, selectedTrades,
+    }));
+  }, [address, city, companyName, hydrated, lat, lng, postalCode, province, selectedTrades, serviceRadius]);
 
   const toggleTrade = (trade: TradeType) => {
     setSelectedTrades((current) => {
@@ -159,6 +209,7 @@ export default function BusinessOnboardingScreen() {
 
       if (error) throw error;
       if (!data) throw new Error('Company profile was not saved.');
+      await AsyncStorage.removeItem(DRAFT_KEY);
       navigation.navigate('LicenseOnboarding');
     } catch (err) {
       Alert.alert('Could not save business info', formatAppSafeErrorMessage(err, 'Please try again.'));

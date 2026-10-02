@@ -1,4 +1,4 @@
-import { useCallback, useState } from 'react';
+import { useCallback, useRef, useState } from 'react';
 import {
   Alert,
   RefreshControl,
@@ -18,7 +18,7 @@ import { formatStatusLabel } from '@/lib/formatters';
 import { GENERAL_CONTRACTOR_READINESS_SELECT, isGeneralContractorReadyForProjectControls } from '@/lib/general-contractor';
 import { getRequiredStringParam } from '@/lib/navigation-params';
 import { Colors, Spacing, Typography } from '@/constants/theme';
-import { GlassButton, GlassCard, GlassInput, GradientBackground, StatusBadge } from '@/components/ui';
+import { CardSkeleton, GlassButton, GlassCard, GlassInput, GradientBackground, StatusBadge } from '@/components/ui';
 
 interface Material {
   id: string;
@@ -109,6 +109,7 @@ export default function GeneralContractorMaterialsScreen() {
   const [leadTimeDays, setLeadTimeDays] = useState('');
   const [quoteNote, setQuoteNote] = useState('');
   const [loading, setLoading] = useState(true);
+  const hasLoadedRef = useRef(false);
   const [refreshing, setRefreshing] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [gcReady, setGcReady] = useState(false);
@@ -195,6 +196,7 @@ export default function GeneralContractorMaterialsScreen() {
       setErrorMessage(formatAppSafeErrorMessage(err, 'Could not load materials.'));
       clearMaterialsState();
     } finally {
+      hasLoadedRef.current = true;
       setLoading(false);
       setRefreshing(false);
     }
@@ -357,9 +359,10 @@ export default function GeneralContractorMaterialsScreen() {
               <Text style={styles.bodyText}>{errorMessage}</Text>
             </GlassCard>
           ) : loading ? (
-            <GlassCard style={styles.card}>
-              <Text style={styles.bodyText}>Loading materials...</Text>
-            </GlassCard>
+            <View style={{ gap: 12 }}>
+              <CardSkeleton />
+              <CardSkeleton />
+            </View>
           ) : (
             <>
               <GlassCard style={styles.card}>

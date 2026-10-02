@@ -88,11 +88,21 @@ export function RoomCustomizer3D({ roomType, scanData, selections, answers = {},
     [scanData],
   );
 
-  const applyMaterialToNative = useCallback((surfaceId: string, option: SurfaceOption) => {
+  const applyMaterialToNative = useCallback((
+    surfaceId: string,
+    option: Pick<SurfaceOption, 'material' | 'colorHex'> & { imageUrl?: string | null },
+  ) => {
     const tag = findNodeHandle(nativeRef.current as React.Component | null);
     if (tag == null) return;
     const { roughness, metalness } = pbrForMaterial(option.material);
-    const args = [surfaceId, option.colorHex, option.material, roughness, metalness];
+    const args = [
+      surfaceId,
+      option.colorHex,
+      option.material,
+      roughness,
+      metalness,
+      option.imageUrl ?? '',
+    ];
     const manager = (UIManager as unknown as Record<string, { Commands?: Record<string, number> }>)[
       'RoomCustomizerView'
     ];
@@ -121,9 +131,8 @@ export function RoomCustomizer3D({ roomType, scanData, selections, answers = {},
       if (!sel) return;
       applyMaterialToNative(surface.id, {
         material: sel.material,
-        colorName: sel.colorName,
         colorHex: sel.colorHex,
-        answerId: sel.answerId,
+        imageUrl: sel.imageUrl,
       });
     });
   }, [surfaces, mergedSelections, nativeLayoutVersion, applyMaterialToNative]);
@@ -154,6 +163,7 @@ export function RoomCustomizer3D({ roomType, scanData, selections, answers = {},
 
   const handleOption = (option: SurfaceOption) => {
     if (!activeSurface) return;
+    const previous = mergedSelections[activeSurface.id];
     onSelect({
       surfaceId: activeSurface.id,
       surfaceLabel: activeSurface.label,
@@ -161,8 +171,19 @@ export function RoomCustomizer3D({ roomType, scanData, selections, answers = {},
       colorName: option.colorName,
       colorHex: option.colorHex,
       answerId: option.answerId,
+      // Keep supplier catalog linkage unless this is a pure style swatch replace.
+      catalogItemId: previous?.catalogItemId,
+      sku: previous?.sku,
+      brand: previous?.brand,
+      priceCents: previous?.priceCents,
+      imageUrl: previous?.imageUrl,
+      supplierId: previous?.supplierId,
     });
-    applyMaterialToNative(activeSurface.id, option);
+    applyMaterialToNative(activeSurface.id, {
+      material: option.material,
+      colorHex: option.colorHex,
+      imageUrl: previous?.imageUrl,
+    });
     closeSheet();
   };
 
@@ -172,19 +193,31 @@ export function RoomCustomizer3D({ roomType, scanData, selections, answers = {},
 
   const sheetTranslate = sheetAnim.interpolate({ inputRange: [0, 1], outputRange: [320, 0] });
 
+  const hasUsdz = Boolean(
+    scanData
+    && typeof scanData === 'object'
+    && (
+      (scanData as { hasUsdz?: boolean }).hasUsdz
+      || (typeof (scanData as { usdzFilePath?: string }).usdzFilePath === 'string'
+        && (scanData as { usdzFilePath: string }).usdzFilePath.trim().length > 0)
+    ),
+  );
+
   return (
     <>
-      <GlassCard style={styles.card}>
+      <GlassCard style={styles.card} padding={14}>
         <View style={styles.header}>
           <View style={{ flex: 1 }}>
             <Text style={styles.title}>Customize in 3D</Text>
             <Text style={styles.subtitle}>
-              Tap a surface in the model to choose a finish. Drag to rotate the room.
+              {hasUsdz
+                ? 'Your scanned room mesh with showroom lighting. Tap a surface, pick a supplier finish — 3D and the AI design preview stay in sync.'
+                : 'Layout preview from measurements. Rescan with RoomPlan for the full mesh. Supplier finishes still update 3D and the AI preview.'}
             </Text>
           </View>
           <View style={styles.badge}>
-            <Ionicons name="cube" size={14} color={Colors.accent} />
-            <Text style={styles.badgeText}>3D V1</Text>
+            <Ionicons name="cube" size={14} color={hasUsdz ? Colors.success : Colors.text.tertiary} />
+            <Text style={styles.badgeText}>{hasUsdz ? 'Scanned mesh' : 'Layout preview'}</Text>
           </View>
         </View>
 
@@ -256,7 +289,7 @@ export function RoomCustomizer3D({ roomType, scanData, selections, answers = {},
                           <Text style={styles.optionMaterial}>{option.material}</Text>
                           <Text style={styles.optionColor}>{option.colorName}</Text>
                         </View>
-                        {selected ? <Ionicons name="checkmark-circle" size={20} color={Colors.accent} /> : null}
+                        {selected ? <Ionicons name="checkmark-circle" size={20} color={Colors.success} /> : null}
                       </TouchableOpacity>
                     );
                   })}
@@ -271,7 +304,7 @@ export function RoomCustomizer3D({ roomType, scanData, selections, answers = {},
 }
 
 const styles = StyleSheet.create({
-  card: { marginBottom: Spacing.lg, padding: 14 },
+  card: { marginBottom: Spacing.lg },
   header: {
     flexDirection: 'row',
     alignItems: 'flex-start',
@@ -292,7 +325,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 9,
     minHeight: 28,
   },
-  badgeText: { fontSize: 11, fontWeight: '700', color: Colors.accent },
+  badgeText: { fontSize: 11, fontWeight: '700', color: Colors.text.secondary },
   viewerWrap: {
     height: 480,
     borderRadius: Radius.item,
@@ -371,7 +404,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 12,
   },
   optionRowSelected: {
-    borderColor: Colors.accent,
+    borderColor: Colors.success,
     backgroundColor: 'rgba(255, 107, 0, 0.08)',
   },
   optionSwatch: {

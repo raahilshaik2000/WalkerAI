@@ -66,6 +66,7 @@ export default function ChatScreen() {
   const [messages, setMessages] = useState<DBMessage[]>([]);
   const [text, setText] = useState('');
   const [loading, setLoading] = useState(true);
+  const hasLoadedRef = useRef(false);
   const [sending, setSending] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [showScrollBtn, setShowScrollBtn] = useState(false);
@@ -79,7 +80,7 @@ export default function ChatScreen() {
       return;
     }
 
-    setLoading(true);
+    if (!hasLoadedRef.current) setLoading(true);
     setErrorMessage(null);
     const { data, error } = await supabase
       .from('messages')
@@ -95,6 +96,7 @@ export default function ChatScreen() {
     }
 
     setMessages((data as DBMessage[]) ?? []);
+    hasLoadedRef.current = true;
     setLoading(false);
   }, [projectId]);
 
@@ -237,7 +239,7 @@ export default function ChatScreen() {
                 <Ionicons
                   name="image-outline"
                   size={15}
-                  color={isMe ? '#000' : Colors.text.secondary}
+                  color={isMe ? Colors.accentFg : Colors.text.secondary}
                 />
                 <Text style={[styles.attachmentText, isMe ? styles.attachmentTextMe : styles.attachmentTextThem]}>
                   View attachment
@@ -267,9 +269,9 @@ export default function ChatScreen() {
             <View style={[styles.headerAvatar, styles.headerAvatarSystem]}>
               <Ionicons name="headset-outline" size={16} color="#fff" />
             </View>
-            <View>
-              <Text style={styles.headerName}>{contractorName ?? 'Contractor'}</Text>
-              <Text style={styles.headerProject}>{projectTitle ?? 'Project'}</Text>
+            <View style={{ flex: 1, minWidth: 0 }}>
+              <Text style={styles.headerName} numberOfLines={1}>{contractorName ?? 'Contractor'}</Text>
+              <Text style={styles.headerProject} numberOfLines={1}>{projectTitle ?? 'Project'}</Text>
             </View>
           </View>
 
@@ -335,7 +337,7 @@ export default function ChatScreen() {
                 onPress={handleSend}
                 disabled={!text.trim() || sending}
               >
-                <Ionicons name="send" size={16} color={text.trim() && !sending ? '#000' : Colors.text.tertiary} />
+                <Ionicons name="send" size={16} color={text.trim() && !sending ? Colors.accentFg : Colors.text.tertiary} />
               </AnimatedPressable>
             </View>
           </SafeAreaView>
@@ -356,10 +358,10 @@ const styles = StyleSheet.create({
     paddingHorizontal: 16, paddingVertical: 10,
     borderBottomWidth: 1, borderBottomColor: Colors.surface.border,
   },
-  headerCenter: { flex: 1, flexDirection: 'row', alignItems: 'center', gap: 10, marginLeft: 12 },
-  headerAvatar: { width: 36, height: 36, borderRadius: 18 },
+  headerCenter: { flex: 1, flexDirection: 'row', alignItems: 'center', gap: 10, marginLeft: 12, minWidth: 0 },
+  headerAvatar: { width: 36, height: 36, borderRadius: 18, flexShrink: 0 },
   headerAvatarSystem: { backgroundColor: Colors.surface.hover, alignItems: 'center', justifyContent: 'center' },
-  headerName: { fontSize: 15, fontWeight: '600', color: '#fff' },
+  headerName: { fontSize: 15, fontWeight: '600', color: Colors.text.primary },
   headerProject: { fontSize: 11, color: Colors.text.tertiary },
 
   list: { paddingHorizontal: 12, paddingVertical: 8, paddingBottom: 4 },
@@ -378,13 +380,13 @@ const styles = StyleSheet.create({
   avatarSpacer: { width: 24 },
 
   bubble: { maxWidth: '75%', borderRadius: 18, padding: 10, paddingBottom: 6 },
-  bubbleMe: { backgroundColor: '#FFFFFF', borderBottomRightRadius: 4 },
+  bubbleMe: { backgroundColor: Colors.accent, borderBottomRightRadius: 4 },
   bubbleThem: { backgroundColor: Colors.surface.default, borderBottomLeftRadius: 4 },
   bubbleMeFirst: { borderTopRightRadius: 18 },
   bubbleThemFirst: { borderTopLeftRadius: 18 },
 
-  msgText: { fontSize: 15, color: '#fff', lineHeight: 21 },
-  msgTextMe: { color: '#000' },
+  msgText: { fontSize: 15, color: Colors.text.primary, lineHeight: 21 },
+  msgTextMe: { color: Colors.accentFg },
   attachmentCard: {
     width: 220,
     maxWidth: '100%',
@@ -397,7 +399,7 @@ const styles = StyleSheet.create({
   attachmentImage: { width: '100%', height: 150, backgroundColor: Colors.bg.secondary },
   attachmentFooter: { flexDirection: 'row', alignItems: 'center', gap: 6, paddingHorizontal: 10, paddingVertical: 8 },
   attachmentText: { fontSize: 13, fontWeight: '600' },
-  attachmentTextMe: { color: '#000' },
+  attachmentTextMe: { color: Colors.accentFg },
   attachmentTextThem: { color: Colors.text.secondary },
 
   timeRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'flex-end', marginTop: 2 },
@@ -418,13 +420,13 @@ const styles = StyleSheet.create({
     borderTopWidth: 1, borderTopColor: Colors.surface.border,
   },
   input: {
-    flex: 1, backgroundColor: Colors.surface.default,
+    flex: 1, minWidth: 0, backgroundColor: Colors.surface.default,
     borderRadius: 20, borderWidth: 1, borderColor: Colors.surface.border,
     paddingHorizontal: 16, paddingVertical: 10,
-    fontSize: 15, color: '#fff', maxHeight: 100,
+    fontSize: 15, color: Colors.text.primary, maxHeight: 100,
   },
-  sendBtn: { width: 38, height: 38, borderRadius: 19, backgroundColor: '#fff', alignItems: 'center', justifyContent: 'center' },
-  sendBtnDisabled: { backgroundColor: Colors.surface.default },
+  sendBtn: { width: 38, height: 38, borderRadius: 19, backgroundColor: Colors.accent, alignItems: 'center', justifyContent: 'center' },
+  sendBtnDisabled: { backgroundColor: Colors.surface.default, borderWidth: 1, borderColor: Colors.surface.border },
 
   empty: { alignItems: 'center', justifyContent: 'center', paddingTop: 60, gap: 10 },
   emptyText: { fontSize: 14, color: Colors.text.tertiary },

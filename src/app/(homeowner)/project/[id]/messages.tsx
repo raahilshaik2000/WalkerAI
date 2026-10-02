@@ -221,7 +221,11 @@ export default function MessagesScreen() {
               disabled={!body.trim() || sending}
               activeOpacity={0.8}
             >
-              <Text style={styles.sendBtnText}>↑</Text>
+              <Ionicons
+                name="arrow-up"
+                size={20}
+                color={!body.trim() || sending ? Colors.text.tertiary : Colors.accentFg}
+              />
             </TouchableOpacity>
           </View>
         </KeyboardAvoidingView>
@@ -316,5 +320,4 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   sendBtnDisabled: { backgroundColor: Colors.glass.surface, borderWidth: 1, borderColor: Colors.glass.border },
-  sendBtnText: { color: '#fff', fontSize: 18, fontWeight: '700' },
 });

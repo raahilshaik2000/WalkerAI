@@ -1,9 +1,9 @@
-import React, { useCallback, useEffect, useState } from 'react';
-import { ActivityIndicator, RefreshControl, ScrollView, StyleSheet, Text, View } from 'react-native';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
+import { RefreshControl, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useNavigation } from '@react-navigation/native';
 import Ionicons from 'react-native-vector-icons/Ionicons';
-import { AnimatedPressable, GlassButton, GlassCard, GradientBackground } from '@/components/ui';
+import { AnimatedPressable, GlassButton, GlassCard, GradientBackground, ListItemSkeleton } from '@/components/ui';
 import { Colors, Radius } from '@/constants/theme';
 import { supabase } from '@/lib/supabase/client';
 import { formatAppSafeErrorMessage } from '@/lib/supabase/functions';
@@ -47,6 +47,7 @@ export default function MyReviewsScreen() {
   const { user } = useAuthStore();
   const [reviews, setReviews] = useState<Review[]>([]);
   const [loading, setLoading] = useState(true);
+  const hasLoadedRef = useRef(false);
   const [refreshing, setRefreshing] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
@@ -60,7 +61,7 @@ export default function MyReviewsScreen() {
     }
 
     if (mode === 'refresh') setRefreshing(true);
-    else setLoading(true);
+    else if (!hasLoadedRef.current) setLoading(true);
     setErrorMessage(null);
 
     const { data, error } = await supabase
@@ -149,6 +150,7 @@ export default function MyReviewsScreen() {
     }));
     setReviews(mapped);
     setErrorMessage(null);
+    hasLoadedRef.current = true;
     setLoading(false);
     setRefreshing(false);
   }, [user]);
@@ -169,8 +171,10 @@ export default function MyReviewsScreen() {
         </View>
 
         {loading ? (
-          <View style={styles.center}>
-            <ActivityIndicator color={Colors.accent} />
+          <View style={{ paddingHorizontal: 16, paddingTop: 8 }}>
+            <ListItemSkeleton style={{ marginBottom: 12 }} />
+            <ListItemSkeleton style={{ marginBottom: 12 }} />
+            <ListItemSkeleton />
           </View>
         ) : (
           <ScrollView

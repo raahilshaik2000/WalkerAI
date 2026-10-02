@@ -111,8 +111,41 @@ function supplierCategoryForMaterial(itemName: string): SupplierCategory {
   return 'Other';
 }
 
-function buildMaterialOrderNotes(material: any): string {
+function extractCatalogItemId(material: any): string | null {
+  const notesMatch = material.contractor_notes?.match(/Walker catalog item ([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})/i);
+  if (notesMatch) return notesMatch[1];
+  const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+  if (material.specific_model && uuidRegex.test(material.specific_model)) {
+    return material.specific_model;
+  }
+  return null;
+}
+
+function extractCatalogSku(material: any): string | null {
+  const skuMatch = material.contractor_notes?.match(/SKU\s+([A-Za-z0-9_-]+)/i);
+  if (skuMatch) return skuMatch[1];
+  const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+  if (material.specific_model && !uuidRegex.test(material.specific_model)) {
+    return material.specific_model;
+  }
+  return null;
+}
+
+function extractCatalogUnitPriceCents(material: any): number | null {
+  const match = material.contractor_notes?.match(/Catalog unit price \$?([0-9]+(?:\.[0-9]{1,2})?)/i);
+  if (match) {
+    const dollars = parseFloat(match[1]);
+    if (!isNaN(dollars) && dollars > 0) {
+      return Math.round(dollars * 100);
+    }
+  }
+  return null;
+}
+
+function buildMaterialOrderNotes(material: any, catalogSku?: string | null, unitPriceNote?: string | null): string {
   const details = [
+    catalogSku ? `Supplier SKU: ${catalogSku}` : null,
+    unitPriceNote ? `Pricing reference: ${unitPriceNote}` : null,
     material.brand_preference ? `Brand: ${material.brand_preference}` : null,
     material.color_finish ? `Color/finish: ${material.color_finish}` : null,
     material.specific_model ? `Product/model: ${material.specific_model}` : null,
@@ -306,16 +339,46 @@ Deno.serve(async (req) => {
 
     const deliveryAddress = [project.address, project.city, project.province].filter(Boolean).join(', ');
 
+    // Query supplier_catalog to verify catalog_item_ids and load actual catalog pricing if present
+    const candidateCatalogIds = orderableMaterials
+      .map(extractCatalogItemId)
+      .filter((id): id is string => Boolean(id));
+
+    const catalogMap = new Map<string, any>();
+    if (candidateCatalogIds.length > 0) {
+      const { data: catalogItems } = await supabase
+        .from('supplier_catalog')
+        .select('id, sku, price_per_unit, category')
+        .in('id', candidateCatalogIds);
+      if (catalogItems) {
+        for (const item of catalogItems) {
+          catalogMap.set(item.id, item);
+        }
+      }
+    }
+
     // Create one material_order per material
     const orderInserts = orderableMaterials.map((m: any) => {
       const quantity = effectiveMaterialQuantity(m);
-      const fixedPrice = estimateFixedPriceCents(m.item ?? 'Material', quantity, m.quality_tier ?? null);
-      const category = supplierCategoryForMaterial(m.item ?? 'Material');
+      const rawCatalogId = extractCatalogItemId(m);
+      const catalogItem = rawCatalogId ? catalogMap.get(rawCatalogId) : null;
+      const validCatalogItemId = catalogItem ? catalogItem.id : null;
+      const extractedSku = catalogItem?.sku ?? extractCatalogSku(m);
+      const catalogUnitPriceCents = catalogItem?.price_per_unit ?? extractCatalogUnitPriceCents(m);
+      const fixedPrice = catalogUnitPriceCents != null
+        ? Math.max(100, Math.round(catalogUnitPriceCents * quantity))
+        : estimateFixedPriceCents(m.item ?? 'Material', quantity, m.quality_tier ?? null);
+      const category = catalogItem?.category ?? supplierCategoryForMaterial(m.item ?? 'Material');
+      const unitPriceNote = catalogUnitPriceCents != null
+        ? `$${(catalogUnitPriceCents / 100).toFixed(2)} / ${m.unit ?? 'unit'}`
+        : null;
+
       return {
         project_id,
         material_id: m.id,
         status: 'open',
         category,
+        catalog_item_id: validCatalogItemId,
         quantity_needed: quantity,
         unit: m.unit ?? 'units',
         quality_tier: m.quality_tier ?? null,
@@ -323,7 +386,7 @@ Deno.serve(async (req) => {
         final_price: fixedPrice,
         delivery_address: deliveryAddress || null,
         delivery_deadline: deliveryDeadline,
-        notes: buildMaterialOrderNotes(m),
+        notes: buildMaterialOrderNotes(m, extractedSku, unitPriceNote),
       };
     });
 
@@ -335,7 +398,7 @@ Deno.serve(async (req) => {
       insertResult = await supabase
         .from('material_orders')
         .insert(orderInserts.map((order) => (
-          Object.fromEntries(Object.entries(order).filter(([key]) => key !== 'category'))
+          Object.fromEntries(Object.entries(order).filter(([key]) => key !== 'category' && key !== 'catalog_item_id'))
         )))
         .select('id, material_id');
     }

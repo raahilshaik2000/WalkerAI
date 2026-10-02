@@ -1,4 +1,4 @@
-import React, { useRef, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import {
   Animated,
   StyleProp,
@@ -21,6 +21,10 @@ interface GlassInputProps extends Omit<TextInputProps, 'style'> {
   containerStyle?: StyleProp<ViewStyle>;
 }
 
+function hasFilledValue(value: TextInputProps['value']): boolean {
+  return value != null && String(value).length > 0;
+}
+
 // Uber-style input: flat dark background, subtle border, white focus border
 export function GlassInput({
   label,
@@ -30,40 +34,52 @@ export function GlassInput({
   iconPosition = 'left',
   containerStyle,
   value,
+  defaultValue,
   onFocus,
   onBlur,
+  placeholder: _placeholder,
   ...props
 }: GlassInputProps) {
   const [isFocused, setIsFocused] = useState(false);
-  const labelAnim = useRef(new Animated.Value(value ? 1 : 0)).current;
+  const [uncontrolledFilled, setUncontrolledFilled] = useState(hasFilledValue(defaultValue));
+  const isControlled = value !== undefined;
+  const filled = isControlled ? hasFilledValue(value) : uncontrolledFilled;
+  const shouldFloat = filled || isFocused;
+  const labelAnim = useRef(new Animated.Value(shouldFloat ? 1 : 0)).current;
   const inputRef = useRef<TextInput>(null);
 
-  const handleFocus = (e: Parameters<NonNullable<TextInputProps['onFocus']>>[0]) => {
-    setIsFocused(true);
+  // Keep floating label in sync when value is hydrated/prefilled after mount
+  // (edit forms, profile screens, async loads). Without this, the label sits
+  // on top of the filled text.
+  useEffect(() => {
     Animated.spring(labelAnim, {
-      toValue: 1,
+      toValue: shouldFloat ? 1 : 0,
       useNativeDriver: false,
       damping: 15,
       stiffness: 300,
     }).start();
+  }, [shouldFloat, labelAnim]);
+
+  const handleFocus = (e: Parameters<NonNullable<TextInputProps['onFocus']>>[0]) => {
+    setIsFocused(true);
     onFocus?.(e);
   };
 
   const handleBlur = (e: Parameters<NonNullable<TextInputProps['onBlur']>>[0]) => {
     setIsFocused(false);
-    if (!value) {
-      Animated.spring(labelAnim, {
-        toValue: 0,
-        useNativeDriver: false,
-        damping: 15,
-        stiffness: 300,
-      }).start();
-    }
     onBlur?.(e);
   };
 
-  const labelTop = labelAnim.interpolate({ inputRange: [0, 1], outputRange: [18, 8] });
+  const handleChangeText = (text: string) => {
+    if (!isControlled) setUncontrolledFilled(text.length > 0);
+    props.onChangeText?.(text);
+  };
+
+  const labelTop = labelAnim.interpolate({ inputRange: [0, 1], outputRange: [18, 6] });
   const labelFontSize = labelAnim.interpolate({ inputRange: [0, 1], outputRange: [15, 11] });
+  const labelColor = shouldFloat
+    ? (isFocused ? Colors.text.secondary : Colors.text.tertiary)
+    : Colors.text.tertiary;
 
   const borderColor = error
     ? Colors.error
@@ -74,24 +90,32 @@ export function GlassInput({
   return (
     <View style={[styles.container, containerStyle]}>
       <TouchableWithoutFeedback onPress={() => inputRef.current?.focus()}>
-        <View style={[styles.inputWrapper, { borderColor }]}>
+        <View style={[styles.inputWrapper, props.multiline ? styles.inputWrapperMultiline : null, { borderColor }]}>
           {icon && iconPosition === 'left' && <View style={styles.iconLeft}>{icon}</View>}
           <View style={styles.fieldArea}>
-            <Animated.Text style={[styles.floatLabel, { top: labelTop, fontSize: labelFontSize }]}>
+            <Animated.Text
+              pointerEvents="none"
+              numberOfLines={1}
+              style={[styles.floatLabel, { top: labelTop, fontSize: labelFontSize, color: labelColor }]}
+            >
               {label}
             </Animated.Text>
             <TextInput
               ref={inputRef}
+              {...props}
               style={[
                 styles.input,
-                Boolean(value) || isFocused ? styles.inputShifted : null,
+                shouldFloat ? styles.inputShifted : null,
+                props.multiline ? styles.inputMultiline : null,
               ]}
               value={value}
+              defaultValue={defaultValue}
               onFocus={handleFocus}
               onBlur={handleBlur}
-              placeholderTextColor={Colors.text.tertiary}
+              onChangeText={handleChangeText}
+              placeholder=""
+              placeholderTextColor="transparent"
               selectionColor="#FFFFFF"
-              {...props}
             />
           </View>
           {icon && iconPosition === 'right' && <View style={styles.iconRight}>{icon}</View>}
@@ -109,6 +133,7 @@ export function GlassInput({
 const styles = StyleSheet.create({
   container: { width: '100%' },
   inputWrapper: {
+    minHeight: 58,
     height: 58,
     borderRadius: Radius.item,
     borderWidth: 1,
@@ -118,12 +143,19 @@ const styles = StyleSheet.create({
     paddingHorizontal: 16,
     overflow: 'hidden',
   },
+  inputWrapperMultiline: {
+    height: undefined,
+    minHeight: 96,
+    alignItems: 'flex-start',
+    paddingVertical: 8,
+  },
   fieldArea: { flex: 1, justifyContent: 'center', position: 'relative', height: '100%' },
   floatLabel: {
     position: 'absolute',
     left: 0,
-    fontWeight: '400',
-    color: Colors.text.tertiary,
+    right: 0,
+    fontWeight: '500',
+    zIndex: 1,
   },
   input: {
     fontSize: 15,
@@ -131,8 +163,14 @@ const styles = StyleSheet.create({
     color: Colors.text.primary,
     paddingTop: 0,
     paddingBottom: 0,
+    margin: 0,
   },
   inputShifted: { paddingTop: 18 },
+  inputMultiline: {
+    minHeight: 72,
+    textAlignVertical: 'top',
+    paddingTop: 22,
+  },
   iconLeft: { marginRight: 12 },
   iconRight: { marginLeft: 12 },
   error: { fontSize: 13, color: Colors.error, marginTop: 6, marginLeft: 4 },

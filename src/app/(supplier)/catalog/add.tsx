@@ -1,14 +1,17 @@
 import { useEffect, useState } from 'react';
-import { ActivityIndicator, Alert, KeyboardAvoidingView, Platform, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { Alert, Image, KeyboardAvoidingView, Platform, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useNavigation } from '@react-navigation/native';
+import { useQueryClient } from '@tanstack/react-query';
 import Ionicons from 'react-native-vector-icons/Ionicons';
 import { supabase } from '@/lib/supabase/client';
 import { getCurrentUser } from '@/lib/supabase/auth';
 import { formatAppSafeErrorMessage } from '@/lib/supabase/functions';
+import { pickAndUploadCatalogPhoto } from '@/lib/catalog-photo';
+import { supplierQueryKeys } from '@/lib/supplier-data';
 import { useAuthStore } from '@/stores/auth.store';
 import { Colors, Spacing, Typography } from '@/constants/theme';
-import { GlassButton, GlassCard, GlassInput, GradientBackground } from '@/components/ui';
+import { GlassButton, GlassCard, GlassInput, GradientBackground, ListItemSkeleton } from '@/components/ui';
 import { type SupplierCategory, type QualityTier } from '@/constants/enums';
 import {
   nextCatalogSetupRoute,
@@ -22,6 +25,7 @@ const UNIT_OPTIONS = ['units', 'sq ft', 'linear ft', 'lbs', 'bags', 'sheets', 'r
 
 export default function AddCatalogItem() {
   const navigation = useNavigation<any>();
+  const queryClient = useQueryClient();
   const { user } = useAuthStore();
   const [name, setName] = useState('');
   const [description, setDescription] = useState('');
@@ -32,11 +36,15 @@ export default function AddCatalogItem() {
   const [brand, setBrand] = useState('');
   const [qualityTier, setQualityTier] = useState<QualityTier>('mid-range');
   const [leadTime, setLeadTime] = useState('3');
+  const [imageUrl, setImageUrl] = useState<string | null>(null);
+  const [uploadingPhoto, setUploadingPhoto] = useState(false);
   const [loading, setLoading] = useState(false);
   const [profileLoading, setProfileLoading] = useState(true);
   const [supplierId, setSupplierId] = useState<string | null>(null);
   const [availableCategories, setAvailableCategories] = useState<SupplierCategory[]>([]);
   const [setupRoute, setSetupRoute] = useState<string | null>(null);
+
+  const [customCategory, setCustomCategory] = useState('');
 
   useEffect(() => {
     let mounted = true;
@@ -68,9 +76,10 @@ export default function AddCatalogItem() {
 
         const route = nextCatalogSetupRoute(data);
         const categories = selectedSupplierCategories(data?.categories);
+        const allCategories = categories.includes('Other') ? categories : [...categories, 'Other' as SupplierCategory];
         setSupplierId(data?.id ?? null);
-        setAvailableCategories(categories);
-        setCategory((current) => current && categories.includes(current) ? current : categories[0] ?? null);
+        setAvailableCategories(allCategories);
+        setCategory((current) => current && allCategories.includes(current) ? current : allCategories[0] ?? null);
         setSetupRoute(route);
       } catch (err) {
         if (!mounted) return;
@@ -86,6 +95,10 @@ export default function AddCatalogItem() {
   const handleSave = async () => {
     if (!name.trim() || !category || !priceStr) {
       Alert.alert('Required', 'Please fill in name, category, and price.');
+      return;
+    }
+    if (category === 'Other' && !customCategory.trim()) {
+      Alert.alert('Custom Category Required', 'Please specify the custom category name for this material.');
       return;
     }
     const price = parsePositiveCadToCents(priceStr);
@@ -115,10 +128,14 @@ export default function AddCatalogItem() {
 
     setLoading(true);
     try {
+      const finalDescription = category === 'Other' && customCategory.trim()
+        ? `[Category: ${customCategory.trim()}] ${description.trim()}`.trim()
+        : description.trim() || null;
+
       const { data: inserted, error } = await supabase.from('supplier_catalog').insert({
         supplier_id: supplierId,
         name: name.trim(),
-        description: description.trim() || null,
+        description: finalDescription,
         category,
         sku: sku.trim() || null,
         unit,
@@ -127,9 +144,11 @@ export default function AddCatalogItem() {
         brand: brand.trim() || null,
         lead_time_days: leadTimeDays,
         in_stock: true,
+        image_urls: imageUrl ? [imageUrl] : [],
       }).select('id').maybeSingle();
       if (error) throw error;
       if (!inserted) throw new Error('Catalog item was not saved.');
+      queryClient.invalidateQueries({ queryKey: supplierQueryKeys.catalog(supplierId) });
       navigation.goBack();
     } catch (err) {
       Alert.alert('Could not save catalog item', formatAppSafeErrorMessage(err, 'Please try again.'));
@@ -139,7 +158,17 @@ export default function AddCatalogItem() {
   };
 
   if (profileLoading) {
-    return <View style={styles.center}><ActivityIndicator color={Colors.success} size="large" /></View>;
+    return (
+      <GradientBackground>
+        <SafeAreaView style={styles.safe}>
+          <View style={{ paddingHorizontal: Spacing.md, paddingTop: Spacing.md }}>
+            <ListItemSkeleton style={{ marginBottom: 12 }} />
+            <ListItemSkeleton style={{ marginBottom: 12 }} />
+            <ListItemSkeleton />
+          </View>
+        </SafeAreaView>
+      </GradientBackground>
+    );
   }
 
   if (setupRoute) {
@@ -177,9 +206,43 @@ export default function AddCatalogItem() {
               <View style={{ width: 24 }} />
             </View>
 
-            <GlassCard style={styles.card}>
+            <GlassCard style={styles.card} padding={Spacing.md}>
+              <Text style={styles.photoLabel}>Product photo</Text>
+              <TouchableOpacity
+                style={styles.photoBox}
+                activeOpacity={0.85}
+                disabled={!supplierId || uploadingPhoto}
+                onPress={async () => {
+                  if (!supplierId) return;
+                  setUploadingPhoto(true);
+                  try {
+                    const url = await pickAndUploadCatalogPhoto(supplierId);
+                    if (url) setImageUrl(url);
+                  } catch (err) {
+                    Alert.alert('Photo upload failed', formatAppSafeErrorMessage(err, 'Please try again.'));
+                  } finally {
+                    setUploadingPhoto(false);
+                  }
+                }}
+              >
+                {imageUrl ? (
+                  <Image source={{ uri: imageUrl }} style={styles.photoPreview} />
+                ) : (
+                  <View style={styles.photoPlaceholder}>
+                    <Ionicons name="camera-outline" size={28} color={Colors.text.tertiary} />
+                    <Text style={styles.photoHint}>
+                      {uploadingPhoto ? 'Uploading…' : 'Add photo for the design tool'}
+                    </Text>
+                  </View>
+                )}
+              </TouchableOpacity>
+              {imageUrl ? (
+                <TouchableOpacity onPress={() => setImageUrl(null)} style={{ marginBottom: Spacing.sm }}>
+                  <Text style={styles.removePhoto}>Remove photo</Text>
+                </TouchableOpacity>
+              ) : null}
               <GlassInput label="Product Name" value={name} onChangeText={setName} containerStyle={styles.input} />
-              <GlassInput label="Description (optional)" value={description} onChangeText={setDescription} multiline containerStyle={styles.input} />
+              <GlassInput label="Description (optional)" value={description} onChangeText={setDescription} containerStyle={styles.input} />
               <GlassInput label="Brand (optional)" value={brand} onChangeText={setBrand} containerStyle={styles.input} />
               <GlassInput label="SKU (optional)" value={sku} onChangeText={setSku} containerStyle={styles.input} />
               <GlassInput label={`Price per unit (CAD $)`} value={priceStr} onChangeText={setPriceStr} keyboardType="decimal-pad" containerStyle={styles.input} />
@@ -190,10 +253,23 @@ export default function AddCatalogItem() {
             <View style={styles.chipGrid}>
               {availableCategories.map((c) => (
                 <TouchableOpacity key={c} style={[styles.chip, category === c && styles.chipActive]} onPress={() => setCategory(c)} activeOpacity={0.7}>
-                  <Text style={[styles.chipText, category === c && styles.chipTextActive]}>{c}</Text>
+                  <Text style={[styles.chipText, category === c && styles.chipTextActive]}>
+                    {c === 'Other' ? 'Other / Custom' : c}
+                  </Text>
                 </TouchableOpacity>
               ))}
             </View>
+
+            {category === 'Other' && (
+              <GlassCard style={[styles.card, { marginTop: Spacing.sm }]} padding={Spacing.md}>
+                <GlassInput
+                  label="Custom Category / Material Type"
+                  value={customCategory}
+                  onChangeText={setCustomCategory}
+                  placeholder="e.g. Specialty Lighting, Custom Glass, Millwork"
+                />
+              </GlassCard>
+            )}
 
             <Text style={styles.sectionLabel}>Unit</Text>
             <View style={styles.chipGrid}>
@@ -224,11 +300,25 @@ export default function AddCatalogItem() {
 const styles = StyleSheet.create({
   safe: { flex: 1 },
   center: { flex: 1, alignItems: 'center', justifyContent: 'center', backgroundColor: '#000' },
-  scroll: { flexGrow: 1, paddingHorizontal: Spacing.md, paddingBottom: Spacing.xl },
+  scroll: { flexGrow: 1, paddingHorizontal: Spacing.md, paddingBottom: 64 },
   navRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingVertical: Spacing.md },
   navTitle: { ...Typography.h3 },
-  card: { padding: Spacing.md, marginBottom: Spacing.lg },
+  card: { marginBottom: Spacing.lg },
   input: { marginBottom: Spacing.sm },
+  photoLabel: { fontSize: 13, color: Colors.text.secondary, fontWeight: '600', marginBottom: 8 },
+  photoBox: {
+    height: 160,
+    borderRadius: 14,
+    overflow: 'hidden',
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.15)',
+    backgroundColor: 'rgba(255,255,255,0.04)',
+    marginBottom: Spacing.sm,
+  },
+  photoPreview: { width: '100%', height: '100%' },
+  photoPlaceholder: { flex: 1, alignItems: 'center', justifyContent: 'center', gap: 8 },
+  photoHint: { fontSize: 13, color: Colors.text.tertiary },
+  removePhoto: { color: Colors.accent, fontWeight: '600', fontSize: 13 },
   sectionLabel: { fontSize: 13, color: Colors.text.secondary, fontWeight: '600', marginBottom: 10, marginTop: 4 },
   chipGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginBottom: Spacing.md },
   chip: { paddingVertical: 8, paddingHorizontal: 14, borderRadius: 20, borderWidth: 1, borderColor: 'rgba(255,255,255,0.15)', backgroundColor: 'rgba(255,255,255,0.05)' },
@@ -240,5 +330,5 @@ const styles = StyleSheet.create({
   setupTitle: { ...Typography.h3, textAlign: 'center' },
   setupBody: { ...Typography.bodySecondary, textAlign: 'center' },
   setupBtn: { backgroundColor: Colors.accent, paddingHorizontal: 24, paddingVertical: 12, borderRadius: 24, marginTop: 8 },
-  setupBtnText: { fontSize: 15, fontWeight: '700', color: '#fff' },
+  setupBtnText: { fontSize: 15, fontWeight: '700', color: Colors.accentFg },
 });

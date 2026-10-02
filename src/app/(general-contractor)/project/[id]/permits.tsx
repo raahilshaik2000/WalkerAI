@@ -1,4 +1,4 @@
-import { useCallback, useState } from 'react';
+import { useCallback, useRef, useState } from 'react';
 import {
   Alert,
   Image,
@@ -12,16 +12,16 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useFocusEffect, useNavigation, useRoute } from '@react-navigation/native';
-import { launchImageLibrary } from 'react-native-image-picker';
 import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
 import { supabase } from '@/lib/supabase/client';
 import { formatAppSafeErrorMessage } from '@/lib/supabase/functions';
 import { documentKindFromPath } from '@/lib/document-preview';
+import { pickPhotosWithSource } from '@/lib/media-picker';
 import { GENERAL_CONTRACTOR_READINESS_SELECT, isGeneralContractorReadyForProjectControls } from '@/lib/general-contractor';
-import { getSignedUrl, getUploadMetadata, uploadFile } from '@/lib/supabase/storage';
+import { getSignedUrl, getUploadMetadata, uploadPickerAsset } from '@/lib/supabase/storage';
 import { getRequiredStringParam } from '@/lib/navigation-params';
 import { Colors, Radius, Spacing, Typography } from '@/constants/theme';
-import { GlassButton, GlassCard, GlassInput, GradientBackground, StatusBadge } from '@/components/ui';
+import { CardSkeleton, GlassButton, GlassCard, GlassInput, GradientBackground, StatusBadge } from '@/components/ui';
 
 interface Permit {
   id: string;
@@ -67,6 +67,7 @@ export default function GeneralContractorPermitsScreen() {
   const [uploadingId, setUploadingId] = useState<string | null>(null);
   const [refreshing, setRefreshing] = useState(false);
   const [loading, setLoading] = useState(true);
+  const hasLoadedRef = useRef(false);
   const [gcReady, setGcReady] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
@@ -144,6 +145,7 @@ export default function GeneralContractorPermitsScreen() {
       clearPermitState();
       setErrorMessage(formatAppSafeErrorMessage(err, 'Could not load permits.'));
     } finally {
+      hasLoadedRef.current = true;
       setLoading(false);
       setRefreshing(false);
     }
@@ -222,18 +224,20 @@ export default function GeneralContractorPermitsScreen() {
       return;
     }
     try {
-      const result = await launchImageLibrary({
-        mediaType: 'photo',
-        quality: 0.8,
+      const assets = await pickPhotosWithSource({
+        quality: 0.45,
         selectionLimit: 1,
-        assetRepresentationMode: 'compatible',
+        includeBase64: true,
+        maxWidth: 1280,
+        maxHeight: 1280,
       });
-      if (result.didCancel || !result.assets?.[0]) return;
+      if (!assets?.[0]) return;
 
       setUploadingId(permit.id);
-      const upload = getUploadMetadata(result.assets[0]);
-      const path = `${projectId}/${permit.id}-${Date.now()}.${upload.extension}`;
-      const { storagePath } = await uploadFile('permits', path, upload.uri, upload.contentType);
+      const upload = getUploadMetadata(assets[0]);
+      const extension = upload.contentType === 'image/jpeg' ? 'jpg' : upload.extension;
+      const path = `${projectId}/${permit.id}-${Date.now()}.${extension}`;
+      const { storagePath } = await uploadPickerAsset('permits', path, assets[0], 'image/jpeg');
 
       const { error } = await supabase
         .from('permits')
@@ -243,6 +247,7 @@ export default function GeneralContractorPermitsScreen() {
       if (error) throw error;
 
       await fetchPermits();
+      Alert.alert('Uploaded', 'Permit / inspection document saved.');
     } catch (err) {
       Alert.alert('Upload failed', formatAppSafeErrorMessage(err, 'Please try again.'));
     } finally {
@@ -317,9 +322,10 @@ export default function GeneralContractorPermitsScreen() {
               <Text style={styles.bodyText}>{errorMessage}</Text>
             </GlassCard>
           ) : loading ? (
-            <GlassCard style={styles.card}>
-              <Text style={styles.bodyText}>Loading permits...</Text>
-            </GlassCard>
+            <View style={{ gap: 12 }}>
+              <CardSkeleton />
+              <CardSkeleton />
+            </View>
           ) : permits.length === 0 && canViewPermits ? (
             <GlassCard style={styles.card}>
               <Text style={styles.bodyText}>No permit or inspection records yet.</Text>

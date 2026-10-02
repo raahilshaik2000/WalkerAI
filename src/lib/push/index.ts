@@ -39,12 +39,18 @@ export function setPushCurrentRole(role: UserRole | null) {
 /**
  * Run on every successful sign-in to make sure this device's APNs token is
  * registered against the current user. Idempotent: safe to call any number
- * of times. Returns early on Android / non-supported platforms.
+ * of times.
+ *
+ * Android push (FCM) is intentionally not wired in this cleanup pass —
+ * only iOS/APNs is supported. Callers should treat Android as no-op.
  */
 export async function initPushForUser(userId: string, role: UserRole | null): Promise<void> {
   setPushCurrentRole(role);
   if (Platform.OS !== 'ios' || !NativeModule || !events) {
-    return; // Android / other platforms not supported yet (no FCM wired).
+    if (Platform.OS === 'android') {
+      console.log('[push] Android push skipped — FCM not configured in this build.');
+    }
+    return;
   }
 
   // Wire up listeners exactly once per process lifetime. We re-register them
@@ -125,11 +131,28 @@ export async function deactivatePushForUser(userId: string): Promise<void> {
  */
 async function saveDeviceToken(userId: string, token: string): Promise<void> {
   try {
+    const { data: authData } = await supabase.auth.getUser();
+    const currentAuthId = authData.user?.id;
+    if (!currentAuthId || currentAuthId !== userId) {
+      // Session not yet established or signed out
+      return;
+    }
+
+    // Attempt registration via SECURITY DEFINER RPC first to bypass cross-user RLS conflicts
+    const { error: rpcError } = await supabase.rpc('register_device_token', {
+      p_token: token,
+      p_platform: 'ios',
+    });
+    if (!rpcError) {
+      console.log('[push] device token saved via rpc');
+      return;
+    }
+
     const { error } = await supabase
       .from('device_tokens')
       .upsert(
         {
-          user_id: userId,
+          user_id: currentAuthId,
           token,
           platform: 'ios',
           is_active: true,
@@ -143,7 +166,7 @@ async function saveDeviceToken(userId: string, token: string): Promise<void> {
     }
     console.log('[push] device token saved');
   } catch (err) {
-    console.warn('[push] unexpected error saving token:', err);
+    console.warn('[push] failed to save device token:', err);
   }
 }
 
@@ -154,10 +177,21 @@ async function saveDeviceToken(userId: string, token: string): Promise<void> {
  */
 function handleNotificationTap(data: Record<string, unknown>): void {
   const type = typeof data.type === 'string' ? data.type : null;
-  if (!type) return;
+  if (!type) {
+    console.warn('[push] notification tap ignored — missing type', data);
+    return;
+  }
   // resolveNotificationRoute expects the raw notification payload. The
   // send-push function forwards canonical project_id/slot_id/order_id keys
   // and deep_link directly in APNs userInfo, so we can hand data through.
   const route = resolveNotificationRoute(type, data, currentRole);
+  if (!route) {
+    console.warn('[push] notification tap ignored — no route for', {
+      type,
+      role: currentRole,
+      keys: Object.keys(data),
+    });
+    return;
+  }
   onDeepLink(route);
 }

@@ -1,6 +1,5 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useState, useRef } from 'react';
 import {
-  ActivityIndicator,
   Alert,
   KeyboardAvoidingView,
   Modal,
@@ -20,7 +19,7 @@ import { isValidIsoDate } from '@/lib/dates';
 import { formatAppSafeErrorMessage } from '@/lib/supabase/functions';
 import { getRequiredStringParam } from '@/lib/navigation-params';
 import { formatTradeLabel } from '@/lib/trade-labels';
-import { GlassButton, GradientBackground } from '@/components/ui';
+import { GlassButton, GradientBackground, ListItemSkeleton } from '@/components/ui';
 import { Colors, Radius, Spacing, Typography } from '@/constants/theme';
 
 interface Slot {
@@ -73,6 +72,7 @@ export default function ScheduleScreen() {
 
   const [slots, setSlots] = useState<Slot[]>([]);
   const [loading, setLoading] = useState(true);
+  const hasLoadedRef = useRef(false);
   const [saving, setSaving] = useState(false);
   const [pickerSlot, setPickerSlot] = useState<{ id: string; field: 'start' | 'end' } | null>(null);
   const [inputValue, setInputValue] = useState('');
@@ -80,7 +80,7 @@ export default function ScheduleScreen() {
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
   const loadSlots = useCallback(async () => {
-    setLoading(true);
+    if (!hasLoadedRef.current) setLoading(true);
     setErrorMessage(null);
 
     if (!projectId) {
@@ -119,6 +119,7 @@ export default function ScheduleScreen() {
       };
     }
     setDates(initial);
+    hasLoadedRef.current = true;
     setLoading(false);
   }, [projectId]);
 
@@ -264,7 +265,11 @@ export default function ScheduleScreen() {
     return (
       <GradientBackground>
         <SafeAreaView style={styles.centered}>
-          <ActivityIndicator size="large" color="#FF6B00" />
+          <View style={{ width: '100%', paddingHorizontal: 16 }}>
+            <ListItemSkeleton style={{ marginBottom: 12 }} />
+            <ListItemSkeleton style={{ marginBottom: 12 }} />
+            <ListItemSkeleton />
+          </View>
         </SafeAreaView>
       </GradientBackground>
     );

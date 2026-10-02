@@ -151,7 +151,7 @@ Deno.serve(async (req) => {
         quote:quotes (
           id, total_amount, status, commission_rate, stripe_payment_intent_id, company_id,
           project:projects (
-            id, homeowner_id, province, status
+            id, homeowner_id, province, status, admin_paused
           ),
           company:companies (
             id, user_id, stripe_account_id, province
@@ -180,6 +180,7 @@ Deno.serve(async (req) => {
         homeowner_id: string;
         province: string;
         status: string;
+        admin_paused?: boolean | null;
       };
       company: {
         id: string;
@@ -212,6 +213,15 @@ Deno.serve(async (req) => {
         status: 403,
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
       });
+    }
+
+    if (project.admin_paused) {
+      return new Response(
+        JSON.stringify({
+          error: 'Payment release is restricted by Walker AI admin. Contact support to release the hold.',
+        }),
+        { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } },
+      );
     }
 
     // Check no active dispute on the project

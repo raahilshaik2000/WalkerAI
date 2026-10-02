@@ -14,13 +14,13 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useNavigation, useRoute } from '@react-navigation/native';
-import { launchImageLibrary } from 'react-native-image-picker';
 import ReactNativeHapticFeedback from 'react-native-haptic-feedback';
 import Ionicons from 'react-native-vector-icons/Ionicons';
 import { supabase } from '@/lib/supabase/client';
 import { formatAppSafeErrorMessage } from '@/lib/supabase/functions';
 import { GENERAL_CONTRACTOR_READINESS_SELECT, isGeneralContractorReadyForProjectControls } from '@/lib/general-contractor';
 import { getRequiredStringParam } from '@/lib/navigation-params';
+import { pickPhotosWithSource } from '@/lib/media-picker';
 import { getUploadMetadata, uploadFile } from '@/lib/supabase/storage';
 import { useAuthStore } from '@/stores/auth.store';
 import { Colors, Spacing, Typography } from '@/constants/theme';
@@ -222,17 +222,15 @@ export default function GeneralContractorMessagesScreen() {
         Alert.alert('Unable to attach photo', 'Please reopen this project and try again.');
         return;
       }
-      const result = await launchImageLibrary({
-        mediaType: 'photo',
+      const assets = await pickPhotosWithSource({
         quality: 0.8,
         selectionLimit: 1,
-        assetRepresentationMode: 'compatible',
       });
-      if (result.didCancel || !result.assets?.[0]) return;
+      if (!assets?.[0]) return;
 
       const caption = body.trim();
       setUploadingAttachment(true);
-      const upload = getUploadMetadata(result.assets[0]);
+      const upload = getUploadMetadata(assets[0]);
       const path = `${projectId}/messages/${currentUser.id}-${Date.now()}.${upload.extension}`;
       const { publicUrl } = await uploadFile('project-photos', path, upload.uri, upload.contentType);
 
@@ -339,32 +337,49 @@ export default function GeneralContractorMessagesScreen() {
             {!!composeLockMessage && (
               <Text style={styles.composeLock}>{composeLockMessage}</Text>
             )}
-            <TextInput
-              style={styles.input}
-              value={body}
-              onChangeText={setBody}
-              placeholder={canSendMessages ? 'Type a message...' : 'Messages locked'}
-              placeholderTextColor={Colors.text.tertiary}
-              editable={canSendMessages && !sending && !uploadingAttachment}
-              multiline
-              maxLength={2000}
-            />
-            <TouchableOpacity
-              style={[styles.attachBtn, (!canSendMessages || sending || uploadingAttachment) && styles.sendBtnDisabled]}
-              onPress={sendPhotoAttachment}
-              disabled={!canSendMessages || sending || uploadingAttachment}
-              activeOpacity={0.85}
-            >
-              <Ionicons name={uploadingAttachment ? 'cloud-upload-outline' : 'image-outline'} size={20} color={Colors.text.secondary} />
-            </TouchableOpacity>
-            <TouchableOpacity
-              style={[styles.sendBtn, (!canSendMessages || !body.trim() || sending || uploadingAttachment) && styles.sendBtnDisabled]}
-              onPress={sendMessage}
-              disabled={!canSendMessages || !body.trim() || sending || uploadingAttachment}
-              activeOpacity={0.85}
-            >
-              <Ionicons name="arrow-up" size={20} color={Colors.accentFg} />
-            </TouchableOpacity>
+            <View style={styles.composeRow}>
+              <TouchableOpacity
+                style={[styles.attachBtn, (!canSendMessages || sending || uploadingAttachment) && styles.iconBtnDisabled]}
+                onPress={sendPhotoAttachment}
+                disabled={!canSendMessages || sending || uploadingAttachment}
+                activeOpacity={0.85}
+              >
+                <Ionicons
+                  name={uploadingAttachment ? 'cloud-upload-outline' : 'image-outline'}
+                  size={20}
+                  color={!canSendMessages || sending || uploadingAttachment ? Colors.text.tertiary : Colors.text.secondary}
+                />
+              </TouchableOpacity>
+              <TextInput
+                style={styles.input}
+                value={body}
+                onChangeText={setBody}
+                placeholder={canSendMessages ? 'Type a message...' : 'Messages locked'}
+                placeholderTextColor={Colors.text.tertiary}
+                editable={canSendMessages && !sending && !uploadingAttachment}
+                multiline
+                maxLength={2000}
+              />
+              <TouchableOpacity
+                style={[
+                  styles.sendBtn,
+                  (!canSendMessages || !body.trim() || sending || uploadingAttachment) && styles.sendBtnDisabled,
+                ]}
+                onPress={sendMessage}
+                disabled={!canSendMessages || !body.trim() || sending || uploadingAttachment}
+                activeOpacity={0.85}
+              >
+                <Ionicons
+                  name="arrow-up"
+                  size={20}
+                  color={
+                    !canSendMessages || !body.trim() || sending || uploadingAttachment
+                      ? Colors.text.tertiary
+                      : Colors.accentFg
+                  }
+                />
+              </TouchableOpacity>
+            </View>
           </View>
         </KeyboardAvoidingView>
       </SafeAreaView>
@@ -433,33 +448,36 @@ const styles = StyleSheet.create({
     backgroundColor: Colors.bg.primary,
   },
   composeLock: { ...Typography.caption, color: Colors.warning, marginBottom: 8 },
+  composeRow: {
+    flexDirection: 'row',
+    alignItems: 'flex-end',
+    gap: 10,
+  },
   input: {
     flex: 1,
+    minWidth: 0,
     color: Colors.text.primary,
     backgroundColor: Colors.glass.surface,
     borderWidth: 1,
     borderColor: Colors.glass.border,
     borderRadius: 22,
-    paddingLeft: 52,
-    paddingRight: 58,
+    paddingHorizontal: 16,
     paddingVertical: 11,
     fontSize: 15,
     maxHeight: 120,
   },
   attachBtn: {
-    position: 'absolute',
-    left: Spacing.sm,
-    bottom: Spacing.sm,
     width: 42,
     height: 42,
     borderRadius: 21,
     alignItems: 'center',
     justifyContent: 'center',
+    backgroundColor: Colors.glass.surface,
+    borderWidth: 1,
+    borderColor: Colors.glass.border,
   },
+  iconBtnDisabled: { opacity: 0.55 },
   sendBtn: {
-    position: 'absolute',
-    right: Spacing.sm,
-    bottom: Spacing.sm,
     width: 42,
     height: 42,
     borderRadius: 21,
@@ -467,5 +485,10 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
-  sendBtnDisabled: { opacity: 0.4 },
+  sendBtnDisabled: {
+    backgroundColor: Colors.glass.surface,
+    borderWidth: 1,
+    borderColor: Colors.glass.border,
+    opacity: 1,
+  },
 });

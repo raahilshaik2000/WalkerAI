@@ -121,10 +121,14 @@ export function TradeEmptyState({
   icon,
   title,
   body,
+  actionLabel,
+  onAction,
 }: {
   icon: string;
   title: string;
   body: string;
+  actionLabel?: string;
+  onAction?: () => void;
 }) {
   return (
     <View style={styles.empty}>
@@ -133,6 +137,11 @@ export function TradeEmptyState({
       </View>
       <Text style={styles.emptyTitle}>{title}</Text>
       <Text style={styles.emptyBody}>{body}</Text>
+      {actionLabel && onAction ? (
+        <TouchableOpacity style={styles.emptyAction} onPress={onAction} activeOpacity={0.8}>
+          <Text style={styles.emptyActionText}>{actionLabel}</Text>
+        </TouchableOpacity>
+      ) : null}
     </View>
   );
 }
@@ -242,5 +251,17 @@ const styles = StyleSheet.create({
   emptyBody: {
     ...Typography.bodySecondary,
     textAlign: 'center',
+  },
+  emptyAction: {
+    marginTop: 16,
+    backgroundColor: Colors.accent,
+    paddingHorizontal: 20,
+    paddingVertical: 10,
+    borderRadius: 20,
+  },
+  emptyActionText: {
+    fontSize: 14,
+    fontWeight: '700',
+    color: Colors.accentFg,
   },
 });

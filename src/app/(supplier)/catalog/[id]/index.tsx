@@ -1,15 +1,18 @@
 import { useEffect, useState } from 'react';
-import { ActivityIndicator, Alert, KeyboardAvoidingView, Platform, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { Alert, Image, KeyboardAvoidingView, Platform, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useNavigation, useRoute } from '@react-navigation/native';
+import { useQueryClient } from '@tanstack/react-query';
 import Ionicons from 'react-native-vector-icons/Ionicons';
 import { supabase } from '@/lib/supabase/client';
 import { getCurrentUser } from '@/lib/supabase/auth';
 import { formatAppSafeErrorMessage } from '@/lib/supabase/functions';
 import { getRequiredStringParam } from '@/lib/navigation-params';
+import { pickAndUploadCatalogPhoto } from '@/lib/catalog-photo';
+import { supplierQueryKeys } from '@/lib/supplier-data';
 import { useAuthStore } from '@/stores/auth.store';
 import { Colors, Spacing, Typography } from '@/constants/theme';
-import { GlassButton, GlassCard, GlassInput, GradientBackground } from '@/components/ui';
+import { GlassButton, GlassCard, GlassInput, GradientBackground, ListItemSkeleton } from '@/components/ui';
 import { type SupplierCategory, type QualityTier } from '@/constants/enums';
 import {
   parseNonNegativeDays,
@@ -22,6 +25,7 @@ const UNIT_OPTIONS = ['units', 'sq ft', 'linear ft', 'lbs', 'bags', 'sheets', 'r
 
 export default function EditCatalogItem() {
   const navigation = useNavigation<any>();
+  const queryClient = useQueryClient();
   const route = useRoute<any>();
   const itemId = getRequiredStringParam(route.params, 'itemId');
   const { user } = useAuthStore();
@@ -39,6 +43,9 @@ export default function EditCatalogItem() {
   const [brand, setBrand] = useState('');
   const [qualityTier, setQualityTier] = useState<QualityTier>('mid-range');
   const [leadTime, setLeadTime] = useState('3');
+  const [imageUrl, setImageUrl] = useState<string | null>(null);
+  const [uploadingPhoto, setUploadingPhoto] = useState(false);
+  const [supplierId, setSupplierId] = useState<string | null>(null);
   const [availableCategories, setAvailableCategories] = useState<SupplierCategory[]>([]);
 
   useEffect(() => {
@@ -68,7 +75,7 @@ export default function EditCatalogItem() {
             .maybeSingle(),
           supabase
             .from('supplier_catalog')
-            .select('*')
+            .select('id, supplier_id, name, description, category, sku, unit, price_per_unit, quality_tier, brand, lead_time_days, in_stock, stock_quantity, image_urls, created_at')
             .eq('id', itemId)
             .maybeSingle(),
         ]);
@@ -97,6 +104,7 @@ export default function EditCatalogItem() {
           return;
         }
 
+        setSupplierId(supplierResult.data.id);
         const categories = selectedSupplierCategories(supplierResult.data.categories);
         if (categories.length === 0) {
           Alert.alert('Supply categories required', 'Select supply categories before editing catalog items.');
@@ -113,6 +121,10 @@ export default function EditCatalogItem() {
         setBrand(data.brand ?? '');
         setQualityTier(data.quality_tier as QualityTier);
         setLeadTime(String(data.lead_time_days ?? 3));
+        const firstImage = Array.isArray(data.image_urls)
+          ? data.image_urls.find((u: string) => typeof u === 'string' && u.startsWith('http'))
+          : null;
+        setImageUrl(firstImage ?? null);
       } catch (err) {
         if (!mounted) return;
         Alert.alert('Could not load catalog item', formatAppSafeErrorMessage(err, 'Please try again.'));
@@ -157,9 +169,11 @@ export default function EditCatalogItem() {
         quality_tier: qualityTier,
         brand: brand.trim() || null,
         lead_time_days: leadTimeDays,
+        image_urls: imageUrl ? [imageUrl] : [],
       }).eq('id', itemId).select('id').maybeSingle();
       if (error) throw error;
       if (!data) throw new Error('Catalog item was not saved.');
+      if (supplierId) queryClient.invalidateQueries({ queryKey: supplierQueryKeys.catalog(supplierId) });
       navigation.goBack();
     } catch (err) {
       Alert.alert('Could not save catalog item', formatAppSafeErrorMessage(err, 'Please try again.'));
@@ -193,6 +207,7 @@ export default function EditCatalogItem() {
             Alert.alert('Catalog item unavailable', 'This catalog item is no longer available.');
             setDeleting(false);
           } else {
+            if (supplierId) queryClient.invalidateQueries({ queryKey: supplierQueryKeys.catalog(supplierId) });
             navigation.goBack();
           }
         },
@@ -201,7 +216,17 @@ export default function EditCatalogItem() {
   };
 
   if (loading) {
-    return <View style={styles.center}><ActivityIndicator color={Colors.success} size="large" /></View>;
+    return (
+      <GradientBackground>
+        <SafeAreaView style={styles.center}>
+          <View style={{ width: '100%', paddingHorizontal: Spacing.md }}>
+            <ListItemSkeleton style={{ marginBottom: 12 }} />
+            <ListItemSkeleton style={{ marginBottom: 12 }} />
+            <ListItemSkeleton style={{ marginBottom: 12 }} />
+          </View>
+        </SafeAreaView>
+      </GradientBackground>
+    );
   }
 
   return (
@@ -219,9 +244,43 @@ export default function EditCatalogItem() {
               </TouchableOpacity>
             </View>
 
-            <GlassCard style={styles.card}>
+            <GlassCard style={styles.card} padding={Spacing.md}>
+              <Text style={styles.photoLabel}>Product photo</Text>
+              <TouchableOpacity
+                style={styles.photoBox}
+                activeOpacity={0.85}
+                disabled={!supplierId || uploadingPhoto}
+                onPress={async () => {
+                  if (!supplierId) return;
+                  setUploadingPhoto(true);
+                  try {
+                    const url = await pickAndUploadCatalogPhoto(supplierId);
+                    if (url) setImageUrl(url);
+                  } catch (err) {
+                    Alert.alert('Photo upload failed', formatAppSafeErrorMessage(err, 'Please try again.'));
+                  } finally {
+                    setUploadingPhoto(false);
+                  }
+                }}
+              >
+                {imageUrl ? (
+                  <Image source={{ uri: imageUrl }} style={styles.photoPreview} />
+                ) : (
+                  <View style={styles.photoPlaceholder}>
+                    <Ionicons name="camera-outline" size={28} color={Colors.text.tertiary} />
+                    <Text style={styles.photoHint}>
+                      {uploadingPhoto ? 'Uploading…' : 'Add photo for the design tool'}
+                    </Text>
+                  </View>
+                )}
+              </TouchableOpacity>
+              {imageUrl ? (
+                <TouchableOpacity onPress={() => setImageUrl(null)} style={{ marginBottom: Spacing.sm }}>
+                  <Text style={styles.removePhoto}>Remove photo</Text>
+                </TouchableOpacity>
+              ) : null}
               <GlassInput label="Product Name" value={name} onChangeText={setName} containerStyle={styles.input} />
-              <GlassInput label="Description (optional)" value={description} onChangeText={setDescription} multiline containerStyle={styles.input} />
+              <GlassInput label="Description (optional)" value={description} onChangeText={setDescription} containerStyle={styles.input} />
               <GlassInput label="Brand (optional)" value={brand} onChangeText={setBrand} containerStyle={styles.input} />
               <GlassInput label="SKU (optional)" value={sku} onChangeText={setSku} containerStyle={styles.input} />
               <GlassInput label="Price per unit (CAD $)" value={priceStr} onChangeText={setPriceStr} keyboardType="decimal-pad" containerStyle={styles.input} />
@@ -266,11 +325,25 @@ export default function EditCatalogItem() {
 const styles = StyleSheet.create({
   safe: { flex: 1 },
   center: { flex: 1, alignItems: 'center', justifyContent: 'center', backgroundColor: '#000' },
-  scroll: { flexGrow: 1, paddingHorizontal: Spacing.md, paddingBottom: Spacing.xl },
+  scroll: { flexGrow: 1, paddingHorizontal: Spacing.md, paddingBottom: 64 },
   navRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingVertical: Spacing.md },
   navTitle: { ...Typography.h3 },
-  card: { padding: Spacing.md, marginBottom: Spacing.lg },
+  card: { marginBottom: Spacing.lg },
   input: { marginBottom: Spacing.sm },
+  photoLabel: { fontSize: 13, color: Colors.text.secondary, fontWeight: '600', marginBottom: 8 },
+  photoBox: {
+    height: 160,
+    borderRadius: 14,
+    overflow: 'hidden',
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.15)',
+    backgroundColor: 'rgba(255,255,255,0.04)',
+    marginBottom: Spacing.sm,
+  },
+  photoPreview: { width: '100%', height: '100%' },
+  photoPlaceholder: { flex: 1, alignItems: 'center', justifyContent: 'center', gap: 8 },
+  photoHint: { fontSize: 13, color: Colors.text.tertiary },
+  removePhoto: { color: Colors.accent, fontWeight: '600', fontSize: 13 },
   sectionLabel: { fontSize: 13, color: Colors.text.secondary, fontWeight: '600', marginBottom: 10, marginTop: 4 },
   chipGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginBottom: Spacing.md },
   chip: { paddingVertical: 8, paddingHorizontal: 14, borderRadius: 20, borderWidth: 1, borderColor: 'rgba(255,255,255,0.15)', backgroundColor: 'rgba(255,255,255,0.05)' },

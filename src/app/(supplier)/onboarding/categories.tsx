@@ -77,7 +77,7 @@ export default function SupplierCategoriesOnboarding() {
           <Text style={styles.title}>What do you supply?</Text>
           <Text style={styles.subtitle}>Select all categories that apply — you can update this later</Text>
 
-          <GlassCard style={styles.card}>
+          <GlassCard style={styles.card} padding={Spacing.md}>
             <View style={styles.grid}>
               {SUPPLIER_CATEGORIES.map((cat) => {
                 const active = selected.has(cat);
@@ -88,7 +88,7 @@ export default function SupplierCategoriesOnboarding() {
                     onPress={() => toggle(cat)}
                     activeOpacity={0.7}
                   >
-                    {active && <Ionicons name="checkmark" size={14} color={Colors.accent} />}
+                    {active && <Ionicons name="checkmark" size={14} color={Colors.success} />}
                     <Text style={[styles.chipText, active && styles.chipTextActive]}>{cat}</Text>
                   </TouchableOpacity>
                 );
@@ -116,7 +116,7 @@ const styles = StyleSheet.create({
   stepDotActive: { backgroundColor: Colors.accent, width: 24 },
   title: { ...Typography.h1, marginBottom: 6 },
   subtitle: { ...Typography.bodySecondary, marginBottom: Spacing.lg },
-  card: { padding: Spacing.md, marginBottom: Spacing.md },
+  card: { marginBottom: Spacing.md },
   grid: { flexDirection: 'row', flexWrap: 'wrap', gap: 10 },
   chip: {
     flexDirection: 'row',

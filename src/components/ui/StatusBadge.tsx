@@ -118,11 +118,14 @@ export function StatusBadge({
         />
       )}
       <Text
+        numberOfLines={1}
+        ellipsizeMode="tail"
         style={[
           styles.text,
           {
             color: variantStyle.text,
             fontSize: isSmall ? 11 : 12,
+            flexShrink: 1,
           },
         ]}
       >
@@ -137,6 +140,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     alignSelf: 'flex-start',
+    maxWidth: '100%',
     borderWidth: 1,
   },
   dot: {

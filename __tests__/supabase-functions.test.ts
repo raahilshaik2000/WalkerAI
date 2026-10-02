@@ -26,7 +26,7 @@ describe('Supabase function error formatting', () => {
   });
 
   it('falls back to polished copy for transient infrastructure errors', async () => {
-    await expect(formatSupabaseFunctionError(new Error('Network request failed'))).resolves.toBe('Request failed. Please try again.');
+    await expect(formatSupabaseFunctionError(new Error('Network request failed'))).resolves.toBe('Network issue. Check your connection and try again.');
     await expect(formatSupabaseFunctionError({
       message: 'Edge Function returned a non-2xx status code',
       context: new Response(JSON.stringify({ error: 'The connection to the database timed out' })),
@@ -42,6 +42,12 @@ describe('Supabase function error formatting', () => {
       { message: 'Project creation failed', details: 'canceling statement due to statement timeout' },
       'Analysis failed. Please try again.',
     )).toBe('Analysis failed. Please try again.');
+    expect(formatAppSafeErrorMessage(
+      new Error('Upload failed (544): {"statusCode":"544","error":"DatabaseTimeout"}'),
+      'Please try again.',
+    )).toBe(
+      'Storage is busy or timing out on the server. Wait a moment and try a smaller photo, or retry after Supabase recovers.',
+    );
   });
 
   it('falls back to polished copy for database-internal errors', async () => {

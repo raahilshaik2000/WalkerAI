@@ -1,5 +1,6 @@
 import type { RoomType } from '@/constants/enums';
 import type { SurfaceSelection } from '@/stores/project-wizard.store';
+export type { SurfaceSelection };
 
 export interface SurfaceOption {
   material: string;
@@ -22,6 +23,12 @@ export interface PersistedSurfaceSelection {
   colorHex: string;
   answerId?: string;
   source?: SurfaceSelectionSource;
+  catalogItemId?: string;
+  sku?: string;
+  brand?: string;
+  priceCents?: number;
+  imageUrl?: string;
+  supplierId?: string;
 }
 
 export const FINISH_CUSTOMIZER_ANSWERS_KEY = 'finish_customizer_selections';
@@ -32,11 +39,11 @@ const KITCHEN_SURFACES: CustomizableSurface[] = [
     id: 'cabinets',
     label: 'Cabinets',
     options: [
+      { material: 'Painted shaker', colorName: 'Deep navy', colorHex: '#23344A' },
+      { material: 'White oak', colorName: 'Natural oak', colorHex: '#C9A775' },
       { material: 'Painted shaker', colorName: 'Warm white', colorHex: '#F2EFE8' },
       { material: 'Painted shaker', colorName: 'Sage green', colorHex: '#8FA68E' },
-      { material: 'Painted shaker', colorName: 'Deep navy', colorHex: '#23344A' },
       { material: 'Painted slab', colorName: 'Charcoal', colorHex: '#33363A' },
-      { material: 'White oak', colorName: 'Natural oak', colorHex: '#C9A775' },
       { material: 'White oak', colorName: 'Bleached oak', colorHex: '#E0CFA8' },
       { material: 'Walnut veneer', colorName: 'Deep walnut', colorHex: '#5C3A24' },
       { material: 'Walnut veneer', colorName: 'Smoky walnut', colorHex: '#3A2618' },
@@ -64,9 +71,9 @@ const KITCHEN_SURFACES: CustomizableSurface[] = [
     id: 'backsplash',
     label: 'Backsplash',
     options: [
+      { material: 'Zellige tile', colorName: 'Sea glass', colorHex: '#89A7A2' },
       { material: 'Ceramic subway tile', colorName: 'Gloss white', colorHex: '#F8F7F2' },
       { material: 'Ceramic subway tile', colorName: 'Matte black', colorHex: '#1E1F22' },
-      { material: 'Zellige tile', colorName: 'Sea glass', colorHex: '#89A7A2' },
       { material: 'Zellige tile', colorName: 'Terracotta', colorHex: '#B86A4F' },
       { material: 'Porcelain tile', colorName: 'Charcoal', colorHex: '#3F4142' },
       { material: 'Stone slab', colorName: 'Bookmatched marble', colorHex: '#D8D2C6' },
@@ -111,11 +118,11 @@ const BATHROOM_SURFACES: CustomizableSurface[] = [
     id: 'vanity',
     label: 'Vanity',
     options: [
+      { material: 'Floating vanity', colorName: 'White oak', colorHex: '#C8A675' },
+      { material: 'Painted vanity', colorName: 'Navy blue', colorHex: '#23344A' },
       { material: 'Painted vanity', colorName: 'Warm white', colorHex: '#F4F1E8' },
       { material: 'Painted vanity', colorName: 'Sage green', colorHex: '#8FA68E' },
-      { material: 'Painted vanity', colorName: 'Navy blue', colorHex: '#23344A' },
       { material: 'Painted vanity', colorName: 'Matte black', colorHex: '#1E1F22' },
-      { material: 'Floating vanity', colorName: 'White oak', colorHex: '#C8A675' },
       { material: 'Floating vanity', colorName: 'Bleached oak', colorHex: '#E0CFA8' },
       { material: 'Custom vanity', colorName: 'Walnut', colorHex: '#5D3B25' },
       { material: 'Custom vanity', colorName: 'Smoky walnut', colorHex: '#3A2618' },
@@ -291,7 +298,9 @@ export function buildSurfaceSelectionSummary(
     .map((surface) => {
       const selection = merged[surface.id];
       const source = surfaceSelectionSourceLabel(sourceForSurface(roomType, surface.id, selections, answers));
-      return `- ${surface.label}: ${selection.material}, ${selection.colorName} (${source})`;
+      return `- ${surface.label}: ${selection.material}, ${selection.colorName}${
+        selection.sku ? ` · SKU ${selection.sku}` : ''
+      }${selection.brand ? ` · ${selection.brand}` : ''} (${source})`;
     })
     .join('\n');
 }
@@ -313,6 +322,12 @@ export function persistedSurfaceSelections(
         colorHex: selection.colorHex,
         answerId: selection.answerId,
         source: sourceForSurface(roomType, surface.id, selections, answers),
+        catalogItemId: selection.catalogItemId,
+        sku: selection.sku,
+        brand: selection.brand,
+        priceCents: selection.priceCents,
+        imageUrl: selection.imageUrl,
+        supplierId: selection.supplierId,
       };
     })
     .filter((selection) => selection.source !== 'preview_default');

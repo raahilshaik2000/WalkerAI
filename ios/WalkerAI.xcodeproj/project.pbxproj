@@ -16,12 +16,15 @@
 		62D84C4B71B84F13BDB10101 /* WalkerVoiceAssistant.swift in Sources */ = {isa = PBXBuildFile; fileRef = 62D84C4B71B84F13BDB10100 /* WalkerVoiceAssistant.swift */; };
 		742BB6191B575E44870F79C9 /* RoomCaptureViewController.swift in Sources */ = {isa = PBXBuildFile; fileRef = AFD26C89B621E11EF0701975 /* RoomCaptureViewController.swift */; };
 		761780ED2CA45674006654EE /* AppDelegate.swift in Sources */ = {isa = PBXBuildFile; fileRef = 761780EC2CA45674006654EE /* AppDelegate.swift */; };
+		761780ED2CA45674006654EF /* SceneDelegate.swift in Sources */ = {isa = PBXBuildFile; fileRef = 761780EC2CA45674006654EF /* SceneDelegate.swift */; };
 		81AB9BB82411601600AC10FF /* LaunchScreen.storyboard in Resources */ = {isa = PBXBuildFile; fileRef = 81AB9BB72411601600AC10FF /* LaunchScreen.storyboard */; };
 		81C99F3E3DAC7C1FB314DEDF /* RoomPlanModule.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5EAFB39F6FB36050E7542342 /* RoomPlanModule.swift */; };
 		84104572B56D83F2D05F6A02 /* WalkerPushModule.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8F47DD424210E1AC0F8F0C57 /* WalkerPushModule.swift */; };
 		A2F6754E9B8E4D5EA9C10201 /* WalkerVoiceAssistant.m in Sources */ = {isa = PBXBuildFile; fileRef = A2F6754E9B8E4D5EA9C10200 /* WalkerVoiceAssistant.m */; };
 		D5D5860BA8C9E3E630A2B8E3 /* PrivacyInfo.xcprivacy in Resources */ = {isa = PBXBuildFile; fileRef = 13B07FB81A68108700A75B9A /* PrivacyInfo.xcprivacy */; };
 		DF5283790FCB7ECB51236FB6 /* RoomCustomizerViewManager.m in Sources */ = {isa = PBXBuildFile; fileRef = D38F77602AE332D2F11F9A64 /* RoomCustomizerViewManager.m */; };
+		E1F2A3B4C5D6E7F8091A2B3C /* WalkerInAppBrowser.swift in Sources */ = {isa = PBXBuildFile; fileRef = E1F2A3B4C5D6E7F8091A2B3D /* WalkerInAppBrowser.swift */; };
+		E1F2A3B4C5D6E7F8091A2B3E /* WalkerInAppBrowser.m in Sources */ = {isa = PBXBuildFile; fileRef = E1F2A3B4C5D6E7F8091A2B3F /* WalkerInAppBrowser.m */; };
 		F01B4672E8E02E55594958B5 /* libPods-WalkerAI.a in Frameworks */ = {isa = PBXBuildFile; fileRef = A4A16C555B69FE185B47D831 /* libPods-WalkerAI.a */; };
 /* End PBXBuildFile section */
 
@@ -35,6 +38,7 @@
 		5EAFB39F6FB36050E7542342 /* RoomPlanModule.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = RoomPlanModule.swift; sourceTree = "<group>"; };
 		62D84C4B71B84F13BDB10100 /* WalkerVoiceAssistant.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = WalkerVoiceAssistant.swift; sourceTree = "<group>"; };
 		761780EC2CA45674006654EE /* AppDelegate.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = AppDelegate.swift; path = WalkerAI/AppDelegate.swift; sourceTree = "<group>"; };
+		761780EC2CA45674006654EF /* SceneDelegate.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = SceneDelegate.swift; path = WalkerAI/SceneDelegate.swift; sourceTree = "<group>"; };
 		81AB9BB72411601600AC10FF /* LaunchScreen.storyboard */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = file.storyboard; name = LaunchScreen.storyboard; path = WalkerAI/LaunchScreen.storyboard; sourceTree = "<group>"; };
 		8F47DD424210E1AC0F8F0C57 /* WalkerPushModule.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = WalkerPushModule.swift; sourceTree = "<group>"; };
 		9A601BF6FCA9931FAF0EAB16 /* Pods-WalkerAI.debug.xcconfig */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.xcconfig; name = "Pods-WalkerAI.debug.xcconfig"; path = "Target Support Files/Pods-WalkerAI/Pods-WalkerAI.debug.xcconfig"; sourceTree = "<group>"; };
@@ -45,6 +49,8 @@
 		B3D4F6CC5D3C781E6F926495 /* Pods-WalkerAI.release.xcconfig */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.xcconfig; name = "Pods-WalkerAI.release.xcconfig"; path = "Target Support Files/Pods-WalkerAI/Pods-WalkerAI.release.xcconfig"; sourceTree = "<group>"; };
 		D38F77602AE332D2F11F9A64 /* RoomCustomizerViewManager.m */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.c.objc; path = RoomCustomizerViewManager.m; sourceTree = "<group>"; };
 		DC97F2F228DA2CA0BB83EA6E /* RoomCustomizerViewController.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = RoomCustomizerViewController.swift; sourceTree = "<group>"; };
+		E1F2A3B4C5D6E7F8091A2B3D /* WalkerInAppBrowser.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = WalkerInAppBrowser.swift; path = WalkerAI/WalkerInAppBrowser.swift; sourceTree = "<group>"; };
+		E1F2A3B4C5D6E7F8091A2B3F /* WalkerInAppBrowser.m */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.c.objc; name = WalkerInAppBrowser.m; path = WalkerAI/WalkerInAppBrowser.m; sourceTree = "<group>"; };
 		ED297162215061F000B7C4FE /* JavaScriptCore.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = JavaScriptCore.framework; path = System/Library/Frameworks/JavaScriptCore.framework; sourceTree = SDKROOT; };
 		F1344072B3D6997D50F1F834 /* RoomPlanModule.m */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.c.objc; path = RoomPlanModule.m; sourceTree = "<group>"; };
 		FA9700EE49B85739DF078F59 /* WalkerAI.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = WalkerAI.entitlements; sourceTree = "<group>"; };
@@ -74,6 +80,7 @@
 			children = (
 				13B07FB51A68108700A75B9A /* Images.xcassets */,
 				761780EC2CA45674006654EE /* AppDelegate.swift */,
+				761780EC2CA45674006654EF /* SceneDelegate.swift */,
 				13B07FB61A68108700A75B9A /* Info.plist */,
 				FA9700EE49B85739DF078F59 /* WalkerAI.entitlements */,
 				81AB9BB72411601600AC10FF /* LaunchScreen.storyboard */,
@@ -81,6 +88,8 @@
 				9B1A40FE5358FF2D185839D6 /* RoomPlan */,
 				62D84C4B71B84F13BDB10102 /* Voice */,
 				A1B2C3D4E5F60718293A4B5C /* Push */,
+				E1F2A3B4C5D6E7F8091A2B3D /* WalkerInAppBrowser.swift */,
+				E1F2A3B4C5D6E7F8091A2B3F /* WalkerInAppBrowser.m */,
 			);
 			name = WalkerAI;
 			sourceTree = "<group>";
@@ -284,9 +293,13 @@
 			inputFileListPaths = (
 				"${PODS_ROOT}/Target Support Files/Pods-WalkerAI/Pods-WalkerAI-frameworks-${CONFIGURATION}-input-files.xcfilelist",
 			);
+			inputPaths = (
+			);
 			name = "[CP] Embed Pods Frameworks";
 			outputFileListPaths = (
 				"${PODS_ROOT}/Target Support Files/Pods-WalkerAI/Pods-WalkerAI-frameworks-${CONFIGURATION}-output-files.xcfilelist",
+			);
+			outputPaths = (
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 			shellPath = /bin/sh;
@@ -316,9 +329,13 @@
 			inputFileListPaths = (
 				"${PODS_ROOT}/Target Support Files/Pods-WalkerAI/Pods-WalkerAI-resources-${CONFIGURATION}-input-files.xcfilelist",
 			);
+			inputPaths = (
+			);
 			name = "[CP] Copy Pods Resources";
 			outputFileListPaths = (
 				"${PODS_ROOT}/Target Support Files/Pods-WalkerAI/Pods-WalkerAI-resources-${CONFIGURATION}-output-files.xcfilelist",
+			);
+			outputPaths = (
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 			shellPath = /bin/sh;
@@ -333,6 +350,7 @@
 			buildActionMask = 2147483647;
 			files = (
 				761780ED2CA45674006654EE /* AppDelegate.swift in Sources */,
+				761780ED2CA45674006654EF /* SceneDelegate.swift in Sources */,
 				81C99F3E3DAC7C1FB314DEDF /* RoomPlanModule.swift in Sources */,
 				62D84C4B71B84F13BDB10101 /* WalkerVoiceAssistant.swift in Sources */,
 				742BB6191B575E44870F79C9 /* RoomCaptureViewController.swift in Sources */,
@@ -344,6 +362,8 @@
 				DF5283790FCB7ECB51236FB6 /* RoomCustomizerViewManager.m in Sources */,
 				84104572B56D83F2D05F6A02 /* WalkerPushModule.swift in Sources */,
 				4850E19952C5C67C8A650FE1 /* WalkerPushModule.m in Sources */,
+				E1F2A3B4C5D6E7F8091A2B3C /* WalkerInAppBrowser.swift in Sources */,
+				E1F2A3B4C5D6E7F8091A2B3E /* WalkerInAppBrowser.m in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -360,13 +380,14 @@
 				CODE_SIGN_ENTITLEMENTS = WalkerAI/WalkerAI.entitlements;
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 22;
+				DEBUG_INFORMATION_FORMAT = dwarf;
 				DEVELOPMENT_TEAM = W4V4NXYYW5;
 				ENABLE_BITCODE = NO;
 				ENABLE_USER_SCRIPT_SANDBOXING = NO;
 				INFOPLIST_FILE = WalkerAI/Info.plist;
 				INFOPLIST_KEY_CFBundleDisplayName = "Walker AI";
 				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.utilities";
-				IPHONEOS_DEPLOYMENT_TARGET = 18.0;
+				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
 					"@executable_path/Frameworks",
@@ -382,7 +403,7 @@
 				SUPPORTED_PLATFORMS = "iphoneos iphonesimulator";
 				SWIFT_OPTIMIZATION_LEVEL = "-Onone";
 				SWIFT_VERSION = 5.0;
-				TARGETED_DEVICE_FAMILY = "1,2";
+				TARGETED_DEVICE_FAMILY = 1;
 				VERSIONING_SYSTEM = "apple-generic";
 			};
 			name = Debug;
@@ -397,12 +418,13 @@
 				CODE_SIGN_ENTITLEMENTS = WalkerAI/WalkerAI.entitlements;
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 22;
+				DEBUG_INFORMATION_FORMAT = "dwarf-with-dsym";
 				DEVELOPMENT_TEAM = W4V4NXYYW5;
 				ENABLE_USER_SCRIPT_SANDBOXING = NO;
 				INFOPLIST_FILE = WalkerAI/Info.plist;
 				INFOPLIST_KEY_CFBundleDisplayName = "Walker AI";
 				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.utilities";
-				IPHONEOS_DEPLOYMENT_TARGET = 18.0;
+				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
 					"@executable_path/Frameworks",
@@ -417,7 +439,7 @@
 				PRODUCT_NAME = WalkerAI;
 				SUPPORTED_PLATFORMS = "iphoneos iphonesimulator";
 				SWIFT_VERSION = 5.0;
-				TARGETED_DEVICE_FAMILY = "1,2";
+				TARGETED_DEVICE_FAMILY = 1;
 				VERSIONING_SYSTEM = "apple-generic";
 			};
 			name = Release;
@@ -453,6 +475,7 @@
 				CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
 				"CODE_SIGN_IDENTITY[sdk=iphoneos*]" = "iPhone Developer";
 				COPY_PHASE_STRIP = NO;
+				DEBUG_INFORMATION_FORMAT = dwarf;
 				ENABLE_STRICT_OBJC_MSGSEND = YES;
 				ENABLE_TESTABILITY = YES;
 				"EXCLUDED_ARCHS[sdk=iphonesimulator*]" = "";
@@ -471,7 +494,7 @@
 				GCC_WARN_UNINITIALIZED_AUTOS = YES_AGGRESSIVE;
 				GCC_WARN_UNUSED_FUNCTION = YES;
 				GCC_WARN_UNUSED_VARIABLE = YES;
-				IPHONEOS_DEPLOYMENT_TARGET = 18.0;
+				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
 				LD_RUNPATH_SEARCH_PATHS = (
 					/usr/lib/swift,
 					"$(inherited)",
@@ -535,6 +558,7 @@
 				CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
 				"CODE_SIGN_IDENTITY[sdk=iphoneos*]" = "iPhone Developer";
 				COPY_PHASE_STRIP = YES;
+				DEBUG_INFORMATION_FORMAT = "dwarf-with-dsym";
 				ENABLE_NS_ASSERTIONS = NO;
 				ENABLE_STRICT_OBJC_MSGSEND = YES;
 				"EXCLUDED_ARCHS[sdk=iphonesimulator*]" = "";
@@ -546,7 +570,7 @@
 				GCC_WARN_UNINITIALIZED_AUTOS = YES_AGGRESSIVE;
 				GCC_WARN_UNUSED_FUNCTION = YES;
 				GCC_WARN_UNUSED_VARIABLE = YES;
-				IPHONEOS_DEPLOYMENT_TARGET = 18.0;
+				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
 				LD_RUNPATH_SEARCH_PATHS = (
 					/usr/lib/swift,
 					"$(inherited)",

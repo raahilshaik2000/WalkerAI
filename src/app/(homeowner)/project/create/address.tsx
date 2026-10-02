@@ -3,6 +3,7 @@ import {
   Alert,
   KeyboardAvoidingView,
   Platform,
+  ScrollView,
   StyleSheet,
   Text,
   TouchableOpacity,
@@ -35,6 +36,7 @@ export default function AddressStep() {
   const [voiceQuery, setVoiceQuery] = useState('');
   const [voiceQueryKey, setVoiceQueryKey] = useState(0);
   const voiceAvailable = isProjectVoiceAvailable();
+  const pauseBetweenVoiceTurns = (durationMs = 250) => new Promise((resolve) => setTimeout(resolve, durationMs));
 
   const handleVoiceAddressSearch = async () => {
     if (voiceBusy) return;
@@ -57,7 +59,8 @@ export default function AddressStep() {
       }
 
       await speakProjectPrompt('Say the full project address, including city and province.');
-      const transcript = await listenForProjectAnswer(9);
+      await pauseBetweenVoiceTurns();
+      const transcript = await listenForProjectAnswer(14);
       if (!transcript) {
         Alert.alert('No address heard', 'Please try again or type your address manually.');
         return;
@@ -139,8 +142,13 @@ export default function AddressStep() {
         <KeyboardAvoidingView
           style={styles.keyboard}
           behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+          keyboardVerticalOffset={Platform.OS === 'ios' ? 16 : 0}
         >
-          <View style={styles.content}>
+          <ScrollView
+            contentContainerStyle={styles.scroll}
+            showsVerticalScrollIndicator={false}
+            keyboardShouldPersistTaps="handled"
+          >
             <WizardHeader currentStep={6} />
 
             <Text style={styles.stepLabel}>STEP 6 OF 8</Text>
@@ -159,7 +167,7 @@ export default function AddressStep() {
                 <Ionicons
                   name={voiceBusy ? 'radio-outline' : 'mic-outline'}
                   size={18}
-                  color={voiceBusy ? '#000' : voiceAvailable ? Colors.accent : Colors.text.tertiary}
+                  color={voiceBusy ? Colors.accentFg : voiceAvailable ? Colors.success : Colors.text.tertiary}
                 />
               </View>
               <View style={styles.voiceTextWrap}>
@@ -203,8 +211,9 @@ export default function AddressStep() {
               loading={loading}
               fullWidth
               size="lg"
+              style={styles.cta}
             />
-          </View>
+          </ScrollView>
         </KeyboardAvoidingView>
       </SafeAreaView>
     </GradientBackground>
@@ -214,11 +223,11 @@ export default function AddressStep() {
 const styles = StyleSheet.create({
   safe: { flex: 1 },
   keyboard: { flex: 1 },
-  content: {
-    flex: 1,
+  scroll: {
+    flexGrow: 1,
     paddingHorizontal: Spacing.sm,
     paddingTop: Spacing.sm,
-    paddingBottom: Spacing.xl,
+    paddingBottom: Spacing.xl + 32,
   },
   stepLabel: {
     ...Typography.label,
@@ -299,5 +308,6 @@ const styles = StyleSheet.create({
     color: Colors.text.secondary,
     flex: 1,
   },
-  spacer: { flex: 1 },
+  spacer: { flex: 1, minHeight: 24 },
+  cta: { marginTop: Spacing.md },
 });

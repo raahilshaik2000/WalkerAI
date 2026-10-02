@@ -111,18 +111,21 @@ Deno.serve(async (req) => {
     // Fetch the order
     const { data: order, error: ordErr } = await adminClient
       .from('material_orders')
-      .select('*, accepted_supplier:suppliers!accepted_supplier_id(id, stripe_account_id, user_id), project:projects(homeowner_id)')
+      .select('*, accepted_supplier:suppliers!accepted_supplier_id(id, stripe_account_id, user_id), project:projects(homeowner_id, admin_paused)')
       .eq('id', order_id)
       .single();
     if (ordErr || !order) throw new Error('Order not found');
     const project = Array.isArray(order.project)
       ? order.project[0]
-      : order.project as { homeowner_id?: string } | null;
+      : order.project as { homeowner_id?: string; admin_paused?: boolean | null } | null;
     if (project?.homeowner_id !== user.id) {
       return new Response(JSON.stringify({ error: 'Forbidden' }), {
         status: 403,
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
       });
+    }
+    if (project?.admin_paused) {
+      throw new Error('Payment release is restricted by Walker AI admin. Contact support to release the hold.');
     }
     if (order.status === 'paid' || order.stripe_transfer_id) throw new Error('Order has already been paid');
     if (!['delivered', 'confirmed'].includes(order.status)) throw new Error('Order must be delivered before payout');

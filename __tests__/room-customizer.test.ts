@@ -49,9 +49,11 @@ describe('room customizer data flow', () => {
       'utf8',
     );
 
-    expect(source).toContain('Tap a surface in the preview or choose one below');
+    expect(source).toContain('Tap a surface, then pick a Walker supplier product');
     expect(source).toContain('onPress={() => setActiveSurfaceId(surface.id)}');
-    expect(source).toContain('stroke: active ? Colors.accent');
+    expect(source).toContain('stroke: active ? Colors.success');
+    expect(source).toContain('Walker products');
+    expect(source).toContain('handleProduct');
   });
 
   it('maps kitchen countertop finish choices into existing pricing answers', () => {
@@ -228,5 +230,22 @@ describe('room customizer data flow', () => {
         colorHex: '#F3F0E8',
       },
     ]);
+  });
+
+  it('polishes scanned USDZ mesh without injecting misaligned box furniture', () => {
+    const nativeSource = fs.readFileSync(
+      path.join(__dirname, '../ios/WalkerAI/RoomPlan/RoomCustomizerViewController.swift'),
+      'utf8',
+    );
+    const uiSource = fs.readFileSync(
+      path.join(__dirname, '../src/components/project/RoomCustomizer3D.tsx'),
+      'utf8',
+    );
+
+    expect(nativeSource).toContain('polishCapturedMeshAppearance');
+    expect(nativeSource).toContain('Do NOT inject kitchen/bath box furniture onto a live RoomPlan mesh');
+    expect(nativeSource).toContain('scene.lightingEnvironment.contents');
+    expect(nativeSource).toContain('camera.wantsHDR = true');
+    expect(uiSource).toContain('showroom lighting');
   });
 });

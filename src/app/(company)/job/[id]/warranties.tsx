@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import {
   Alert,
   Image,
@@ -12,7 +12,6 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useNavigation, useRoute } from '@react-navigation/native';
-import { launchImageLibrary } from 'react-native-image-picker';
 import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
 import Ionicons from 'react-native-vector-icons/Ionicons';
 import ReactNativeHapticFeedback from 'react-native-haptic-feedback';
@@ -20,6 +19,7 @@ import { supabase } from '@/lib/supabase/client';
 import { documentKindFromPath } from '@/lib/document-preview';
 import { normalizeOptionalIsoDate } from '@/lib/dates';
 import { formatAppSafeErrorMessage } from '@/lib/supabase/functions';
+import { pickPhotosWithSource } from '@/lib/media-picker';
 import { getSignedUrl, getUploadMetadata, uploadFile } from '@/lib/supabase/storage';
 import { Colors, Radius, Spacing, Typography } from '@/constants/theme';
 import { getRequiredStringParam } from '@/lib/navigation-params';
@@ -55,6 +55,7 @@ export default function CompanyWarrantiesScreen() {
   const [loading, setLoading] = useState(true);
   const [uploading, setUploading] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  const hasLoadedRef = useRef(false);
 
   const clearWarrantyState = useCallback(() => {
     setWarranties([]);
@@ -74,7 +75,7 @@ export default function CompanyWarrantiesScreen() {
     }
 
     try {
-      setLoading(true);
+      if (!hasLoadedRef.current) setLoading(true);
       setErrorMessage(null);
       const { data, error } = await supabase
         .from('warranties')
@@ -102,8 +103,9 @@ export default function CompanyWarrantiesScreen() {
 
       setWarranties(rows);
       setPreviewUrls(previews);
+      hasLoadedRef.current = true;
     } catch (err) {
-      clearWarrantyState();
+      if (!hasLoadedRef.current) clearWarrantyState();
       setErrorMessage(formatAppSafeErrorMessage(err, 'Could not load warranties.'));
     } finally {
       setLoading(false);
@@ -121,15 +123,13 @@ export default function CompanyWarrantiesScreen() {
   }, [fetchWarranties, projectId]);
 
   const pickWarrantyDoc = async () => {
-    const result = await launchImageLibrary({
-      mediaType: 'photo',
+    const assets = await pickPhotosWithSource({
       quality: 0.8,
       selectionLimit: 1,
-      assetRepresentationMode: 'compatible',
     });
 
-    if (result.didCancel || !result.assets?.[0]) return;
-    const asset = result.assets[0];
+    if (!assets?.[0]) return;
+    const asset = assets[0];
     setSelectedUri(asset.uri ?? null);
     setSelectedName(asset.fileName ?? 'warranty.jpg');
     setSelectedType(asset.type ?? null);

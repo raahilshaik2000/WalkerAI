@@ -1,7 +1,6 @@
-import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useFocusEffect } from '@react-navigation/native';
 import {
-  ActivityIndicator,
   FlatList,
   Image,
   RefreshControl,
@@ -15,9 +14,9 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { useNavigation } from '@react-navigation/native';
 import Ionicons from 'react-native-vector-icons/Ionicons';
 import LinearGradient from 'react-native-linear-gradient';
-import { AnimatedPressable, GlassButton, GradientBackground } from '@/components/ui';
+import { AnimatedPressable, CardSkeleton, GlassButton, GradientBackground } from '@/components/ui';
 import { ProgressRing } from '@/components/dashboard/ProgressRing';
-import { Colors, Radius } from '@/constants/theme';
+import { Colors, Radius, Spacing } from '@/constants/theme';
 import { supabase } from '@/lib/supabase/client';
 import { isMissingSupabaseSchemaObjectError } from '@/lib/supabase/errors';
 import { formatAppSafeErrorMessage } from '@/lib/supabase/functions';
@@ -200,6 +199,8 @@ export default function HomeownerProjects() {
   const [diyLoading, setDiyLoading] = useState(false);
   const [diyError, setDiyError] = useState<string | null>(null);
   const [milestoneProgressMap, setMilestoneProgressMap] = useState<Record<string, number>>({});
+  const hasLoadedProjectsRef = useRef(false);
+  const hasLoadedDiyRef = useRef(false);
 
   const filtered = useMemo(() => {
     if (filter === 'All') return projects;
@@ -214,7 +215,8 @@ export default function HomeownerProjects() {
 
   const fetchProjects = useCallback(async () => {
     if (!user) return;
-    setProjectsLoading(true);
+    // Keep prior list visible on return focus; full spinner only before first successful load.
+    setProjectsLoading(!hasLoadedProjectsRef.current);
     setProjectsError(null);
     try {
       let projectResult: any = await supabase
@@ -263,6 +265,7 @@ export default function HomeownerProjects() {
         }
       }
       setProjects(projectList);
+      hasLoadedProjectsRef.current = true;
 
       // Fetch milestone-based progress for all projects
       if (ids.length > 0) {
@@ -284,8 +287,10 @@ export default function HomeownerProjects() {
         setMilestoneProgressMap({});
       }
     } catch (err) {
-      setProjects([]);
-      setMilestoneProgressMap({});
+      if (!hasLoadedProjectsRef.current) {
+        setProjects([]);
+        setMilestoneProgressMap({});
+      }
       setProjectsError(formatAppSafeErrorMessage(err, 'Could not load projects.'));
     } finally {
       setProjectsLoading(false);
@@ -294,7 +299,7 @@ export default function HomeownerProjects() {
 
   const fetchDIYProjects = useCallback(async () => {
     if (!user) return;
-    setDiyLoading(true);
+    setDiyLoading(!hasLoadedDiyRef.current);
     setDiyError(null);
     try {
       let diyResult: any = await supabase
@@ -323,8 +328,11 @@ export default function HomeownerProjects() {
         room_type: project.room_type ?? null,
         diy_category: project.diy_category ?? null,
       })));
+      hasLoadedDiyRef.current = true;
     } catch (err) {
-      setDiyProjects([]);
+      if (!hasLoadedDiyRef.current) {
+        setDiyProjects([]);
+      }
       const message = err instanceof Error ? err.message : 'Could not load DIY guides.';
       setDiyError(isMissingColumnError({ message })
         ? 'Saved DIY guides are not enabled in this environment yet.'
@@ -473,8 +481,10 @@ export default function HomeownerProjects() {
         {/* DIY List */}
         {filter === 'DIY' ? (
           diyLoading ? (
-            <View style={styles.loadingWrap}>
-              <ActivityIndicator color="#34D399" size="large" />
+            <View style={styles.skeletonList}>
+              {Array.from({ length: 4 }).map((_, index) => (
+                <CardSkeleton key={`diy-skel-${index}`} style={styles.skeletonCard} />
+              ))}
             </View>
           ) : diyError ? (
             <View style={styles.empty}>
@@ -523,8 +533,10 @@ export default function HomeownerProjects() {
             />
           )
         ) : projectsLoading ? (
-          <View style={styles.loadingWrap}>
-            <ActivityIndicator color={Colors.accent} size="large" />
+          <View style={styles.skeletonList}>
+            {Array.from({ length: 4 }).map((_, index) => (
+              <CardSkeleton key={`proj-skel-${index}`} style={styles.skeletonCard} />
+            ))}
           </View>
         ) : projectsError ? (
           <View style={styles.empty}>
@@ -591,6 +603,8 @@ const styles = StyleSheet.create({
 
   list: { paddingHorizontal: 16, paddingBottom: 150, gap: 14 },
   loadingWrap: { flex: 1, alignItems: 'center', justifyContent: 'center', paddingTop: 80 },
+  skeletonList: { paddingHorizontal: Spacing.sm, paddingTop: 8, paddingBottom: Spacing.xl },
+  skeletonCard: { marginBottom: 12 },
 
   // Regular project card
   card: { borderRadius: 20, overflow: 'hidden', backgroundColor: Colors.surface.default, borderWidth: 1, borderColor: Colors.surface.border },

@@ -192,13 +192,13 @@ export default function DIYGuideScreen() {
                     <Text style={styles.stepDesc}>{step.description}</Text>
                     {step.tip && (
                       <View style={styles.tipBox}>
-                        <Ionicons name="bulb-outline" size={14} color="#A78BFA" />
+                        <Ionicons name="bulb-outline" size={15} color="#A78BFA" style={styles.boxIcon} />
                         <Text style={styles.tipText}>{step.tip}</Text>
                       </View>
                     )}
                     {step.warning && (
                       <View style={styles.stepWarnBox}>
-                        <Ionicons name="alert-circle-outline" size={14} color="#F59E0B" />
+                        <Ionicons name="alert-circle-outline" size={15} color="#F59E0B" style={styles.boxIcon} />
                         <Text style={styles.stepWarnText}>{step.warning}</Text>
                       </View>
                     )}
@@ -357,9 +357,10 @@ const styles = StyleSheet.create({
   stepBody: { flex: 1 },
   stepTitle: { fontSize: 15, fontWeight: '700', color: '#fff', marginBottom: 6 },
   stepDesc: { fontSize: 14, color: Colors.text.secondary, lineHeight: 21 },
-  tipBox: { flexDirection: 'row', gap: 6, marginTop: 10, backgroundColor: 'rgba(167,139,250,0.1)', borderRadius: 8, padding: 10, alignItems: 'flex-start' },
+  tipBox: { flexDirection: 'row', gap: 8, marginTop: 10, backgroundColor: 'rgba(167,139,250,0.1)', borderRadius: 8, padding: 10, alignItems: 'flex-start' },
+  boxIcon: { marginTop: 2 },
   tipText: { fontSize: 13, color: '#A78BFA', flex: 1, lineHeight: 19 },
-  stepWarnBox: { flexDirection: 'row', gap: 6, marginTop: 10, backgroundColor: 'rgba(245,158,11,0.08)', borderRadius: 8, padding: 10, alignItems: 'flex-start' },
+  stepWarnBox: { flexDirection: 'row', gap: 8, marginTop: 10, backgroundColor: 'rgba(245,158,11,0.08)', borderRadius: 8, padding: 10, alignItems: 'flex-start' },
   stepWarnText: { fontSize: 13, color: '#F59E0B', flex: 1, lineHeight: 19 },
 
   proBox: { backgroundColor: 'rgba(96,165,250,0.08)', borderRadius: Radius.card, borderWidth: 1, borderColor: 'rgba(96,165,250,0.2)', padding: 16, marginTop: 4 },

@@ -28,11 +28,12 @@ RCT_EXPORT_METHOD(setSurfaceMaterial:(nonnull NSNumber *)reactTag
                                  colorHex:(NSString *)colorHex
                              materialName:(NSString *)materialName
                                 roughness:(nonnull NSNumber *)roughness
-                                metalness:(nonnull NSNumber *)metalness)
+                                metalness:(nonnull NSNumber *)metalness
+                               textureURL:(NSString *)textureURL)
 {
   [self.bridge.uiManager addUIBlock:^(RCTUIManager *uiManager, NSDictionary<NSNumber *,UIView *> *viewRegistry) {
     UIView *view = viewRegistry[reactTag];
-    SEL selector = NSSelectorFromString(@"setSurfaceMaterial:colorHex:materialName:roughness:metalness:");
+    SEL selector = NSSelectorFromString(@"setSurfaceMaterial:colorHex:materialName:roughness:metalness:textureURL:");
     if ([view respondsToSelector:selector]) {
       NSMethodSignature *signature = [view methodSignatureForSelector:selector];
       NSInvocation *invocation = [NSInvocation invocationWithMethodSignature:signature];
@@ -41,11 +42,13 @@ RCT_EXPORT_METHOD(setSurfaceMaterial:(nonnull NSNumber *)reactTag
       NSString *sid = surfaceId ?: @"";
       NSString *cx = colorHex ?: @"";
       NSString *mn = materialName ?: @"";
+      NSString *tex = textureURL ?: @"";
       [invocation setArgument:&sid atIndex:2];
       [invocation setArgument:&cx atIndex:3];
       [invocation setArgument:&mn atIndex:4];
       [invocation setArgument:&roughness atIndex:5];
       [invocation setArgument:&metalness atIndex:6];
+      [invocation setArgument:&tex atIndex:7];
       [invocation invoke];
     }
   }];

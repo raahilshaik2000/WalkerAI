@@ -1,4 +1,6 @@
 import { create } from 'zustand';
+import { createJSONStorage, persist } from 'zustand/middleware';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import type { AIAnalysis, QuestionnaireQuestion } from '@/types/database.types';
 import type { RoomType } from '@/constants/enums';
 
@@ -17,6 +19,13 @@ export interface SurfaceSelection {
   colorName: string;
   colorHex: string;
   answerId?: string;
+  /** Real Walker supplier catalog product (when chosen). */
+  catalogItemId?: string;
+  sku?: string;
+  brand?: string;
+  priceCents?: number;
+  imageUrl?: string;
+  supplierId?: string;
 }
 
 export interface UploadedPhoto {
@@ -136,11 +145,14 @@ interface ProjectWizardState {
   addPhoto: (photo: UploadedPhoto) => void;
   updatePhoto: (id: string, updates: Partial<UploadedPhoto>) => void;
   removePhoto: (id: string) => void;
+  clearPhotoBase64: () => void;
   setAnalysisResult: (result: AIAnalysis) => void;
   setQuestions: (questions: QuestionnaireQuestion[]) => void;
   setAnswer: (questionId: string, answer: string) => void;
   /** Move to next question. Pass nextQuestionId to jump; null advances sequentially */
   nextQuestion: (nextQuestionId?: string | null) => void;
+  /** Jump to a specific question index after validating bounds */
+  goToQuestionIndex: (index: number) => void;
   /** Move back one question without clearing previously selected answers */
   previousQuestion: () => void;
   setSelectedRender: (renderId: string | null) => void;
@@ -155,8 +167,8 @@ interface ProjectWizardState {
 }
 
 const initialState: Omit<ProjectWizardState,
-  | 'setAddress' | 'setRoomType' | 'addPhoto' | 'updatePhoto' | 'removePhoto'
-  | 'setAnalysisResult' | 'setQuestions' | 'setAnswer' | 'nextQuestion'
+  | 'setAddress' | 'setRoomType' | 'addPhoto' | 'updatePhoto' | 'removePhoto' | 'clearPhotoBase64'
+  | 'setAnalysisResult' | 'setQuestions' | 'setAnswer' | 'nextQuestion' | 'goToQuestionIndex'
   | 'previousQuestion'
   | 'setSelectedRender' | 'setMeasurements' | 'setRoomScanData' | 'setMaterialOverride' | 'setSurfaceSelection' | 'setProjectId' | 'setStep' | 'setPhotoSaveFailed' | 'reset'
 > = {
@@ -179,72 +191,135 @@ const initialState: Omit<ProjectWizardState,
   photoSaveFailed: false,
 };
 
-export const useProjectWizardStore = create<ProjectWizardState>()((set, get) => ({
-  ...initialState,
+function stripPhotoBase64(photos: UploadedPhoto[]): UploadedPhoto[] {
+  return photos.map(({ base64: _base64, ...rest }) => rest);
+}
 
-  setAddress: (address, coordinates, province) =>
-    set({ address, coordinates: coordinates ?? null, province: province ?? null }),
+export const useProjectWizardStore = create<ProjectWizardState>()(
+  persist(
+    (set, get) => ({
+      ...initialState,
 
-  setRoomType: (roomType) => set({ roomType }),
+      setAddress: (address, coordinates, province) =>
+        set({ address, coordinates: coordinates ?? null, province: province ?? null }),
 
-  addPhoto: (photo) =>
-    set((state) => ({ photos: [...state.photos, photo] })),
+      setRoomType: (roomType) => set({ roomType }),
 
-  updatePhoto: (id, updates) =>
-    set((state) => ({
-      photos: state.photos.map((p) => (p.id === id ? { ...p, ...updates } : p)),
-    })),
+      addPhoto: (photo) =>
+        set((state) => ({ photos: [...state.photos, photo] })),
 
-  removePhoto: (id) =>
-    set((state) => ({ photos: state.photos.filter((p) => p.id !== id) })),
+      updatePhoto: (id, updates) =>
+        set((state) => ({
+          photos: state.photos.map((p) => (p.id === id ? { ...p, ...updates } : p)),
+        })),
 
-  setAnalysisResult: (analysisResult) => set({ analysisResult }),
+      removePhoto: (id) =>
+        set((state) => ({ photos: state.photos.filter((p) => p.id !== id) })),
 
-  setQuestions: (questions) => set({ questions, currentQuestionIndex: 0, answers: {} }),
+      clearPhotoBase64: () =>
+        set((state) => ({ photos: stripPhotoBase64(state.photos) })),
 
-  setAnswer: (questionId, answer) =>
-    set((state) => ({
-      answers: { ...state.answers, [questionId]: answer },
-    })),
+      setAnalysisResult: (analysisResult) => set({ analysisResult }),
 
-  nextQuestion: (nextQuestionId) => {
-    const { questions, currentQuestionIndex } = get();
-    if (nextQuestionId) {
-      const idx = questions.findIndex((q) => q.id === nextQuestionId);
-      if (idx !== -1) {
-        set({ currentQuestionIndex: idx });
-        return;
-      }
-    }
-    set({ currentQuestionIndex: currentQuestionIndex + 1 });
-  },
+      setQuestions: (questions) => set({ questions, currentQuestionIndex: 0, answers: {} }),
 
-  previousQuestion: () => {
-    const { currentQuestionIndex } = get();
-    set({ currentQuestionIndex: Math.max(0, currentQuestionIndex - 1) });
-  },
+      setAnswer: (questionId, answer) =>
+        set((state) => ({
+          answers: { ...state.answers, [questionId]: answer },
+        })),
 
-  setSelectedRender: (selectedRenderId) => set({ selectedRenderId }),
+      nextQuestion: (nextQuestionId) => {
+        const { questions, currentQuestionIndex } = get();
+        if (nextQuestionId) {
+          const idx = questions.findIndex((q) => q.id === nextQuestionId);
+          if (idx !== -1) {
+            set({ currentQuestionIndex: idx });
+            return;
+          }
+        }
+        set({ currentQuestionIndex: currentQuestionIndex + 1 });
+      },
 
-  setMeasurements: (measurements) => set({ measurements }),
+      goToQuestionIndex: (index) => {
+        const { questions } = get();
+        const boundedIndex = Math.max(0, Math.min(index, Math.max(questions.length - 1, 0)));
+        set({ currentQuestionIndex: boundedIndex });
+      },
 
-  setRoomScanData: (roomScanData) => set({ roomScanData }),
+      previousQuestion: () => {
+        const { currentQuestionIndex } = get();
+        set({ currentQuestionIndex: Math.max(0, currentQuestionIndex - 1) });
+      },
 
-  setMaterialOverride: (index, override) =>
-    set((state) => ({
-      materialOverrides: { ...state.materialOverrides, [index]: { ...state.materialOverrides[index], ...override } },
-    })),
+      setSelectedRender: (selectedRenderId) => set({ selectedRenderId }),
 
-  setSurfaceSelection: (selection) =>
-    set((state) => ({
-      surfaceSelections: { ...state.surfaceSelections, [selection.surfaceId]: selection },
-    })),
+      setMeasurements: (measurements) => set({ measurements }),
 
-  setProjectId: (projectId) => set({ projectId }),
+      setRoomScanData: (roomScanData) => set({ roomScanData }),
 
-  setStep: (step) => set({ step }),
+      setMaterialOverride: (index, override) =>
+        set((state) => ({
+          materialOverrides: { ...state.materialOverrides, [index]: { ...state.materialOverrides[index], ...override } },
+        })),
 
-  setPhotoSaveFailed: (photoSaveFailed) => set({ photoSaveFailed }),
+      setSurfaceSelection: (selection) =>
+        set((state) => ({
+          surfaceSelections: { ...state.surfaceSelections, [selection.surfaceId]: selection },
+        })),
 
-  reset: () => set(initialState),
-}));
+      setProjectId: (projectId) => set({ projectId }),
+
+      setStep: (step) => set({ step }),
+
+      setPhotoSaveFailed: (photoSaveFailed) => set({ photoSaveFailed }),
+
+      reset: () => set(initialState),
+    }),
+    {
+      name: 'walker-ai-project-wizard',
+      storage: createJSONStorage(() => AsyncStorage),
+      // Photos are session-only. Persisting them (without base64) caused ghost
+      // thumbnails from abandoned projects that broke analysis on Continue.
+      version: 2,
+      migrate: (persisted) => {
+        if (!persisted || typeof persisted !== 'object') return persisted as ProjectWizardState;
+        const draft = persisted as Partial<ProjectWizardState>;
+        return {
+          ...draft,
+          photos: [],
+          photoSaveFailed: false,
+        } as ProjectWizardState;
+      },
+      partialize: (state) => ({
+        address: state.address,
+        coordinates: state.coordinates,
+        province: state.province,
+        roomType: state.roomType,
+        analysisResult: state.analysisResult,
+        questions: state.questions,
+        answers: state.answers,
+        currentQuestionIndex: state.currentQuestionIndex,
+        selectedRenderId: state.selectedRenderId,
+        measurements: state.measurements,
+        // Keep local USDZ path so Design step can load the real RoomPlan mesh.
+        // Files live under Documents/WalkerRoomScans (not tmp/Caches).
+        roomScanData: state.roomScanData,
+        materialOverrides: state.materialOverrides,
+        surfaceSelections: state.surfaceSelections,
+        projectId: state.projectId,
+        step: state.step,
+        photoSaveFailed: state.photoSaveFailed,
+      }),
+      // Drop any legacy photo rows still sitting in AsyncStorage from older builds.
+      merge: (persisted, current) => {
+        const incoming = (persisted ?? {}) as Partial<ProjectWizardState>;
+        return {
+          ...current,
+          ...incoming,
+          photos: [],
+          photoSaveFailed: false,
+        };
+      },
+    },
+  ),
+);

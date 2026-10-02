@@ -15,7 +15,11 @@ import type {
   SupplierCategory,
   ApprovalRequestStatus,
   ApprovalRequestType,
+  SiteInspectionAdjustmentStatus,
+  SiteInspectionReasonCategory,
 } from '@/constants/enums';
+
+export type { SiteInspectionAdjustmentStatus, SiteInspectionReasonCategory };
 
 export interface User {
   id: string;
@@ -486,9 +490,18 @@ export interface AIAnalysis {
     has_island?: boolean;
     plumbing_wall_visible: boolean;
     window_count: number;
+    verified_sqft?: number | null;
+    is_verified?: boolean;
+    length_ft?: number | null;
+    width_ft?: number | null;
+    ceiling_height_ft?: number | null;
+    door_count?: number;
   };
   structural_concerns: string[];
   ai_observations: string;
+  verified_measurements?: any;
+  verified_quantities?: any;
+  room_scan_data?: any;
 }
 
 // Questionnaire from Claude
@@ -508,4 +521,70 @@ export interface QuestionnaireQuestion {
 
 export interface Questionnaire {
   questions: QuestionnaireQuestion[];
+}
+
+export interface SiteInspectionAdjustment {
+  id: string;
+  project_id: string;
+  company_id: string;
+  trade_type: string;
+  reason_category: SiteInspectionReasonCategory;
+  description: string;
+  evidence_urls: string[];
+  corrected_measurements: {
+    lengthFt?: string | number;
+    widthFt?: string | number;
+    ceilingHeightFt?: string | number;
+    squareFootage?: string | number;
+    notes?: string;
+  };
+  labor_breakdown: Array<{
+    task: string;
+    trade: string;
+    hours: number;
+    rateCadCents: number;
+    totalCadCents: number;
+  }>;
+  material_breakdown: Array<{
+    item: string;
+    sku?: string;
+    quantity: number;
+    unit: string;
+    unitCostCadCents: number;
+    totalCadCents: number;
+  }>;
+  schedule_impact_days: number;
+  cost_delta: number; // in CAD cents
+  status: SiteInspectionAdjustmentStatus;
+  head_office_reviewer_id?: string | null;
+  head_office_reviewed_at?: string | null;
+  head_office_notes?: string | null;
+  homeowner_signed_at?: string | null;
+  payment_intent_id?: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface EstimationLearningRecord {
+  id: string;
+  project_id: string;
+  adjustment_id?: string | null;
+  room_type: string;
+  province: string;
+  quality_tier: string;
+  original_measurements: Record<string, unknown>;
+  verified_measurements: Record<string, unknown>;
+  dimensional_variance_ratio: number;
+  original_estimated_cost_cents: number;
+  approved_cost_delta_cents: number;
+  final_cost_cents: number;
+  adjustment_category: string;
+  adjustment_reason: string;
+  evidence_urls: string[];
+  itemized_labor_diff: Record<string, unknown>[];
+  itemized_material_diff: Record<string, unknown>[];
+  head_office_approved_by?: string | null;
+  head_office_approved_at?: string | null;
+  calibration_factors: Record<string, unknown>;
+  created_at: string;
 }

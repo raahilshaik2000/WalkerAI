@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import {
   Image,
   RefreshControl,
@@ -128,8 +128,10 @@ export default function CompanyJobFeed() {
     insurance_doc_url: string | null;
   } | null>(null);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  const hasLoadedRef = useRef(false);
 
   const fetchData = useCallback(async () => {
+    if (!hasLoadedRef.current) setLoading(true);
     try {
       setErrorMessage(null);
       const currentUserId = user?.id ?? (await getCurrentUser())?.id ?? null;
@@ -178,9 +180,7 @@ export default function CompanyJobFeed() {
           .select(`
             project_id, slot_id, dispatched_at, response,
             project:projects (
-              id, address, city, room_type, status,
-              renders ( url, selected ),
-              project_photos ( url, storage_path )
+              id, address, city, room_type, status
             ),
             slot:project_slots ( id, trade_type )
           `)
@@ -300,11 +300,14 @@ export default function CompanyJobFeed() {
 
       setJobs(pendingDispatchRows.map(enrichDispatchProject));
       setActiveJobs(Array.from(byKey.values()));
+      hasLoadedRef.current = true;
     } catch (err) {
-      setCompany(null);
+      if (!hasLoadedRef.current) {
+        setCompany(null);
+        setJobs([]);
+        setActiveJobs([]);
+      }
       setErrorMessage(formatAppSafeErrorMessage(err, 'Could not load jobs.'));
-      setJobs([]);
-      setActiveJobs([]);
     } finally {
       setLoading(false);
       setRefreshing(false);
@@ -313,6 +316,7 @@ export default function CompanyJobFeed() {
 
   useFocusEffect(
     useCallback(() => {
+      // Keep last jobs on screen; refetch in the background with no full-screen loader.
       fetchData();
     }, [fetchData])
   );
@@ -515,6 +519,8 @@ export default function CompanyJobFeed() {
               icon="wifi-off"
               title="Could not load jobs"
               body={errorMessage}
+              actionLabel="Try Again"
+              onAction={() => { void fetchData(); }}
             />
           ) : loading
             ? Array.from({ length: 3 }).map((_, i) => <ListItemSkeleton key={i} style={styles.skeletonSpacing} />)

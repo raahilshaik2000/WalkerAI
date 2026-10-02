@@ -1,8 +1,6 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useState } from 'react';
 import {
-  ActivityIndicator,
   Alert,
-  AppState,
   FlatList,
   RefreshControl,
   StyleSheet,
@@ -11,19 +9,20 @@ import {
   View,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { useFocusEffect, useNavigation } from '@react-navigation/native';
+import { useNavigation } from '@react-navigation/native';
 import Ionicons from 'react-native-vector-icons/Ionicons';
-import { supabase } from '@/lib/supabase/client';
 import { formatCadCents } from '@/lib/currency';
 import { formatAppSafeErrorMessage, formatSupabaseFunctionError } from '@/lib/supabase/functions';
 import { joinedMaterialItemName } from '@/lib/material-orders';
 import { isStripePayoutLocallyReady } from '@/lib/payouts';
-import { getCurrentUser } from '@/lib/supabase/auth';
 import { useAuthStore } from '@/stores/auth.store';
 import { Colors, Radius, Spacing, Typography } from '@/constants/theme';
 import { NotificationButton } from '@/components/notifications/NotificationButton';
-import { GradientBackground } from '@/components/ui';
+import { GradientBackground, ListItemSkeleton } from '@/components/ui';
 import type { MaterialOrder, Supplier } from '@/types/database.types';
+import { useInvalidateSupplierQueries, useSupplierOpenOrders } from '@/lib/supplier-data';
+import { useSilentFocusRefetch } from '@/lib/silent-focus-refetch';
+import { supabase } from '@/lib/supabase/client';
 
 function supplierCategories(supplier: Supplier): string[] {
   return Array.isArray(supplier.categories) ? supplier.categories : [];
@@ -42,120 +41,36 @@ function formatOrderValue(order: MaterialOrder): string | null {
   return `${formatCadCents(price)} order value`;
 }
 
-async function filterClaimableOrders(supplier: Supplier, orders: MaterialOrder[]): Promise<MaterialOrder[]> {
-  const categories = supplierCategories(supplier);
-  const categoryFiltered = orders.filter((order) => !order.category || categories.includes(order.category));
-
-  if (categoryFiltered.length === 0) return [];
-
-  const checks = await Promise.all(categoryFiltered.map(async (order) => {
-    const { data, error } = await supabase.rpc('supplier_can_fulfill_material_order', {
-      p_order_id: order.id,
-      p_supplier_id: supplier.id,
-    });
-
-    if (!error) return data === true ? order : null;
-
-    // Older schemas may not have the radius/category RPC yet. Keep the
-    // category-filtered result so old environments still work, while the claim
-    // edge function remains the final authority.
-    const message = error.message?.toLowerCase() ?? '';
-    if (message.includes('supplier_can_fulfill_material_order')
-      || message.includes('function')
-      || message.includes('schema cache')) {
-      return order;
-    }
-
-    throw error;
-  }));
-
-  return checks.filter((order): order is MaterialOrder => !!order);
-}
-
 export default function SupplierOrderFeed() {
   const navigation = useNavigation<any>();
   const { user } = useAuthStore();
-  const [supplier, setSupplier] = useState<Supplier | null>(null);
-  const [orders, setOrders] = useState<MaterialOrder[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [refreshing, setRefreshing] = useState(false);
   const [claiming, setClaiming] = useState<string | null>(null);
-  const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  const [refreshing, setRefreshing] = useState(false);
+  const invalidateSupplier = useInvalidateSupplierQueries();
 
-  const fetchData = useCallback(async () => {
-    try {
-      const currentUserId = user?.id ?? (await getCurrentUser())?.id ?? null;
-      if (!currentUserId) {
-        setSupplier(null);
-        setOrders([]);
-        setErrorMessage('You need to be signed in to view supplier orders.');
-        return;
-      }
-      setErrorMessage(null);
-      const { data: sup, error: supplierError } = await supabase
-        .from('suppliers')
-        .select('*')
-        .eq('user_id', currentUserId)
-        .order('created_at', { ascending: false })
-        .limit(1)
-        .maybeSingle();
+  const { profileQuery, ordersQuery, supplier } = useSupplierOpenOrders(user?.id);
+  const showSkeleton =
+    (!!user?.id && !supplier && profileQuery.isLoading)
+    || (!!supplier?.verified && !ordersQuery.data && ordersQuery.isLoading);
+  const errorMessage = !user?.id
+    ? 'You need to be signed in to view supplier orders.'
+    : profileQuery.error
+      ? formatAppSafeErrorMessage(profileQuery.error, 'Could not load supplier profile.')
+      : ordersQuery.error
+        ? formatAppSafeErrorMessage(ordersQuery.error, 'Could not load open material orders.')
+        : null;
+  const orders = ordersQuery.data ?? [];
 
-      if (supplierError) {
-        setSupplier(null);
-        setOrders([]);
-        setErrorMessage(formatAppSafeErrorMessage(supplierError, 'Could not load supplier profile.'));
-        return;
-      }
+  const refetchAll = useCallback(async () => {
+    await Promise.all([profileQuery.refetch(), ordersQuery.refetch()]);
+  }, [ordersQuery, profileQuery]);
+  useSilentFocusRefetch(refetchAll);
 
-      setSupplier(sup);
-      if (!sup) {
-        setOrders([]);
-        return;
-      }
-
-      if (!sup?.verified) {
-        setOrders([]);
-        return;
-      }
-
-      const { data, error } = await supabase
-        .from('material_orders')
-        .select('*, material:materials!material_orders_material_id_fkey(*)')
-        .eq('status', 'open')
-        .order('delivery_deadline', { ascending: true });
-
-      if (error) {
-        setOrders([]);
-        setErrorMessage(formatAppSafeErrorMessage(error, 'Could not load open material orders.'));
-        return;
-      }
-
-      const claimableOrders = await filterClaimableOrders(sup, (data as MaterialOrder[]) ?? []);
-      setOrders(claimableOrders);
-    } catch (err) {
-      setSupplier(null);
-      setOrders([]);
-      setErrorMessage(formatAppSafeErrorMessage(err, 'Could not load open material orders.'));
-    } finally {
-      setLoading(false);
-    }
-  }, [user?.id]);
-
-  useFocusEffect(
-    useCallback(() => {
-      fetchData();
-    }, [fetchData])
-  );
-
-  useEffect(() => {
-    const subscription = AppState.addEventListener('change', (state) => {
-      if (state === 'active') fetchData();
-    });
-
-    return () => subscription.remove();
-  }, [fetchData]);
-
-  const onRefresh = async () => { setRefreshing(true); await fetchData(); setRefreshing(false); };
+  const onRefresh = async () => {
+    setRefreshing(true);
+    await refetchAll();
+    setRefreshing(false);
+  };
 
   const claimOrder = async (order: MaterialOrder) => {
     if (!supplier) return;
@@ -165,7 +80,8 @@ export default function SupplierOrderFeed() {
         body: { order_id: order.id },
       });
       if (error) throw new Error(await formatSupabaseFunctionError(error));
-      await fetchData();
+      invalidateSupplier(user?.id, supplier.id);
+      await refetchAll();
     } catch (err: any) {
       const msg = await formatSupabaseFunctionError(err, 'Failed to claim order');
       if (msg.includes('ORDER_CLAIMED') || msg.includes('no longer available')) {
@@ -173,6 +89,7 @@ export default function SupplierOrderFeed() {
       } else {
         Alert.alert('Could not claim order', msg);
       }
+      await refetchAll();
     } finally {
       setClaiming(null);
     }
@@ -194,7 +111,22 @@ export default function SupplierOrderFeed() {
   const payoutReady = isStripePayoutLocallyReady(supplier);
   const setupRoute = nextSupplierOnboardingRoute(supplier);
 
-  if (loading) return <View style={styles.center}><ActivityIndicator color={Colors.accent} size="large" /></View>;
+  if (showSkeleton) {
+    return (
+      <GradientBackground>
+        <SafeAreaView style={styles.safe}>
+          <View style={styles.header}>
+            <Text style={styles.headerTitle}>Open Orders</Text>
+          </View>
+          <View style={styles.skeletonList}>
+            {Array.from({ length: 5 }).map((_, index) => (
+              <ListItemSkeleton key={`order-skel-${index}`} style={styles.skeletonItem} />
+            ))}
+          </View>
+        </SafeAreaView>
+      </GradientBackground>
+    );
+  }
 
   return (
     <GradientBackground>
@@ -214,7 +146,7 @@ export default function SupplierOrderFeed() {
             <Ionicons name="alert-circle-outline" size={48} color={Colors.text.tertiary} />
             <Text style={styles.emptyTitle}>Could not load orders</Text>
             <Text style={styles.emptyBody}>{errorMessage}</Text>
-            <TouchableOpacity style={styles.retryBtn} onPress={fetchData} activeOpacity={0.8}>
+            <TouchableOpacity style={styles.retryBtn} onPress={refetchAll} activeOpacity={0.8}>
               <Text style={styles.retryBtnText}>Try Again</Text>
             </TouchableOpacity>
           </View>
@@ -292,18 +224,20 @@ export default function SupplierOrderFeed() {
                     </View>
                   </View>
 
-                  <Text style={styles.orderQty}>
-                    {item.quantity_needed} {item.unit}
-                  </Text>
+                  <View style={styles.orderMiddle}>
+                    <Text style={styles.orderQty}>
+                      {item.quantity_needed} {item.unit}
+                    </Text>
+                    {orderValue ? (
+                      <Text style={styles.fixedPrice}>{orderValue}</Text>
+                    ) : null}
+                  </View>
 
                   <View style={styles.orderFooter}>
                     <View style={styles.deadlineBadge}>
                       <Ionicons name="time-outline" size={13} color={Colors.text.tertiary} />
                       <Text style={styles.deadlineText}>{deadlineLabel(item.delivery_deadline)}</Text>
                     </View>
-                    {orderValue ? (
-                      <Text style={styles.fixedPrice}>{orderValue}</Text>
-                    ) : null}
                     <TouchableOpacity
                       style={[styles.claimBtn, claiming === item.id && styles.claimBtnDisabled]}
                       onPress={() => claimOrder(item)}
@@ -329,6 +263,8 @@ export default function SupplierOrderFeed() {
 const styles = StyleSheet.create({
   safe: { flex: 1 },
   center: { flex: 1, alignItems: 'center', justifyContent: 'center', backgroundColor: '#000' },
+  skeletonList: { paddingHorizontal: Spacing.md, paddingTop: 8 },
+  skeletonItem: { marginBottom: 12 },
   header: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingHorizontal: Spacing.md, paddingTop: Spacing.sm, paddingBottom: Spacing.md },
   headerTitle: { ...Typography.h2 },
   headerActions: { flexDirection: 'row', alignItems: 'center', gap: 12 },
@@ -345,19 +281,21 @@ const styles = StyleSheet.create({
     borderColor: 'rgba(255,255,255,0.08)',
     padding: Spacing.md,
     gap: 8,
+    overflow: 'hidden',
   },
   orderHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
   orderItem: { fontSize: 16, fontWeight: '700', color: Colors.text.primary, flex: 1, marginRight: 8 },
   tierBadge: { paddingHorizontal: 10, paddingVertical: 4, borderRadius: 20 },
   tierText: { fontSize: 11, fontWeight: '700', textTransform: 'uppercase' },
+  orderMiddle: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
   orderQty: { fontSize: 14, color: Colors.text.secondary },
   orderFooter: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginTop: 4 },
   deadlineBadge: { flexDirection: 'row', alignItems: 'center', gap: 4 },
   deadlineText: { fontSize: 13, color: Colors.text.tertiary },
   fixedPrice: { fontSize: 14, fontWeight: '700', color: '#34D399' },
-  claimBtn: { backgroundColor: '#FF6B00', paddingHorizontal: 18, paddingVertical: 8, borderRadius: 20 },
+  claimBtn: { backgroundColor: '#FF6B00', paddingHorizontal: 16, paddingVertical: 8, borderRadius: 20, alignSelf: 'center' },
   claimBtnDisabled: { opacity: 0.5 },
   claimBtnText: { fontSize: 13, fontWeight: '700', color: '#000' },
   retryBtn: { backgroundColor: Colors.accent, paddingHorizontal: 18, paddingVertical: 10, borderRadius: 20 },
-  retryBtnText: { fontSize: 13, fontWeight: '700', color: '#000' },
+  retryBtnText: { fontSize: 13, fontWeight: '700', color: Colors.accentFg },
 });

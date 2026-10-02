@@ -1,6 +1,5 @@
-import React, { useCallback, useEffect, useState } from 'react';
+import React, { useCallback, useEffect } from 'react';
 import {
-  ActivityIndicator,
   Dimensions,
   FlatList,
   Image,
@@ -12,12 +11,12 @@ import Animated from 'react-native-reanimated';
 import Ionicons from 'react-native-vector-icons/Ionicons';
 import LinearGradient from 'react-native-linear-gradient';
 import { useNavigation } from '@react-navigation/native';
-import { supabase } from '@/lib/supabase/client';
-import { isMissingSupabaseSchemaObjectError } from '@/lib/supabase/errors';
 import { formatAppSafeErrorMessage } from '@/lib/supabase/functions';
 import { formatGcProjectType } from '@/lib/gc-project-type';
+import { useHomeownerCarouselProjects, type HomeownerCarouselProject } from '@/lib/homeowner-data';
+import { useSilentFocusRefetch } from '@/lib/silent-focus-refetch';
 import { useAuthStore } from '@/stores/auth.store';
-import { AnimatedPressable, GlassButton } from '@/components/ui';
+import { AnimatedPressable, GlassButton, ListItemSkeleton } from '@/components/ui';
 import { Colors, Spacing } from '@/constants/theme';
 import { SectionHeader } from './SectionHeader';
 import { ProgressRing } from './ProgressRing';
@@ -38,24 +37,6 @@ const STATUS_META: Record<string, { label: string; color: string }> = {
   completed:   { label: 'Completed',            color: '#FF6B00' },
   diy_saved:   { label: 'DIY saved',            color: '#34D399' },
 };
-
-interface Project {
-  id: string;
-  room_type: string | null;
-  status: string;
-  address: string | null;
-  city: string | null;
-  ai_cost_min: number | null;
-  ai_cost_max: number | null;
-  renders: Array<{ url: string; selected?: boolean | null }>;
-  project_photos: Array<{ url: string }>;
-  gc_project_type?: string | null;
-}
-
-interface GcProjectContextRow {
-  project_id: string;
-  project_type: string | null;
-}
 
 function getProjectProgress(status: string) {
   if (status === 'completed') return 1;
@@ -87,79 +68,27 @@ export function ProjectsCarousel({ refreshKey = 0, onRefreshDone }: { refreshKey
   const navigation = useNavigation<any>();
   const { user } = useAuthStore();
   const animatedStyle = useStaggeredEntrance(3);
-  const [projects, setProjects] = useState<Project[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [errorMessage, setErrorMessage] = useState<string | null>(null);
-
-  const loadProjects = useCallback(async () => {
-    if (!user) {
-      setLoading(false);
-      setProjects([]);
-      setErrorMessage(null);
-      return;
-    }
-    setLoading(true);
-    setErrorMessage(null);
-    try {
-      const { data, error } = await supabase
-        .from('projects')
-        .select('id, room_type, status, address, city, ai_cost_min, ai_cost_max, renders(url, selected), project_photos(url)')
-        .eq('homeowner_id', user.id)
-        .not('status', 'eq', 'diy_saved')
-        .order('created_at', { ascending: false })
-        .limit(5);
-
-      if (error) {
-        setProjects([]);
-        setErrorMessage(formatAppSafeErrorMessage(error, 'Could not load projects.'));
-        return;
-      }
-      let projectList = ((data as Project[]) ?? []).map((project) => ({
-        ...project,
-        room_type: project.room_type ?? null,
-      }));
-      const ids = projectList.map((project) => project.id);
-      if (ids.length > 0) {
-        const { data: gcContextData, error: gcContextError } = await supabase
-          .from('general_contractor_projects')
-          .select('project_id, project_type')
-          .in('project_id', ids)
-          .neq('status', 'removed')
-          .order('created_at', { ascending: false });
-        if (gcContextError) {
-          if (!isMissingSupabaseSchemaObjectError(gcContextError, 'general_contractor_projects')) {
-            setProjects([]);
-            setErrorMessage(formatAppSafeErrorMessage(gcContextError, 'Could not load project management context.'));
-            return;
-          }
-          setProjects(projectList);
-          return;
-        }
-
-        const gcProjectTypes = new Map<string, string | null>();
-        ((gcContextData ?? []) as GcProjectContextRow[]).forEach((row) => {
-          if (!gcProjectTypes.has(row.project_id)) {
-            gcProjectTypes.set(row.project_id, row.project_type);
-          }
-        });
-        projectList = projectList.map((project) => ({
-          ...project,
-          gc_project_type: gcProjectTypes.get(project.id) ?? null,
-        }));
-      }
-      setProjects(projectList);
-    } finally {
-      setLoading(false);
-      onRefreshDone?.();
-    }
-  }, [user, onRefreshDone]);
+  const projectsQuery = useHomeownerCarouselProjects(user?.id);
+  useSilentFocusRefetch(projectsQuery.refetch);
+  const projects = projectsQuery.data ?? [];
+  const showSkeleton = !!user?.id && !projectsQuery.data && projectsQuery.isLoading;
+  const errorMessage = projectsQuery.error
+    ? formatAppSafeErrorMessage(projectsQuery.error, 'Could not load projects.')
+    : null;
 
   useEffect(() => {
-    loadProjects();
-  }, [loadProjects, refreshKey]);
+    if (refreshKey <= 0) return;
+    let cancelled = false;
+    void projectsQuery.refetch().finally(() => {
+      if (!cancelled) onRefreshDone?.();
+    });
+    return () => { cancelled = true; };
+    // Intentionally only re-run when parent bumps refreshKey.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [refreshKey]);
 
   const renderProject = useCallback(
-    ({ item }: { item: Project }) => {
+    ({ item }: { item: HomeownerCarouselProject }) => {
       const meta = STATUS_META[item.status] ?? { label: item.status, color: '#6B7280' };
       const selectedRender = item.renders?.find((render) => render.selected);
       const coverImage = selectedRender?.url ?? item.renders?.[0]?.url ?? item.project_photos?.[0]?.url;
@@ -246,7 +175,7 @@ export function ProjectsCarousel({ refreshKey = 0, onRefreshDone }: { refreshKey
       <Text style={styles.emptySubtitle}>{errorMessage}</Text>
       <GlassButton
         label="Try Again"
-        onPress={loadProjects}
+        onPress={() => { void projectsQuery.refetch(); }}
         variant="primary"
         size="sm"
         haptic
@@ -261,9 +190,9 @@ export function ProjectsCarousel({ refreshKey = 0, onRefreshDone }: { refreshKey
         title="My Projects"
         onPress={() => navigation.navigate('Projects')}
       />
-      {loading ? (
+      {showSkeleton ? (
         <View style={styles.emptyCard}>
-          <ActivityIndicator color="rgba(255,255,255,0.3)" />
+          <ListItemSkeleton />
         </View>
       ) : errorMessage ? (
         renderError()

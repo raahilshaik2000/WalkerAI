@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useState, useRef } from 'react';
 import {
   Alert,
   ScrollView,
@@ -62,6 +62,7 @@ export default function CompanyHomeownerReviewScreen() {
   const [existingReviewId, setExistingReviewId] = useState<string | null>(null);
   const [projectStatus, setProjectStatus] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
+  const hasLoadedRef = useRef(false);
   const [submitting, setSubmitting] = useState(false);
   const [comment, setComment] = useState('');
   const [ratings, setRatings] = useState<Record<string, number>>({
@@ -76,7 +77,7 @@ export default function CompanyHomeownerReviewScreen() {
   );
 
   const fetchReviewContext = useCallback(async () => {
-    setLoading(true);
+    if (!hasLoadedRef.current) setLoading(true);
     if (!projectId || !user?.id) {
       setHomeowner(null);
       setProjectStatus(null);
@@ -133,6 +134,7 @@ export default function CompanyHomeownerReviewScreen() {
       setExistingReviewId(existingResult.data?.id ?? null);
     }
 
+    hasLoadedRef.current = true;
     setLoading(false);
   }, [projectId, user?.id]);
 

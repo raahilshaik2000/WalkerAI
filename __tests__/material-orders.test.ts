@@ -118,12 +118,17 @@ describe('supplier material order payout math', () => {
       path.join(__dirname, '../src/app/(supplier)/orders/active.tsx'),
       'utf8',
     );
+    const supplierData = fs.readFileSync(
+      path.join(__dirname, '../src/lib/supplier-data.ts'),
+      'utf8',
+    );
 
     expect(feedSource).toContain("import { formatAppSafeErrorMessage, formatSupabaseFunctionError } from '@/lib/supabase/functions'");
-    expect(feedSource).toContain("setErrorMessage(formatAppSafeErrorMessage(supplierError, 'Could not load supplier profile.'))");
-    expect(feedSource).toContain("setErrorMessage(formatAppSafeErrorMessage(error, 'Could not load open material orders.'))");
-    expect(feedSource).toContain("setErrorMessage(formatAppSafeErrorMessage(err, 'Could not load open material orders.'))");
-    expect(feedSource).toContain("} finally {\n      setLoading(false);");
+    expect(feedSource).toContain("import { useInvalidateSupplierQueries, useSupplierOpenOrders } from '@/lib/supplier-data';");
+    expect(feedSource).toContain("formatAppSafeErrorMessage(profileQuery.error, 'Could not load supplier profile.')");
+    expect(feedSource).toContain("formatAppSafeErrorMessage(ordersQuery.error, 'Could not load open material orders.')");
+    expect(supplierData).toContain('export async function fetchSupplierOpenOrders(supplier: Supplier)');
+    expect(supplierData).toContain('if (error) throw error;');
     expect(feedSource).toContain("const msg = await formatSupabaseFunctionError(err, 'Failed to claim order')");
     expect(feedSource).toContain("Alert.alert('Order taken', 'Another supplier just claimed this order.')");
     expect(feedSource).toContain("Alert.alert('Could not claim order', msg)");
@@ -134,8 +139,9 @@ describe('supplier material order payout math', () => {
     expect(feedSource).not.toContain("Alert.alert('Error', msg)");
 
     expect(detailSource).toContain("import { formatAppSafeErrorMessage, formatSupabaseFunctionError } from '@/lib/supabase/functions'");
+    expect(detailSource).toContain("import { fetchSupplierProfile, useInvalidateSupplierQueries } from '@/lib/supplier-data';");
     expect(detailSource).toContain("setErrorMessage(formatAppSafeErrorMessage(orderResult.error, 'Could not load material order.'))");
-    expect(detailSource).toContain("setErrorMessage(formatAppSafeErrorMessage(supplierResult.error, 'Could not load supplier profile.'))");
+    expect(detailSource).toContain('currentUserId ? fetchSupplierProfile(currentUserId) : Promise.resolve(null)');
     expect(detailSource).toContain("setErrorMessage(formatAppSafeErrorMessage(err, 'Could not load material order.'))");
     expect(detailSource).toContain("} finally {\n      setLoading(false);");
     expect(detailSource).toContain("Alert.alert('Could not claim order', await formatSupabaseFunctionError(err, 'Please try again.'))");
@@ -145,10 +151,9 @@ describe('supplier material order payout math', () => {
     expect(detailSource).not.toContain("Alert.alert('Error', await formatSupabaseFunctionError(err, 'Failed to claim order.'))");
 
     expect(activeSource).toContain("import { formatAppSafeErrorMessage } from '@/lib/supabase/functions'");
-    expect(activeSource).toContain("setErrorMessage(formatAppSafeErrorMessage(supplierError, 'Could not load supplier profile.'))");
-    expect(activeSource).toContain("setErrorMessage(formatAppSafeErrorMessage(error, 'Could not load active supplier orders.'))");
-    expect(activeSource).toContain("setErrorMessage(formatAppSafeErrorMessage(err, 'Could not load active supplier orders.'))");
-    expect(activeSource).toContain("} finally {\n      setLoading(false);");
+    expect(activeSource).toContain("formatAppSafeErrorMessage(profileQuery.error, 'Could not load supplier profile.')");
+    expect(activeSource).toContain("formatAppSafeErrorMessage(ordersQuery.error, 'Could not load active supplier orders.')");
+    expect(activeSource).toContain("import { useInvalidateSupplierQueries, useSupplierActiveOrders } from '@/lib/supplier-data';");
     expect(activeSource).toContain("Alert.alert('Could not update order', formatAppSafeErrorMessage(err, 'Please try again.'))");
     expect(activeSource).toContain("Alert.alert('Could not mark order shipped', formatAppSafeErrorMessage(err, 'Please try again.'))");
     expect(activeSource).toContain("Alert.alert('Could not mark order delivered', formatAppSafeErrorMessage(err, 'Please try again.'))");
@@ -172,16 +177,25 @@ describe('supplier material order payout math', () => {
       path.join(__dirname, '../src/app/(supplier)/orders/active.tsx'),
       'utf8',
     );
+    const supplierData = fs.readFileSync(
+      path.join(__dirname, '../src/lib/supplier-data.ts'),
+      'utf8',
+    );
 
-    [feedSource, detailSource, activeSource].forEach((source) => {
+    [detailSource].forEach((source) => {
       expect(source).toContain("import { getCurrentUser } from '@/lib/supabase/auth';");
       expect(source).toContain('user?.id ?? (await getCurrentUser())?.id ?? null');
       expect(source).not.toContain(".eq('user_id', user.id)");
     });
-    expect(feedSource).toContain("const currentUserId = user?.id ?? (await getCurrentUser())?.id ?? null;");
-    expect(activeSource).toContain('const [hasActiveSession, setHasActiveSession] = useState(false);');
-    expect(activeSource).toContain('setHasActiveSession(true);');
-    expect(activeSource).toContain(') : !hasActiveSession ? (');
+    [feedSource, activeSource].forEach((source) => {
+      expect(source).toContain('useSupplier');
+      expect(source).toContain('user?.id');
+      expect(source).not.toContain(".eq('user_id', user.id)");
+    });
+    expect(supplierData).toContain('export async function fetchSupplierProfile(userId: string)');
+    expect(supplierData).toContain(".eq('user_id', userId)");
+    expect(feedSource).toContain('useSupplierOpenOrders(user?.id)');
+    expect(activeSource).toContain('useSupplierActiveOrders(user?.id)');
     expect(detailSource).toContain('setCanClaimOpenOrder(false);');
   });
 
@@ -193,11 +207,12 @@ describe('supplier material order payout math', () => {
 
     expect(earningsSource).toContain("import { getCurrentUser } from '@/lib/supabase/auth';");
     expect(earningsSource).toContain('user?.id ?? (await getCurrentUser())?.id ?? null');
-    expect(earningsSource).toContain("setErrorMessage(formatAppSafeErrorMessage(err, 'Could not load earnings.'))");
+    expect(earningsSource).toContain("useSupplierEarnings(user?.id)");
+    expect(earningsSource).toContain("formatAppSafeErrorMessage(profileQuery.error, 'Could not load earnings.')");
+    expect(earningsSource).toContain("formatAppSafeErrorMessage(earningsQuery.error, 'Could not load earnings.')");
     expect(earningsSource).toContain("Alert.alert('Could not start payout setup', formatAppSafeErrorMessage(err, 'Please try again.'))");
     expect(earningsSource).not.toContain(".eq('user_id', user.id)");
     expect(earningsSource).not.toContain('if (!user?.id || !supplier?.id)');
-    expect(earningsSource).toContain('}, [user?.id]);');
   });
 
   it('uses explicit material relationship names on company supplier-delivery queries', () => {

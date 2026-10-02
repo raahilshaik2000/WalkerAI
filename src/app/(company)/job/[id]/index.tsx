@@ -1,4 +1,4 @@
-import { useCallback, useState } from 'react';
+import { useCallback, useRef, useState } from 'react';
 import {
   Alert,
   Image,
@@ -86,6 +86,70 @@ function quoteBuilderParamsForNegotiation(
   };
 }
 
+function isMaterialForTrade(item: string, tradeType: string | null | undefined): boolean {
+  if (!tradeType || tradeType === 'general_contractor') return true;
+  const t = tradeType.toLowerCase();
+  const text = item.toLowerCase();
+
+  if (t.includes('plumb')) {
+    return /plumb|pipe|valve|drain|faucet|sink|toilet|shower|tub|water|p-trap|shutoff|supply line|waste/i.test(text);
+  }
+  if (t.includes('electr')) {
+    return /electr|wire|wiring|lighting|light|outlet|switch|breaker|panel|conduit|pot light|fixture|junction/i.test(text);
+  }
+  if (t.includes('paint')) {
+    return /paint|primer|masking|tape|patch|sundries|sand|drop cloth|caulk|surface prep|trim paint/i.test(text);
+  }
+  if (t.includes('tile')) {
+    return /tile|mortar|thinset|grout|underlayment|schluter|membrane|backsplash|spacer|sealer/i.test(text);
+  }
+  if (t.includes('cabinet')) {
+    return /cabinet|vanity|hardware|handle|knob|hinge|filler|crown molding|toe kick/i.test(text);
+  }
+  if (t.includes('floor')) {
+    return /floor|hardwood|laminate|vinyl|underlayment|transition|baseboard|t-molding|shoe mold/i.test(text);
+  }
+  if (t.includes('drywall')) {
+    return /drywall|sheetrock|mud|taping|compound|corner bead|insulation|stud/i.test(text);
+  }
+  if (t.includes('demo')) {
+    return /demo|removal|disposal|bin|tear out|dumpster|protection/i.test(text);
+  }
+  return true;
+}
+
+function isScopeForTrade(phaseOrDesc: string, tradeType: string | null | undefined): boolean {
+  if (!tradeType || tradeType === 'general_contractor') return true;
+  const t = tradeType.toLowerCase();
+  const text = phaseOrDesc.toLowerCase();
+
+  if (t.includes('plumb')) {
+    return /plumb|pipe|valve|drain|faucet|sink|toilet|shower|tub|water|rough-in/i.test(text);
+  }
+  if (t.includes('electr')) {
+    return /electr|wire|wiring|lighting|light|outlet|switch|breaker|panel|rough-in/i.test(text);
+  }
+  if (t.includes('paint')) {
+    return /paint|primer|finish|prep|sand|coat/i.test(text);
+  }
+  if (t.includes('tile')) {
+    return /tile|mortar|grout|waterproof|backsplash/i.test(text);
+  }
+  if (t.includes('cabinet')) {
+    return /cabinet|vanity|install.*cabinet|millwork/i.test(text);
+  }
+  if (t.includes('floor')) {
+    return /floor|hardwood|laminate|vinyl|baseboard/i.test(text);
+  }
+  if (t.includes('drywall')) {
+    return /drywall|sheetrock|tape|insulation/i.test(text);
+  }
+  if (t.includes('demo')) {
+    return /demo|remove|tear out|disposal/i.test(text);
+  }
+  return true;
+}
+
 interface Slot {
   id: string;
   trade_type: string;
@@ -103,6 +167,7 @@ interface JobBrief {
   room_type: string | null;
   gc_project_type?: string | null;
   status: string;
+  admin_paused?: boolean | null;
   ai_cost_min: number | null;
   ai_cost_max: number | null;
   assigned_company_id: string | null;
@@ -193,6 +258,7 @@ export default function JobBriefScreen() {
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [hasApprovedQuote, setHasApprovedQuote] = useState(false);
   const [hasEditablePendingQuote, setHasEditablePendingQuote] = useState(false);
+  const hasLoadedRef = useRef(false);
   const finishSelections = readPersistedSurfaceSelections(job?.questionnaire_answers);
 
   const fetchJob = useCallback(async () => {
@@ -203,6 +269,7 @@ export default function JobBriefScreen() {
       return;
     }
 
+    if (!hasLoadedRef.current) setLoading(true);
     try {
       setErrorMessage(null);
       let currentUserId = user?.id ?? null;
@@ -213,8 +280,20 @@ export default function JobBriefScreen() {
       }
       if (!currentUserId) throw new Error('Sign in again before opening this job.');
 
-      const [projectResult, slotResult, companyData, gcContextResult] = await Promise.all([
-        supabase
+      let projectResult = await supabase
+        .from('projects')
+        .select(`
+          id, address, city, room_type, status, admin_paused, assigned_company_id, ai_cost_min, ai_cost_max,
+          ai_analysis, questionnaire_answers, dispatch_expires_at,
+          materials ( item, quantity, unit, quality_tier ),
+          scope_of_work ( phase, description, sort_order ),
+          renders ( url, selected ),
+          project_photos ( url, storage_path )
+        `)
+        .eq('id', projectId)
+        .maybeSingle();
+      if (projectResult.error && /admin_paused/i.test(projectResult.error.message)) {
+        projectResult = await supabase
           .from('projects')
           .select(`
             id, address, city, room_type, status, assigned_company_id, ai_cost_min, ai_cost_max,
@@ -225,7 +304,10 @@ export default function JobBriefScreen() {
             project_photos ( url, storage_path )
           `)
           .eq('id', projectId)
-          .maybeSingle(),
+          .maybeSingle();
+      }
+
+      const [slotResult, companyData, gcContextResult] = await Promise.all([
         slotId
           ? supabase
               .from('project_slots')
@@ -333,16 +415,19 @@ export default function JobBriefScreen() {
       setTradeNegotiations(
         negotiations.filter((negotiation) => negotiation.status === 'pending' || acceptedCounterofferNeedsQuoteUpdate(negotiation)),
       );
+      hasLoadedRef.current = true;
       setLoading(false);
     } catch (err) {
       setErrorMessage(formatAppSafeErrorMessage(err, 'Could not load this job.'));
-      setJob(null);
-      setSlot(null);
-      setAlreadyAccepted(false);
-      setUnavailable(false);
-      setHasApprovedQuote(false);
-      setHasEditablePendingQuote(false);
-      setTradeNegotiations([]);
+      if (!hasLoadedRef.current) {
+        setJob(null);
+        setSlot(null);
+        setAlreadyAccepted(false);
+        setUnavailable(false);
+        setHasApprovedQuote(false);
+        setHasEditablePendingQuote(false);
+        setTradeNegotiations([]);
+      }
       setLoading(false);
     }
   }, [projectId, slotId, user?.id]);
@@ -356,6 +441,13 @@ export default function JobBriefScreen() {
   const handleAccept = async () => {
     if (!projectId) {
       Alert.alert('Missing job', 'Reopen this invite from the job feed and try again.');
+      return;
+    }
+    if (job?.admin_paused) {
+      Alert.alert(
+        'Project on hold',
+        'Walker AI admin has paused this project. You cannot accept it until the hold is lifted.',
+      );
       return;
     }
     if (!payoutReady) {
@@ -390,22 +482,13 @@ export default function JobBriefScreen() {
       setAlreadyAccepted(true);
       setUnavailable(false);
       fetchJob();
-      const shouldStartQuote = !!slotId || !!data?.needs_quote;
-      const actions = shouldStartQuote
-        ? [
-            { text: 'Start Quote', onPress: () => navigation.navigate('QuoteBuilder', { id: projectId, slot: slotId }) },
-            { text: 'Verify Materials', onPress: () => navigation.navigate('JobMaterials', { id: projectId }) },
-          ]
-        : [
-            { text: 'Verify Materials', onPress: () => navigation.navigate('JobMaterials', { id: projectId }) },
-            { text: 'View Job', onPress: () => undefined },
-          ];
       Alert.alert(
         slotId ? 'Slot accepted!' : 'Job accepted!',
-        shouldStartQuote
-          ? 'The homeowner has been notified. Submit your trade quote, then verify material quantities.'
-          : 'The homeowner has been notified. A pending quote was created from the AI price, so verify material quantities next.',
-        actions
+        'The homeowner has been notified. Review your assigned scope & payout, then verify material quantities.',
+        [
+          { text: 'Scope & Payout', onPress: () => navigation.navigate('JobMilestones', { id: projectId, slot: slotId }) },
+          { text: 'Verify Materials', onPress: () => navigation.navigate('JobMaterials', { id: projectId }) },
+        ]
       );
     } catch (err) {
       const msg = await formatSupabaseFunctionError(err, 'Failed to accept job.');
@@ -504,7 +587,8 @@ export default function JobBriefScreen() {
       <GradientBackground>
         <SafeAreaView style={styles.safe}>
           <View style={styles.center}>
-            <Text style={Typography.h2}>{errorMessage ?? 'Job not found'}</Text>
+            <Text style={[Typography.h2, { textAlign: 'center' }]}>{errorMessage ?? 'Job not found'}</Text>
+            <GlassButton label="Try Again" onPress={() => { void fetchJob(); }} size="sm" style={{ marginTop: 16 }} />
           </View>
         </SafeAreaView>
       </GradientBackground>
@@ -528,6 +612,14 @@ export default function JobBriefScreen() {
           </View>
 
           {/* Slot banner — shown when dispatched to a specific trade */}
+          {job.admin_paused ? (
+            <View style={styles.holdBanner}>
+              <Ionicons name="pause-circle-outline" size={18} color="#FFB020" />
+              <Text style={styles.holdBannerText}>
+                Walker AI admin has paused this project. Accepting and payouts are blocked until the hold is lifted.
+              </Text>
+            </View>
+          ) : null}
           {slot && (
             <View style={styles.slotBanner}>
               <View style={styles.slotBannerIcon}>
@@ -616,41 +708,57 @@ export default function JobBriefScreen() {
           )}
 
           {/* Scope of work */}
-          {job.scope_of_work && job.scope_of_work.length > 0 && (
-            <TradeSection title="Scope of work">
-            <TradePanel style={styles.card}>
-              {[...job.scope_of_work]
-                .sort((a, b) => a.sort_order - b.sort_order)
-                .map((item, i) => (
-                  <View key={i} style={styles.scopeRow}>
-                    <View style={styles.phaseTag}>
-                      <Text style={styles.phaseText}>{item.phase}</Text>
+          {job.scope_of_work && job.scope_of_work.length > 0 && (() => {
+            const activeTrade = slot?.trade_type || null;
+            const scopedScope = (job.scope_of_work ?? []).filter((item) => isScopeForTrade(`${item.phase} ${item.description}`, activeTrade));
+            const displayScope = (scopedScope.length > 0 ? scopedScope : job.scope_of_work ?? [])
+              .slice()
+              .sort((a, b) => a.sort_order - b.sort_order);
+
+            return (
+              <TradeSection title={activeTrade ? `Scope of work (${formatTradeLabel(activeTrade)})` : 'Scope of work'}>
+                <TradePanel style={styles.card}>
+                  {displayScope.map((item, i) => (
+                    <View key={i} style={styles.scopeRow}>
+                      <View style={styles.phaseTag}>
+                        <Text style={styles.phaseText}>{item.phase}</Text>
+                      </View>
+                      <Text style={styles.scopeDesc}>{item.description}</Text>
                     </View>
-                    <Text style={styles.scopeDesc}>{item.description}</Text>
-                  </View>
-                ))}
-            </TradePanel>
-            </TradeSection>
-          )}
+                  ))}
+                </TradePanel>
+              </TradeSection>
+            );
+          })()}
 
           {/* Materials */}
-          {job.materials && job.materials.length > 0 && (
-            <TradeSection title="Materials">
-            <TradePanel style={styles.card}>
-              {job.materials.map((mat, i) => (
-                <View key={i} style={styles.matRow}>
-                  <Text style={styles.matItem}>{mat.item}</Text>
-                  <Text style={styles.matQty}>{mat.quantity} {mat.unit}</Text>
-                </View>
-              ))}
-            </TradePanel>
-            </TradeSection>
-          )}
+          {job.materials && job.materials.length > 0 && (() => {
+            const activeTrade = slot?.trade_type || null;
+            const scopedMaterials = (job.materials ?? []).filter((mat) => isMaterialForTrade(mat.item, activeTrade));
+            const displayMaterials = scopedMaterials.length > 0 ? scopedMaterials : job.materials ?? [];
+
+            return (
+              <TradeSection title={activeTrade ? `Materials (${formatTradeLabel(activeTrade)})` : 'Materials'}>
+                <TradePanel style={styles.card}>
+                  {displayMaterials.map((mat, i) => (
+                    <View key={i} style={styles.matRow}>
+                      <Text style={styles.matItem}>{mat.item}</Text>
+                      <Text style={styles.matQty}>{mat.quantity} {mat.unit}</Text>
+                    </View>
+                  ))}
+                </TradePanel>
+              </TradeSection>
+            );
+          })()}
 
           {/* Accept CTA */}
           {unavailable ? (
             <GlassCard style={[styles.card, styles.acceptedCard]}>
               <Text style={styles.acceptedText}>Job no longer available</Text>
+            </GlassCard>
+          ) : job.admin_paused ? (
+            <GlassCard style={[styles.card, styles.acceptedCard]}>
+              <Text style={styles.acceptedText}>Project on admin hold</Text>
             </GlassCard>
           ) : !alreadyAccepted ? (
             <>
@@ -783,7 +891,7 @@ export default function JobBriefScreen() {
                   },
                   { label: 'Payments', iconName: 'cash-multiple', route: 'JobMilestones', meta: 'Milestones' },
                   { label: 'Materials', iconName: 'cube-outline', route: 'JobMaterials', meta: 'Verify counts' },
-                  { label: 'Messages', iconName: 'chat-outline', route: 'JobMessages', meta: 'Project thread' },
+                  { label: 'Site Check', iconName: 'clipboard-search-outline', route: 'JobSiteInspection', meta: 'Inspection diff' },
                   { label: 'Changes', iconName: 'pencil-outline', route: 'JobChangeOrders', meta: 'Change orders' },
                   { label: 'Warranties', iconName: 'shield-check-outline', route: 'JobWarranties', meta: 'Closeout docs' },
                   ...(job.status === 'completed'
@@ -910,6 +1018,18 @@ const styles = StyleSheet.create({
     backgroundColor: 'rgba(255,107,0,0.08)',
     borderRadius: Radius.card, borderWidth: 1, borderColor: 'rgba(255,107,0,0.25)',
     padding: 12, marginBottom: Spacing.sm,
+  },
+  holdBanner: {
+    flexDirection: 'row', alignItems: 'flex-start', gap: 10,
+    backgroundColor: 'rgba(255,176,32,0.10)',
+    borderRadius: Radius.card, borderWidth: 1, borderColor: 'rgba(255,176,32,0.35)',
+    padding: 12, marginBottom: Spacing.sm,
+  },
+  holdBannerText: {
+    flex: 1,
+    fontSize: 13,
+    lineHeight: 18,
+    color: Colors.text.secondary,
   },
   slotBannerIcon: {
     width: 36, height: 36, borderRadius: 18,

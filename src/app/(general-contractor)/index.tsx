@@ -1,4 +1,4 @@
-import { useCallback, useState } from 'react';
+import { useCallback, useRef, useState } from 'react';
 import {
   RefreshControl,
   ScrollView,
@@ -88,6 +88,7 @@ export default function GeneralContractorDashboard() {
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  const hasLoadedRef = useRef(false);
 
   const clearDashboardState = useCallback(() => {
     setGc(null);
@@ -96,6 +97,7 @@ export default function GeneralContractorDashboard() {
   }, []);
 
   const fetchData = useCallback(async () => {
+    if (!hasLoadedRef.current) setLoading(true);
     try {
       setErrorMessage(null);
       const currentUser = user ?? (await supabase.auth.getUser()).data.user;
@@ -107,7 +109,11 @@ export default function GeneralContractorDashboard() {
 
       const { data: profile, error: profileError } = await supabase
         .from('general_contractors')
-        .select('*')
+        .select(`
+          id, user_id, business_name, address, city, province, postal_code,
+          lat, lng, service_radius_km, license_number, license_doc_url, insurance_doc_url,
+          verified, concierge_enabled, rating, total_reviews, created_at
+        `)
         .eq('user_id', currentUser.id)
         .maybeSingle();
       if (profileError) throw profileError;
@@ -198,9 +204,10 @@ export default function GeneralContractorDashboard() {
         + (paymentCountResult.count ?? 0)
         + conciergeActionCount,
       );
+      hasLoadedRef.current = true;
     } catch (err) {
       setErrorMessage(formatAppSafeErrorMessage(err, 'Could not load GC dashboard.'));
-      clearDashboardState();
+      if (!hasLoadedRef.current) clearDashboardState();
     } finally {
       setLoading(false);
       setRefreshing(false);
@@ -209,6 +216,7 @@ export default function GeneralContractorDashboard() {
 
   useFocusEffect(
     useCallback(() => {
+      // Keep last dashboard on screen; refetch in the background with no full-screen loader.
       fetchData();
     }, [fetchData]),
   );
@@ -317,7 +325,13 @@ export default function GeneralContractorDashboard() {
           />
 
           {errorMessage ? (
-            <TradeEmptyState icon="wifi-off" title="Could not load GC desk" body={errorMessage} />
+            <TradeEmptyState
+              icon="wifi-off"
+              title="Could not load GC desk"
+              body={errorMessage}
+              actionLabel="Try Again"
+              onAction={() => { void fetchData(); }}
+            />
           ) : loading ? (
             Array.from({ length: 3 }).map((_, index) => <ListItemSkeleton key={index} style={styles.skeletonSpacing} />)
           ) : assignments.length === 0 ? (

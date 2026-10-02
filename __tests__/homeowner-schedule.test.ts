@@ -189,10 +189,18 @@ describe('homeowner project schedule screen source guards', () => {
       path.join(__dirname, '../src/app/(homeowner)/schedule.tsx'),
       'utf8',
     );
+    const homeownerData = fs.readFileSync(
+      path.join(__dirname, '../src/lib/homeowner-data.ts'),
+      'utf8',
+    );
 
     expect(source).toContain("import { formatAppSafeErrorMessage } from '@/lib/supabase/functions';");
-    expect(source).toContain("setErrorMessage(formatAppSafeErrorMessage(projectsError, 'Could not load schedule.'))");
-    expect(source).toContain("setErrorMessage(formatAppSafeErrorMessage(slotsResult.error ?? milestonesResult.error, 'Could not load schedule.'))");
+    expect(source).toContain("import { useHomeownerSchedule } from '@/lib/homeowner-data';");
+    expect(source).toContain('useHomeownerSchedule(user?.id)');
+    expect(source).toContain("formatAppSafeErrorMessage(scheduleQuery.error, 'Could not load schedule.')");
+    expect(homeownerData).toContain('export async function fetchHomeownerSchedule(userId: string)');
+    expect(homeownerData).toContain('if (projectsError) throw projectsError;');
+    expect(homeownerData).toContain('throw slotsResult.error ?? milestonesResult.error;');
     expect(source).not.toContain('setErrorMessage(projectsError.message)');
     expect(source).not.toContain("setErrorMessage(slotsResult.error?.message ?? milestonesResult.error?.message ?? 'Could not load schedule.')");
   });

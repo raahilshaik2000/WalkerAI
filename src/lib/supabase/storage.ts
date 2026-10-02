@@ -20,10 +20,13 @@ interface UploadBase64Options {
   retries?: number;
   retryDelayMs?: number;
   upsert?: boolean;
+  /** When true, each retry writes to path-rN.ext to avoid stuck partial objects. */
+  uniquePathOnRetry?: boolean;
 }
 
 export interface StorageUploadAsset {
   uri?: string | null;
+  base64?: string | null;
   fileName?: string | null;
   type?: string | null;
 }
@@ -69,10 +72,6 @@ export function getUploadMetadata(
   asset: StorageUploadAsset,
   fallbackContentType: string = 'image/jpeg',
 ): StorageUploadMetadata {
-  if (!asset.uri) {
-    throw new Error('Selected file is missing a file URI.');
-  }
-
   const extensionFromAsset = extensionFromName(asset.fileName) ?? extensionFromName(asset.uri);
   const contentType =
     sanitizeContentType(asset.type)
@@ -80,63 +79,62 @@ export function getUploadMetadata(
     ?? fallbackContentType;
   const extension = EXTENSION_BY_MIME[contentType] ?? extensionFromAsset ?? 'jpg';
 
+  const uri = (asset.base64 ? `data:${contentType};base64,${asset.base64}` : null) || asset.uri;
+  if (!uri) {
+    throw new Error('Selected file is missing a file URI.');
+  }
+
   return {
-    uri: asset.uri,
+    uri,
     extension,
     contentType,
   };
 }
 
 // React Native's fetch() returns empty blobs for file:// URIs.
-// Use XMLHttpRequest with responseType='blob' instead — it correctly reads local files.
-function readLocalFileAsBlob(uri: string): Promise<Blob> {
+// Use XMLHttpRequest with responseType='arraybuffer' or direct base64 decode for data: URIs.
+function readLocalFileAsArrayBuffer(uri: string): Promise<ArrayBuffer> {
+  if (uri.startsWith('data:')) {
+    const clean = uri.replace(/^data:[^;]+;base64,/, '');
+    const binary = atob(clean);
+    const buffer = new ArrayBuffer(binary.length);
+    const bytes = new Uint8Array(buffer);
+    for (let i = 0; i < binary.length; i++) {
+      bytes[i] = binary.charCodeAt(i);
+    }
+    return Promise.resolve(buffer);
+  }
+
   return new Promise((resolve, reject) => {
     const xhr = new XMLHttpRequest();
     xhr.open('GET', uri, true);
-    xhr.responseType = 'blob';
+    xhr.timeout = 8000;
+    xhr.responseType = 'arraybuffer';
     xhr.onload = () => {
-      if (xhr.status === 200 || xhr.status === 0) {
-        resolve(xhr.response as Blob);
-      } else {
-        reject(new Error(`Failed to read file (${xhr.status}): ${uri}`));
+      if ((xhr.status === 200 || xhr.status === 0) && xhr.response) {
+        const buffer = xhr.response as ArrayBuffer;
+        if (buffer && buffer.byteLength > 0) {
+          resolve(buffer);
+          return;
+        }
       }
+      reject(new Error(`Could not read non-empty file payload from URI: ${uri}`));
     };
+    xhr.ontimeout = () => reject(new Error('Timeout reading local file'));
     xhr.onerror = () => reject(new Error(`Network error reading file: ${uri}`));
     xhr.send();
   });
 }
 
-export async function uploadFile(
+async function uploadBinaryViaXHR(
   bucket: StorageBucket,
   path: string,
-  fileUri: string,
-  contentType: string = 'image/jpeg',
-  onProgress?: (progress: number) => void
-): Promise<UploadResult> {
-  const blob = await readLocalFileAsBlob(fileUri);
-
-  if (onProgress) {
-    await uploadWithProgress(bucket, path, blob, contentType, onProgress);
-  } else {
-    const { error } = await supabase.storage.from(bucket).upload(path, blob, {
-      contentType,
-      upsert: true,
-    });
-    if (error) throw error;
-  }
-
-  const { data } = supabase.storage.from(bucket).getPublicUrl(path);
-  return { publicUrl: data.publicUrl, storagePath: path };
-}
-
-async function uploadWithProgress(
-  bucket: StorageBucket,
-  path: string,
-  blob: Blob,
+  arrayBuffer: ArrayBuffer,
   contentType: string,
-  onProgress: (progress: number) => void
+  onProgress?: (progress: number) => void
 ): Promise<void> {
   const supabaseUrl = Config.SUPABASE_URL!;
+  const anonKey = Config.SUPABASE_ANON_KEY!;
   const { data, error } = await supabase.auth.getSession();
   if (error || !data.session?.access_token) {
     throw new Error(error?.message ?? 'Sign in is required to upload files.');
@@ -146,26 +144,112 @@ async function uploadWithProgress(
     const xhr = new XMLHttpRequest();
     xhr.open('POST', `${supabaseUrl}/storage/v1/object/${bucket}/${path}`);
     xhr.setRequestHeader('Authorization', `Bearer ${data.session.access_token}`);
+    if (anonKey) {
+      xhr.setRequestHeader('apikey', anonKey);
+    }
     xhr.setRequestHeader('Content-Type', contentType);
-    xhr.setRequestHeader('x-upsert', 'false');
+    xhr.setRequestHeader('x-upsert', 'true');
+    // Permit/doc uploads were aborting at 25s while Supabase storage returned 544 DB timeouts.
+    xhr.timeout = 60000;
 
-    xhr.upload.onprogress = (e) => {
-      if (e.lengthComputable) {
-        onProgress(Math.round((e.loaded / e.total) * 100));
-      }
-    };
+    if (onProgress) {
+      xhr.upload.onprogress = (e) => {
+        if (e.lengthComputable) {
+          onProgress(Math.round((e.loaded / e.total) * 100));
+        }
+      };
+    }
 
     xhr.onload = () => {
-      if (xhr.status === 200 || xhr.status === 201) {
+      if (xhr.status >= 200 && xhr.status < 300) {
         resolve();
       } else {
-        reject(new Error(`Upload failed: ${xhr.statusText}`));
+        reject(new Error(`Upload failed (${xhr.status}): ${xhr.responseText || xhr.statusText}`));
       }
     };
 
-    xhr.onerror = () => reject(new Error('Upload network error'));
-    xhr.send(blob);
+    xhr.ontimeout = () => reject(new Error('Upload timed out. Please check your connection.'));
+    xhr.onerror = () => reject(new Error('Network error during file upload'));
+    xhr.send(arrayBuffer);
   });
+}
+
+function attemptStoragePath(path: string, attempt: number): string {
+  if (attempt <= 1) return path;
+  return path.replace(/(\.[^./]+)$/, `-r${attempt}$1`);
+}
+
+export async function uploadFile(
+  bucket: StorageBucket,
+  path: string,
+  fileUri: string,
+  contentType: string = 'image/jpeg',
+  onProgress?: (progress: number) => void
+): Promise<UploadResult> {
+  const arrayBuffer = await readLocalFileAsArrayBuffer(fileUri);
+
+  if (!arrayBuffer || arrayBuffer.byteLength === 0) {
+    throw new Error('Selected file contains no binary data.');
+  }
+
+  const retries = 4;
+  const retryDelayMs = 1500;
+  let lastError: unknown = null;
+  let uploadedPath = path;
+
+  for (let attempt = 1; attempt <= retries; attempt += 1) {
+    const attemptPath = attemptStoragePath(path, attempt);
+    try {
+      await uploadBinaryViaXHR(bucket, attemptPath, arrayBuffer, contentType, onProgress);
+      uploadedPath = attemptPath;
+      lastError = null;
+      break;
+    } catch (err: any) {
+      lastError = err;
+      const text = `${err?.message ?? ''}`.toLowerCase();
+      const retriable = text.includes('544')
+        || text.includes('timeout')
+        || text.includes('timed out')
+        || text.includes('network')
+        || text.includes('databasetimeout')
+        || text.includes('503')
+        || text.includes('504');
+      if (!retriable || attempt === retries) throw err;
+      await new Promise((resolve) => setTimeout(resolve, retryDelayMs * attempt));
+    }
+  }
+
+  if (lastError) {
+    throw lastError;
+  }
+
+  const { data } = supabase.storage.from(bucket).getPublicUrl(uploadedPath);
+  return { publicUrl: data.publicUrl, storagePath: uploadedPath };
+}
+
+/**
+ * Prefer base64 from the image picker (reliable on iOS ph:// / camera assets).
+ * Fall back to reading the local file URI when base64 is unavailable.
+ * Retries use a new object path so a hung/partial upsert cannot block the next attempt.
+ */
+export async function uploadPickerAsset(
+  bucket: StorageBucket,
+  path: string,
+  asset: StorageUploadAsset,
+  fallbackContentType: string = 'image/jpeg',
+  onProgress?: (progress: number) => void,
+): Promise<UploadResult> {
+  const meta = getUploadMetadata(asset, fallbackContentType);
+  const base64 = typeof asset.base64 === 'string' && asset.base64.length > 0 ? asset.base64 : null;
+  if (base64) {
+    return uploadBase64(bucket, path, base64, meta.contentType, {
+      upsert: false,
+      retries: 4,
+      retryDelayMs: 1500,
+      uniquePathOnRetry: true,
+    });
+  }
+  return uploadFile(bucket, path, meta.uri, meta.contentType, onProgress);
 }
 
 export async function uploadBase64(
@@ -183,15 +267,22 @@ export async function uploadBase64(
   }
   const retries = Math.max(1, options.retries ?? 3);
   const retryDelayMs = options.retryDelayMs ?? 800;
+  const uniquePathOnRetry = options.uniquePathOnRetry ?? false;
   let lastError: unknown = null;
+  let uploadedPath = path;
 
   for (let attempt = 1; attempt <= retries; attempt += 1) {
-    const { error } = await supabase.storage.from(bucket).upload(path, bytes, {
+    const attemptPath = uniquePathOnRetry ? attemptStoragePath(path, attempt) : path;
+    const { error } = await supabase.storage.from(bucket).upload(attemptPath, bytes, {
       contentType,
       upsert: options.upsert ?? false,
     });
 
-    if (!error || isAlreadyUploadedError(error)) break;
+    if (!error || isAlreadyUploadedError(error)) {
+      uploadedPath = attemptPath;
+      lastError = null;
+      break;
+    }
 
     lastError = error;
     if (!isRetriableStorageError(error) || attempt === retries) {
@@ -205,8 +296,8 @@ export async function uploadBase64(
     throw lastError;
   }
 
-  const { data } = supabase.storage.from(bucket).getPublicUrl(path);
-  return { publicUrl: data.publicUrl, storagePath: path };
+  const { data } = supabase.storage.from(bucket).getPublicUrl(uploadedPath);
+  return { publicUrl: data.publicUrl, storagePath: uploadedPath };
 }
 
 function storageErrorText(error: unknown): string {
@@ -218,6 +309,8 @@ function isRetriableStorageError(error: unknown): boolean {
   const text = storageErrorText(error);
   return text.includes('timed out')
     || text.includes('timeout')
+    || text.includes('databasetimeout')
+    || text.includes('544')
     || text.includes('network')
     || text.includes('fetch')
     || text.includes('temporarily')

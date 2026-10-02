@@ -251,7 +251,81 @@ Deno.serve(async (req) => {
     switch (event.type) {
       case 'payment_intent.succeeded': {
         const pi = event.data.object as Stripe.PaymentIntent;
-        const { project_id, quote_id, gc_concierge_booking_id } = pi.metadata;
+        const { project_id, quote_id, gc_concierge_booking_id, site_inspection_adjustment_id } = pi.metadata;
+
+        if (site_inspection_adjustment_id) {
+          const { data: adj, error: adjErr } = await adminClient
+            .from('site_inspection_adjustments')
+            .select('*, project:projects(*)')
+            .eq('id', site_inspection_adjustment_id)
+            .single();
+
+          if (!adjErr && adj && adj.status === 'awaiting_homeowner_funding') {
+            await adminClient
+              .from('site_inspection_adjustments')
+              .update({
+                status: 'approved_and_funded',
+                homeowner_signed_at: new Date().toISOString(),
+                updated_at: new Date().toISOString(),
+              })
+              .eq('id', adj.id);
+
+            const proj = Array.isArray(adj.project) ? adj.project[0] : adj.project;
+            if (proj) {
+              const currentCost = proj.estimated_cost_cents || 0;
+              const updatedCost = currentCost + adj.cost_delta;
+              await adminClient
+                .from('projects')
+                .update({ estimated_cost_cents: updatedCost, updated_at: new Date().toISOString() })
+                .eq('id', proj.id);
+            }
+
+            // Create mirrored change order record for unified ledger & screens
+            await adminClient.from('change_orders').insert({
+              project_id: adj.project_id,
+              company_id: adj.company_id,
+              description: `[Site Inspection Adjustment] ${adj.description}`,
+              cost_delta: adj.cost_delta,
+              status: 'approved',
+              signed_by_company: true,
+              signed_by_homeowner: true,
+            });
+
+            // Write to verified estimation learning records
+            const originalMeas = proj?.measurements || {};
+            const verifiedMeas = adj.corrected_measurements || {};
+            const origSqft = Number(originalMeas.lengthFt || 0) * Number(originalMeas.widthFt || 0);
+            const verifiedSqft = Number(verifiedMeas.lengthFt || 0) * Number(verifiedMeas.widthFt || 0);
+            const varianceRatio = origSqft > 0 && verifiedSqft > 0
+              ? Number((verifiedSqft / origSqft).toFixed(4))
+              : 1.0;
+
+            await adminClient.from('estimation_learning_records').insert({
+              project_id: adj.project_id,
+              adjustment_id: adj.id,
+              room_type: proj?.room_type || 'kitchen',
+              province: proj?.province || 'ON',
+              quality_tier: 'mid-range',
+              original_measurements: originalMeas,
+              verified_measurements: verifiedMeas,
+              dimensional_variance_ratio: varianceRatio,
+              original_estimated_cost_cents: proj?.estimated_cost_cents || 0,
+              approved_cost_delta_cents: adj.cost_delta,
+              final_cost_cents: (proj?.estimated_cost_cents || 0) + adj.cost_delta,
+              adjustment_category: adj.reason_category,
+              adjustment_reason: adj.description,
+              evidence_urls: adj.evidence_urls,
+              itemized_labor_diff: adj.labor_breakdown,
+              itemized_material_diff: adj.material_breakdown,
+              head_office_approved_by: adj.head_office_reviewer_id,
+              calibration_factors: {
+                area_ratio: varianceRatio,
+                cost_per_sqft_delta_cad: verifiedSqft > 0 ? (adj.cost_delta / 100) / verifiedSqft : 0,
+              },
+            });
+          }
+        }
+
         if (gc_concierge_booking_id) {
           const { data: booking, error: bookingLookupError } = await adminClient
             .from('gc_concierge_bookings')

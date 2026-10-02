@@ -3,10 +3,10 @@ import { Alert, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'rea
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useNavigation } from '@react-navigation/native';
 import Ionicons from 'react-native-vector-icons/Ionicons';
-import { launchImageLibrary } from 'react-native-image-picker';
+import { pickPhotosWithSource } from '@/lib/media-picker';
 import { supabase } from '@/lib/supabase/client';
 import { formatAppSafeErrorMessage } from '@/lib/supabase/functions';
-import { getUploadMetadata, uploadFile } from '@/lib/supabase/storage';
+import { getUploadMetadata, uploadBase64, uploadFile } from '@/lib/supabase/storage';
 import { useAuthStore } from '@/stores/auth.store';
 import { Colors, Radius, Spacing, Typography } from '@/constants/theme';
 import { GlassButton, GlassCard, GlassInput, GradientBackground } from '@/components/ui';
@@ -21,21 +21,24 @@ export default function SupplierLicenseOnboarding() {
   const { user } = useAuthStore();
   const [licenseNumber, setLicenseNumber] = useState('');
   const [docUri, setDocUri] = useState<string | null>(null);
+  const [docBase64, setDocBase64] = useState<string | null>(null);
   const [docName, setDocName] = useState<string | null>(null);
   const [docType, setDocType] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
 
   const pickDoc = async () => {
-    const result = await launchImageLibrary({
-      mediaType: 'photo',
+    const assets = await pickPhotosWithSource({
+      selectionLimit: 1,
       quality: 0.8,
-      assetRepresentationMode: 'compatible',
+      maxWidth: 1600,
+      maxHeight: 1600,
+      includeBase64: true,
     });
-    if (result.assets?.[0]) {
-      setDocUri(result.assets[0].uri ?? null);
-      setDocName(result.assets[0].fileName ?? 'license.jpg');
-      setDocType(result.assets[0].type ?? null);
-    }
+    if (!assets?.[0]) return;
+    setDocUri(assets[0].uri ?? null);
+    setDocBase64(assets[0].base64 ?? null);
+    setDocName(assets[0].fileName ?? 'license.jpg');
+    setDocType(assets[0].type ?? null);
   };
 
   const handleNext = async () => {
@@ -51,7 +54,9 @@ export default function SupplierLicenseOnboarding() {
       if (docUri) {
         const upload = getUploadMetadata({ uri: docUri, fileName: docName, type: docType });
         const path = `supplier-licenses/${user.id}/license.${upload.extension}`;
-        const { storagePath } = await uploadFile('company-docs', path, upload.uri, upload.contentType);
+        const { storagePath } = docBase64
+          ? await uploadBase64('company-docs', path, docBase64, upload.contentType)
+          : await uploadFile('company-docs', path, upload.uri, upload.contentType);
         docPath = storagePath;
       }
 
@@ -110,7 +115,7 @@ export default function SupplierLicenseOnboarding() {
           <Text style={styles.title}>Business License</Text>
           <Text style={styles.subtitle}>Required to verify your supply business</Text>
 
-          <GlassCard style={styles.card}>
+          <GlassCard style={styles.card} padding={Spacing.md}>
             <GlassInput
               label="License Number"
               value={licenseNumber}
@@ -144,7 +149,7 @@ const styles = StyleSheet.create({
   stepDotActive: { backgroundColor: Colors.accent, width: 24 },
   title: { ...Typography.h1, marginBottom: 6 },
   subtitle: { ...Typography.bodySecondary, marginBottom: Spacing.lg },
-  card: { padding: Spacing.md, marginBottom: Spacing.lg },
+  card: { marginBottom: Spacing.lg },
   docLabel: { fontSize: 13, color: Colors.text.secondary, marginBottom: 10 },
   uploadBox: {
     borderWidth: 1.5,

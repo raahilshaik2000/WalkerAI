@@ -1,6 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
 import {
-  Alert,
   Animated,
   Easing,
   StyleSheet,
@@ -23,6 +22,7 @@ import {
 import { useProjectWizardStore } from '@/stores/project-wizard.store';
 import { useAuthStore } from '@/stores/auth.store';
 import { getQuestionsForRoomType } from '@/data/fixed-questions';
+import { parseMetricDimension } from '@/lib/measurements';
 import { Colors, Spacing, Typography } from '@/constants/theme';
 import { GradientBackground } from '@/components/ui';
 import type { AIAnalysis } from '@/types/database.types';
@@ -77,7 +77,21 @@ async function ensureDraftProjectId(params: {
   roomType: string;
 }) {
   const { existingProjectId, userId, roomType } = params;
-  if (existingProjectId) return existingProjectId;
+  if (existingProjectId) {
+    const { data: existingProject, error: existingProjectError } = await supabase
+      .from('projects')
+      .select('id')
+      .eq('id', existingProjectId)
+      .eq('homeowner_id', userId)
+      .maybeSingle();
+
+    if (!existingProjectError && existingProject?.id) return existingProject.id as string;
+
+    console.warn(
+      '[analyzing] existing draft project was unavailable for the signed-in homeowner; creating a fresh draft:',
+      errorMessage(existingProjectError, 'Project was not found for this homeowner.'),
+    );
+  }
 
   const draftProjectId = generateUuid();
   let lastError: unknown = null;
@@ -219,7 +233,7 @@ export default function AnalyzingScreen() {
           roomType: selectedRoomType,
         });
 
-        if (!projectId) {
+        if (pid !== projectId) {
           useProjectWizardStore.getState().setProjectId(pid);
         }
 
@@ -252,25 +266,15 @@ export default function AnalyzingScreen() {
         }
 
         const hasPersistedPhoto = uploadedPhotoResults.some((result) => result.saved);
-        const canContinueWithLocalPhotos =
-          photoBase64s.length > 0
-          && uploadedPhotoResults.length > 0
-          && uploadedPhotoResults.every((result) => result.retryableFailure);
 
         if (!hasPersistedPhoto) {
-          if (!canContinueWithLocalPhotos) {
-            throw new Error('Project photos could not be saved. Please check your connection and try uploading the photos again.');
-          }
-
-          console.warn(
-            '[analyzing] continuing with local photo payload after transient photo persistence failures:',
-            uploadedPhotoResults.map((result) => result.message).filter(Boolean).join(' | '),
-          );
-          Alert.alert(
-            'Photos not saved',
-            'We could not save your photos due to a connection issue. Your project was still created — you can add photos from the project page.',
+          useProjectWizardStore.getState().setPhotoSaveFailed(true);
+          throw new Error(
+            'Project photos could not be saved. Please check your connection and try uploading the photos again — design previews need saved photos.',
           );
         }
+
+        useProjectWizardStore.getState().setPhotoSaveFailed(false);
 
         // Flatten to plain base64 strings so the request body works against both
         // the legacy deployed analyze-photos function (expects string[]) and the
@@ -321,6 +325,35 @@ export default function AnalyzingScreen() {
         // Only fall back to Claude's detection if the user never chose one.
         const detectedRoomType = analysis.room_type === 'bathroom' ? 'bathroom' : 'kitchen';
         const effectiveRoomType = roomType ?? detectedRoomType;
+
+        // Ground analysis layout in verified measurements from LiDAR scan or manual entry
+        const { measurements, roomScanData } = useProjectWizardStore.getState();
+        if (measurements) {
+          const l = parseMetricDimension(measurements.lengthFt);
+          const w = parseMetricDimension(measurements.widthFt);
+          const h = parseMetricDimension(measurements.ceilingHeightFt);
+          const doors = parseInt(measurements.numDoors, 10);
+          const windows = parseInt(measurements.numWindows, 10);
+          const verifiedSqft = l && w ? Math.round(l * w) : null;
+
+          analysis = {
+            ...analysis,
+            verified_measurements: measurements,
+            room_scan_data: roomScanData,
+            layout: {
+              ...(analysis.layout || {}),
+              estimated_sqft: verifiedSqft ?? analysis.layout?.estimated_sqft ?? 0,
+              verified_sqft: verifiedSqft,
+              is_verified: verifiedSqft != null,
+              length_ft: l,
+              width_ft: w,
+              ceiling_height_ft: h,
+              window_count: !isNaN(windows) ? windows : analysis.layout?.window_count ?? 0,
+              door_count: !isNaN(doors) ? doors : analysis.layout?.door_count ?? 0,
+            },
+          };
+        }
+
         // Combine room_type + ai_analysis into a single update so we don't
         // do two round-trips. ai_analysis persistence is best-effort on the
         // server side too (it races a 10s cap before returning), so writing
@@ -338,6 +371,8 @@ export default function AnalyzingScreen() {
 
         useProjectWizardStore.getState().setRoomType(effectiveRoomType as any);
         setAnalysisResult(analysis);
+        // Drop in-memory base64 after analysis/upload to reduce peak memory.
+        useProjectWizardStore.getState().clearPhotoBase64();
 
         // The pricing engine depends on canonical question IDs (k_tier,
         // b_tier, etc.). Keep the active flow on the fixed set until dynamic
@@ -397,6 +432,16 @@ export default function AnalyzingScreen() {
   return (
     <GradientBackground>
       <SafeAreaView style={styles.safe}>
+        <View style={styles.topBar}>
+          <TouchableOpacity
+            style={styles.closeBtn}
+            onPress={() => navigation.goBack()}
+            hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}
+          >
+            <Ionicons name="close" size={22} color="rgba(255,255,255,0.7)" />
+          </TouchableOpacity>
+        </View>
+
         <Animated.View style={[styles.center, { opacity: opacityAnim }]}>
           {/* Pulsing rings */}
           <View style={styles.ringContainer}>
@@ -433,6 +478,20 @@ export default function AnalyzingScreen() {
 
 const styles = StyleSheet.create({
   safe: { flex: 1 },
+  topBar: {
+    paddingHorizontal: Spacing.md,
+    paddingTop: Spacing.xs,
+    flexDirection: 'row',
+    justifyContent: 'flex-end',
+  },
+  closeBtn: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    backgroundColor: 'rgba(255,255,255,0.1)',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
   center: {
     flex: 1,
     alignItems: 'center',

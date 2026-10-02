@@ -1,8 +1,11 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useState, useRef } from 'react';
 import {
   Alert,
+  Dimensions,
   Image,
   Linking,
+  Modal,
+  Platform,
   ScrollView,
   StyleSheet,
   Text,
@@ -27,6 +30,8 @@ interface Warranty {
   expiry_date: string | null;
   created_at: string;
 }
+
+const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = Dimensions.get('window');
 
 function formatDate(value: string | null) {
   if (!value) return null;
@@ -53,7 +58,9 @@ export default function ProjectWarrantiesScreen() {
   const [warranties, setWarranties] = useState<Warranty[]>([]);
   const [previewUrls, setPreviewUrls] = useState<Record<string, string>>({});
   const [loading, setLoading] = useState(true);
+  const hasLoadedRef = useRef(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  const [selectedPreviewImage, setSelectedPreviewImage] = useState<string | null>(null);
 
   const fetchWarranties = useCallback(async () => {
     if (!projectId) {
@@ -65,7 +72,7 @@ export default function ProjectWarrantiesScreen() {
     }
 
     try {
-      setLoading(true);
+      if (!hasLoadedRef.current) setLoading(true);
       setErrorMessage(null);
       const { data, error } = await supabase
         .from('warranties')
@@ -99,6 +106,7 @@ export default function ProjectWarrantiesScreen() {
       setPreviewUrls({});
       setErrorMessage(formatAppSafeErrorMessage(err, 'Could not load warranties.'));
     } finally {
+      hasLoadedRef.current = true;
       setLoading(false);
     }
   }, [projectId]);
@@ -175,7 +183,12 @@ export default function ProjectWarrantiesScreen() {
                 </View>
 
                 {previewUrl && documentKind === 'image' ? (
-                  <Image source={{ uri: previewUrl }} style={styles.preview} resizeMode="cover" />
+                  <TouchableOpacity
+                    activeOpacity={0.9}
+                    onPress={() => setSelectedPreviewImage(previewUrl)}
+                  >
+                    <Image source={{ uri: previewUrl }} style={styles.preview} resizeMode="cover" />
+                  </TouchableOpacity>
                 ) : previewUrl ? (
                   <TouchableOpacity
                     style={styles.documentRow}
@@ -217,6 +230,33 @@ export default function ProjectWarrantiesScreen() {
             );
           })}
         </ScrollView>
+
+        {/* Full-Screen Document Image Modal */}
+        <Modal
+          visible={!!selectedPreviewImage}
+          transparent={false}
+          animationType="fade"
+          onRequestClose={() => setSelectedPreviewImage(null)}
+        >
+          <View style={styles.fullScreenContainer}>
+            <SafeAreaView style={styles.fullScreenHeader}>
+              <TouchableOpacity
+                style={styles.fullScreenCloseBtn}
+                onPress={() => setSelectedPreviewImage(null)}
+                activeOpacity={0.8}
+              >
+                <Ionicons name="close" size={24} color="#fff" />
+              </TouchableOpacity>
+              <Text style={styles.fullScreenTitle}>Warranty Document</Text>
+              <View style={{ width: 40 }} />
+            </SafeAreaView>
+            {selectedPreviewImage ? (
+              <View style={styles.fullScreenWrapper}>
+                <Image source={{ uri: selectedPreviewImage }} style={styles.fullScreenImage} resizeMode="contain" />
+              </View>
+            ) : null}
+          </View>
+        </Modal>
       </SafeAreaView>
     </GradientBackground>
   );
@@ -295,4 +335,36 @@ const styles = StyleSheet.create({
   expiryLabel: { ...Typography.bodySecondary },
   expiryValue: { color: Colors.text.primary, fontSize: 14, fontWeight: '700', flexShrink: 1, textAlign: 'right' },
   noExpiry: { ...Typography.caption },
+
+  // Full-screen Image Viewer
+  fullScreenContainer: { flex: 1, backgroundColor: '#000' },
+  fullScreenHeader: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    zIndex: 10,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: 16,
+    paddingTop: Platform.OS === 'ios' ? 24 : 36,
+  },
+  fullScreenCloseBtn: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: 'rgba(255,255,255,0.18)',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  fullScreenTitle: { fontSize: 16, fontWeight: '600', color: '#fff' },
+  fullScreenWrapper: {
+    width: SCREEN_WIDTH,
+    height: SCREEN_HEIGHT,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#000',
+  },
+  fullScreenImage: { width: SCREEN_WIDTH, height: '100%' },
 });

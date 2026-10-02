@@ -1,12 +1,90 @@
 import UIKit
 import SceneKit
 import React
+import simd
 
 private let SURFACE_NAME_PREFIX = "wai_surface_"
 
 private func surfaceIdFromNodeName(_ name: String?) -> String? {
   guard let name = name, name.hasPrefix(SURFACE_NAME_PREFIX) else { return nil }
   return String(name.dropFirst(SURFACE_NAME_PREFIX.count))
+}
+
+/// Normalized room footprint from scanned walls so the floor plane aligns with wall geometry.
+private struct RoomLayout {
+  let length: Double
+  let width: Double
+  let height: Double
+  let offsetX: Double
+  let offsetY: Double
+  let offsetZ: Double
+  let lookAtY: Double
+
+  static func from(json: [String: Any]) -> RoomLayout {
+    let dims = (json["roomDimensions"] as? [String: Double]) ?? [:]
+    let walls = (json["walls"] as? [[String: Any]]) ?? []
+    let fallbackLength = dims["length"] ?? 4.0
+    let fallbackWidth = dims["width"] ?? 3.0
+    let fallbackHeight = dims["height"] ?? 2.7
+
+    guard !walls.isEmpty else {
+      return RoomLayout(
+        length: fallbackLength,
+        width: fallbackWidth,
+        height: fallbackHeight,
+        offsetX: 0,
+        offsetY: 0,
+        offsetZ: 0,
+        lookAtY: fallbackHeight * 0.4
+      )
+    }
+
+    var minX = Double.infinity
+    var maxX = -Double.infinity
+    var minZ = Double.infinity
+    var maxZ = -Double.infinity
+    var minFloorY = Double.infinity
+    var maxWallTop = -Double.infinity
+
+    for wall in walls {
+      guard let w = wall["width"] as? Double,
+            let h = wall["height"] as? Double,
+            let center = wall["center"] as? [String: Double],
+            let cx = center["x"], let cy = center["y"], let cz = center["z"] else {
+        continue
+      }
+      let angle = wall["angle"] as? Double ?? 0
+      let halfX = abs(cos(angle)) * w / 2
+      let halfZ = abs(sin(angle)) * w / 2
+
+      minX = min(minX, cx - halfX)
+      maxX = max(maxX, cx + halfX)
+      minZ = min(minZ, cz - halfZ)
+      maxZ = max(maxZ, cz + halfZ)
+      minFloorY = min(minFloorY, cy - h / 2)
+      maxWallTop = max(maxWallTop, cy + h / 2)
+    }
+
+    let hasBounds = minX.isFinite && maxX.isFinite && minZ.isFinite && maxZ.isFinite
+    let length = hasBounds ? max(0.5, maxX - minX) : fallbackLength
+    let width = hasBounds ? max(0.5, maxZ - minZ) : fallbackWidth
+    let height = maxWallTop.isFinite && minFloorY.isFinite
+      ? max(2.0, maxWallTop - minFloorY)
+      : fallbackHeight
+    let centerX = hasBounds ? (minX + maxX) / 2 : 0
+    let centerZ = hasBounds ? (minZ + maxZ) / 2 : 0
+    let floorY = minFloorY.isFinite ? minFloorY : 0
+
+    return RoomLayout(
+      length: length,
+      width: width,
+      height: height,
+      offsetX: -centerX,
+      offsetY: -floorY,
+      offsetZ: -centerZ,
+      lookAtY: height * 0.4
+    )
+  }
 }
 
 // MARK: - Texture Pattern Hints (derived from material name on the JS side)
@@ -53,6 +131,12 @@ class RoomCustomizerViewController: UIViewController {
   // an array so setSurfaceMaterial can update every one of them.
   private var surfaceNodes: [String: [SCNNode]] = [:]
   private var textureCache: [String: UIImage] = [:]
+  private var contentNode: SCNNode?
+  private var cameraNode: SCNNode?
+  private var initialCameraTransform: SCNMatrix4?
+  private var roomLayout: RoomLayout?
+  /// True when the live SceneKit scene is the RoomPlan USDZ mesh (not box fallback).
+  private var usesCapturedMesh = false
 
   weak var bridgeView: RoomCustomizerView?
 
@@ -79,98 +163,687 @@ class RoomCustomizerViewController: UIViewController {
   private func setupSceneView() {
     sceneView = SCNView(frame: view.bounds)
     sceneView.autoresizingMask = [.flexibleWidth, .flexibleHeight]
-    sceneView.backgroundColor = UIColor(white: 0.06, alpha: 1.0)
+    sceneView.backgroundColor = UIColor(red: 0.09, green: 0.10, blue: 0.12, alpha: 1.0)
     sceneView.allowsCameraControl = true
     sceneView.autoenablesDefaultLighting = false
     sceneView.antialiasingMode = .multisampling4X
+    sceneView.preferredFramesPerSecond = 60
+    sceneView.isPlaying = true
     view.addSubview(sceneView)
   }
 
   private func setupTapRecognizer() {
     let tap = UITapGestureRecognizer(target: self, action: #selector(handleTap(_:)))
     tap.cancelsTouchesInView = false
+
+    let doubleTap = UITapGestureRecognizer(target: self, action: #selector(handleDoubleTap(_:)))
+    doubleTap.numberOfTapsRequired = 2
+    doubleTap.cancelsTouchesInView = false
+    tap.require(toFail: doubleTap)
+
+    sceneView.addGestureRecognizer(doubleTap)
     sceneView.addGestureRecognizer(tap)
   }
 
   // MARK: - Scene Building
 
   private func buildScene() {
-    let scene = SCNScene()
-    scene.background.contents = UIColor(white: 0.06, alpha: 1.0)
-    sceneView.scene = scene
+    surfaceNodes.removeAll()
+    usesCapturedMesh = false
+    contentNode = nil
 
     guard let jsonStr = measurementData,
           let data = jsonStr.data(using: .utf8),
           let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any] else {
+      let scene = SCNScene()
+      scene.background.contents = roomBackdropColor()
+      sceneView.scene = scene
       addPlaceholderLabel()
       return
     }
 
-    let dims = (json["roomDimensions"] as? [String: Double]) ?? [:]
-    let length = dims["length"] ?? 4.0
-    let widthDim = dims["width"] ?? 3.0
-    let height = dims["height"] ?? 2.7
-
-    addFloor(to: scene, length: length, width: widthDim)
-
-    if let walls = json["walls"] as? [[String: Any]] {
-      addWalls(walls, to: scene, height: height)
-    }
-
+    let layout = RoomLayout.from(json: json)
+    roomLayout = layout
     let isBathroom = (roomTypeRaw ?? "").lowercased() == "bathroom"
-    if isBathroom {
-      addBathroomFurniture(to: scene, length: length, width: widthDim, height: height)
-    } else {
-      addKitchenFurniture(to: scene, length: length, width: widthDim, height: height)
+
+    if let usdzPath = json["usdzFilePath"] as? String,
+       !usdzPath.isEmpty,
+       FileManager.default.fileExists(atPath: usdzPath),
+       let usdzScene = loadUSDZScene(path: usdzPath) {
+      NSLog("[RoomCustomizer] Loading RoomPlan USDZ mesh: \(usdzPath)")
+      usdzScene.background.contents = roomBackdropColor()
+      sceneView.scene = usdzScene
+      usesCapturedMesh = true
+      contentNode = usdzScene.rootNode
+
+      let placed = classifyAndRegisterCapturedMesh(
+        meshRoot: usdzScene.rootNode,
+        json: json,
+        layout: layout,
+        isBathroom: isBathroom
+      )
+
+      // Do NOT inject kitchen/bath box furniture onto a live RoomPlan mesh —
+      // those placeholders sit in the wrong coords and make the 3D look broken.
+      polishCapturedMeshAppearance(root: usdzScene.rootNode)
+
+      // Recenter mesh so the room sits near the origin (stable camera + lighting).
+      // Classification already ran in RoomPlan coordinates before this shift.
+      centerCapturedMesh(usdzScene.rootNode)
+      _ = placed
+
+      setupCamera(for: usdzScene, layout: layout)
+      setupLighting(for: usdzScene, lookAtY: Float(layout.lookAtY))
+      return
     }
 
-    setupCamera(for: scene, length: length, width: widthDim, height: height)
-    setupLighting(for: scene)
+    let missingPath = (json["usdzFilePath"] as? String) ?? ""
+    if missingPath.isEmpty {
+      NSLog("[RoomCustomizer] No usdzFilePath in scan data — using box fallback")
+    } else if !FileManager.default.fileExists(atPath: missingPath) {
+      NSLog("[RoomCustomizer] USDZ missing on disk (\(missingPath)) — using box fallback. Rescan room.")
+    } else {
+      NSLog("[RoomCustomizer] USDZ failed to load — using box fallback")
+    }
+
+    // Fallback: measurement boxes when USDZ is missing (mock / AR measure / failed export).
+    let scene = SCNScene()
+    scene.background.contents = roomBackdropColor()
+    sceneView.scene = scene
+
+    let content = SCNNode()
+    content.name = "wai_room_content"
+    scene.rootNode.addChildNode(content)
+    contentNode = content
+
+    addFloor(to: content, length: layout.length, width: layout.width)
+
+    let walls = (json["walls"] as? [[String: Any]]) ?? []
+    addWalls(walls, to: content, layout: layout)
+
+    let doors = (json["doors"] as? [[String: Any]]) ?? []
+    let windows = (json["windows"] as? [[String: Any]]) ?? []
+    addOpenings(doors: doors, windows: windows, to: content, layout: layout)
+
+    let objects = (json["objects"] as? [[String: Any]]) ?? []
+    let placed = addScannedObjects(objects, to: content, layout: layout, isBathroom: isBathroom)
+
+    if isBathroom {
+      if !placed.contains("vanity") || !placed.contains("vanity_counter") || !placed.contains("shower_tile") {
+        addBathroomFurniture(
+          to: content,
+          length: layout.length,
+          width: layout.width,
+          height: layout.height,
+          skipSurfaces: placed
+        )
+      } else if !placed.contains("floor_tile") {
+        addBathroomFloorTile(to: content, length: layout.length, width: layout.width)
+      }
+    } else {
+      addKitchenFurniture(
+        to: content,
+        length: layout.length,
+        width: layout.width,
+        height: layout.height,
+        skipSurfaces: placed
+      )
+    }
+
+    setupCamera(for: scene, layout: layout)
+    setupLighting(for: scene, lookAtY: Float(layout.lookAtY))
   }
 
-  private func addFloor(to scene: SCNScene, length: Double, width: Double) {
-    let geo = SCNPlane(width: CGFloat(length) + 0.4, height: CGFloat(width) + 0.4)
+  private func loadUSDZScene(path: String) -> SCNScene? {
+    let url = URL(fileURLWithPath: path)
+    do {
+      return try SCNScene(url: url, options: [
+        .checkConsistency: true,
+      ])
+    } catch {
+      NSLog("[RoomCustomizer] USDZ load failed: \(error.localizedDescription)")
+      return nil
+    }
+  }
+
+  private struct MeshCandidate {
+    let node: SCNNode
+    let center: SIMD3<Float>
+    let extent: SIMD3<Float>
+    var xzArea: Float { extent.x * extent.z }
+    var volume: Float { max(extent.x, 0.01) * max(extent.y, 0.01) * max(extent.z, 0.01) }
+  }
+
+  private func worldAABB(of node: SCNNode) -> (min: SIMD3<Float>, max: SIMD3<Float>)? {
+    let (lmin, lmax) = node.boundingBox
+    var worldMin = SIMD3<Float>(repeating: Float.greatestFiniteMagnitude)
+    var worldMax = SIMD3<Float>(repeating: -Float.greatestFiniteMagnitude)
+    var hasPoint = false
+    for x in [lmin.x, lmax.x] {
+      for y in [lmin.y, lmax.y] {
+        for z in [lmin.z, lmax.z] {
+          let world = node.convertPosition(SCNVector3(x, y, z), to: nil)
+          let p = SIMD3<Float>(world.x, world.y, world.z)
+          worldMin = min(worldMin, p)
+          worldMax = max(worldMax, p)
+          hasPoint = true
+        }
+      }
+    }
+    guard hasPoint else { return nil }
+    return (worldMin, worldMax)
+  }
+
+  private func collectMeshCandidates(from root: SCNNode) -> [MeshCandidate] {
+    var candidates: [MeshCandidate] = []
+    root.enumerateChildNodes { node, _ in
+      guard node.geometry != nil, node.camera == nil, node.light == nil else { return }
+      if node.geometry is SCNText { return }
+      guard let aabb = worldAABB(of: node) else { return }
+      let extent = abs(aabb.max - aabb.min)
+      // Skip tiny decorative bits
+      if extent.x < 0.05 && extent.y < 0.05 && extent.z < 0.05 { return }
+      let center = (aabb.min + aabb.max) * 0.5
+      candidates.append(MeshCandidate(node: node, center: center, extent: extent))
+    }
+    return candidates
+  }
+
+  /// Tag RoomPlan USDZ mesh nodes as editable surfaces using measurement metadata.
+  @discardableResult
+  private func classifyAndRegisterCapturedMesh(
+    meshRoot: SCNNode,
+    json: [String: Any],
+    layout: RoomLayout,
+    isBathroom: Bool
+  ) -> Set<String> {
+    var placed = Set<String>()
+    var candidates = collectMeshCandidates(from: meshRoot)
+    guard !candidates.isEmpty else { return placed }
+
+    // 1) Floor — largest nearly-horizontal slab near the bottom of the room.
+    if let floorIdx = candidates.indices
+      .filter({ candidates[$0].extent.y < 0.35 && candidates[$0].xzArea > 0.4 })
+      .max(by: { candidates[$0].xzArea < candidates[$1].xzArea }) {
+      let floorId = isBathroom ? "floor_tile" : "flooring"
+      // Also register bathroom floor_tile AND kitchen flooring when bath uses floor_tile as primary.
+      registerSurface(candidates[floorIdx].node, surfaceId: floorId)
+      if isBathroom {
+        registerSurface(candidates[floorIdx].node, surfaceId: "flooring")
+      }
+      placed.insert(floorId)
+      placed.insert("flooring")
+      candidates.remove(at: floorIdx)
+    }
+
+    // 2) Walls — match each scanned wall center to the nearest tall thin mesh.
+    let walls = (json["walls"] as? [[String: Any]]) ?? []
+    for wall in walls {
+      guard let center = wall["center"] as? [String: Double],
+            let cx = center["x"], let cy = center["y"], let cz = center["z"] else { continue }
+      let target = SIMD3<Float>(Float(cx), Float(cy), Float(cz))
+      guard let bestIdx = candidates.indices
+        .filter({
+          let c = candidates[$0]
+          let thin = min(c.extent.x, c.extent.z) < 0.45
+          let tall = c.extent.y > 1.2
+          return thin && tall
+        })
+        .min(by: {
+          simd_distance(candidates[$0].center, target) < simd_distance(candidates[$1].center, target)
+        }),
+            simd_distance(candidates[bestIdx].center, target) < 1.25 else {
+        continue
+      }
+      registerSurface(candidates[bestIdx].node, surfaceId: "walls")
+      placed.insert("walls")
+      candidates.remove(at: bestIdx)
+    }
+
+    // If no wall matched by center, promote remaining tall thin meshes to walls.
+    if !placed.contains("walls") {
+      let wallLike = candidates.indices.filter {
+        let c = candidates[$0]
+        return min(c.extent.x, c.extent.z) < 0.45 && c.extent.y > 1.2
+      }
+      for idx in wallLike.reversed() {
+        registerSurface(candidates[idx].node, surfaceId: "walls")
+        placed.insert("walls")
+        candidates.remove(at: idx)
+      }
+    }
+
+    // 3) Objects — match RoomPlan objects to remaining meshes by center.
+    let objects = (json["objects"] as? [[String: Any]]) ?? []
+    for obj in objects {
+      guard let center = obj["center"] as? [String: Double],
+            let cx = center["x"], let cy = center["y"], let cz = center["z"] else { continue }
+      let category = String(obj["category"] as? String ?? "").lowercased()
+      guard let surfaceId = surfaceIdForScannedCategory(category, isBathroom: isBathroom) else { continue }
+      let target = SIMD3<Float>(Float(cx), Float(cy), Float(cz))
+      guard let bestIdx = candidates.indices.min(by: {
+        simd_distance(candidates[$0].center, target) < simd_distance(candidates[$1].center, target)
+      }), simd_distance(candidates[bestIdx].center, target) < 1.0 else {
+        continue
+      }
+      registerSurface(candidates[bestIdx].node, surfaceId: surfaceId)
+      placed.insert(surfaceId)
+      let matched = candidates.remove(at: bestIdx)
+
+      // Countertop slab on top of cabinet/vanity mesh if counter surface still empty.
+      let counterId = surfaceId == "vanity" ? "vanity_counter" : (surfaceId == "cabinets" ? "countertops" : nil)
+      if let counterId = counterId, !placed.contains(counterId) {
+        let topY = matched.center.y + matched.extent.y * 0.5
+        let slab = SCNBox(
+          width: CGFloat(max(0.2, Double(matched.extent.x) + 0.02)),
+          height: 0.035,
+          length: CGFloat(max(0.2, Double(matched.extent.z) + 0.02)),
+          chamferRadius: 0.003
+        )
+        let mat = SCNMaterial()
+        mat.diffuse.contents = UIColor(red: 0.97, green: 0.96, blue: 0.93, alpha: 1.0)
+        mat.roughness.contents = 0.25
+        mat.lightingModel = .physicallyBased
+        slab.materials = [mat]
+        let slabNode = SCNNode(geometry: slab)
+        slabNode.position = SCNVector3(matched.center.x, topY + 0.02, matched.center.z)
+        registerSurface(slabNode, surfaceId: counterId)
+        applyShowroomFinish(to: slabNode, surfaceId: counterId)
+        placed.insert(counterId)
+        meshRoot.addChildNode(slabNode)
+      }
+    }
+
+    // 4) Leftover mid-height storage-like meshes → cabinets/vanity if still missing.
+    if !placed.contains(isBathroom ? "vanity" : "cabinets") {
+      let storageLike = candidates.indices.filter {
+        let c = candidates[$0]
+        return c.extent.y > 0.45 && c.extent.y < 2.2 && c.xzArea > 0.15 && c.xzArea < 4.0
+      }
+      .sorted { candidates[$0].volume > candidates[$1].volume }
+      if let idx = storageLike.first {
+        let sid = isBathroom ? "vanity" : "cabinets"
+        registerSurface(candidates[idx].node, surfaceId: sid)
+        placed.insert(sid)
+        candidates.remove(at: idx)
+      }
+    }
+
+    _ = layout
+    return placed
+  }
+
+  /// Soft showroom finishes so raw RoomPlan USDZ isn't flat gray plastic.
+  private func polishCapturedMeshAppearance(root: SCNNode) {
+    root.enumerateChildNodes { node, _ in
+      guard node.geometry != nil, node.camera == nil, node.light == nil else { return }
+      if node.geometry is SCNText { return }
+      let surfaceId = surfaceIdFromNodeName(node.name)
+      applyShowroomFinish(to: node, surfaceId: surfaceId)
+    }
+  }
+
+  /// Shift top-level mesh nodes so the room floor/center sits near the origin.
+  private func centerCapturedMesh(_ root: SCNNode) {
+    let bounds = root.boundingBox
+    let spanX = bounds.max.x - bounds.min.x
+    let spanY = bounds.max.y - bounds.min.y
+    let spanZ = bounds.max.z - bounds.min.z
+    guard spanX.isFinite, spanY.isFinite, spanZ.isFinite, spanX > 0.2, spanZ > 0.2 else { return }
+
+    let shiftX = (bounds.min.x + bounds.max.x) * 0.5
+    let shiftY = bounds.min.y
+    let shiftZ = (bounds.min.z + bounds.max.z) * 0.5
+    for child in root.childNodes {
+      if child.camera != nil || child.light != nil { continue }
+      child.position.x -= shiftX
+      child.position.y -= shiftY
+      child.position.z -= shiftZ
+    }
+  }
+
+  private func applyShowroomFinish(to node: SCNNode, surfaceId: String?) {
+    guard let geometry = node.geometry else { return }
+    let mat = SCNMaterial()
+    mat.lightingModel = .physicallyBased
+    mat.metalness.contents = 0.04
+    mat.emission.contents = UIColor.black
+
+    switch surfaceId {
+    case "walls":
+      // Warm modern architectural greige wall — distinct from pure white counters & dark cabinets
+      mat.diffuse.contents = UIColor(red: 0.91, green: 0.89, blue: 0.86, alpha: 1.0)
+      mat.roughness.contents = 0.85
+      mat.isDoubleSided = true
+    case "flooring", "floor_tile":
+      // Rich natural golden oak hardwood flooring
+      mat.diffuse.contents = UIColor(red: 0.76, green: 0.61, blue: 0.39, alpha: 1.0)
+      mat.roughness.contents = 0.50
+      mat.isDoubleSided = true
+    case "cabinets":
+      // Sophisticated deep navy shaker cabinets (striking contrast against walls & counters)
+      mat.diffuse.contents = UIColor(red: 0.16, green: 0.22, blue: 0.29, alpha: 1.0)
+      mat.roughness.contents = 0.40
+    case "vanity":
+      // Natural white oak vanity
+      mat.diffuse.contents = UIColor(red: 0.74, green: 0.58, blue: 0.38, alpha: 1.0)
+      mat.roughness.contents = 0.45
+    case "countertops", "vanity_counter":
+      // Polished bright Calacatta quartz with high specularity
+      mat.diffuse.contents = UIColor(red: 0.98, green: 0.98, blue: 0.97, alpha: 1.0)
+      mat.roughness.contents = 0.15
+      mat.metalness.contents = 0.10
+    case "backsplash":
+      // Glazed sea-glass subway tile
+      mat.diffuse.contents = UIColor(red: 0.54, green: 0.65, blue: 0.64, alpha: 1.0)
+      mat.roughness.contents = 0.25
+    case "shower_tile":
+      // Slate grey porcelain tile
+      mat.diffuse.contents = UIColor(red: 0.42, green: 0.46, blue: 0.50, alpha: 1.0)
+      mat.roughness.contents = 0.30
+    default:
+      let name = (node.name ?? "").lowercased()
+      if name.contains("stove") || name.contains("oven") || name.contains("refrigerator") || name.contains("dishwasher") || name.contains("appliance") {
+        // Metallic stainless steel appliances
+        mat.diffuse.contents = UIColor(red: 0.58, green: 0.60, blue: 0.62, alpha: 1.0)
+        mat.metalness.contents = 0.85
+        mat.roughness.contents = 0.20
+      } else {
+        // Distinct warm charcoal architectural accent
+        mat.diffuse.contents = UIColor(red: 0.45, green: 0.48, blue: 0.52, alpha: 1.0)
+        mat.roughness.contents = 0.60
+      }
+      mat.isDoubleSided = true
+    }
+
+    geometry.materials = [mat]
+  }
+
+  private func roomBackdropColor() -> UIColor {
+    UIColor(red: 0.10, green: 0.11, blue: 0.13, alpha: 1.0)
+  }
+
+  private func addFloor(to parent: SCNNode, length: Double, width: Double) {
+    let geo = SCNPlane(width: CGFloat(length), height: CGFloat(width))
     let mat = SCNMaterial()
     mat.diffuse.contents = UIColor(red: 0.78, green: 0.66, blue: 0.46, alpha: 1.0)
     mat.roughness.contents = 0.7
+    mat.isDoubleSided = true
+    mat.lightingModel = .physicallyBased
     geo.materials = [mat]
     let node = SCNNode(geometry: geo)
     node.eulerAngles.x = -.pi / 2
-    node.position = SCNVector3(0, 0, 0)
+    // Slightly above y=0 so the floor renders cleanly under walls without z-fighting.
+    node.position = SCNVector3(0, 0.002, 0)
     registerSurface(node, surfaceId: "flooring")
-    scene.rootNode.addChildNode(node)
+    parent.addChildNode(node)
   }
 
-  private func addWalls(_ walls: [[String: Any]], to scene: SCNScene, height: Double) {
-    for wall in walls {
-      guard let w = wall["width"] as? Double,
-            let h = wall["height"] as? Double,
-            let center = wall["center"] as? [String: Double],
+  private func addWalls(_ walls: [[String: Any]], to parent: SCNNode, layout: RoomLayout) {
+    let length = layout.length
+    let width = layout.width
+    let height = layout.height
+    let ox = layout.offsetX
+    let oy = layout.offsetY
+    let oz = layout.offsetZ
+
+    if !walls.isEmpty {
+      for wall in walls {
+        guard let w = wall["width"] as? Double,
+              let h = wall["height"] as? Double,
+              let center = wall["center"] as? [String: Double],
+              let cx = center["x"], let cy = center["y"], let cz = center["z"] else {
+          continue
+        }
+        let angle = wall["angle"] as? Double ?? 0
+
+        let geo = SCNBox(width: CGFloat(w), height: CGFloat(h), length: 0.06, chamferRadius: 0.002)
+        let mat = SCNMaterial()
+        mat.diffuse.contents = UIColor(red: 0.95, green: 0.93, blue: 0.88, alpha: 1.0)
+        mat.roughness.contents = 0.88
+        mat.metalness.contents = 0.02
+        mat.lightingModel = .physicallyBased
+        mat.isDoubleSided = true
+        geo.materials = [mat]
+
+        let node = SCNNode(geometry: geo)
+        node.position = SCNVector3(
+          Float(cx + ox),
+          Float(cy + oy),
+          Float(cz + oz)
+        )
+        node.eulerAngles.y = -Float(angle)
+        registerSurface(node, surfaceId: "walls")
+        parent.addChildNode(node)
+      }
+    } else {
+      // Create 3 enclosing room walls around the floor (Back, Left, Right)
+      let wallMat = SCNMaterial()
+      wallMat.diffuse.contents = UIColor(red: 0.95, green: 0.93, blue: 0.88, alpha: 1.0)
+      wallMat.roughness.contents = 0.88
+      wallMat.metalness.contents = 0.02
+      wallMat.lightingModel = .physicallyBased
+      wallMat.isDoubleSided = true
+
+      // Back wall
+      let backGeo = SCNBox(width: CGFloat(length), height: CGFloat(height), length: 0.06, chamferRadius: 0.002)
+      backGeo.materials = [wallMat]
+      let backNode = SCNNode(geometry: backGeo)
+      backNode.position = SCNVector3(0, Float(height / 2), Float(-width / 2))
+      registerSurface(backNode, surfaceId: "walls")
+      parent.addChildNode(backNode)
+
+      // Left wall
+      let leftGeo = SCNBox(width: 0.06, height: CGFloat(height), length: CGFloat(width), chamferRadius: 0)
+      leftGeo.materials = [wallMat]
+      let leftNode = SCNNode(geometry: leftGeo)
+      leftNode.position = SCNVector3(Float(-length / 2), Float(height / 2), 0)
+      registerSurface(leftNode, surfaceId: "walls")
+      parent.addChildNode(leftNode)
+
+      // Right wall
+      let rightGeo = SCNBox(width: 0.06, height: CGFloat(height), length: CGFloat(width), chamferRadius: 0)
+      rightGeo.materials = [wallMat]
+      let rightNode = SCNNode(geometry: rightGeo)
+      rightNode.position = SCNVector3(Float(length / 2), Float(height / 2), 0)
+      registerSurface(rightNode, surfaceId: "walls")
+      parent.addChildNode(rightNode)
+    }
+  }
+
+  // MARK: - Doors / Windows (from scan — spatial layout fidelity)
+
+  private func addOpenings(
+    doors: [[String: Any]],
+    windows: [[String: Any]],
+    to parent: SCNNode,
+    layout: RoomLayout
+  ) {
+    let ox = layout.offsetX
+    let oy = layout.offsetY
+    let oz = layout.offsetZ
+
+    for door in doors {
+      guard let w = door["width"] as? Double,
+            let h = door["height"] as? Double,
+            let center = door["center"] as? [String: Double],
             let cx = center["x"], let cy = center["y"], let cz = center["z"] else {
         continue
       }
-      let angle = wall["angle"] as? Double ?? 0
-
-      let geo = SCNBox(width: CGFloat(w), height: CGFloat(h), length: 0.06, chamferRadius: 0)
+      let angle = door["angle"] as? Double ?? 0
+      let geo = SCNBox(width: CGFloat(max(0.4, w)), height: CGFloat(max(0.8, h)), length: 0.08, chamferRadius: 0)
       let mat = SCNMaterial()
-      mat.diffuse.contents = UIColor(red: 0.95, green: 0.93, blue: 0.88, alpha: 1.0)
-      mat.roughness.contents = 0.9
+      mat.diffuse.contents = UIColor(red: 0.45, green: 0.32, blue: 0.22, alpha: 0.85)
+      mat.transparency = 0.35
+      mat.isDoubleSided = true
+      geo.materials = [mat]
+      let node = SCNNode(geometry: geo)
+      node.position = SCNVector3(Float(cx + ox), Float(cy + oy), Float(cz + oz))
+      node.eulerAngles.y = -Float(angle)
+      node.name = "wai_opening_door"
+      parent.addChildNode(node)
+    }
+
+    for window in windows {
+      guard let w = window["width"] as? Double,
+            let h = window["height"] as? Double,
+            let center = window["center"] as? [String: Double],
+            let cx = center["x"], let cy = center["y"], let cz = center["z"] else {
+        continue
+      }
+      let angle = window["angle"] as? Double ?? 0
+      let geo = SCNBox(width: CGFloat(max(0.3, w)), height: CGFloat(max(0.3, h)), length: 0.06, chamferRadius: 0)
+      let mat = SCNMaterial()
+      mat.diffuse.contents = UIColor(red: 0.55, green: 0.75, blue: 0.95, alpha: 0.55)
+      mat.transparency = 0.45
+      mat.isDoubleSided = true
+      geo.materials = [mat]
+      let node = SCNNode(geometry: geo)
+      node.position = SCNVector3(Float(cx + ox), Float(cy + oy), Float(cz + oz))
+      node.eulerAngles.y = -Float(angle)
+      node.name = "wai_opening_window"
+      parent.addChildNode(node)
+    }
+  }
+
+  /// Place RoomPlan-detected objects at scanned size/pose. Returns surface ids that were filled from scan.
+  @discardableResult
+  private func addScannedObjects(
+    _ objects: [[String: Any]],
+    to parent: SCNNode,
+    layout: RoomLayout,
+    isBathroom: Bool
+  ) -> Set<String> {
+    var placed = Set<String>()
+    let ox = layout.offsetX
+    let oy = layout.offsetY
+    let oz = layout.offsetZ
+
+    for obj in objects {
+      guard let w = obj["width"] as? Double,
+            let h = obj["height"] as? Double,
+            let d = obj["depth"] as? Double,
+            let center = obj["center"] as? [String: Double],
+            let cx = center["x"], let cy = center["y"], let cz = center["z"] else {
+        continue
+      }
+      let angle = obj["angle"] as? Double ?? 0
+      let category = String(obj["category"] as? String ?? "").lowercased()
+      let surfaceId = surfaceIdForScannedCategory(category, isBathroom: isBathroom)
+
+      let geo = SCNBox(
+        width: CGFloat(max(0.15, w)),
+        height: CGFloat(max(0.15, h)),
+        length: CGFloat(max(0.15, d)),
+        chamferRadius: 0.008
+      )
+      let mat = SCNMaterial()
+      let isAppliance = category.contains("stove") || category.contains("oven") || category.contains("dishwasher") || category.contains("refrigerator")
+      if isAppliance {
+        mat.diffuse.contents = UIColor(red: 0.58, green: 0.60, blue: 0.62, alpha: 1.0)
+        mat.metalness.contents = 0.85
+        mat.roughness.contents = 0.20
+      } else {
+        mat.diffuse.contents = defaultColor(for: surfaceId)
+        mat.roughness.contents = 0.45
+      }
+      mat.lightingModel = .physicallyBased
       geo.materials = [mat]
 
       let node = SCNNode(geometry: geo)
-      node.position = SCNVector3(Float(cx), Float(cy), Float(cz))
+      node.position = SCNVector3(Float(cx + ox), Float(cy + oy), Float(cz + oz))
       node.eulerAngles.y = -Float(angle)
-      registerSurface(node, surfaceId: "walls")
-      scene.rootNode.addChildNode(node)
+      if let surfaceId = surfaceId {
+        registerSurface(node, surfaceId: surfaceId)
+        placed.insert(surfaceId)
+
+        // Counter slab on top of scanned base cabinets / vanity.
+        if surfaceId == "cabinets" || surfaceId == "vanity" {
+          let counterId = surfaceId == "vanity" ? "vanity_counter" : "countertops"
+          let slabH: CGFloat = 0.04
+          let slab = SCNBox(
+            width: CGFloat(max(0.15, w)) + 0.02,
+            height: slabH,
+            length: CGFloat(max(0.15, d)) + 0.02,
+            chamferRadius: 0.004
+          )
+          let slabMat = SCNMaterial()
+          slabMat.diffuse.contents = UIColor(red: 0.98, green: 0.98, blue: 0.97, alpha: 1.0)
+          slabMat.roughness.contents = 0.15
+          slabMat.metalness.contents = 0.10
+          slabMat.lightingModel = .physicallyBased
+          slab.materials = [slabMat]
+          let slabNode = SCNNode(geometry: slab)
+          slabNode.position = SCNVector3(
+            Float(cx + ox),
+            Float(cy + oy + h / 2 + Double(slabH) / 2),
+            Float(cz + oz)
+          )
+          slabNode.eulerAngles.y = -Float(angle)
+          registerSurface(slabNode, surfaceId: counterId)
+          placed.insert(counterId)
+          parent.addChildNode(slabNode)
+        }
+      } else {
+        node.name = "wai_scanned_\(category)"
+      }
+      parent.addChildNode(node)
     }
-    _ = height // reserved for future ceiling support
+
+    return placed
   }
 
-  // MARK: - Synthetic Kitchen Furniture (anchored to the longest wall)
+  private func surfaceIdForScannedCategory(_ category: String, isBathroom: Bool) -> String? {
+    // RoomPlan String(describing:) is typically the case name ("storage", "sink", …).
+    if category.contains("storage") {
+      return isBathroom ? "vanity" : "cabinets"
+    }
+    if category.contains("sink") {
+      return isBathroom ? "vanity_counter" : "countertops"
+    }
+    if category.contains("bathtub") || category.contains("toilet") {
+      return "shower_tile"
+    }
+    if category.contains("stove") || category.contains("oven")
+        || category.contains("dishwasher") || category.contains("refrigerator") {
+      return nil // appliances — geometry only
+    }
+    return nil
+  }
 
-  private func addKitchenFurniture(to scene: SCNScene, length: Double, width: Double, height: Double) {
+  private func defaultColor(for surfaceId: String?) -> UIColor {
+    switch surfaceId {
+    case "cabinets":
+      return UIColor(red: 0.16, green: 0.22, blue: 0.29, alpha: 1.0) // Deep Navy Shaker
+    case "vanity":
+      return UIColor(red: 0.74, green: 0.58, blue: 0.38, alpha: 1.0) // Warm Oak
+    case "countertops", "vanity_counter":
+      return UIColor(red: 0.98, green: 0.98, blue: 0.97, alpha: 1.0) // Polished Quartz
+    case "backsplash":
+      return UIColor(red: 0.54, green: 0.65, blue: 0.64, alpha: 1.0) // Sea Glass Glazed Tile
+    case "shower_tile":
+      return UIColor(red: 0.42, green: 0.46, blue: 0.50, alpha: 1.0) // Slate Grey Tile
+    case "flooring", "floor_tile":
+      return UIColor(red: 0.76, green: 0.61, blue: 0.39, alpha: 1.0) // Natural Oak
+    case "walls":
+      return UIColor(red: 0.91, green: 0.89, blue: 0.86, alpha: 1.0) // Studio Greige
+    default:
+      return UIColor(red: 0.45, green: 0.48, blue: 0.52, alpha: 1.0) // Architectural Accent
+    }
+  }
+
+  // MARK: - Synthetic Kitchen Furniture (only for surfaces missing from scan)
+
+  private func addKitchenFurniture(
+    to parent: SCNNode,
+    length: Double,
+    width: Double,
+    height: Double,
+    skipSurfaces: Set<String> = [],
+    centeredFallback: Bool = false
+  ) {
     // Anchor against the "back" wall on -Z, centered along X
-    let runWidth = min(length - 0.6, 3.4)
+    let runWidth = min(length - 0.4, 3.4)
     if runWidth <= 0.5 { return }
 
     let baseHeight: CGFloat = 0.9
@@ -179,152 +852,332 @@ class RoomCustomizerViewController: UIViewController {
     let upperHeight: CGFloat = 0.7
     let upperDepth: CGFloat = 0.32
     let upperOffsetY: CGFloat = 1.5
-    let backZ = -(width / 2) + 0.04 + Double(baseDepth) / 2
 
-    // Base cabinets
-    do {
-      let geo = SCNBox(width: CGFloat(runWidth), height: baseHeight, length: baseDepth, chamferRadius: 0.01)
-      let mat = SCNMaterial()
-      mat.diffuse.contents = UIColor(red: 0.95, green: 0.93, blue: 0.91, alpha: 1.0)
-      mat.roughness.contents = 0.4
-      geo.materials = [mat]
-      let node = SCNNode(geometry: geo)
-      node.position = SCNVector3(0, Float(baseHeight / 2), Float(backZ))
-      registerSurface(node, surfaceId: "cabinets")
-      scene.rootNode.addChildNode(node)
+    // Box-fallback scenes are recentered to origin. USDZ mesh stays in RoomPlan coords.
+    let originX: Float
+    let originZ: Float
+    let floorY: Float
+    if centeredFallback, let layout = roomLayout {
+      originX = Float(-layout.offsetX)
+      originZ = Float(-layout.offsetZ)
+      floorY = Float(-layout.offsetY)
+    } else {
+      originX = 0
+      originZ = 0
+      floorY = 0
     }
 
-    // Countertop
-    do {
-      let geo = SCNBox(width: CGFloat(runWidth) + 0.04, height: counterThickness, length: baseDepth + 0.04, chamferRadius: 0.005)
+    let backZ = originZ - Float(width / 2) + 0.04 + Float(baseDepth) / 2
+    let needsCabinets = !skipSurfaces.contains("cabinets")
+    let needsCounters = !skipSurfaces.contains("countertops")
+    let needsBacksplash = !skipSurfaces.contains("backsplash")
+
+    // Base cabinets (Deep Navy Shaker)
+    if needsCabinets {
+      let geo = SCNBox(width: CGFloat(runWidth), height: baseHeight, length: baseDepth, chamferRadius: 0.012)
       let mat = SCNMaterial()
-      mat.diffuse.contents = UIColor(red: 0.97, green: 0.96, blue: 0.93, alpha: 1.0)
-      mat.roughness.contents = 0.2
-      mat.metalness.contents = 0.05
+      mat.diffuse.contents = UIColor(red: 0.16, green: 0.22, blue: 0.29, alpha: 1.0)
+      mat.roughness.contents = 0.40
+      mat.metalness.contents = 0.04
+      mat.lightingModel = .physicallyBased
       geo.materials = [mat]
       let node = SCNNode(geometry: geo)
-      node.position = SCNVector3(0, Float(baseHeight + counterThickness / 2), Float(backZ))
+      node.position = SCNVector3(originX, floorY + Float(baseHeight / 2), backZ)
+      registerSurface(node, surfaceId: "cabinets")
+      parent.addChildNode(node)
+    }
+
+    // Countertop (Polished Calacatta Quartz)
+    if needsCounters {
+      let geo = SCNBox(width: CGFloat(runWidth) + 0.04, height: counterThickness, length: baseDepth + 0.04, chamferRadius: 0.006)
+      let mat = SCNMaterial()
+      mat.diffuse.contents = UIColor(red: 0.98, green: 0.98, blue: 0.97, alpha: 1.0)
+      mat.roughness.contents = 0.15
+      mat.metalness.contents = 0.10
+      mat.lightingModel = .physicallyBased
+      geo.materials = [mat]
+      let node = SCNNode(geometry: geo)
+      node.position = SCNVector3(originX, floorY + Float(baseHeight + counterThickness / 2), backZ)
       registerSurface(node, surfaceId: "countertops")
-      scene.rootNode.addChildNode(node)
+      parent.addChildNode(node)
     }
 
-    // Upper cabinets (same surface id as base — pick "cabinets" once, both update)
-    do {
-      let geo = SCNBox(width: CGFloat(runWidth), height: upperHeight, length: upperDepth, chamferRadius: 0.01)
+    // Upper cabinets (Deep Navy Shaker)
+    if needsCabinets {
+      let geo = SCNBox(width: CGFloat(runWidth), height: upperHeight, length: upperDepth, chamferRadius: 0.012)
       let mat = SCNMaterial()
-      mat.diffuse.contents = UIColor(red: 0.95, green: 0.93, blue: 0.91, alpha: 1.0)
-      mat.roughness.contents = 0.4
+      mat.diffuse.contents = UIColor(red: 0.16, green: 0.22, blue: 0.29, alpha: 1.0)
+      mat.roughness.contents = 0.40
+      mat.metalness.contents = 0.04
+      mat.lightingModel = .physicallyBased
       geo.materials = [mat]
       let node = SCNNode(geometry: geo)
-      let upperBackZ = -(width / 2) + 0.04 + Double(upperDepth) / 2
-      node.position = SCNVector3(0, Float(upperOffsetY + upperHeight / 2), Float(upperBackZ))
+      let upperBackZ = originZ - Float(width / 2) + 0.04 + Float(upperDepth) / 2
+      node.position = SCNVector3(originX, floorY + Float(upperOffsetY + upperHeight / 2), upperBackZ)
       registerSurface(node, surfaceId: "cabinets")
-      scene.rootNode.addChildNode(node)
+      parent.addChildNode(node)
     }
 
     _ = height // reserved for future ceiling support
 
-    // Backsplash (between countertop top and upper cabinets bottom)
-    do {
+    // Backsplash (Glazed Sea Glass Tile)
+    if needsBacksplash {
       let backsplashHeight = upperOffsetY - (baseHeight + counterThickness) - 0.02
       if backsplashHeight > 0.1 {
         let geo = SCNBox(width: CGFloat(runWidth), height: backsplashHeight, length: 0.015, chamferRadius: 0)
         let mat = SCNMaterial()
-        mat.diffuse.contents = UIColor(red: 0.97, green: 0.97, blue: 0.95, alpha: 1.0)
-        mat.roughness.contents = 0.3
+        mat.diffuse.contents = UIColor(red: 0.54, green: 0.65, blue: 0.64, alpha: 1.0)
+        mat.roughness.contents = 0.25
+        mat.lightingModel = .physicallyBased
         geo.materials = [mat]
         let node = SCNNode(geometry: geo)
-        node.position = SCNVector3(0, Float(baseHeight + counterThickness + backsplashHeight / 2), Float(-(width / 2) + 0.05))
+        node.position = SCNVector3(
+          originX,
+          floorY + Float(baseHeight + counterThickness + backsplashHeight / 2),
+          originZ - Float(width / 2) + 0.05
+        )
         registerSurface(node, surfaceId: "backsplash")
-        scene.rootNode.addChildNode(node)
+        parent.addChildNode(node)
       }
     }
   }
 
   // MARK: - Synthetic Bathroom Furniture
 
-  private func addBathroomFurniture(to scene: SCNScene, length: Double, width: Double, height: Double) {
+  private func addBathroomFloorTile(to parent: SCNNode, length: Double, width: Double) {
+    let geo = SCNPlane(width: CGFloat(length), height: CGFloat(width))
+    let mat = SCNMaterial()
+    mat.diffuse.contents = UIColor(red: 0.72, green: 0.7, blue: 0.66, alpha: 1.0)
+    mat.roughness.contents = 0.5
+    mat.isDoubleSided = true
+    mat.lightingModel = .physicallyBased
+    geo.materials = [mat]
+    let node = SCNNode(geometry: geo)
+    node.eulerAngles.x = -.pi / 2
+    node.position = SCNVector3(0, 0.003, 0)
+    registerSurface(node, surfaceId: "floor_tile")
+    parent.addChildNode(node)
+  }
+
+  private func addBathroomFurniture(
+    to parent: SCNNode,
+    length: Double,
+    width: Double,
+    height: Double,
+    skipSurfaces: Set<String> = [],
+    centeredFallback: Bool = false
+  ) {
     let vanityWidth = min(length - 0.8, 1.2)
     if vanityWidth <= 0.4 { return }
 
     let vanityHeight: CGFloat = 0.85
     let vanityDepth: CGFloat = 0.55
     let counterThickness: CGFloat = 0.04
-    let backZ = -(width / 2) + 0.04 + Double(vanityDepth) / 2
 
-    // Vanity base
-    do {
+    let originX: Float
+    let originZ: Float
+    let floorY: Float
+    if centeredFallback, let layout = roomLayout {
+      originX = Float(-layout.offsetX)
+      originZ = Float(-layout.offsetZ)
+      floorY = Float(-layout.offsetY)
+    } else {
+      originX = 0
+      originZ = 0
+      floorY = 0
+    }
+
+    let backZ = originZ - Float(width / 2) + 0.04 + Float(vanityDepth) / 2
+    let needsVanity = !skipSurfaces.contains("vanity")
+    let needsCounter = !skipSurfaces.contains("vanity_counter")
+    let needsShower = !skipSurfaces.contains("shower_tile")
+    let needsFloor = !skipSurfaces.contains("floor_tile")
+
+    // Vanity base (Warm White Oak)
+    if needsVanity {
       let geo = SCNBox(width: CGFloat(vanityWidth), height: vanityHeight, length: vanityDepth, chamferRadius: 0.01)
       let mat = SCNMaterial()
-      mat.diffuse.contents = UIColor(red: 0.96, green: 0.94, blue: 0.9, alpha: 1.0)
-      mat.roughness.contents = 0.4
+      mat.diffuse.contents = UIColor(red: 0.74, green: 0.58, blue: 0.38, alpha: 1.0)
+      mat.roughness.contents = 0.45
+      mat.lightingModel = .physicallyBased
       geo.materials = [mat]
       let node = SCNNode(geometry: geo)
-      node.position = SCNVector3(Float(-length / 4), Float(vanityHeight / 2), Float(backZ))
+      node.position = SCNVector3(originX - Float(length / 4), floorY + Float(vanityHeight / 2), backZ)
       registerSurface(node, surfaceId: "vanity")
-      scene.rootNode.addChildNode(node)
+      parent.addChildNode(node)
     }
 
-    // Vanity counter
-    do {
+    // Vanity counter (Polished Bright Quartz)
+    if needsCounter {
       let geo = SCNBox(width: CGFloat(vanityWidth) + 0.04, height: counterThickness, length: vanityDepth + 0.04, chamferRadius: 0.005)
       let mat = SCNMaterial()
-      mat.diffuse.contents = UIColor(red: 0.97, green: 0.96, blue: 0.93, alpha: 1.0)
-      mat.roughness.contents = 0.2
+      mat.diffuse.contents = UIColor(red: 0.98, green: 0.98, blue: 0.97, alpha: 1.0)
+      mat.roughness.contents = 0.15
+      mat.metalness.contents = 0.10
+      mat.lightingModel = .physicallyBased
       geo.materials = [mat]
       let node = SCNNode(geometry: geo)
-      node.position = SCNVector3(Float(-length / 4), Float(vanityHeight + counterThickness / 2), Float(backZ))
+      node.position = SCNVector3(originX - Float(length / 4), floorY + Float(vanityHeight + counterThickness / 2), backZ)
       registerSurface(node, surfaceId: "vanity_counter")
-      scene.rootNode.addChildNode(node)
+      parent.addChildNode(node)
     }
+    
 
-    // Shower tile wall (right side)
-    do {
+    // Shower tile wall (Slate Grey Tile)
+    if needsShower {
       let showerWidth = min(width - 0.4, 1.2)
-      let showerHeight: CGFloat = min(2.1, CGFloat(height) - 0.2)
+      let showerHeight: CGFloat = min(2.2, CGFloat(height) - 0.1)
       let geo = SCNBox(width: 0.04, height: showerHeight, length: CGFloat(showerWidth), chamferRadius: 0)
       let mat = SCNMaterial()
-      mat.diffuse.contents = UIColor(red: 0.66, green: 0.65, blue: 0.62, alpha: 1.0)
-      mat.roughness.contents = 0.3
+      mat.diffuse.contents = UIColor(red: 0.42, green: 0.46, blue: 0.50, alpha: 1.0)
+      mat.roughness.contents = 0.30
+      mat.lightingModel = .physicallyBased
       geo.materials = [mat]
       let node = SCNNode(geometry: geo)
-      node.position = SCNVector3(Float(length / 2 - 0.05), Float(showerHeight / 2), 0)
+      node.position = SCNVector3(
+        originX + Float(length / 2 - 0.05),
+        floorY + Float(showerHeight / 2),
+        originZ - Float(width / 2) + Float(showerWidth) / 2 + 0.04
+      )
       registerSurface(node, surfaceId: "shower_tile")
-      scene.rootNode.addChildNode(node)
+      parent.addChildNode(node)
     }
 
-    // Floor tile insert (overlays the floor in a portion of the room)
-    do {
-      let tileLength = min(length - 0.2, 2.0)
-      let tileWidth = min(width - 0.2, 2.0)
-      let geo = SCNPlane(width: CGFloat(tileLength), height: CGFloat(tileWidth))
-      let mat = SCNMaterial()
-      mat.diffuse.contents = UIColor(red: 0.72, green: 0.7, blue: 0.66, alpha: 1.0)
-      mat.roughness.contents = 0.5
-      geo.materials = [mat]
-      let node = SCNNode(geometry: geo)
-      node.eulerAngles.x = -.pi / 2
-      node.position = SCNVector3(0, 0.005, 0)
-      registerSurface(node, surfaceId: "floor_tile")
-      scene.rootNode.addChildNode(node)
+    // Floor tile covering the room floor flush (bathroom — same footprint as main floor)
+    if needsFloor {
+      if centeredFallback {
+        let geo = SCNPlane(width: CGFloat(length), height: CGFloat(width))
+        let mat = SCNMaterial()
+        mat.diffuse.contents = UIColor(red: 0.72, green: 0.7, blue: 0.66, alpha: 1.0)
+        mat.roughness.contents = 0.5
+        mat.isDoubleSided = true
+        mat.lightingModel = .physicallyBased
+        geo.materials = [mat]
+        let node = SCNNode(geometry: geo)
+        node.eulerAngles.x = -.pi / 2
+        node.position = SCNVector3(originX, floorY + 0.003, originZ)
+        registerSurface(node, surfaceId: "floor_tile")
+        parent.addChildNode(node)
+      } else {
+        addBathroomFloorTile(to: parent, length: length, width: width)
+      }
     }
   }
 
   // MARK: - Surface Registration + Material Swap
 
   private func registerSurface(_ node: SCNNode, surfaceId: String) {
-    node.name = "\(SURFACE_NAME_PREFIX)\(surfaceId)"
+    // Preserve first surface id on the node name for hit-testing; still track multi-ids.
+    if surfaceIdFromNodeName(node.name) == nil {
+      node.name = "\(SURFACE_NAME_PREFIX)\(surfaceId)"
+    }
     var list = surfaceNodes[surfaceId] ?? []
-    list.append(node)
-    surfaceNodes[surfaceId] = list
+    if !list.contains(node) {
+      list.append(node)
+      surfaceNodes[surfaceId] = list
+    }
   }
 
-  func setSurfaceMaterial(surfaceId: String, colorHex: String, materialName: String, roughness: Double, metalness: Double) {
+  func setSurfaceMaterial(
+    surfaceId: String,
+    colorHex: String,
+    materialName: String,
+    roughness: Double,
+    metalness: Double,
+    textureURL: String? = nil
+  ) {
     guard let nodes = surfaceNodes[surfaceId], !nodes.isEmpty,
           let color = colorFromHex(colorHex) else { return }
 
+    let isFloorSurface = surfaceId == "flooring" || surfaceId == "floor_tile"
+    let floorScaleX = Float(roomLayout?.length ?? 4.0)
+    let floorScaleZ = Float(roomLayout?.width ?? 3.0)
+    let trimmedURL = textureURL?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+
+    let apply: (UIImage?) -> Void = { [weak self] texture in
+      guard let self = self else { return }
+      DispatchQueue.main.async {
+        for node in nodes {
+          guard let geometry = node.geometry else { continue }
+          let mat = SCNMaterial()
+          if let texture = texture {
+            mat.diffuse.contents = texture
+            mat.diffuse.wrapS = .repeat
+            mat.diffuse.wrapT = .repeat
+            if isFloorSurface {
+              mat.diffuse.contentsTransform = SCNMatrix4MakeScale(floorScaleX * 2.5, floorScaleZ * 2.5, 1)
+            } else {
+              // Product photos: show once across the face rather than a tiny tile.
+              mat.diffuse.contentsTransform = SCNMatrix4MakeScale(1.0, 1.0, 1)
+              mat.diffuse.wrapS = .clamp
+              mat.diffuse.wrapT = .clamp
+            }
+          } else {
+            mat.diffuse.contents = color
+          }
+          mat.roughness.contents = roughness
+          mat.metalness.contents = metalness
+          mat.isDoubleSided = isFloorSurface || surfaceId == "walls"
+          mat.lightingModel = .physicallyBased
+          geometry.materials = [mat]
+        }
+      }
+    }
+
+    // Supplier catalog photo — prefer over procedural when available.
+    if !trimmedURL.isEmpty, let url = URL(string: trimmedURL), url.scheme?.hasPrefix("http") == true {
+      if let cached = textureCache[trimmedURL] {
+        apply(cached)
+        return
+      }
+      URLSession.shared.dataTask(with: url) { [weak self] data, _, _ in
+        guard let self = self else { return }
+        guard let data = data, let image = UIImage(data: data) else {
+          self.applyProceduralOrFlat(
+            surfaceId: surfaceId,
+            color: color,
+            materialName: materialName,
+            roughness: roughness,
+            metalness: metalness,
+            isFloorSurface: isFloorSurface,
+            floorScaleX: floorScaleX,
+            floorScaleZ: floorScaleZ,
+            nodes: nodes
+          )
+          return
+        }
+        self.textureCache[trimmedURL] = image
+        apply(image)
+      }.resume()
+      return
+    }
+
+    applyProceduralOrFlat(
+      surfaceId: surfaceId,
+      color: color,
+      materialName: materialName,
+      roughness: roughness,
+      metalness: metalness,
+      isFloorSurface: isFloorSurface,
+      floorScaleX: floorScaleX,
+      floorScaleZ: floorScaleZ,
+      nodes: nodes
+    )
+  }
+
+  private func applyProceduralOrFlat(
+    surfaceId: String,
+    color: UIColor,
+    materialName: String,
+    roughness: Double,
+    metalness: Double,
+    isFloorSurface: Bool,
+    floorScaleX: Float,
+    floorScaleZ: Float,
+    nodes: [SCNNode]
+  ) {
     let pattern = patternForMaterialName(materialName)
-    let textureKey = "\(materialName.lowercased())|\(colorHex.lowercased())"
+    let textureKey = "\(materialName.lowercased())|\(colorHexKey(color))"
     let texture: UIImage? = (pattern == .flat) ? nil : (textureCache[textureKey] ?? generateTexture(pattern: pattern, baseColor: color))
     if let texture = texture {
       textureCache[textureKey] = texture
@@ -338,14 +1191,26 @@ class RoomCustomizerViewController: UIViewController {
           mat.diffuse.contents = texture
           mat.diffuse.wrapS = .repeat
           mat.diffuse.wrapT = .repeat
+          if isFloorSurface {
+            mat.diffuse.contentsTransform = SCNMatrix4MakeScale(floorScaleX * 2.5, floorScaleZ * 2.5, 1)
+          }
         } else {
           mat.diffuse.contents = color
         }
         mat.roughness.contents = roughness
         mat.metalness.contents = metalness
+        mat.isDoubleSided = isFloorSurface || surfaceId == "walls"
+        mat.lightingModel = .physicallyBased
         geometry.materials = [mat]
       }
     }
+    _ = surfaceId
+  }
+
+  private func colorHexKey(_ color: UIColor) -> String {
+    var r: CGFloat = 0, g: CGFloat = 0, b: CGFloat = 0, a: CGFloat = 0
+    color.getRed(&r, green: &g, blue: &b, alpha: &a)
+    return String(format: "%02x%02x%02x", Int(r * 255), Int(g * 255), Int(b * 255))
   }
 
   private func colorFromHex(_ hex: String) -> UIColor? {
@@ -786,50 +1651,132 @@ class RoomCustomizerViewController: UIViewController {
     }
   }
 
+  @objc private func handleDoubleTap(_ gesture: UITapGestureRecognizer) {
+    guard let cam = cameraNode ?? sceneView.pointOfView,
+          let initTransform = initialCameraTransform else { return }
+    SCNTransaction.begin()
+    SCNTransaction.animationDuration = 0.45
+    cam.transform = initTransform
+    SCNTransaction.commit()
+  }
+
   // MARK: - Helpers
 
-  private func setupCamera(for scene: SCNScene, length: Double, width: Double, height: Double) {
-    let cameraNode = SCNNode()
+  private func setupCamera(for scene: SCNScene, layout: RoomLayout) {
+    let camNode = SCNNode()
     let camera = SCNCamera()
     camera.zNear = 0.05
     camera.zFar = 100
-    camera.fieldOfView = 55
-    cameraNode.camera = camera
+    camera.fieldOfView = 62
+    camera.wantsHDR = true
+    camera.wantsExposureAdaptation = false
+    camera.exposureOffset = -0.15
+    camera.automaticallyAdjustsZRange = true
+    camNode.camera = camera
 
-    let maxSpan = max(length, width)
-    let distance = maxSpan * 1.4
+    let boundsNode = contentNode ?? scene.rootNode
+    let bounds = boundsNode.boundingBox
+    let spanX = bounds.max.x - bounds.min.x
+    let spanZ = bounds.max.z - bounds.min.z
+    let spanY = bounds.max.y - bounds.min.y
+    let maxSpan = Swift.max(
+      2.5 as Float,
+      Swift.max(spanX, spanZ),
+      Float(layout.length),
+      Float(layout.width)
+    )
+    let lookY: Float = usesCapturedMesh
+      ? (bounds.min.y + bounds.max.y) * 0.42
+      : Float(layout.lookAtY)
+    let center = SCNVector3(
+      (bounds.min.x + bounds.max.x) / 2,
+      lookY,
+      (bounds.min.z + bounds.max.z) / 2
+    )
 
-    cameraNode.position = SCNVector3(Float(distance * 0.7), Float(height * 1.2), Float(distance * 0.9))
-    cameraNode.look(at: SCNVector3(0, Float(height * 0.4), 0))
-    scene.rootNode.addChildNode(cameraNode)
-    sceneView.pointOfView = cameraNode
+    // Wide elevated dollhouse 3/4 angle: pulls camera back so whole room is comfortably framed
+    let camDist = maxSpan * 1.35
+    camNode.position = SCNVector3(
+      center.x + camDist * 0.65,
+      center.y + maxSpan * 0.85,
+      center.z + camDist * 0.75
+    )
+    camNode.look(at: center)
+    scene.rootNode.addChildNode(camNode)
+    sceneView.pointOfView = camNode
+    self.cameraNode = camNode
+    self.initialCameraTransform = camNode.transform
+    _ = spanY
   }
 
-  private func setupLighting(for scene: SCNScene) {
+  private func setupLighting(for scene: SCNScene, lookAtY: Float) {
+    let boundsNode = contentNode ?? scene.rootNode
+    let bounds = boundsNode.boundingBox
+    let cx = (bounds.min.x + bounds.max.x) / 2
+    let cy = usesCapturedMesh
+      ? (bounds.min.y + bounds.max.y) / 2
+      : lookAtY
+    let cz = (bounds.min.z + bounds.max.z) / 2
+    let span = Swift.max(
+      2.0 as Float,
+      bounds.max.x - bounds.min.x,
+      bounds.max.y - bounds.min.y,
+      bounds.max.z - bounds.min.z
+    )
+    let target = SCNVector3(cx, cy, cz)
+
+    // Soft IBL base so PBR materials don't look dead/flat.
+    scene.lightingEnvironment.contents = UIColor(red: 0.55, green: 0.58, blue: 0.62, alpha: 1.0)
+    scene.lightingEnvironment.intensity = 0.85
+
     let ambient = SCNNode()
     ambient.light = SCNLight()
     ambient.light?.type = .ambient
-    ambient.light?.color = UIColor(white: 0.6, alpha: 1.0)
-    ambient.light?.intensity = 700
+    ambient.light?.color = UIColor(red: 0.92, green: 0.93, blue: 0.95, alpha: 1.0)
+    ambient.light?.intensity = 420
     scene.rootNode.addChildNode(ambient)
 
     let key = SCNNode()
     key.light = SCNLight()
     key.light?.type = .directional
-    key.light?.color = UIColor(white: 1.0, alpha: 1.0)
-    key.light?.intensity = 900
-    key.position = SCNVector3(2, 6, 3)
-    key.look(at: SCNVector3(0, 0, 0))
+    key.light?.color = UIColor(red: 1.0, green: 0.98, blue: 0.94, alpha: 1.0)
+    key.light?.intensity = 1100
+    key.light?.castsShadow = !usesCapturedMesh
+    key.light?.shadowMode = .deferred
+    key.light?.shadowSampleCount = 8
+    key.light?.shadowRadius = 3
+    key.position = SCNVector3(cx + span * 0.55, cy + span * 0.95, cz + span * 0.4)
+    key.look(at: target)
     scene.rootNode.addChildNode(key)
 
     let fill = SCNNode()
     fill.light = SCNLight()
     fill.light?.type = .directional
-    fill.light?.color = UIColor(red: 0.92, green: 0.95, blue: 1.0, alpha: 1.0)
-    fill.light?.intensity = 350
-    fill.position = SCNVector3(-3, 4, -2)
-    fill.look(at: SCNVector3(0, 0, 0))
+    fill.light?.color = UIColor(red: 0.82, green: 0.88, blue: 1.0, alpha: 1.0)
+    fill.light?.intensity = 420
+    fill.position = SCNVector3(cx - span * 0.6, cy + span * 0.55, cz - span * 0.35)
+    fill.look(at: target)
     scene.rootNode.addChildNode(fill)
+
+    // Soft ceiling bounce — reads more like a real interior.
+    let ceiling = SCNNode()
+    ceiling.light = SCNLight()
+    ceiling.light?.type = .omni
+    ceiling.light?.color = UIColor(red: 1.0, green: 0.97, blue: 0.92, alpha: 1.0)
+    ceiling.light?.intensity = 650
+    ceiling.light?.attenuationStartDistance = CGFloat(span * 0.4)
+    ceiling.light?.attenuationEndDistance = CGFloat(span * 2.8)
+    ceiling.position = SCNVector3(cx, bounds.max.y + span * 0.15, cz)
+    scene.rootNode.addChildNode(ceiling)
+
+    let rim = SCNNode()
+    rim.light = SCNLight()
+    rim.light?.type = .directional
+    rim.light?.color = UIColor(red: 0.95, green: 0.96, blue: 1.0, alpha: 1.0)
+    rim.light?.intensity = 220
+    rim.position = SCNVector3(cx - span * 0.2, cy + span * 0.3, cz + span * 0.8)
+    rim.look(at: target)
+    scene.rootNode.addChildNode(rim)
   }
 
   private func addPlaceholderLabel() {
@@ -899,13 +1846,21 @@ class RoomCustomizerView: UIView {
     onSurfaceTap?(["surfaceId": surfaceId])
   }
 
-  @objc func setSurfaceMaterial(_ surfaceId: String, colorHex: String, materialName: String, roughness: NSNumber, metalness: NSNumber) {
+  @objc func setSurfaceMaterial(
+    _ surfaceId: String,
+    colorHex: String,
+    materialName: String,
+    roughness: NSNumber,
+    metalness: NSNumber,
+    textureURL: NSString?
+  ) {
     viewController?.setSurfaceMaterial(
       surfaceId: surfaceId,
       colorHex: colorHex,
       materialName: materialName,
       roughness: roughness.doubleValue,
-      metalness: metalness.doubleValue
+      metalness: metalness.doubleValue,
+      textureURL: textureURL as String?
     )
   }
 }

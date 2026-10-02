@@ -16,6 +16,10 @@ describe('project messages', () => {
       path.join(__dirname, '../src/app/(homeowner)/project/[id]/messages.tsx'),
       'utf8',
     );
+    const homeownerData = fs.readFileSync(
+      path.join(__dirname, '../src/lib/homeowner-data.ts'),
+      'utf8',
+    );
     const homeownerLegacyChat = fs.readFileSync(
       path.join(__dirname, '../src/app/(homeowner)/chat.tsx'),
       'utf8',
@@ -30,9 +34,14 @@ describe('project messages', () => {
     );
 
     expect(homeownerList).toContain("import { formatAppSafeErrorMessage } from '@/lib/supabase/functions';");
-    expect(homeownerList).toContain("setErrorMessage(formatAppSafeErrorMessage(projectsError, 'Could not load messages.'))");
-    expect(homeownerList).toContain("setErrorMessage(formatAppSafeErrorMessage(\n        slotResult.error ?? gcResult.error,\n        'Could not load message participants.',\n      ))");
-    expect(homeownerList).toContain("setErrorMessage(formatAppSafeErrorMessage(messagesError, 'Could not load messages.'))");
+    expect(homeownerList).toContain("import { useHomeownerMessageThreads, type HomeownerMessageThread } from '@/lib/homeowner-data';");
+    expect(homeownerList).toContain("formatAppSafeErrorMessage(threadsQuery.error, 'Could not load messages.')");
+    expect(homeownerList).toContain('void threadsQuery.refetch();');
+    expect(homeownerData).toContain('export async function fetchHomeownerMessageThreads(userId: string)');
+    expect(homeownerData).toContain('if (projectsError) throw projectsError;');
+    expect(homeownerData).toContain("const gcContextUnavailable = isMissingSupabaseSchemaObjectError(gcResult.error, 'general_contractor_projects');");
+    expect(homeownerData).toContain('throw slotResult.error ?? gcResult.error;');
+    expect(homeownerData).toContain('if (messagesError) throw messagesError;');
     expect(homeownerList).not.toContain('setErrorMessage(projectsError.message)');
     expect(homeownerList).not.toContain('setErrorMessage(messagesError.message)');
     expect(homeownerList).not.toContain('slotResult.error?.message ?? gcResult.error?.message');

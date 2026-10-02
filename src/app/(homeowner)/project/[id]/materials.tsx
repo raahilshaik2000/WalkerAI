@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useState, useRef } from 'react';
 import {
   Alert,
   Image,
@@ -55,11 +55,12 @@ export default function MaterialsScreen() {
 
   const [orders, setOrders] = useState<MaterialOrder[]>([]);
   const [loading, setLoading] = useState(true);
+  const hasLoadedRef = useRef(false);
   const [confirmingOrder, setConfirmingOrder] = useState<string | null>(null);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
   const fetchOrders = useCallback(async () => {
-    setLoading(true);
+    if (!hasLoadedRef.current) setLoading(true);
     setErrorMessage(null);
     try {
       if (!projectId) {
@@ -88,6 +89,7 @@ export default function MaterialsScreen() {
       setErrorMessage(formatAppSafeErrorMessage(err, 'Could not load material orders.'));
     } finally {
       setLoading(false);
+      hasLoadedRef.current = true;
     }
   }, [projectId]);
 
@@ -108,6 +110,16 @@ export default function MaterialsScreen() {
   const confirmDelivery = async (order: MaterialOrder) => {
     if (!order.delivery_photo_url) {
       Alert.alert('Delivery photo missing', 'Ask the supplier to upload delivery proof before releasing payment.');
+      return;
+    }
+
+    const { data: projectHold } = await supabase
+      .from('projects')
+      .select('admin_paused')
+      .eq('id', projectId)
+      .maybeSingle();
+    if (projectHold?.admin_paused) {
+      Alert.alert('Payment held', 'Walker AI admin has restricted payouts on this project. Contact support to release the hold.');
       return;
     }
 

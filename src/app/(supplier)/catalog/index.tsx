@@ -1,94 +1,73 @@
-import { useCallback, useState } from 'react';
-import { ActivityIndicator, Alert, FlatList, RefreshControl, StyleSheet, Switch, Text, TouchableOpacity, View } from 'react-native';
+import { useCallback, useRef, useState } from 'react';
+import { Alert, FlatList, RefreshControl, StyleSheet, Switch, Text, TouchableOpacity, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { useNavigation, useFocusEffect } from '@react-navigation/native';
+import { useFocusEffect, useNavigation } from '@react-navigation/native';
+import { useQueryClient } from '@tanstack/react-query';
 import Ionicons from 'react-native-vector-icons/Ionicons';
 import { supabase } from '@/lib/supabase/client';
-import { getCurrentUser } from '@/lib/supabase/auth';
 import { formatAppSafeErrorMessage } from '@/lib/supabase/functions';
+import { nextCatalogSetupRoute } from '@/lib/supplier-catalog';
+import { supplierQueryKeys, useSupplierCatalog } from '@/lib/supplier-data';
 import { useAuthStore } from '@/stores/auth.store';
 import { Colors, Radius, Spacing, Typography } from '@/constants/theme';
-import { GradientBackground } from '@/components/ui';
-import type { Supplier, SupplierCatalogItem } from '@/types/database.types';
-import { nextCatalogSetupRoute } from '@/lib/supplier-catalog';
+import { GradientBackground, ListItemSkeleton } from '@/components/ui';
+import type { SupplierCatalogItem } from '@/types/database.types';
 
 export default function SupplierCatalog() {
   const navigation = useNavigation<any>();
+  const queryClient = useQueryClient();
   const { user } = useAuthStore();
-  const [items, setItems] = useState<SupplierCatalogItem[]>([]);
-  const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
-  const [hasSupplierProfile, setHasSupplierProfile] = useState(false);
-  const [setupRoute, setSetupRoute] = useState<string | null>(null);
-  const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  const hasFocusedOnce = useRef(false);
 
-  const fetchData = useCallback(async () => {
-    setErrorMessage(null);
-    try {
-      const currentUserId = user?.id ?? (await getCurrentUser())?.id ?? null;
-      if (!currentUserId) {
-        setItems([]);
-        setHasSupplierProfile(false);
-        setSetupRoute('SupplierBusinessOnboarding');
-        setErrorMessage('You need to be signed in to manage your catalog.');
+  const { profileQuery, catalogQuery, supplier } = useSupplierCatalog(user?.id);
+  const items = catalogQuery.data ?? [];
+  const setupRoute = supplier
+    ? nextCatalogSetupRoute(supplier)
+    : 'SupplierBusinessOnboarding';
+  const hasSupplierProfile = !!supplier;
+  const showSkeleton =
+    (!!user?.id && !supplier && profileQuery.isLoading)
+    || (!!supplier && !setupRoute && !catalogQuery.data && catalogQuery.isLoading);
+  const errorMessage = !user?.id
+    ? 'You need to be signed in to manage your catalog.'
+    : profileQuery.error
+      ? formatAppSafeErrorMessage(profileQuery.error, 'Could not load catalog.')
+      : catalogQuery.error
+        ? formatAppSafeErrorMessage(catalogQuery.error, 'Could not load catalog.')
+        : null;
+
+  const refetchAll = useCallback(async () => {
+    await Promise.all([profileQuery.refetch(), catalogQuery.refetch()]);
+  }, [catalogQuery, profileQuery]);
+
+  useFocusEffect(
+    useCallback(() => {
+      if (!hasFocusedOnce.current) {
+        hasFocusedOnce.current = true;
         return;
       }
+      void refetchAll();
+    }, [refetchAll])
+  );
 
-      const { data: sup, error: supplierError } = await supabase
-        .from('suppliers')
-        .select('id, license_number, categories')
-        .eq('user_id', currentUserId)
-        .order('created_at', { ascending: false })
-        .limit(1)
-        .maybeSingle();
-      if (supplierError) {
-        setItems([]);
-        setHasSupplierProfile(false);
-        setSetupRoute(null);
-        setErrorMessage(formatAppSafeErrorMessage(supplierError, 'Could not load catalog.'));
-        return;
-      }
-      if (!sup) {
-        setItems([]);
-        setHasSupplierProfile(false);
-        setSetupRoute('SupplierBusinessOnboarding');
-        return;
-      }
-
-      setHasSupplierProfile(true);
-      setSetupRoute(nextCatalogSetupRoute(sup as Pick<Supplier, 'categories' | 'license_number'>));
-      const { data, error } = await supabase
-        .from('supplier_catalog')
-        .select('*')
-        .eq('supplier_id', sup.id)
-        .order('created_at', { ascending: false });
-      if (error) {
-        setItems([]);
-        setErrorMessage(formatAppSafeErrorMessage(error, 'Could not load catalog.'));
-        return;
-      }
-
-      setItems((data as SupplierCatalogItem[]) ?? []);
-    } catch (err) {
-      setItems([]);
-      setHasSupplierProfile(false);
-      setSetupRoute(null);
-      setErrorMessage(formatAppSafeErrorMessage(err, 'Could not load catalog.'));
-    } finally {
-      setLoading(false);
-    }
-  }, [user?.id]);
-
-  useFocusEffect(useCallback(() => { fetchData(); }, [fetchData]));
-
-  const onRefresh = async () => { setRefreshing(true); await fetchData(); setRefreshing(false); };
+  const onRefresh = async () => {
+    setRefreshing(true);
+    await refetchAll();
+    setRefreshing(false);
+  };
 
   const openAddItem = () => {
     navigation.navigate(setupRoute ?? 'SupplierAddCatalogItem');
   };
 
   const toggleStock = async (item: SupplierCatalogItem) => {
-    setItems((prev) => prev.map((i) => i.id === item.id ? { ...i, in_stock: !i.in_stock } : i));
+    if (!supplier?.id) return;
+    const previous = catalogQuery.data ?? [];
+    queryClient.setQueryData(
+      supplierQueryKeys.catalog(supplier.id),
+      previous.map((i) => (i.id === item.id ? { ...i, in_stock: !i.in_stock } : i)),
+    );
     try {
       const { data, error } = await supabase
         .from('supplier_catalog')
@@ -98,16 +77,31 @@ export default function SupplierCatalog() {
         .maybeSingle();
       if (error) throw error;
       if (!data) {
-        setItems((prev) => prev.map((i) => i.id === item.id ? { ...i, in_stock: item.in_stock } : i));
+        queryClient.setQueryData(supplierQueryKeys.catalog(supplier.id), previous);
         Alert.alert('Could not update stock', 'This catalog item is no longer available.');
       }
     } catch (err) {
-      setItems((prev) => prev.map((i) => i.id === item.id ? { ...i, in_stock: item.in_stock } : i));
+      queryClient.setQueryData(supplierQueryKeys.catalog(supplier.id), previous);
       Alert.alert('Could not update stock', formatAppSafeErrorMessage(err, 'Please try again.'));
     }
   };
 
-  if (loading) return <View style={styles.center}><ActivityIndicator color={Colors.accent} size="large" /></View>;
+  if (showSkeleton) {
+    return (
+      <GradientBackground>
+        <SafeAreaView style={styles.safe}>
+          <View style={styles.header}>
+            <Text style={styles.headerTitle}>My Catalog</Text>
+          </View>
+          <View style={styles.skeletonList}>
+            {Array.from({ length: 5 }).map((_, index) => (
+              <ListItemSkeleton key={`catalog-skel-${index}`} style={styles.skeletonItem} />
+            ))}
+          </View>
+        </SafeAreaView>
+      </GradientBackground>
+    );
+  }
 
   return (
     <GradientBackground>
@@ -125,7 +119,7 @@ export default function SupplierCatalog() {
             <Ionicons name="alert-circle-outline" size={48} color={Colors.text.tertiary} />
             <Text style={styles.emptyTitle}>Could not load catalog</Text>
             <Text style={styles.emptyBody}>{errorMessage}</Text>
-            <TouchableOpacity style={styles.emptyBtn} onPress={fetchData} activeOpacity={0.8}>
+            <TouchableOpacity style={styles.emptyBtn} onPress={() => { void refetchAll(); }} activeOpacity={0.8}>
               <Text style={styles.emptyBtnText}>Try Again</Text>
             </TouchableOpacity>
           </View>
@@ -189,6 +183,8 @@ export default function SupplierCatalog() {
 const styles = StyleSheet.create({
   safe: { flex: 1 },
   center: { flex: 1, alignItems: 'center', justifyContent: 'center', backgroundColor: '#000' },
+  skeletonList: { paddingHorizontal: Spacing.md, paddingTop: 8 },
+  skeletonItem: { marginBottom: 12 },
   header: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingHorizontal: Spacing.md, paddingTop: Spacing.sm, paddingBottom: Spacing.md },
   headerTitle: { ...Typography.h2 },
   addBtn: { flexDirection: 'row', alignItems: 'center', gap: 6, backgroundColor: Colors.success, paddingHorizontal: 14, paddingVertical: 8, borderRadius: 20 },
@@ -198,7 +194,7 @@ const styles = StyleSheet.create({
   emptyTitle: { ...Typography.h3, textAlign: 'center' },
   emptyBody: { ...Typography.bodySecondary, textAlign: 'center' },
   emptyBtn: { backgroundColor: Colors.accent, paddingHorizontal: 24, paddingVertical: 12, borderRadius: 24, marginTop: 8 },
-  emptyBtnText: { fontSize: 15, fontWeight: '700', color: '#fff' },
+  emptyBtnText: { fontSize: 15, fontWeight: '700', color: Colors.accentFg },
   itemCard: { flexDirection: 'row', alignItems: 'center', backgroundColor: 'rgba(255,255,255,0.06)', borderRadius: Radius.item, borderWidth: 1, borderColor: 'rgba(255,255,255,0.08)', padding: Spacing.md },
   itemName: { fontSize: 15, fontWeight: '700', color: Colors.text.primary, marginBottom: 3 },
   itemMeta: { fontSize: 12, color: Colors.text.tertiary, marginBottom: 4 },

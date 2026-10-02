@@ -33,6 +33,26 @@ export type QuoteStatus = 'pending' | 'approved' | 'rejected';
 
 export type ChangeOrderStatus = 'proposed' | 'approved' | 'rejected';
 
+export type SiteInspectionAdjustmentStatus =
+  | 'submitted'
+  | 'under_review'
+  | 'approved_by_head_office'
+  | 'rejected_by_head_office'
+  | 'awaiting_homeowner_funding'
+  | 'approved_and_funded'
+  | 'credited'
+  | 'cancelled';
+
+export type SiteInspectionReasonCategory =
+  | 'plumbing_roughin_mismatch'
+  | 'subfloor_framing_damage'
+  | 'measurement_variance'
+  | 'electrical_service_upgrade'
+  | 'structural_obstacle'
+  | 'hazardous_material'
+  | 'material_discontinuation'
+  | 'other';
+
 export type ApprovalRequestStatus = 'pending' | 'approved' | 'rejected' | 'cancelled';
 
 export type ApprovalRequestType =

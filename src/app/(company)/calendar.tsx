@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useState } from 'react';
 import {
   RefreshControl,
   ScrollView,
@@ -8,7 +8,7 @@ import {
   View,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { useNavigation } from '@react-navigation/native';
+import { useFocusEffect, useNavigation } from '@react-navigation/native';
 import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
 import { supabase } from '@/lib/supabase/client';
 import { useAuthStore } from '@/stores/auth.store';
@@ -19,7 +19,7 @@ import { formatCad } from '@/lib/formatters';
 import { gcProjectTypeIcon } from '@/lib/gc-project-type';
 import { mapCompanyCalendarMilestones, type CompanyCalendarMilestone } from '@/lib/company-calendar';
 import { Colors, Spacing, Typography } from '@/constants/theme';
-import { GlassCard, GradientBackground, ListItemSkeleton, StatusBadge } from '@/components/ui';
+import { GlassButton, GlassCard, GradientBackground, ListItemSkeleton, StatusBadge } from '@/components/ui';
 import { TradeMetricStrip, TradeScreenHeader } from '@/components/company/TradeUI';
 
 type Milestone = CompanyCalendarMilestone;
@@ -162,7 +162,11 @@ export default function CalendarScreen() {
     }
   }, [user?.id]);
 
-  useEffect(() => { fetchData(); }, [fetchData]);
+  useFocusEffect(
+    useCallback(() => {
+      fetchData();
+    }, [fetchData]),
+  );
 
   const onRefresh = () => {
     setRefreshing(true);
@@ -207,6 +211,7 @@ export default function CalendarScreen() {
               <Icon name="alert-circle-outline" size={48} color={Colors.text.tertiary} />
               <Text style={styles.emptyTitle}>Could not load calendar</Text>
               <Text style={styles.emptySub}>{errorMessage}</Text>
+              <GlassButton label="Try Again" onPress={() => { void fetchData(); }} size="sm" style={{ marginTop: 12 }} />
             </View>
           ) : !hasCompanyProfile ? (
             <View style={styles.emptyState}>
@@ -299,5 +304,5 @@ const styles = StyleSheet.create({
   emptyTitle: { ...Typography.h3, marginTop: Spacing.md, marginBottom: 8 },
   emptySub: { ...Typography.bodySecondary, textAlign: 'center', lineHeight: 22 },
   setupBtn: { backgroundColor: Colors.accent, paddingHorizontal: 18, paddingVertical: 10, borderRadius: 20, marginTop: 12 },
-  setupBtnText: { fontSize: 14, fontWeight: '700', color: '#fff' },
+  setupBtnText: { fontSize: 14, fontWeight: '700', color: Colors.accentFg },
 });

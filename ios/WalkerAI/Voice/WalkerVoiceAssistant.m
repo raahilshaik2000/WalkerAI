@@ -26,4 +26,12 @@ RCT_EXTERN_METHOD(listenOnce:
                   resolver:(RCTPromiseResolveBlock)resolve
                   rejecter:(RCTPromiseRejectBlock)reject)
 
+RCT_EXTERN_METHOD(speakAndListen:
+                  (NSString *)text
+                  locale:(NSString *)locale
+                  durationSeconds:(nonnull NSNumber *)durationSeconds
+                  contextualStrings:(NSArray *)contextualStrings
+                  resolver:(RCTPromiseResolveBlock)resolve
+                  rejecter:(RCTPromiseRejectBlock)reject)
+
 @end

@@ -1,4 +1,4 @@
-import { useCallback, useState } from 'react';
+import { useCallback, useRef, useState } from 'react';
 import type { ReactNode } from 'react';
 import {
   Alert,
@@ -20,7 +20,7 @@ import { formatGcProjectType } from '@/lib/gc-project-type';
 import { GENERAL_CONTRACTOR_READINESS_SELECT, isGeneralContractorReadyForProjectControls } from '@/lib/general-contractor';
 import { getRequiredStringParam } from '@/lib/navigation-params';
 import { Colors, Spacing, Typography } from '@/constants/theme';
-import { GlassButton, GlassCard, GradientBackground, StatusBadge } from '@/components/ui';
+import { CardSkeleton, GlassButton, GlassCard, GradientBackground, StatusBadge } from '@/components/ui';
 import type { ChangeOrder } from '@/types/database.types';
 
 interface ProjectSummary {
@@ -119,6 +119,7 @@ export default function GeneralContractorCompletionScreen() {
   const [paymentRequests, setPaymentRequests] = useState<PaymentRequestRecord[]>([]);
   const [changeOrders, setChangeOrders] = useState<ChangeOrder[]>([]);
   const [loading, setLoading] = useState(true);
+  const hasLoadedRef = useRef(false);
   const [refreshing, setRefreshing] = useState(false);
   const [submittingCompletion, setSubmittingCompletion] = useState(false);
   const [gcReady, setGcReady] = useState(false);
@@ -142,6 +143,7 @@ export default function GeneralContractorCompletionScreen() {
 
   const fetchData = useCallback(async () => {
     try {
+      if (!hasLoadedRef.current) setLoading(true);
       setErrorMessage(null);
       const currentUser = (await supabase.auth.getUser()).data.user;
       if (!currentUser?.id) {
@@ -263,6 +265,7 @@ export default function GeneralContractorCompletionScreen() {
       setErrorMessage(formatAppSafeErrorMessage(err, 'Could not load completion binder.'));
       clearCompletionState();
     } finally {
+      hasLoadedRef.current = true;
       setLoading(false);
       setRefreshing(false);
     }
@@ -404,9 +407,10 @@ export default function GeneralContractorCompletionScreen() {
               <Text style={styles.bodyText}>{errorMessage}</Text>
             </GlassCard>
           ) : loading ? (
-            <GlassCard style={styles.card}>
-              <Text style={styles.bodyText}>Loading completion binder...</Text>
-            </GlassCard>
+            <View style={{ gap: 12 }}>
+              <CardSkeleton />
+              <CardSkeleton />
+            </View>
           ) : (
             <>
               <GlassCard style={styles.card}>

@@ -1,7 +1,7 @@
-import { useCallback, useEffect, useState } from 'react';
-import { ActivityIndicator, Alert, AppState, Linking, RefreshControl, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { useCallback, useState } from 'react';
+import { Alert, RefreshControl, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { useFocusEffect, useNavigation } from '@react-navigation/native';
+import { useNavigation } from '@react-navigation/native';
 import Ionicons from 'react-native-vector-icons/Ionicons';
 import { supabase } from '@/lib/supabase/client';
 import { getCurrentUser } from '@/lib/supabase/auth';
@@ -9,89 +9,48 @@ import { formatAppSafeErrorMessage, formatSupabaseFunctionError } from '@/lib/su
 import { joinedMaterialItemName } from '@/lib/material-orders';
 import { isStripePayoutLocallyReady } from '@/lib/payouts';
 import { refreshStripeConnectStatus } from '@/lib/stripe-connect';
+import { openInAppBrowser } from '@/lib/in-app-browser';
+import { useSupplierEarnings } from '@/lib/supplier-data';
+import { useSilentFocusRefetch } from '@/lib/silent-focus-refetch';
 import { useAuthStore } from '@/stores/auth.store';
 import { Colors, Spacing, Typography } from '@/constants/theme';
-import { GlassCard, GradientBackground } from '@/components/ui';
-import type { MaterialOrder, Supplier } from '@/types/database.types';
+import { CardSkeleton, GlassCard, GradientBackground, ListItemSkeleton } from '@/components/ui';
+import type { MaterialOrder } from '@/types/database.types';
 
 export default function SupplierEarnings() {
   const navigation = useNavigation<any>();
   const { user } = useAuthStore();
-  const [supplier, setSupplier] = useState<Supplier | null>(null);
-  const [orders, setOrders] = useState<MaterialOrder[]>([]);
-  const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
-  const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
-  const loadEarnings = useCallback(async ({ showSpinner = false } = {}) => {
-    if (showSpinner) setLoading(true);
-    try {
-      const currentUserId = user?.id ?? (await getCurrentUser())?.id ?? null;
-      if (!currentUserId) {
-        setSupplier(null);
-        setOrders([]);
-        setErrorMessage('You need to be signed in to view supplier earnings.');
-        return;
+  const { profileQuery, earningsQuery, supplier } = useSupplierEarnings(user?.id);
+  const orders = earningsQuery.data ?? [];
+  const showSkeleton =
+    (!!user?.id && !supplier && profileQuery.isLoading)
+    || (!!supplier && !earningsQuery.data && earningsQuery.isLoading);
+  const errorMessage = !user?.id
+    ? 'You need to be signed in to view supplier earnings.'
+    : profileQuery.error
+      ? formatAppSafeErrorMessage(profileQuery.error, 'Could not load earnings.')
+      : earningsQuery.error
+        ? formatAppSafeErrorMessage(earningsQuery.error, 'Could not load earnings.')
+        : null;
+
+  const refetchAll = useCallback(async ({ syncStripe = false } = {}) => {
+    if (syncStripe) {
+      try {
+        await refreshStripeConnectStatus('supplier');
+      } catch {
+        // Keep local earnings visible even if Stripe status sync fails.
       }
-      await refreshStripeConnectStatus('supplier');
-      const { data: sup, error: supplierError } = await supabase
-        .from('suppliers')
-        .select('*')
-        .eq('user_id', currentUserId)
-        .order('created_at', { ascending: false })
-        .limit(1)
-        .maybeSingle();
-      if (supplierError) {
-        setSupplier(null);
-        setOrders([]);
-        setErrorMessage(formatAppSafeErrorMessage(supplierError, 'Could not load earnings.'));
-        return;
-      }
-      setSupplier(sup);
-      if (!sup) {
-        setOrders([]);
-        setErrorMessage(null);
-        return;
-      }
-      const { data, error } = await supabase
-        .from('material_orders')
-        .select('*, material:materials!material_orders_material_id_fkey(item)')
-        .eq('accepted_supplier_id', sup.id)
-        .in('status', ['confirmed', 'paid'])
-        .order('confirmed_at', { ascending: false });
-      if (error) {
-        setOrders([]);
-        setErrorMessage(formatAppSafeErrorMessage(error, 'Could not load earnings.'));
-        return;
-      }
-      setOrders((data as MaterialOrder[]) ?? []);
-      setErrorMessage(null);
-    } catch (err) {
-      setSupplier(null);
-      setOrders([]);
-      setErrorMessage(formatAppSafeErrorMessage(err, 'Could not load earnings.'));
-    } finally {
-      setLoading(false);
-      setRefreshing(false);
     }
-  }, [user?.id]);
+    await Promise.all([profileQuery.refetch(), earningsQuery.refetch()]);
+  }, [earningsQuery, profileQuery]);
+  useSilentFocusRefetch(refetchAll);
 
-  useFocusEffect(
-    useCallback(() => {
-      loadEarnings({ showSpinner: true });
-    }, [loadEarnings])
-  );
-
-  useEffect(() => {
-    const subscription = AppState.addEventListener('change', (state) => {
-      if (state === 'active') loadEarnings();
-    });
-    return () => subscription.remove();
-  }, [loadEarnings]);
-
-  const onRefresh = () => {
+  const onRefresh = async () => {
     setRefreshing(true);
-    loadEarnings();
+    await refetchAll({ syncStripe: true });
+    setRefreshing(false);
   };
 
   const orderAmountCents = (order: MaterialOrder) => order.final_price ?? order.offered_price ?? 0;
@@ -117,13 +76,31 @@ export default function SupplierEarnings() {
         Alert.alert('Could not start payout setup', error ? await formatSupabaseFunctionError(error, 'Please try again.') : 'Please try again.');
         return;
       }
-      Linking.openURL(data.url);
+      const result = await openInAppBrowser(data.url);
+      await refetchAll({ syncStripe: true });
+      if (result?.status === 'success' || (result?.url && result.url.includes('status=success'))) {
+        Alert.alert('Payouts Connected!', 'Your Stripe payout details were submitted successfully and your account status is updated.');
+      }
     } catch (err) {
       Alert.alert('Could not start payout setup', formatAppSafeErrorMessage(err, 'Please try again.'));
     }
   };
 
-  if (loading) return <View style={styles.center}><ActivityIndicator color={Colors.accent} size="large" /></View>;
+  if (showSkeleton) {
+    return (
+      <GradientBackground>
+        <SafeAreaView style={styles.safe}>
+          <Text style={styles.pageTitle}>Earnings</Text>
+          <View style={styles.skeletonWrap}>
+            <CardSkeleton style={styles.skeletonCard} />
+            <ListItemSkeleton style={styles.skeletonCard} />
+            <ListItemSkeleton style={styles.skeletonCard} />
+            <ListItemSkeleton style={styles.skeletonCard} />
+          </View>
+        </SafeAreaView>
+      </GradientBackground>
+    );
+  }
 
   return (
     <GradientBackground>
@@ -135,13 +112,16 @@ export default function SupplierEarnings() {
           refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={Colors.accent} />}
         >
           {errorMessage ? (
-            <GlassCard style={styles.stripeCard}>
+            <GlassCard style={styles.stripeCard} padding={Spacing.lg}>
               <Ionicons name="alert-circle-outline" size={28} color={Colors.accent} />
               <Text style={styles.stripeTitle}>Could not load earnings</Text>
               <Text style={styles.stripeBody}>{errorMessage}</Text>
+              <TouchableOpacity style={styles.stripeBtn} activeOpacity={0.8} onPress={() => { void refetchAll(); }}>
+                <Text style={styles.stripeBtnText}>Try Again</Text>
+              </TouchableOpacity>
             </GlassCard>
           ) : !supplier ? (
-            <GlassCard style={styles.stripeCard}>
+            <GlassCard style={styles.stripeCard} padding={Spacing.lg}>
               <Ionicons name="storefront-outline" size={28} color={Colors.accent} />
               <Text style={styles.stripeTitle}>Set up your supplier profile</Text>
               <Text style={styles.stripeBody}>Create a supplier profile before viewing payouts or connecting Stripe.</Text>
@@ -151,7 +131,6 @@ export default function SupplierEarnings() {
             </GlassCard>
           ) : null}
 
-          {/* Summary cards */}
           {supplier && <View style={styles.statsRow}>
             <GlassCard style={[styles.statCard, { borderColor: 'rgba(52,211,153,0.3)' }]}>
               <Text style={styles.statLabel}>Paid to Date</Text>
@@ -167,7 +146,7 @@ export default function SupplierEarnings() {
             </GlassCard>
           </View>}
 
-          {supplier && <GlassCard style={styles.payoutCard}>
+          {supplier && <GlassCard style={styles.payoutCard} padding={Spacing.md}>
             <View style={styles.payoutRow}>
               <Text style={styles.payoutLabel}>Paid to date</Text>
               <Text style={[styles.payoutValue, { color: '#34D399' }]}>{fmt(paidTotal)}</Text>
@@ -182,9 +161,8 @@ export default function SupplierEarnings() {
             </View>
           </GlassCard>}
 
-          {/* Stripe Connect CTA until payouts are truly active */}
           {supplier && !payoutReady && (
-            <GlassCard style={styles.stripeCard}>
+            <GlassCard style={styles.stripeCard} padding={Spacing.lg}>
               <Ionicons name="card-outline" size={28} color={Colors.accent} />
               <Text style={styles.stripeTitle}>
                 {supplier.stripe_account_id ? 'Finish payout setup' : 'Set up payouts'}
@@ -202,7 +180,6 @@ export default function SupplierEarnings() {
             </GlassCard>
           )}
 
-          {/* Order history */}
           {supplier && <Text style={styles.sectionTitle}>Order History</Text>}
           {supplier && (orders.length === 0 ? (
             <Text style={styles.emptyText}>No completed orders yet.</Text>
@@ -235,17 +212,19 @@ export default function SupplierEarnings() {
 const styles = StyleSheet.create({
   safe: { flex: 1 },
   center: { flex: 1, alignItems: 'center', justifyContent: 'center', backgroundColor: '#000' },
+  skeletonWrap: { paddingHorizontal: Spacing.md },
+  skeletonCard: { marginBottom: 12 },
   pageTitle: { ...Typography.h2, paddingHorizontal: Spacing.md, paddingTop: Spacing.sm, paddingBottom: Spacing.md },
   scroll: { paddingHorizontal: Spacing.md, paddingBottom: 100, gap: 16 },
   statsRow: { flexDirection: 'row', gap: 12 },
   statCard: { flex: 1, padding: Spacing.md, alignItems: 'center', gap: 6 },
   statLabel: { fontSize: 12, color: Colors.text.tertiary },
   statValue: { fontSize: 22, fontWeight: '800', textAlign: 'center', width: '100%' },
-  payoutCard: { padding: Spacing.md, gap: 10 },
+  payoutCard: {gap: 10},
   payoutRow: { flexDirection: 'row', justifyContent: 'space-between' },
   payoutLabel: { fontSize: 14, color: Colors.text.secondary },
   payoutValue: { fontSize: 14, fontWeight: '600', color: Colors.text.primary },
-  stripeCard: { padding: Spacing.lg, alignItems: 'center', gap: 10 },
+  stripeCard: {alignItems: 'center', gap: 10},
   stripeTitle: { ...Typography.h3 },
   stripeBody: { ...Typography.bodySecondary, textAlign: 'center' },
   stripeBtn: { backgroundColor: Colors.success, paddingHorizontal: 24, paddingVertical: 12, borderRadius: 24, marginTop: 4 },

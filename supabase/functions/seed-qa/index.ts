@@ -139,7 +139,15 @@ Deno.serve(async (req) => {
       license_number: 'QA-SUPPLY-001',
       license_doc_url: 'qa/supplier-license.pdf',
       service_radius_km: 100,
-      categories: ['Cabinets & Storage', 'Countertops & Surfaces', 'Tile & Flooring', 'Plumbing Fixtures'],
+      categories: [
+        'Cabinets & Storage',
+        'Countertops & Surfaces',
+        'Tile & Flooring',
+        'Plumbing Fixtures',
+        'Paint & Wall Coverings',
+        'Hardware & Fixtures',
+        'Other',
+      ],
       city: 'Toronto',
       province: 'ON',
       postal_code: 'M5V 3A8',
@@ -154,6 +162,19 @@ Deno.serve(async (req) => {
     const { error: supplierError } = await supabase.from('suppliers').upsert(supplierRow, { onConflict: 'user_id' });
     if (supplierError && !/duplicate|already/i.test(supplierError.message ?? '')) {
       console.warn('supplier upsert:', supplierError.message);
+    }
+
+    // Resolve supplier row id for catalog seeding (suppliers.id ≠ user_id).
+    const { data: supplierProfile } = await supabase
+      .from('suppliers')
+      .select('id')
+      .eq('user_id', supplier.id)
+      .maybeSingle();
+
+    if (supplierProfile?.id) {
+      await seedDesignCatalog(supabase, supplierProfile.id);
+    } else {
+      console.warn('supplier profile missing — skipped design catalog seed');
     }
 
     // ── General Contractor: verified concierge profile ────────────
@@ -203,7 +224,8 @@ Deno.serve(async (req) => {
         'Stripe Connect IDs are placeholder strings for E2E flows that gate on stripe_*_enabled.',
         'Real payment tests require live Stripe test-mode keys + real Connect onboarding.',
         'Company is configured as a verified multi-trade contractor in Toronto, 50km radius.',
-        'Supplier is configured with 4 categories in Toronto, 100km radius.',
+        'Supplier is configured with design-tool categories in Toronto, 100km radius.',
+        'QA supplier catalog includes sample in-stock SKUs for the design tool.',
         'GC is verified, concierge-enabled, and ready to manage homeowner projects.',
       ],
     }), {
@@ -217,6 +239,113 @@ Deno.serve(async (req) => {
     );
   }
 });
+
+const QA_DESIGN_CATALOG = [
+  {
+    sku: 'QA-CAB-SHAKER-W',
+    name: 'Shaker Cabinet Set — Soft White',
+    description: 'QA sample kitchen cabinet package for design-tool testing.',
+    category: 'Cabinets & Storage',
+    brand: 'Walker QA',
+    unit: 'set',
+    price_per_unit: 480000,
+    quality_tier: 'mid-range',
+    image_urls: ['https://picsum.photos/seed/QA-CAB-SHAKER-W/640/640'],
+  },
+  {
+    sku: 'QA-CT-QUARTZ-CAL',
+    name: 'Calacatta Quartz Slab',
+    description: 'QA sample countertop SKU.',
+    category: 'Countertops & Surfaces',
+    brand: 'Walker QA',
+    unit: 'sqft',
+    price_per_unit: 9500,
+    quality_tier: 'luxury',
+    image_urls: ['https://picsum.photos/seed/QA-CT-QUARTZ-CAL/640/640'],
+  },
+  {
+    sku: 'QA-TILE-PORC-24',
+    name: 'Porcelain Floor Tile 24×24',
+    description: 'QA sample flooring / backsplash SKU.',
+    category: 'Tile & Flooring',
+    brand: 'Walker QA',
+    unit: 'sqft',
+    price_per_unit: 650,
+    quality_tier: 'mid-range',
+    image_urls: ['https://picsum.photos/seed/QA-TILE-PORC-24/640/640'],
+  },
+  {
+    sku: 'QA-PLUMB-FAUCET-MB',
+    name: 'Matte Black Kitchen Faucet',
+    description: 'QA sample plumbing fixture.',
+    category: 'Plumbing Fixtures',
+    brand: 'Walker QA',
+    unit: 'units',
+    price_per_unit: 28900,
+    quality_tier: 'mid-range',
+    image_urls: ['https://picsum.photos/seed/QA-PLUMB-FAUCET-MB/640/640'],
+  },
+  {
+    sku: 'QA-PAINT-SOFT-W',
+    name: 'Interior Paint — Soft White',
+    description: 'QA sample wall covering for design-tool walls surface.',
+    category: 'Paint & Wall Coverings',
+    brand: 'Walker QA',
+    unit: 'gallon',
+    price_per_unit: 5400,
+    quality_tier: 'budget',
+    image_urls: ['https://picsum.photos/seed/QA-PAINT-SOFT-W/640/640'],
+  },
+  {
+    sku: 'QA-HARD-PULL-BN',
+    name: 'Brushed Nickel Cabinet Pull',
+    description: 'QA sample hardware SKU.',
+    category: 'Hardware & Fixtures',
+    brand: 'Walker QA',
+    unit: 'units',
+    price_per_unit: 1800,
+    quality_tier: 'mid-range',
+    image_urls: ['https://picsum.photos/seed/QA-HARD-PULL-BN/640/640'],
+  },
+] as const;
+
+async function seedDesignCatalog(
+  supabase: ReturnType<typeof createClient>,
+  supplierId: string,
+): Promise<void> {
+  for (const item of QA_DESIGN_CATALOG) {
+    const { data: existing } = await supabase
+      .from('supplier_catalog')
+      .select('id')
+      .eq('supplier_id', supplierId)
+      .eq('sku', item.sku)
+      .maybeSingle();
+
+    const row = {
+      supplier_id: supplierId,
+      name: item.name,
+      description: item.description,
+      category: item.category,
+      sku: item.sku,
+      brand: item.brand,
+      unit: item.unit,
+      price_per_unit: item.price_per_unit,
+      quality_tier: item.quality_tier,
+      lead_time_days: 5,
+      in_stock: true,
+      stock_quantity: 25,
+      image_urls: [...item.image_urls],
+    };
+
+    if (existing?.id) {
+      const { error } = await supabase.from('supplier_catalog').update(row).eq('id', existing.id);
+      if (error) console.warn(`catalog update ${item.sku}:`, error.message);
+    } else {
+      const { error } = await supabase.from('supplier_catalog').insert(row);
+      if (error) console.warn(`catalog insert ${item.sku}:`, error.message);
+    }
+  }
+}
 
 async function ensureUser(
   supabase: ReturnType<typeof createClient>,

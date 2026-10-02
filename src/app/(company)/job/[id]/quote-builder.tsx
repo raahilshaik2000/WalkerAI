@@ -22,7 +22,7 @@ import { formatAppSafeErrorMessage } from '@/lib/supabase/functions';
 import { getRequiredStringParam } from '@/lib/navigation-params';
 import { useAuthStore } from '@/stores/auth.store';
 import { Colors, Radius, Spacing, Typography } from '@/constants/theme';
-import { GlassButton, GlassCard, GradientBackground } from '@/components/ui';
+import { CardSkeleton, GlassButton, GlassCard, GradientBackground } from '@/components/ui';
 
 interface LineItem {
   id: string;
@@ -557,7 +557,7 @@ export default function QuoteBuilderScreen() {
       <GradientBackground>
         <SafeAreaView style={styles.safe}>
           <View style={styles.center}>
-            <Text style={Typography.bodySecondary}>Loading quote...</Text>
+            <CardSkeleton />
           </View>
         </SafeAreaView>
       </GradientBackground>
@@ -943,7 +943,7 @@ const styles = StyleSheet.create({
   milestoneNum: {
     width: 24, height: 24, borderRadius: 12,
     backgroundColor: Colors.accent,
-    color: '#fff',
+    color: Colors.accentFg,
     fontSize: 12, fontWeight: '700',
     textAlign: 'center', lineHeight: 24,
     marginTop: 8,

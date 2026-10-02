@@ -1,6 +1,5 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useRef, useState } from 'react';
 import {
-  AppState,
   Alert,
   ScrollView,
   StyleSheet,
@@ -21,26 +20,9 @@ import { getPaymentSheetConfig } from '@/lib/payments';
 import { formatTradeLabel } from '@/lib/trade-labels';
 import { Colors, Spacing, Typography, Radius } from '@/constants/theme';
 import { getRequiredStringParam } from '@/lib/navigation-params';
-import { GlassCard, GradientBackground } from '@/components/ui';
-
-interface ProjectData {
-  ai_cost_min: number;
-  ai_cost_max: number;
-  status: string;
-  room_type: string | null;
-  ai_analysis: any;
-  payment_model: 'legacy' | 'master' | null;
-  payment_status: 'unpaid' | 'funded' | 'refunded' | null;
-  master_total_cents: number | null;
-}
-
-interface MasterSlot {
-  id: string;
-  trade_type: string | null;
-  status: string | null;
-  assigned_company_id: string | null;
-  company_name: string | null;
-}
+import { useHomeownerProjectQuote } from '@/lib/homeowner-data';
+import { CardSkeleton, GlassCard, GradientBackground } from '@/components/ui';
+import { openInAppBrowser } from '@/lib/in-app-browser';
 
 function formatCad(cents: number) {
   return formatCadCents(cents);
@@ -51,86 +33,28 @@ export default function CostBreakdownScreen() {
   const projectId = getRequiredStringParam(route.params, 'id');
   const navigation = useNavigation<any>();
   const { initPaymentSheet, presentPaymentSheet } = useStripe();
-
-  const [project, setProject] = useState<ProjectData | null>(null);
-  const [masterSlots, setMasterSlots] = useState<MasterSlot[]>([]);
-  const [loading, setLoading] = useState(true);
   const [paying, setPaying] = useState(false);
-  const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  const hasFocusedOnce = useRef(false);
 
-  const fetchData = useCallback(async () => {
-    setLoading(true);
-    setErrorMessage(null);
-    try {
-      if (!projectId) {
-        setProject(null);
-        setErrorMessage('Project is missing. Reopen the project breakdown from the project page.');
-        setLoading(false);
-        return;
-      }
-      const { data: proj, error: projectError } = await supabase
-        .from('projects')
-        .select('ai_cost_min, ai_cost_max, status, room_type, ai_analysis, payment_model, payment_status, master_total_cents')
-        .eq('id', projectId)
-        .maybeSingle();
-      if (projectError) {
-        setErrorMessage(formatAppSafeErrorMessage(projectError, 'Could not load project breakdown.'));
-        setProject(null);
-        setLoading(false);
-        return;
-      }
-      if (!proj) {
-        setErrorMessage('Project not found.');
-        setProject(null);
-        setLoading(false);
-        return;
-      }
-      const { data: slotRows, error: slotsError } = await supabase
-        .from('project_slots')
-        .select('id, trade_type, status, assigned_company_id, companies(name)')
-        .eq('project_id', projectId)
-        .order('work_order', { ascending: true, nullsFirst: false })
-        .order('created_at', { ascending: true });
-      if (slotsError) {
-        setErrorMessage(formatAppSafeErrorMessage(slotsError, 'Could not load project trades.'));
-        setProject(proj as any);
-        setMasterSlots([]);
-        setLoading(false);
-        return;
-      }
-      const slots: MasterSlot[] = ((slotRows ?? []) as any[]).map((s) => {
-        const company = Array.isArray(s.companies) ? s.companies[0] : s.companies;
-        return {
-          id: s.id,
-          trade_type: s.trade_type ?? null,
-          status: s.status ?? null,
-          assigned_company_id: s.assigned_company_id ?? null,
-          company_name: company?.name ?? null,
-        };
-      });
-      setProject(proj as any);
-      setMasterSlots(slots);
-    } catch (err) {
-      setErrorMessage(formatAppSafeErrorMessage(err, 'Could not load project breakdown.'));
-      setProject(null);
-    } finally {
-      setLoading(false);
-    }
-  }, [projectId]);
+  const quoteQuery = useHomeownerProjectQuote(projectId ?? undefined);
+  const project = quoteQuery.data?.project ?? null;
+  const masterSlots = quoteQuery.data?.slots ?? [];
+  const showSkeleton = !!projectId && !quoteQuery.data && quoteQuery.isLoading;
+  const errorMessage = !projectId
+    ? 'Project is missing. Reopen the project breakdown from the project page.'
+    : quoteQuery.error
+      ? formatAppSafeErrorMessage(quoteQuery.error, 'Could not load project breakdown.')
+      : null;
 
   useFocusEffect(
     useCallback(() => {
-      fetchData();
-    }, [fetchData])
+      if (!hasFocusedOnce.current) {
+        hasFocusedOnce.current = true;
+        return;
+      }
+      void quoteQuery.refetch();
+    }, [quoteQuery])
   );
-
-  useEffect(() => {
-    const subscription = AppState.addEventListener('change', (state) => {
-      if (state === 'active') fetchData();
-    });
-
-    return () => subscription.remove();
-  }, [fetchData]);
 
   const handlePayMaster = async (masterTotal: number) => {
     Alert.alert(
@@ -157,20 +81,27 @@ export default function CostBreakdownScreen() {
 
               const { error: payErr } = await presentPaymentSheet();
               if (payErr) {
-                if (payErr.code !== 'Canceled') throw new Error(payErr.message);
-                return;
+                if (payErr.code === 'Canceled') return;
+                throw new Error(payErr.message || 'Payment was not completed.');
               }
 
               ReactNativeHapticFeedback.trigger('notificationSuccess');
-              setTimeout(() => fetchData(), 1500);
-              setTimeout(() => fetchData(), 4000);
+              await quoteQuery.refetch();
+              setTimeout(() => { void quoteQuery.refetch(); }, 1500);
+              setTimeout(() => { void quoteQuery.refetch(); }, 4000);
               Alert.alert(
-                'Payment received!',
-                'Your project is funded. Each trade is paid from escrow only after you approve their completed work.',
+                'Payment submitted',
+                'Your card was charged. Escrow funding usually confirms within a few seconds — pull to refresh if the project still shows unpaid.',
                 [{ text: 'View Project', onPress: () => navigation.goBack() }]
               );
             } catch (err) {
-              Alert.alert('Payment failed', await formatSupabaseFunctionError(err, 'Please try again.'));
+              Alert.alert(
+                'Payment failed',
+                await formatSupabaseFunctionError(
+                  err,
+                  'Payment could not be completed. Check your connection and card details, then try again.',
+                ),
+              );
             } finally {
               setPaying(false);
             }
@@ -180,12 +111,79 @@ export default function CostBreakdownScreen() {
     );
   };
 
-  if (loading) {
+  const handlePayQuote = async (quoteId: string, quoteTotal: number) => {
+    Alert.alert(
+      'Confirm Escrow Funding',
+      `Pay ${formatCad(quoteTotal)} to WalkerAI to fund this quote in Stripe Escrow? Funds are released to your contractor only after you approve each completed milestone.`,
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Pay Now',
+          onPress: async () => {
+            setPaying(true);
+            try {
+              const { data, error } = await supabase.functions.invoke('create-payment-intent', {
+                body: { project_id: projectId, quote_id: quoteId },
+              });
+              if (error) throw new Error(await formatSupabaseFunctionError(error));
+              const paymentSheetConfig = getPaymentSheetConfig(data);
+
+              const { error: initErr } = await initPaymentSheet({
+                paymentIntentClientSecret: paymentSheetConfig.clientSecret,
+                merchantDisplayName: 'WalkerAI',
+              });
+              if (initErr) throw new Error(initErr.message);
+
+              const { error: payErr } = await presentPaymentSheet();
+              if (payErr) {
+                if (payErr.code === 'Canceled') return;
+                throw new Error(payErr.message || 'Payment was not completed.');
+              }
+
+              ReactNativeHapticFeedback.trigger('notificationSuccess');
+              await quoteQuery.refetch();
+              setTimeout(() => { void quoteQuery.refetch(); }, 1500);
+              setTimeout(() => { void quoteQuery.refetch(); }, 4000);
+              Alert.alert(
+                'Payment submitted',
+                'Your card was charged. Escrow funding usually confirms within a few seconds — pull to refresh if the project still shows unpaid.',
+                [{ text: 'View Project', onPress: () => navigation.goBack() }]
+              );
+            } catch (err) {
+              Alert.alert(
+                'Payment failed',
+                await formatSupabaseFunctionError(
+                  err,
+                  'Payment could not be completed. Check your connection and card details, then try again.',
+                ),
+              );
+            } finally {
+              setPaying(false);
+            }
+          },
+        },
+      ]
+    );
+  };
+
+  const handleOpenFinancing = async () => {
+    const url = 'https://aristothemortgageman.ca/renovation-equity-checker';
+    await openInAppBrowser(url);
+  };
+
+  if (showSkeleton) {
     return (
-      <GradientBackground>
+      <GradientBackground glow="top-right">
         <SafeAreaView style={styles.safe}>
+          <View style={styles.header}>
+            <TouchableOpacity style={styles.backBtn} onPress={() => navigation.goBack()} activeOpacity={0.8}>
+              <Ionicons name="chevron-back" size={22} color="#fff" />
+            </TouchableOpacity>
+            <Text style={styles.headerTitle}>Project Breakdown</Text>
+            <View style={{ width: 36 }} />
+          </View>
           <View style={styles.center}>
-            <Text style={Typography.bodySecondary}>Loading…</Text>
+            <CardSkeleton style={{ width: '90%' }} />
           </View>
         </SafeAreaView>
       </GradientBackground>
@@ -194,12 +192,27 @@ export default function CostBreakdownScreen() {
 
   if (errorMessage) {
     return (
-      <GradientBackground>
+      <GradientBackground glow="top-right">
         <SafeAreaView style={styles.safe}>
+          <View style={styles.header}>
+            <TouchableOpacity style={styles.backBtn} onPress={() => navigation.goBack()} activeOpacity={0.8}>
+              <Ionicons name="chevron-back" size={22} color="#fff" />
+            </TouchableOpacity>
+            <Text style={styles.headerTitle}>Project Breakdown</Text>
+            <View style={{ width: 36 }} />
+          </View>
           <View style={styles.center}>
             <Ionicons name="alert-circle-outline" size={42} color={Colors.text.tertiary} />
-            <Text style={Typography.h3}>Could not load project breakdown</Text>
+            <Text style={[Typography.h3, { marginTop: 12 }]}>Could not load project breakdown</Text>
             <Text style={[Typography.bodySecondary, styles.errorText]}>{errorMessage}</Text>
+            <TouchableOpacity
+              style={[styles.payCta, { paddingHorizontal: 24, paddingVertical: 12, marginTop: 20 }]}
+              onPress={() => void quoteQuery.refetch()}
+              activeOpacity={0.8}
+            >
+              <Ionicons name="refresh-outline" size={18} color="#000" />
+              <Text style={styles.payCtaText}>Try Again</Text>
+            </TouchableOpacity>
           </View>
         </SafeAreaView>
       </GradientBackground>
@@ -211,11 +224,19 @@ export default function CostBreakdownScreen() {
     : (project?.ai_cost_min != null && project?.ai_cost_max != null
       ? averageCostCents(project.ai_cost_min, project.ai_cost_max)
       : 0);
-  const allTradesJoined = masterSlots.length > 0
-    && masterSlots.every((s) => !!s.assigned_company_id && ['filled', 'scheduled'].includes(s.status ?? ''));
+  const singleTradeJoined = masterSlots.length === 0 && !!project?.assigned_company_id;
+  const allTradesJoined = (masterSlots.length > 0
+    && masterSlots.every((s) => !!s.assigned_company_id && ['filled', 'scheduled'].includes(s.status ?? '')))
+    || singleTradeJoined;
   const isFunded = project?.payment_status === 'funded';
   const canPayMaster = !isFunded && allTradesJoined && masterTotal > 0;
   const pendingTrades = masterSlots.filter((s) => !s.assigned_company_id || !['filled', 'scheduled'].includes(s.status ?? '')).length;
+
+  const quotes = quoteQuery.data?.quotes ?? [];
+  const pendingQuote = quotes.find((q) => q.status === 'pending') ?? null;
+  const approvedQuote = quotes.find((q) => q.status === 'approved') ?? null;
+  const activeQuote = pendingQuote ?? approvedQuote ?? (quotes.length > 0 ? quotes[0] : null);
+  const canPayQuote = !isFunded && !!pendingQuote && pendingQuote.total_amount > 0;
 
   return (
       <GradientBackground glow="top-right">
@@ -255,13 +276,125 @@ export default function CostBreakdownScreen() {
               )}
             </GlassCard>
 
+            {/* Contractor Submitted Quote */}
+            {activeQuote && (
+              <GlassCard style={styles.card}>
+                <View style={styles.priceHeader}>
+                  <View style={[styles.iconCircle, { backgroundColor: 'rgba(52, 211, 153, 0.12)' }]}>
+                    <Ionicons name="document-text" size={20} color="#34D399" />
+                  </View>
+                  <View style={{ flex: 1 }}>
+                    <Text style={styles.priceLabel}>
+                      {activeQuote.status === 'approved' ? 'Funded Contractor Quote' : 'Contractor Quote Submitted'}
+                    </Text>
+                    <Text style={styles.priceSubLabel}>
+                      {activeQuote.company_name ? `From ${activeQuote.company_name}` : 'From assigned contractor'}
+                    </Text>
+                  </View>
+                </View>
+                <Text style={[styles.priceRange, { color: '#34D399' }]}>
+                  {formatCad(activeQuote.total_amount)}
+                </Text>
+                {activeQuote.status === 'approved' || isFunded ? (
+                  <View style={styles.confirmedRow}>
+                    <Ionicons name="checkmark-circle" size={16} color="#34D399" />
+                    <Text style={styles.confirmedText}>Quote funded — held in escrow</Text>
+                  </View>
+                ) : (
+                  <Text style={styles.pendingText}>
+                    Review the line items and payment milestones below before funding escrow.
+                  </Text>
+                )}
+
+                {/* Line Items */}
+                {activeQuote.line_items.length > 0 && (
+                  <View style={{ marginTop: 16 }}>
+                    <Text style={styles.sectionLabel}>Scope & Line Items</Text>
+                    {activeQuote.line_items.map((item, idx) => (
+                      <View
+                        key={item.id || idx}
+                        style={[
+                          styles.lineRow,
+                          idx < activeQuote.line_items.length - 1 && styles.lineRowBorder,
+                          { paddingLeft: 0 },
+                        ]}
+                      >
+                        <View style={{ flex: 1, paddingRight: 8 }}>
+                          <Text style={styles.lineDesc}>{item.description}</Text>
+                          {item.type ? (
+                            <Text style={styles.lineQty}>
+                              {item.type.charAt(0).toUpperCase() + item.type.slice(1)}
+                              {item.quantity && item.quantity > 1 ? ` · Qty ${item.quantity}` : ''}
+                            </Text>
+                          ) : null}
+                        </View>
+                        {item.total_cost != null && item.total_cost > 0 && (
+                          <Text style={styles.lineTotal}>{formatCad(item.total_cost)}</Text>
+                        )}
+                      </View>
+                    ))}
+                  </View>
+                )}
+
+                {/* Milestones */}
+                {activeQuote.milestones.length > 0 && (
+                  <View style={{ marginTop: 16 }}>
+                    <Text style={styles.sectionLabel}>Payment Milestones</Text>
+                    <Text style={styles.sectionSub}>
+                      Funds are released to the contractor only after you approve each completed milestone.
+                    </Text>
+                    {activeQuote.milestones.map((m, idx) => (
+                      <View
+                        key={m.id || idx}
+                        style={[
+                          styles.milestoneRow,
+                          idx < activeQuote.milestones.length - 1 && styles.milestoneRowBorder,
+                        ]}
+                      >
+                        <View
+                          style={[
+                            styles.milestoneNum,
+                            {
+                              borderColor: m.status === 'paid' ? '#34D399' : Colors.glass.border,
+                              backgroundColor: m.status === 'paid' ? 'rgba(52,211,153,0.1)' : Colors.glass.surface,
+                            },
+                          ]}
+                        >
+                          <Text
+                            style={[
+                              styles.milestoneNumText,
+                              { color: m.status === 'paid' ? '#34D399' : '#fff' },
+                            ]}
+                          >
+                            {m.sort_order ?? idx + 1}
+                          </Text>
+                        </View>
+                        <View style={{ flex: 1 }}>
+                          <Text style={styles.milestoneTitle}>{m.title}</Text>
+                          {m.due_date ? (
+                            <Text style={styles.milestonePct}>Due: {m.due_date}</Text>
+                          ) : null}
+                          {m.status === 'paid' && (
+                            <Text style={styles.releasedBadge}>Released to contractor</Text>
+                          )}
+                        </View>
+                        <Text style={styles.milestoneAmount}>{formatCad(m.amount)}</Text>
+                      </View>
+                    ))}
+                  </View>
+                )}
+              </GlassCard>
+            )}
+
             {/* Trades on this project (names + status only — no per-trade amounts) */}
             {masterSlots.length > 0 && (
               <GlassCard style={styles.card}>
                 <Text style={styles.sectionLabel}>Your Trades</Text>
                 <Text style={styles.sectionSub}>Each trade is paid from escrow only after you approve their completed work.</Text>
                 {masterSlots.map((s) => {
+                  const matchingQuote = quotes.find((q) => q.slot_id === s.id) ?? (quotes.length === 1 && !quotes[0].slot_id ? quotes[0] : null);
                   const joined = !!s.assigned_company_id && ['filled', 'scheduled'].includes(s.status ?? '');
+                  const hasQuote = !!matchingQuote;
                   return (
                     <View key={s.id} style={styles.quoteOption}>
                       <View style={styles.quoteOptionLeft}>
@@ -269,7 +402,11 @@ export default function CostBreakdownScreen() {
                         <View style={{ flex: 1 }}>
                           <Text style={styles.quoteCompany}>{formatTradeLabel(s.trade_type) ?? 'Trade'}</Text>
                           <Text style={styles.quoteStatusText}>
-                            {joined ? (s.company_name ?? 'Contractor joined') : 'Finding a contractor…'}
+                            {hasQuote
+                              ? `${s.company_name ?? matchingQuote?.company_name ?? 'Contractor'} · Quote: ${formatCad(matchingQuote.total_amount)}`
+                              : joined
+                              ? (s.company_name ?? 'Contractor joined')
+                              : 'Finding a contractor…'}
                           </Text>
                         </View>
                       </View>
@@ -284,8 +421,8 @@ export default function CostBreakdownScreen() {
             <GlassCard style={styles.card}>
               <Text style={styles.sectionLabel}>How Escrow Works</Text>
               {[
-                { icon: 'lock-closed-outline', text: 'You pay one project total to WalkerAI upfront — held securely, not released yet.' },
-                { icon: 'hammer-outline', text: 'When a trade finishes their work, you review their photos and approve. Only then is that trade paid.' },
+                { icon: 'lock-closed-outline', text: 'You pay to WalkerAI upfront — held securely in Stripe Escrow, not released yet.' },
+                { icon: 'hammer-outline', text: 'When a trade finishes their work or milestone, you review their photos and approve. Only then are funds released.' },
                 { icon: 'shield-checkmark-outline', text: "You're always in control. No trade gets paid without your approval." },
               ].map((item, i) => (
                 <View key={i} style={[styles.escrowRow, i < 2 && { marginBottom: 14 }]}>
@@ -296,6 +433,45 @@ export default function CostBreakdownScreen() {
                 </View>
               ))}
             </GlassCard>
+
+            {/* Monthly Financing & Equity Checker */}
+            <GlassCard style={styles.card}>
+              <View style={styles.financingHeader}>
+                <View style={[styles.iconCircle, { backgroundColor: 'rgba(59, 130, 246, 0.12)' }]}>
+                  <Ionicons name="calculator" size={20} color="#60A5FA" />
+                </View>
+                <View style={{ flex: 1 }}>
+                  <Text style={styles.financingTitle}>Monthly Financing Available</Text>
+                  <Text style={styles.financingSubTitle}>Check your renovation equity & loan eligibility</Text>
+                </View>
+              </View>
+              <Text style={styles.financingBody}>
+                Fund your renovation with flexible monthly payments. Calculate your instant home equity approval in seconds with no upfront impact.
+              </Text>
+              <TouchableOpacity
+                style={styles.financingBtn}
+                onPress={handleOpenFinancing}
+                activeOpacity={0.82}
+              >
+                <Ionicons name="open-outline" size={16} color="#60A5FA" />
+                <Text style={styles.financingBtnText}>Check Equity & Apply with Aristo</Text>
+              </TouchableOpacity>
+            </GlassCard>
+
+            {/* Quote Pay CTA */}
+            {canPayQuote && (
+              <TouchableOpacity
+                style={styles.payCta}
+                onPress={() => handlePayQuote(pendingQuote.id, pendingQuote.total_amount)}
+                activeOpacity={0.85}
+                disabled={paying}
+              >
+                <Ionicons name="card-outline" size={20} color="#000" />
+                <Text style={styles.payCtaText}>
+                  {paying ? 'Processing…' : `Fund Quote ${formatCad(pendingQuote.total_amount)} (Stripe Escrow)`}
+                </Text>
+              </TouchableOpacity>
+            )}
 
             {/* Pay CTA */}
             {canPayMaster && (
@@ -449,4 +625,23 @@ const styles = StyleSheet.create({
   lineRight: { alignItems: 'flex-end', marginLeft: 12 },
   lineQty: { fontSize: 11, color: Colors.text.tertiary },
   lineTotal: { fontSize: 13, fontWeight: '600', color: Colors.text.primary },
+
+  // Financing Card
+  financingHeader: { flexDirection: 'row', alignItems: 'center', gap: 12, marginBottom: 10 },
+  financingTitle: { fontSize: 14, fontWeight: '700', color: Colors.text.primary },
+  financingSubTitle: { fontSize: 12, color: Colors.text.secondary, marginTop: 2 },
+  financingBody: { fontSize: 13, color: Colors.text.secondary, lineHeight: 19, marginBottom: 14 },
+  financingBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+    backgroundColor: 'rgba(59, 130, 246, 0.12)',
+    borderWidth: 1,
+    borderColor: 'rgba(59, 130, 246, 0.35)',
+    borderRadius: Radius.card,
+    paddingVertical: 12,
+    paddingHorizontal: 16,
+  },
+  financingBtnText: { fontSize: 14, fontWeight: '700', color: '#60A5FA' },
 });

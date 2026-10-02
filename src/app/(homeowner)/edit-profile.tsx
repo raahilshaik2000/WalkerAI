@@ -1,9 +1,7 @@
 import React, { useState } from 'react';
 import {
-  ActionSheetIOS,
   Alert,
   Image,
-  Platform,
   ScrollView,
   StyleSheet,
   Text,
@@ -12,7 +10,6 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useNavigation } from '@react-navigation/native';
 import Ionicons from 'react-native-vector-icons/Ionicons';
-import { launchCamera, launchImageLibrary } from 'react-native-image-picker';
 import ReactNativeHapticFeedback from 'react-native-haptic-feedback';
 import { AnimatedPressable, GlassInput, GradientBackground, AddressAutocomplete } from '@/components/ui';
 import { Colors } from '@/constants/theme';
@@ -20,6 +17,7 @@ import { useProfileStore } from '@/stores/profile.store';
 import { useAuthStore } from '@/stores/auth.store';
 import { supabase } from '@/lib/supabase/client';
 import { formatAppSafeErrorMessage } from '@/lib/supabase/functions';
+import { pickPhotosWithSource } from '@/lib/media-picker';
 import { getUploadMetadata, uploadFile, type StorageUploadAsset } from '@/lib/supabase/storage';
 
 export default function EditProfileScreen() {
@@ -112,24 +110,15 @@ export default function EditProfileScreen() {
     }
   };
 
-  const handlePickPhoto = () => {
-    const options = ['Take Photo', 'Choose from Library', 'Remove Photo', 'Cancel'];
-    if (Platform.OS === 'ios') {
-      ActionSheetIOS.showActionSheetWithOptions(
-        { options, cancelButtonIndex: 3, destructiveButtonIndex: 2 },
-        (index) => {
-          if (index === 0) pickFromCamera();
-          else if (index === 1) pickFromLibrary();
-          else if (index === 2) { removeAvatar(); }
-        },
-      );
-    } else {
-      Alert.alert('Profile Photo', '', [
-        { text: 'Take Photo', onPress: pickFromCamera },
-        { text: 'Choose from Library', onPress: pickFromLibrary },
-        { text: 'Remove Photo', style: 'destructive', onPress: removeAvatar },
-        { text: 'Cancel', style: 'cancel' },
-      ]);
+  const handlePickPhoto = async () => {
+    const assets = await pickPhotosWithSource({
+      maxWidth: 800,
+      maxHeight: 800,
+      quality: 0.8,
+      selectionLimit: 1,
+    });
+    if (assets?.[0]?.uri) {
+      await uploadAndSetAvatar(assets[0]);
     }
   };
 
@@ -153,34 +142,6 @@ export default function EditProfileScreen() {
     } catch (err) {
       Alert.alert('Upload failed', formatAppSafeErrorMessage(err, 'Could not upload photo.'));
     }
-  };
-
-  const pickFromCamera = () => {
-    launchCamera({
-      mediaType: 'photo',
-      maxWidth: 800,
-      maxHeight: 800,
-      quality: 0.8,
-      assetRepresentationMode: 'compatible',
-    }, (res) => {
-      if (res.assets?.[0]?.uri) {
-        uploadAndSetAvatar(res.assets[0]);
-      }
-    });
-  };
-
-  const pickFromLibrary = () => {
-    launchImageLibrary({
-      mediaType: 'photo',
-      maxWidth: 800,
-      maxHeight: 800,
-      quality: 0.8,
-      assetRepresentationMode: 'compatible',
-    }, (res) => {
-      if (res.assets?.[0]?.uri) {
-        uploadAndSetAvatar(res.assets[0]);
-      }
-    });
   };
 
   const initials = (name || user?.email || 'U').slice(0, 2).toUpperCase();
@@ -208,12 +169,17 @@ export default function EditProfileScreen() {
                 </View>
               )}
               <View style={styles.cameraOverlay}>
-                <Ionicons name="camera" size={16} color="#fff" />
+                <Ionicons name="camera" size={16} color={Colors.accentFg} />
               </View>
             </AnimatedPressable>
             <AnimatedPressable onPress={handlePickPhoto} haptic>
               <Text style={styles.changePhotoText}>Change Photo</Text>
             </AnimatedPressable>
+            {avatarUri ? (
+              <AnimatedPressable onPress={removeAvatar} haptic>
+                <Text style={styles.removePhotoText}>Remove Photo</Text>
+              </AnimatedPressable>
+            ) : null}
           </View>
 
           {/* Form */}
@@ -293,7 +259,8 @@ const styles = StyleSheet.create({
     backgroundColor: Colors.accent, alignItems: 'center', justifyContent: 'center',
     borderWidth: 3, borderColor: Colors.bg.primary,
   },
-  changePhotoText: { fontSize: 14, fontWeight: '600', color: Colors.accent, marginTop: 10 },
+  changePhotoText: { fontSize: 14, fontWeight: '600', color: Colors.success, marginTop: 10 },
+  removePhotoText: { fontSize: 13, fontWeight: '600', color: Colors.error, marginTop: 8 },
 
   form: { gap: 4 },
   fieldRow: { position: 'relative' },

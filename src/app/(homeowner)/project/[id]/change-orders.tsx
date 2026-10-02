@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useState, useRef } from 'react';
 import {
   Alert,
   Modal,
@@ -18,7 +18,7 @@ import { formatAppSafeErrorMessage } from '@/lib/supabase/functions';
 import { Colors, Radius, Spacing, Typography } from '@/constants/theme';
 import { formatSignedCadCents } from '@/lib/currency';
 import { getRequiredStringParam } from '@/lib/navigation-params';
-import { GlassButton, GlassCard, GradientBackground, StatusBadge } from '@/components/ui';
+import { GlassButton, GlassCard, GradientBackground, ListItemSkeleton, StatusBadge } from '@/components/ui';
 import type { ChangeOrder } from '@/types/database.types';
 
 function statusVariant(status: string): 'pending' | 'active' | 'completed' | 'error' {
@@ -33,6 +33,7 @@ export default function HomeownerChangeOrdersScreen() {
   const navigation = useNavigation<any>();
   const [changeOrders, setChangeOrders] = useState<ChangeOrder[]>([]);
   const [loading, setLoading] = useState(true);
+  const hasLoadedRef = useRef(false);
   const [responding, setResponding] = useState<string | null>(null);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [requestOpen, setRequestOpen] = useState(false);
@@ -45,7 +46,7 @@ export default function HomeownerChangeOrdersScreen() {
   }, []);
 
   const fetchChangeOrders = useCallback(async () => {
-    setLoading(true);
+    if (!hasLoadedRef.current) setLoading(true);
     try {
       if (!projectId) {
         setErrorMessage('Project is missing. Reopen change orders from the project page.');
@@ -70,6 +71,7 @@ export default function HomeownerChangeOrdersScreen() {
       clearChangeOrderState();
     } finally {
       setLoading(false);
+      hasLoadedRef.current = true;
     }
   }, [clearChangeOrderState, projectId]);
 
@@ -224,14 +226,17 @@ export default function HomeownerChangeOrdersScreen() {
           />
 
           {loading ? (
-            <View style={styles.center}>
-                <Text style={Typography.bodySecondary}>Loading…</Text>
-              </View>
+            <View style={{ gap: 12, paddingTop: 8 }}>
+              <ListItemSkeleton />
+              <ListItemSkeleton />
+              <ListItemSkeleton />
+            </View>
           ) : errorMessage ? (
             <View style={styles.emptyState}>
               <Text style={styles.emptyIcon}>!</Text>
               <Text style={styles.emptyTitle}>Could not load change orders</Text>
               <Text style={styles.emptySub}>{errorMessage}</Text>
+              <GlassButton label="Try Again" onPress={() => { void fetchChangeOrders(); }} size="sm" style={{ marginTop: 12 }} />
             </View>
           ) : changeOrders.length === 0 ? (
             <View style={styles.emptyState}>

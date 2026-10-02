@@ -1,8 +1,6 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useState } from 'react';
 import {
-  ActivityIndicator,
   Alert,
-  AppState,
   FlatList,
   Image,
   RefreshControl,
@@ -13,18 +11,19 @@ import {
   View,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { useFocusEffect, useNavigation } from '@react-navigation/native';
+import { useNavigation } from '@react-navigation/native';
 import Ionicons from 'react-native-vector-icons/Ionicons';
-import { launchImageLibrary } from 'react-native-image-picker';
 import { supabase } from '@/lib/supabase/client';
 import { formatCadCents } from '@/lib/currency';
 import { formatAppSafeErrorMessage } from '@/lib/supabase/functions';
 import { joinedMaterialItemName } from '@/lib/material-orders';
+import { pickPhotosWithSource } from '@/lib/media-picker';
 import { getUploadMetadata, uploadFile } from '@/lib/supabase/storage';
-import { getCurrentUser } from '@/lib/supabase/auth';
+import { useInvalidateSupplierQueries, useSupplierActiveOrders } from '@/lib/supplier-data';
+import { useSilentFocusRefetch } from '@/lib/silent-focus-refetch';
 import { useAuthStore } from '@/stores/auth.store';
 import { Colors, Radius, Spacing, Typography } from '@/constants/theme';
-import { GlassButton, GradientBackground } from '@/components/ui';
+import { GlassButton, GradientBackground, ListItemSkeleton } from '@/components/ui';
 import type { MaterialOrder } from '@/types/database.types';
 import type { MaterialOrderStatus } from '@/constants/enums';
 
@@ -61,99 +60,37 @@ function deadlineLabel(deadline: string | null): string | null {
 export default function SupplierActiveOrders() {
   const { user } = useAuthStore();
   const navigation = useNavigation<any>();
-  const [orders, setOrders] = useState<MaterialOrder[]>([]);
-  const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [expanded, setExpanded] = useState<string | null>(null);
   const [tracking, setTracking] = useState<Record<string, string>>({});
   const [carrier, setCarrier] = useState<Record<string, string>>({});
   const [updating, setUpdating] = useState<string | null>(null);
-  const [errorMessage, setErrorMessage] = useState<string | null>(null);
-  const [hasSupplierProfile, setHasSupplierProfile] = useState(false);
-  const [hasActiveSession, setHasActiveSession] = useState(false);
-  const [supplierId, setSupplierId] = useState<string | null>(null);
+  const invalidateSupplier = useInvalidateSupplierQueries();
 
-  const fetchData = useCallback(async () => {
-    try {
-      const currentUserId = user?.id ?? (await getCurrentUser())?.id ?? null;
-      if (!currentUserId) {
-        setOrders([]);
-        setHasSupplierProfile(false);
-        setHasActiveSession(false);
-        setSupplierId(null);
-        setErrorMessage('You need to be signed in to view supplier orders.');
-        return;
-      }
+  const { profileQuery, ordersQuery, supplier } = useSupplierActiveOrders(user?.id);
+  const supplierId = supplier?.id ?? null;
+  const orders = ordersQuery.data ?? [];
+  const showSkeleton =
+    (!!user?.id && !supplier && profileQuery.isLoading)
+    || (!!supplier && !ordersQuery.data && ordersQuery.isLoading);
+  const errorMessage = !user?.id
+    ? 'You need to be signed in to view supplier orders.'
+    : profileQuery.error
+      ? formatAppSafeErrorMessage(profileQuery.error, 'Could not load supplier profile.')
+      : ordersQuery.error
+        ? formatAppSafeErrorMessage(ordersQuery.error, 'Could not load active supplier orders.')
+        : null;
 
-      setHasActiveSession(true);
-      setErrorMessage(null);
-      const { data: sup, error: supplierError } = await supabase
-        .from('suppliers')
-        .select('*')
-        .eq('user_id', currentUserId)
-        .order('created_at', { ascending: false })
-        .limit(1)
-        .maybeSingle();
+  const refetchAll = useCallback(async () => {
+    await Promise.all([profileQuery.refetch(), ordersQuery.refetch()]);
+  }, [ordersQuery, profileQuery]);
+  useSilentFocusRefetch(refetchAll);
 
-      if (supplierError) {
-        setOrders([]);
-        setHasSupplierProfile(false);
-        setHasActiveSession(true);
-        setSupplierId(null);
-        setErrorMessage(formatAppSafeErrorMessage(supplierError, 'Could not load supplier profile.'));
-        return;
-      }
-
-      if (!sup) {
-        setOrders([]);
-        setHasSupplierProfile(false);
-        setHasActiveSession(true);
-        setSupplierId(null);
-        setErrorMessage(null);
-        return;
-      }
-
-      setHasSupplierProfile(true);
-      setSupplierId(sup.id);
-      const { data, error } = await supabase
-        .from('material_orders')
-        .select('*, material:materials!material_orders_material_id_fkey(*)')
-        .eq('accepted_supplier_id', sup.id)
-        .not('status', 'in', '("open","cancelled")')
-        .order('created_at', { ascending: false });
-
-      if (error) {
-        setOrders([]);
-        setErrorMessage(formatAppSafeErrorMessage(error, 'Could not load active supplier orders.'));
-        return;
-      }
-
-      setOrders((data as MaterialOrder[]) ?? []);
-    } catch (err) {
-      setOrders([]);
-      setHasSupplierProfile(false);
-      setHasActiveSession(false);
-      setSupplierId(null);
-      setErrorMessage(formatAppSafeErrorMessage(err, 'Could not load active supplier orders.'));
-    } finally {
-      setLoading(false);
-    }
-  }, [user?.id]);
-
-  useFocusEffect(
-    useCallback(() => {
-      fetchData();
-    }, [fetchData])
-  );
-
-  useEffect(() => {
-    const subscription = AppState.addEventListener('change', (state) => {
-      if (state === 'active') fetchData();
-    });
-
-    return () => subscription.remove();
-  }, [fetchData]);
-  const onRefresh = async () => { setRefreshing(true); await fetchData(); setRefreshing(false); };
+  const onRefresh = async () => {
+    setRefreshing(true);
+    await refetchAll();
+    setRefreshing(false);
+  };
 
   const markProcessing = async (order: MaterialOrder) => {
     if (!supplierId) {
@@ -172,7 +109,8 @@ export default function SupplierActiveOrders() {
         .maybeSingle();
       if (error) throw error;
       if (!data) throw new Error('This order is no longer available.');
-      await fetchData();
+      invalidateSupplier(user?.id, supplierId);
+      await refetchAll();
     } catch (err) {
       Alert.alert('Could not update order', formatAppSafeErrorMessage(err, 'Please try again.'));
     } finally {
@@ -200,7 +138,8 @@ export default function SupplierActiveOrders() {
         .maybeSingle();
       if (error) throw error;
       if (!data) throw new Error('This order is no longer available.');
-      await fetchData();
+      invalidateSupplier(user?.id, supplierId);
+      await refetchAll();
     } catch (err) {
       Alert.alert('Could not mark order shipped', formatAppSafeErrorMessage(err, 'Please try again.'));
     } finally {
@@ -215,14 +154,12 @@ export default function SupplierActiveOrders() {
     }
     setUpdating(order.id);
     try {
-      const result = await launchImageLibrary({
-        mediaType: 'photo',
+      const assets = await pickPhotosWithSource({
         quality: 0.7,
-        assetRepresentationMode: 'compatible',
       });
       let photoUrl: string | null = null;
-      if (result.assets?.[0]?.uri) {
-        const asset = getUploadMetadata(result.assets[0]);
+      if (assets?.[0]?.uri) {
+        const asset = getUploadMetadata(assets[0]);
         const path = `delivery-photos/${order.id}.${asset.extension}`;
         const upload = await uploadFile('progress-photos', path, asset.uri, asset.contentType);
         photoUrl = upload.publicUrl;
@@ -240,7 +177,8 @@ export default function SupplierActiveOrders() {
         .maybeSingle();
       if (error) throw error;
       if (!data) throw new Error('This order is no longer available.');
-      await fetchData();
+      invalidateSupplier(user?.id, supplierId);
+      await refetchAll();
     } catch (err) {
       Alert.alert('Could not mark order delivered', formatAppSafeErrorMessage(err, 'Please try again.'));
     } finally {
@@ -250,7 +188,26 @@ export default function SupplierActiveOrders() {
 
   const stepIndex = (status: string) => STATUS_STEPS.indexOf(status as MaterialOrderStatus);
 
-  if (loading) return <View style={styles.center}><ActivityIndicator color={Colors.accent} size="large" /></View>;
+  if (showSkeleton) {
+    return (
+      <GradientBackground>
+        <SafeAreaView style={styles.safe}>
+          <View style={styles.header}>
+            <TouchableOpacity onPress={() => navigation.goBack()}>
+              <Ionicons name="arrow-back" size={22} color={Colors.text.secondary} />
+            </TouchableOpacity>
+            <Text style={styles.headerTitle}>My Orders</Text>
+            <View style={styles.headerSpacer} />
+          </View>
+          <View style={styles.skeletonList}>
+            {Array.from({ length: 4 }).map((_, index) => (
+              <ListItemSkeleton key={`active-skel-${index}`} style={styles.skeletonItem} />
+            ))}
+          </View>
+        </SafeAreaView>
+      </GradientBackground>
+    );
+  }
 
   return (
     <GradientBackground>
@@ -268,17 +225,17 @@ export default function SupplierActiveOrders() {
             <Ionicons name="alert-circle-outline" size={48} color={Colors.text.tertiary} />
             <Text style={styles.emptyTitle}>Could not load active orders</Text>
             <Text style={styles.emptyBody}>{errorMessage}</Text>
-            <TouchableOpacity style={styles.retryBtn} onPress={fetchData} activeOpacity={0.8}>
+            <TouchableOpacity style={styles.retryBtn} onPress={() => { void refetchAll(); }} activeOpacity={0.8}>
               <Text style={styles.retryBtnText}>Try Again</Text>
             </TouchableOpacity>
           </View>
-        ) : !hasActiveSession ? (
+        ) : !user?.id ? (
           <View style={styles.empty}>
             <Ionicons name="person-circle-outline" size={48} color={Colors.text.tertiary} />
             <Text style={styles.emptyTitle}>Sign in required</Text>
             <Text style={styles.emptyBody}>Sign in to view active supplier orders.</Text>
           </View>
-        ) : !hasSupplierProfile ? (
+        ) : !supplier ? (
           <View style={styles.empty}>
             <Ionicons name="storefront-outline" size={48} color={Colors.text.tertiary} />
             <Text style={styles.emptyTitle}>Set up your supplier profile</Text>
@@ -453,6 +410,8 @@ export default function SupplierActiveOrders() {
 const styles = StyleSheet.create({
   safe: { flex: 1 },
   center: { flex: 1, alignItems: 'center', justifyContent: 'center', backgroundColor: '#000' },
+  skeletonList: { paddingHorizontal: Spacing.md, paddingTop: 8 },
+  skeletonItem: { marginBottom: 12 },
   header: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingHorizontal: Spacing.md, paddingTop: Spacing.sm, paddingBottom: Spacing.md },
   headerTitle: { ...Typography.h2 },
   headerSpacer: { width: 22 },
@@ -513,5 +472,5 @@ const styles = StyleSheet.create({
   waitingText: { fontSize: 13, color: Colors.text.tertiary, textAlign: 'center', fontStyle: 'italic' },
   paidText: { fontSize: 14, color: '#34D399', fontWeight: '700', textAlign: 'center' },
   retryBtn: { backgroundColor: Colors.accent, paddingHorizontal: 18, paddingVertical: 10, borderRadius: 20 },
-  retryBtnText: { fontSize: 13, fontWeight: '700', color: '#000' },
+  retryBtnText: { fontSize: 13, fontWeight: '700', color: Colors.accentFg },
 });

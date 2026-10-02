@@ -175,6 +175,23 @@ Deno.serve(async (req) => {
       });
     }
 
+    if (booking.project_id) {
+      const { data: projectHold, error: projectHoldError } = await adminClient
+        .from('projects')
+        .select('admin_paused')
+        .eq('id', booking.project_id)
+        .maybeSingle();
+      if (projectHoldError) throw new Error(`Failed to check project hold: ${projectHoldError.message}`);
+      if (projectHold?.admin_paused) {
+        return new Response(
+          JSON.stringify({
+            error: 'Payment release is restricted by Walker AI admin. Contact support to release the hold.',
+          }),
+          { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } },
+        );
+      }
+    }
+
     if (booking.status === 'completed' && booking.stripe_transfer_id) {
       return new Response(
         JSON.stringify({

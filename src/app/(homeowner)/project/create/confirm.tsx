@@ -11,9 +11,10 @@ import Ionicons from 'react-native-vector-icons/Ionicons';
 import ReactNativeHapticFeedback from 'react-native-haptic-feedback';
 import { restartProjectDispatch } from '@/lib/project-dispatch';
 import { formatAppSafeErrorMessage } from '@/lib/supabase/functions';
+import { supabase } from '@/lib/supabase/client';
 import { useProjectWizardStore } from '@/stores/project-wizard.store';
 import { Colors, Spacing, Typography } from '@/constants/theme';
-import { GlassButton, GlassCard, GradientBackground } from '@/components/ui';
+import { GlassButton, GlassCard, GradientBackground, WizardHeader } from '@/components/ui';
 
 export default function ConfirmStep() {
   const navigation = useNavigation<any>();
@@ -35,16 +36,48 @@ export default function ConfirmStep() {
 
     setLoading(true);
     try {
+      const { data: projectHold, error: holdError } = await supabase
+        .from('projects')
+        .select('admin_paused')
+        .eq('id', projectId)
+        .maybeSingle();
+      if (holdError && !/admin_paused/i.test(holdError.message)) throw holdError;
+      if (projectHold?.admin_paused) {
+        Alert.alert(
+          'Project on hold',
+          'Walker AI admin has paused this project. Contact support before dispatching.',
+        );
+        return;
+      }
+
       const dispatchData = await restartProjectDispatch(projectId, 1);
       if (!dispatchData?.success) {
-        throw new Error(dispatchData?.message ?? 'No matching contractors were found for this project.');
+        throw new Error(
+          typeof dispatchData?.message === 'string' && dispatchData.message.trim()
+            ? dispatchData.message
+            : 'Could not send this project to contractors. Please try again.',
+        );
       }
+
+      const { error: statusError } = await supabase
+        .from('projects')
+        .update({
+          status: 'dispatching',
+          dispatch_round: 1,
+          dispatch_expires_at: new Date(Date.now() + 2 * 60 * 60 * 1000).toISOString(),
+        })
+        .eq('id', projectId);
+      if (statusError) throw statusError;
 
       ReactNativeHapticFeedback.trigger('notificationSuccess');
       reset();
       navigation.reset({ index: 0, routes: [{ name: 'HomeownerTabs' }] });
     } catch (err) {
-      Alert.alert('Dispatch failed', formatAppSafeErrorMessage(err, 'Could not send this project to contractors. Please try again.'));
+      ReactNativeHapticFeedback.trigger('notificationError');
+      Alert.alert(
+        'Dispatch failed',
+        formatAppSafeErrorMessage(err, 'Could not send this project to contractors. Please try again.'),
+      );
     } finally {
       setLoading(false);
     }
@@ -54,12 +87,7 @@ export default function ConfirmStep() {
     <GradientBackground glow="top-right">
       <SafeAreaView style={styles.safe}>
         <View style={styles.container}>
-          {/* Progress */}
-          <View style={styles.progressRow}>
-            {Array.from({ length: 8 }, (_, i) => (
-              <View key={i} style={[styles.progressSeg, styles.progressSegActive]} />
-            ))}
-          </View>
+          <WizardHeader currentStep={8} totalSteps={8} />
 
           <View style={styles.content}>
             <View style={styles.iconWrap}>

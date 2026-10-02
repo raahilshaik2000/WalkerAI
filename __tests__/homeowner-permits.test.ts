@@ -26,10 +26,13 @@ describe('homeowner permit documents', () => {
 
     expect(source).toContain("import { formatAppSafeErrorMessage } from '@/lib/supabase/functions';");
     expect(source).toContain("setErrorMessage(formatAppSafeErrorMessage(error, 'Could not load permits.'))");
-    expect(source).toContain("setPermits([]);\n          setPreviewUrls({});\n          return;");
+    expect(source).toContain("setPermits([]);\n        setPreviewUrls({});\n        return;");
     expect(source).toContain("setErrorMessage(formatAppSafeErrorMessage(err, 'Could not load permits.'))");
-    expect(source).toContain("setPermits([]);\n        setPreviewUrls({});");
+    expect(source).toContain("setPermits([]);\n      setPreviewUrls({});");
     expect(source).toContain("Alert.alert('Upload failed', formatAppSafeErrorMessage(err, 'Please try again.'))");
+    expect(source).toContain('uploadPickerAsset');
+    expect(source).toContain('Replace photo / document');
+    expect(source).toContain('Add permit / inspection');
     expect(source).not.toContain('setErrorMessage(`Could not load permits: ${error.message}`)');
     expect(source).not.toContain("Alert.alert('Upload failed', err instanceof Error ? err.message : 'Please try again.')");
   });

@@ -7,6 +7,7 @@ type WalkerVoiceAssistantModule = {
   stopSpeaking: () => Promise<{ stopped: boolean }>;
   cancelListening?: () => Promise<{ cancelled: boolean }>;
   listenOnce: (locale: string, durationSeconds: number, contextualStrings: string[]) => Promise<{ transcript: string; cancelled?: boolean }>;
+  speakAndListen?: (text: string, locale: string, durationSeconds: number, contextualStrings: string[]) => Promise<{ transcript: string; cancelled?: boolean }>;
 };
 
 const nativeVoice = NativeModules.WalkerVoiceAssistant as WalkerVoiceAssistantModule | undefined;
@@ -38,10 +39,22 @@ type PreferenceOptionRule = {
 };
 
 export function isProjectVoiceAvailable() {
+  // iOS-only native Speech.framework bridge. Android has no WalkerVoiceAssistant
+  // module in this build — callers must hide voice controls when this is false.
   return Platform.OS === 'ios'
     && !!nativeVoice?.requestPermissions
     && !!nativeVoice?.speak
     && !!nativeVoice?.listenOnce;
+}
+
+export function getProjectVoiceUnavailableReason(): string | null {
+  if (Platform.OS !== 'ios') {
+    return 'Voice answers are available on iOS only in this version.';
+  }
+  if (!nativeVoice?.requestPermissions || !nativeVoice?.speak || !nativeVoice?.listenOnce) {
+    return 'Voice assistant is unavailable in this build.';
+  }
+  return null;
 }
 
 export async function requestProjectVoicePermissions() {
@@ -51,14 +64,16 @@ export async function requestProjectVoicePermissions() {
   return nativeVoice.requestPermissions();
 }
 
-export async function speakProjectQuestion(question: QuestionnaireQuestion) {
+export function formatQuestionVoicePrompt(question: QuestionnaireQuestion) {
   const options = question.options.map((option, index) => {
-    const [label, detail] = option.label.split('—').map((part) => part.trim());
-    return detail
-      ? `Option ${index + 1}: ${label}, ${detail}`
-      : `Option ${index + 1}: ${label}`;
+    const label = option.label.split('—')[0].trim();
+    return `Option ${index + 1}: ${label}`;
   }).join('. ');
-  await speakProjectPrompt(`${question.text}. ${options}. You can say an option number, answer in your own words, ask me to repeat, or say help me choose.`);
+  return `${question.text}. ${options}.`;
+}
+
+export async function speakProjectQuestion(question: QuestionnaireQuestion) {
+  await speakProjectPrompt(formatQuestionVoicePrompt(question));
 }
 
 export async function speakProjectDecisionHelp(question: QuestionnaireQuestion) {
@@ -97,13 +112,32 @@ export async function speakProjectPrompt(text: string) {
   await nativeVoice.speak(text);
 }
 
-export async function listenForProjectAnswer(durationSeconds = 7, contextTerms: string[] = []) {
+export async function listenForProjectAnswer(durationSeconds = 16, contextTerms: string[] = []) {
   if (!nativeVoice?.listenOnce) {
     throw new Error('Voice answers are not available on this device.');
   }
-  const result = await nativeVoice.listenOnce('en-CA', durationSeconds, contextTerms);
+  const result = await nativeVoice.listenOnce('en-US', durationSeconds, contextTerms);
   if (result.cancelled) return 'voice cancelled';
   return result.transcript.trim();
+}
+
+export async function speakAndListenForProjectAnswer(
+  text: string,
+  durationSeconds = 16,
+  contextTerms: string[] = []
+): Promise<string> {
+  if (nativeVoice?.speakAndListen) {
+    const result = await nativeVoice.speakAndListen(text, 'en-US', durationSeconds, contextTerms);
+    if (result.cancelled) return 'voice cancelled';
+    return result.transcript.trim();
+  }
+  if (!nativeVoice?.speak && !nativeVoice?.listenOnce) {
+    throw new Error('Voice answers are not available on this device.');
+  }
+  if (text.trim()) {
+    await speakProjectPrompt(text);
+  }
+  return listenForProjectAnswer(durationSeconds, contextTerms);
 }
 
 export async function stopProjectVoice() {
@@ -869,7 +903,7 @@ export function transcriptRequestsPreviousQuestion(transcript: string) {
 
 export function transcriptRequestsVoiceStop(transcript: string) {
   const normalizedTranscript = normalize(transcript);
-  return /\b(stop|pause|cancel|quit|exit|manual|tap manually|voice cancelled)\b/.test(normalizedTranscript);
+  return /\b(stop|stop it|stop talking|shut up|hush|silence|pause|cancel|quit|exit|hold on|wait|wait a second|be quiet|mute|enough|manual|tap manually|voice cancelled)\b/.test(normalizedTranscript);
 }
 
 export function extractCorrectedAnswerTranscript(transcript: string) {
@@ -940,6 +974,13 @@ export function buildVoiceContextTerms(question: QuestionnaireQuestion) {
     'previous question',
     'change my last answer',
     'stop',
+    'stop voice',
+    'stop talking',
+    'cancel',
+    'pause',
+    'enough',
+    'hold on',
+    'manual',
   ].forEach((term) => terms.add(term));
   return Array.from(terms).filter((term) => term.length > 0);
 }

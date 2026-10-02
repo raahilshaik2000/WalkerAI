@@ -12,6 +12,14 @@ export interface RawScanSurface {
   center: ScanPoint;
 }
 
+export interface RawScanOpening {
+  id: string;
+  width: number;
+  height?: number;
+  angle?: number;
+  center: ScanPoint;
+}
+
 export interface NormalizedSegment {
   id: string;
   x1: number;
@@ -36,17 +44,60 @@ export interface NormalizedFloorPlan {
     roomH: number;
   };
   quality: 'good' | 'fallback' | 'empty';
+  normalizedDoors?: RawScanOpening[];
+  normalizedWindows?: RawScanOpening[];
+  dominantAngle?: number;
 }
 
-// Tolerance for clustering parallel walls onto the same axis line. RoomPlan
-// scans can drift several centimetres per face, especially in low light, so
-// 22cm is a reasonable balance between snapping noisy walls together and
-// preserving genuinely-close-but-distinct walls.
 const SNAP_TOLERANCE_M = 0.22;
 const MIN_WALL_LENGTH_M = 0.35;
-// When deciding whether a wall is horizontal-leaning vs vertical-leaning,
-// a wall within ~10 degrees of an axis is treated as that axis.
 const AXIS_ANGLE_BIAS = Math.tan((10 * Math.PI) / 180);
+
+/**
+ * Compute the dominant orientation angle of the room using circular statistics
+ * with 4-fold rotational symmetry (modulo π/2), weighted by wall length.
+ * Rotated scans (where the phone was held at an angle) are aligned to this dominant
+ * angle to eliminate pinwheel distortion and un-rotate the bounding box.
+ */
+export function computeDominantAngle(walls: RawScanSurface[]): number {
+  const validWalls = walls.filter((w) => Number.isFinite(w.width) && w.width >= MIN_WALL_LENGTH_M);
+  if (validWalls.length === 0) return 0;
+
+  let sumX = 0;
+  let sumY = 0;
+  let hasAngles = false;
+
+  for (const wall of validWalls) {
+    if (typeof wall.angle === 'number' && Number.isFinite(wall.angle)) {
+      hasAngles = true;
+      const a = wall.angle;
+      sumX += wall.width * Math.cos(4 * a);
+      sumY += wall.width * Math.sin(4 * a);
+    }
+  }
+
+  if (!hasAngles || Math.hypot(sumX, sumY) < 1e-4) {
+    return 0;
+  }
+
+  const rawDom = Math.atan2(sumY, sumX) / 4;
+  if (Math.abs(rawDom) < 0.035) {
+    return 0;
+  }
+  return rawDom;
+}
+
+function rotatePoint(p: ScanPoint, cx: number, cz: number, angle: number): ScanPoint {
+  const cosA = Math.cos(angle);
+  const sinA = Math.sin(angle);
+  const dx = p.x - cx;
+  const dz = p.z - cz;
+  return {
+    ...p,
+    x: cx + dx * cosA - dz * sinA,
+    z: cz + dx * sinA + dz * cosA,
+  };
+}
 
 function normalizeAngle(angle: number) {
   let a = angle % Math.PI;
@@ -157,16 +208,37 @@ function snapSegmentsToGrid(segments: NormalizedSegment[]): NormalizedSegment[] 
   const canonicalYs = Array.from(new Set(horizontalYClusters.values()));
   const canonicalXs = Array.from(new Set(verticalXClusters.values()));
 
+  // Closed 4-wall room optimization:
+  // If we have 2 horizontal and 2 vertical walls, snap them into an exact closed rectangular boundary.
+  if (horizontals.length === 2 && verticals.length === 2 && canonicalXs.length >= 2 && canonicalYs.length >= 2) {
+    const sortedXs = [...canonicalXs].sort((a, b) => a - b);
+    const sortedYs = [...canonicalYs].sort((a, b) => a - b);
+    const minX = sortedXs[0];
+    const maxX = sortedXs[sortedXs.length - 1];
+    const minY = sortedYs[0];
+    const maxY = sortedYs[sortedYs.length - 1];
+
+    return segments.map((seg) => {
+      if (seg.isHorizontal) {
+        const y = Math.abs(seg.y1 - minY) <= Math.abs(seg.y1 - maxY) ? minY : maxY;
+        return { ...seg, y1: y, y2: y, x1: minX, x2: maxX, length: maxX - minX };
+      } else {
+        const x = Math.abs(seg.x1 - minX) <= Math.abs(seg.x1 - maxX) ? minX : maxX;
+        return { ...seg, x1: x, x2: x, y1: minY, y2: maxY, length: maxY - minY };
+      }
+    });
+  }
+
   return segments.map((seg) => {
     if (seg.isHorizontal) {
       const y = horizontalYClusters.get(seg.y1) ?? seg.y1;
-      const x1 = snapToNearest(seg.x1, canonicalXs, SNAP_TOLERANCE_M * 1.5);
-      const x2 = snapToNearest(seg.x2, canonicalXs, SNAP_TOLERANCE_M * 1.5);
+      const x1 = snapToNearest(seg.x1, canonicalXs, SNAP_TOLERANCE_M * 2.5);
+      const x2 = snapToNearest(seg.x2, canonicalXs, SNAP_TOLERANCE_M * 2.5);
       return { ...seg, y1: y, y2: y, x1, x2, length: Math.abs(x2 - x1) };
     }
     const x = verticalXClusters.get(seg.x1) ?? seg.x1;
-    const y1 = snapToNearest(seg.y1, canonicalYs, SNAP_TOLERANCE_M * 1.5);
-    const y2 = snapToNearest(seg.y2, canonicalYs, SNAP_TOLERANCE_M * 1.5);
+    const y1 = snapToNearest(seg.y1, canonicalYs, SNAP_TOLERANCE_M * 2.5);
+    const y2 = snapToNearest(seg.y2, canonicalYs, SNAP_TOLERANCE_M * 2.5);
     return { ...seg, x1: x, x2: x, y1, y2, length: Math.abs(y2 - y1) };
   });
 }
@@ -256,9 +328,53 @@ function boundsFromSegments(segments: NormalizedSegment[]) {
   return { minX, maxX, minY, maxY, roomW: maxX - minX, roomH: maxY - minY };
 }
 
-export function normalizeFloorPlan(walls: RawScanSurface[]): NormalizedFloorPlan {
-  const initial = walls
-    .map((wall) => segmentFromWall(wall, walls))
+export function normalizeFloorPlan(
+  walls: RawScanSurface[],
+  doors?: RawScanOpening[],
+  windows?: RawScanOpening[],
+): NormalizedFloorPlan {
+  if (!walls || walls.length === 0) {
+    return {
+      segments: [],
+      corners: [],
+      bounds: { minX: -1, maxX: 1, minY: -1, maxY: 1, roomW: 2, roomH: 2 },
+      quality: 'empty',
+    };
+  }
+
+  // 1. Align room to its dominant wall orientation to remove rotated coordinate skew
+  const dominantAngle = computeDominantAngle(walls);
+  let effectiveWalls = walls;
+  let normalizedDoors = doors ?? [];
+  let normalizedWindows = windows ?? [];
+
+  if (dominantAngle !== 0) {
+    const totalLen = walls.reduce((sum, w) => sum + (w.width || 1), 0);
+    const cx = walls.reduce((sum, w) => sum + (w.width || 1) * w.center.x, 0) / (totalLen || 1);
+    const cz = walls.reduce((sum, w) => sum + (w.width || 1) * w.center.z, 0) / (totalLen || 1);
+    const unrotate = -dominantAngle;
+
+    effectiveWalls = walls.map((wall) => ({
+      ...wall,
+      center: rotatePoint(wall.center, cx, cz, unrotate),
+      angle: typeof wall.angle === 'number' ? wall.angle + unrotate : undefined,
+    }));
+
+    normalizedDoors = (doors ?? []).map((door) => ({
+      ...door,
+      center: rotatePoint(door.center, cx, cz, unrotate),
+      angle: typeof door.angle === 'number' ? door.angle + unrotate : undefined,
+    }));
+
+    normalizedWindows = (windows ?? []).map((win) => ({
+      ...win,
+      center: rotatePoint(win.center, cx, cz, unrotate),
+      angle: typeof win.angle === 'number' ? win.angle + unrotate : undefined,
+    }));
+  }
+
+  const initial = effectiveWalls
+    .map((wall) => segmentFromWall(wall, effectiveWalls))
     .filter((segment): segment is NormalizedSegment => Boolean(segment));
 
   if (initial.length === 0) {
@@ -290,5 +406,8 @@ export function normalizeFloorPlan(walls: RawScanSurface[]): NormalizedFloorPlan
     corners: corners.length >= 3 ? corners : fallbackCorners,
     bounds,
     quality: corners.length >= 3 ? 'good' : 'fallback',
+    normalizedDoors,
+    normalizedWindows,
+    dominantAngle,
   };
 }

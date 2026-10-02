@@ -1,4 +1,9 @@
-import { canUseRoomScanMeasurements, getRoomScanMeasurementBlocker } from '../src/lib/room-scan';
+import {
+  canUseRoomScanMeasurements,
+  getRoomScanMeasurementBlocker,
+  getRoomScanQualityWarnings,
+  scanHasUsdzMesh,
+} from '../src/lib/room-scan';
 import { distancePointToSegment, findNearestWallSegment } from '../src/lib/room-scan/floorPlanGeometry';
 import { normalizeFloorPlan } from '../src/lib/room-scan/normalizeFloorPlan';
 
@@ -29,6 +34,26 @@ describe('room scan measurement helpers', () => {
     expect(canUseRoomScanMeasurements({ isMock: false, roomDimensions: { length: 4, width: 3.5 } })).toBe(false);
   });
 
+  it('blocks partial RoomPlan wall sets and surfaces quality warnings', () => {
+    const partial = {
+      isMock: false,
+      scanMode: 'roomplan',
+      walls: [{ id: 'a' }, { id: 'b' }],
+      roomDimensions: { length: 4.2, width: 3.5, height: 2.7 },
+      hasUsdz: false,
+    };
+    expect(getRoomScanMeasurementBlocker(partial)).toContain('only captured part of the room');
+    expect(getRoomScanQualityWarnings(partial)).toEqual(
+      expect.arrayContaining([
+        expect.stringContaining('Fewer than 3 walls'),
+        expect.stringContaining('3D mesh is missing'),
+      ]),
+    );
+    expect(scanHasUsdzMesh({ usdzFilePath: '/tmp/room.usdz' })).toBe(true);
+    expect(scanHasUsdzMesh({ hasUsdz: true })).toBe(true);
+    expect(scanHasUsdzMesh({})).toBe(false);
+  });
+
   it('serializes RoomPlan dimensions from projected wall extents', () => {
     const source = fs.readFileSync(
       path.join(__dirname, '../ios/WalkerAI/RoomPlan/RoomCaptureViewController.swift'),
@@ -39,6 +64,10 @@ describe('room scan measurement helpers', () => {
     expect(source).toContain('let halfZ = abs(sin(angle)) * length / 2');
     expect(source).toContain('let roomLength = hasWallBounds ? max(0, maxX - minX) : 0');
     expect(source).toContain('let roomWidth = hasWallBounds ? max(0, maxZ - minZ) : 0');
+    expect(source).toContain('WalkerRoomScans');
+    expect(source).toContain('documentDirectory');
+    expect(source).toContain('"scanQuality"');
+    expect(source).toContain('var roomHeight = room.walls.map { Double($0.dimensions.y) }.max() ?? 2.7');
     expect(source).not.toContain("let roomWidth = (allZ.max() ?? 0) - (allZ.min() ?? 0) + Double(room.walls.first?.dimensions.x ?? 0)");
   });
 
@@ -94,5 +123,46 @@ describe('room scan measurement helpers', () => {
       { center: { x: 1, z: 0 } },
       [topWall, leftWall],
     )?.id).toBe('top');
+  });
+
+  it('aligns rotated room scans to dominant orientation to prevent pinwheel distortion and area inflation', () => {
+    // Dominic's kitchen: physical dimensions 2.83m (9.3ft) x 3.26m (10.7ft) = 9.23 m² (99 sq ft).
+    // When scanned at a 35-degree angle, unrotated world AABB ballooned to 4.7m x 4.9m (23.0 m²).
+    const rot = (35 * Math.PI) / 180;
+    const cosR = Math.cos(rot);
+    const sinR = Math.sin(rot);
+
+    // 4 rotated walls centered around origin
+    const walls = [
+      { id: 'w1', width: 2.83, height: 2.8, angle: rot, center: { x: -1.63 * sinR, z: 1.63 * cosR } },
+      { id: 'w2', width: 2.83, height: 2.8, angle: rot, center: { x: 1.63 * sinR, z: -1.63 * cosR } },
+      { id: 'w3', width: 3.26, height: 2.8, angle: rot + Math.PI / 2, center: { x: -1.415 * cosR, z: -1.415 * sinR } },
+      { id: 'w4', width: 3.26, height: 2.8, angle: rot + Math.PI / 2, center: { x: 1.415 * cosR, z: 1.415 * sinR } },
+    ];
+
+    const doors = [
+      { id: 'd1', width: 0.9, height: 2.1, center: { x: -1.415 * cosR, z: -1.415 * sinR } },
+    ];
+
+    const plan = normalizeFloorPlan(walls, doors);
+
+    // Verify room is closed into a clean rectangle
+    expect(plan.quality).toBe('good');
+    expect(plan.segments.length).toBe(4);
+    expect(plan.corners.length).toBe(4);
+
+    // Verify true orthogonal dimensions: ~2.83m width and ~3.26m length
+    const minDim = Math.min(plan.bounds.roomW, plan.bounds.roomH);
+    const maxDim = Math.max(plan.bounds.roomW, plan.bounds.roomH);
+    expect(minDim).toBeCloseTo(2.83, 1);
+    expect(maxDim).toBeCloseTo(3.26, 1);
+
+    // Verify area is ~9.2 m², not inflated 23 m²
+    const trueArea = plan.bounds.roomW * plan.bounds.roomH;
+    expect(trueArea).toBeLessThan(12.0);
+    expect(trueArea).toBeGreaterThan(8.0);
+
+    // Verify doors are rotated to align with room segments
+    expect(plan.normalizedDoors?.length).toBe(1);
   });
 });

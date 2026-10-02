@@ -1,10 +1,13 @@
-import { StyleSheet, Text, View } from 'react-native';
+import { Linking, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import { useNavigation } from '@react-navigation/native';
 import Ionicons from 'react-native-vector-icons/Ionicons';
 import { Colors, Spacing, Typography } from '@/constants/theme';
 import { GradientBackground } from '@/components/ui';
 
 export default function SupplierPendingVerification() {
+  const navigation = useNavigation<any>();
+
   return (
     <GradientBackground glow="top-right">
       <SafeAreaView style={styles.safe}>
@@ -38,6 +41,17 @@ export default function SupplierPendingVerification() {
               <Text style={styles.stepText}>Start receiving material orders</Text>
             </View>
           </View>
+
+          <TouchableOpacity
+            style={styles.refreshBtn}
+            onPress={() => navigation.navigate('SupplierTabs')}
+            activeOpacity={0.85}
+          >
+            <Text style={styles.refreshBtnText}>Check approval status</Text>
+          </TouchableOpacity>
+          <TouchableOpacity onPress={() => Linking.openURL('mailto:support@walkerai.ca')}>
+            <Text style={styles.emailLink}>Need help? support@walkerai.ca</Text>
+          </TouchableOpacity>
         </View>
       </SafeAreaView>
     </GradientBackground>
@@ -71,4 +85,15 @@ const styles = StyleSheet.create({
   infoTitle: { fontSize: 15, fontWeight: '700', color: Colors.text.primary, marginBottom: 4 },
   step: { flexDirection: 'row', alignItems: 'center', gap: 12 },
   stepText: { fontSize: 14, color: Colors.text.secondary },
+  refreshBtn: {
+    marginTop: Spacing.lg,
+    minHeight: 48,
+    paddingHorizontal: 24,
+    borderRadius: 14,
+    backgroundColor: Colors.accent,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  refreshBtnText: { color: Colors.accentFg, fontSize: 15, fontWeight: '800' },
+  emailLink: { color: Colors.accent, fontSize: 13, fontWeight: '600', marginTop: 14 },
 });

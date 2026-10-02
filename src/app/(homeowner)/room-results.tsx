@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import {
   Alert,
   Dimensions,
@@ -19,7 +19,8 @@ import Ionicons from 'react-native-vector-icons/Ionicons';
 import { AnimatedPressable, GlassButton, GradientBackground } from '@/components/ui';
 import { useProjectWizardStore } from '@/stores/project-wizard.store';
 import { parseMetricDimension } from '@/lib/measurements';
-import { getRoomScanMeasurementBlocker } from '@/lib/room-scan';
+import { getRoomScanMeasurementBlocker, getRoomScanQualityWarnings, scanHasUsdzMesh } from '@/lib/room-scan';
+import { normalizeFloorPlan } from '@/lib/room-scan/normalizeFloorPlan';
 import {
   FloorPlanView,
   USDZViewer,
@@ -40,15 +41,58 @@ export default function RoomResultsScreen() {
   const route = useRoute<any>();
   const { scanData: routeScanData, fromWizard } = route.params ?? {};
   const scanData = routeScanData && typeof routeScanData === 'object' ? routeScanData : null;
-  const safeScanData = scanData ?? {};
+  const safeScanData = useMemo(() => scanData ?? {}, [scanData]);
   const [viewMode, setViewMode] = useState<ViewMode>('floorplan');
   const [editOpen, setEditOpen] = useState(false);
-  const [roomDimensions, setRoomDimensions] = useState(() => safeScanData.roomDimensions ?? {});
+  const canonicalDimensions = useMemo(() => {
+    const rawDims = safeScanData.roomDimensions ?? {};
+    const walls = Array.isArray(safeScanData.walls) ? safeScanData.walls : [];
+    if (walls.length >= 3) {
+      const plan = normalizeFloorPlan(walls);
+      if (plan.bounds && plan.bounds.roomW > 0.5 && plan.bounds.roomH > 0.5) {
+        const spanW = Number(plan.bounds.roomW.toFixed(2));
+        const spanH = Number(plan.bounds.roomH.toFixed(2));
+        const trueLength = Math.max(spanW, spanH);
+        const trueWidth = Math.min(spanW, spanH);
+        const rawLength = typeof rawDims.length === 'number' ? rawDims.length : 0;
+        const rawWidth = typeof rawDims.width === 'number' ? rawDims.width : 0;
+
+        // An unrotated AABB is inflated by up to sqrt(2) (~41%) when the room is scanned at an angle.
+        // If raw AABB is inflated (>5% larger than the true orthogonal wall spans), prefer true wall dimensions.
+        const isInflated =
+          rawLength > trueLength * 1.05 ||
+          rawWidth > trueWidth * 1.05 ||
+          (typeof rawDims.area === 'number' && rawDims.area > trueLength * trueWidth * 1.1);
+
+        if (isInflated || !rawLength || !rawWidth) {
+          const height = typeof rawDims.height === 'number' && rawDims.height > 0 ? rawDims.height : 2.7;
+          return {
+            length: trueLength,
+            width: trueWidth,
+            height,
+            area: Number((trueLength * trueWidth).toFixed(2)),
+          };
+        }
+      }
+    }
+    return rawDims;
+  }, [safeScanData]);
+
+  const [roomDimensions, setRoomDimensions] = useState(() => canonicalDimensions);
   const [draftDimensions, setDraftDimensions] = useState({
-    length: String(safeScanData.roomDimensions?.length ?? ''),
-    width: String(safeScanData.roomDimensions?.width ?? ''),
-    height: String(safeScanData.roomDimensions?.height ?? ''),
+    length: String(canonicalDimensions?.length ?? ''),
+    width: String(canonicalDimensions?.width ?? ''),
+    height: String(canonicalDimensions?.height ?? ''),
   });
+
+  useEffect(() => {
+    setRoomDimensions(canonicalDimensions);
+    setDraftDimensions({
+      length: String(canonicalDimensions?.length ?? ''),
+      width: String(canonicalDimensions?.width ?? ''),
+      height: String(canonicalDimensions?.height ?? ''),
+    });
+  }, [canonicalDimensions]);
   const { setMeasurements, setRoomScanData } = useProjectWizardStore();
 
   const correctedScanData = {
@@ -56,6 +100,8 @@ export default function RoomResultsScreen() {
     roomDimensions,
   };
   const measurementBlocker = getRoomScanMeasurementBlocker(correctedScanData);
+  const qualityWarnings = getRoomScanQualityWarnings(correctedScanData);
+  const hasUsdz = scanHasUsdzMesh(correctedScanData);
 
   function handleUseMeasurements() {
     if (measurementBlocker) {
@@ -63,6 +109,38 @@ export default function RoomResultsScreen() {
       return;
     }
 
+    if (qualityWarnings.length > 0 && !hasUsdz) {
+      Alert.alert(
+        'Scan needs another pass',
+        `${qualityWarnings[0]}\n\nA complete RoomPlan scan unlocks accurate 3D. Rescan, or continue with measurements only.`,
+        [
+          { text: 'Rescan', style: 'cancel', onPress: () => navigation.goBack() },
+          {
+            text: 'Continue anyway',
+            style: 'destructive',
+            onPress: () => commitMeasurementsAndContinue(),
+          },
+        ],
+      );
+      return;
+    }
+
+    if (qualityWarnings.length > 0) {
+      Alert.alert(
+        'Scan quality tip',
+        `${qualityWarnings[0]}\n\nYou can continue, but a cleaner rescan improves 3D accuracy.`,
+        [
+          { text: 'Rescan', style: 'cancel', onPress: () => navigation.goBack() },
+          { text: 'Continue', onPress: () => commitMeasurementsAndContinue() },
+        ],
+      );
+      return;
+    }
+
+    commitMeasurementsAndContinue();
+  }
+
+  function commitMeasurementsAndContinue() {
     const rd = roomDimensions ?? {};
     setMeasurements({
       lengthFt: rd.length ? (rd.length * M_TO_FT).toFixed(1) : '',
@@ -245,6 +323,20 @@ export default function RoomResultsScreen() {
             windowCount={windows.length}
           />
 
+          {qualityWarnings.length > 0 && (
+            <View style={styles.qualityCard}>
+              <View style={styles.qualityHeader}>
+                <Ionicons name="warning-outline" size={18} color="#FBBF24" />
+                <Text style={styles.qualityTitle}>
+                  {hasUsdz ? 'Scan quality tips' : 'Rescan recommended for accurate 3D'}
+                </Text>
+              </View>
+              {qualityWarnings.map((warning) => (
+                <Text key={warning} style={styles.qualityBody}>• {warning}</Text>
+              ))}
+            </View>
+          )}
+
           <TouchableOpacity style={styles.adjustCard} activeOpacity={0.8} onPress={() => setEditOpen(true)}>
             <View style={styles.adjustIcon}>
               <Ionicons name="create-outline" size={18} color="#06B6D4" />
@@ -341,7 +433,7 @@ export default function RoomResultsScreen() {
 
           {fromWizard && measurementBlocker && (
             <View style={styles.blockerCard}>
-              <Ionicons name="alert-circle-outline" size={18} color="#FF6B00" />
+              <Ionicons name="alert-circle-outline" size={16} color="#FF6B00" style={styles.blockerIcon} />
               <Text style={styles.blockerText}>{measurementBlocker}</Text>
             </View>
           )}
@@ -433,7 +525,7 @@ function DimensionInput({
         value={value}
         onChangeText={onChangeText}
         keyboardType="decimal-pad"
-        placeholder="0.0"
+        placeholder=""
         placeholderTextColor={Colors.text.tertiary}
       />
     </View>
@@ -549,6 +641,32 @@ const styles = StyleSheet.create({
     marginBottom: Spacing.sm,
     gap: 16,
   },
+  qualityCard: {
+    marginBottom: Spacing.md,
+    padding: Spacing.md,
+    borderRadius: Radius.md,
+    backgroundColor: 'rgba(251, 191, 36, 0.12)',
+    borderWidth: 1,
+    borderColor: 'rgba(251, 191, 36, 0.35)',
+    gap: 6,
+  },
+  qualityHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    marginBottom: 4,
+  },
+  qualityTitle: {
+    ...Typography.body,
+    fontWeight: '600',
+    color: '#FBBF24',
+    flex: 1,
+  },
+  qualityBody: {
+    ...Typography.caption,
+    color: Colors.text.secondary,
+    lineHeight: 18,
+  },
   legendItem: { flexDirection: 'row', alignItems: 'center' },
   legendDot: { width: 8, height: 8, borderRadius: 4, marginRight: 4 },
   legendLabel: { ...Typography.caption, fontSize: 11 },
@@ -602,6 +720,9 @@ const styles = StyleSheet.create({
     backgroundColor: 'rgba(255, 107, 0, 0.1)',
     padding: 12,
     marginTop: Spacing.sm,
+  },
+  blockerIcon: {
+    marginTop: 2,
   },
   blockerText: {
     flex: 1,
@@ -664,5 +785,5 @@ const styles = StyleSheet.create({
     borderRadius: Radius.item,
     backgroundColor: Colors.accent,
   },
-  modalPrimaryText: { color: '#000', fontWeight: '800' },
+  modalPrimaryText: { color: Colors.accentFg, fontWeight: '800' },
 });

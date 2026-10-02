@@ -16,7 +16,7 @@ import Config from 'react-native-config';
  * future `pk_live_…` override needs no code change.
  */
 const STRIPE_PUBLISHABLE_KEY_FALLBACK =
-  'pk_test_51TIZ85RBbhenZ69DaiWJnLj3L1OBqwQ89lkTJ18NKV0HxdARD6kyWKvTvC2OOGfLrLwVUjv3HCSM3ngN7xRCrDqI002iEGMgnF';
+  'pk_test_51QyqXvIdH0yC3MFK86764E9AuYejJZoIWFdfKsVwh40C69DKzmW6fmKpRwj9zhqgqroXvmluYDWssilCmpost2ZK00xipNON89';
 
 const envKey = Config.STRIPE_PUBLISHABLE_KEY?.trim();
 

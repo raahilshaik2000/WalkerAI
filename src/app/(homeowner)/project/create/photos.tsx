@@ -9,9 +9,9 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useNavigation } from '@react-navigation/native';
-import { launchImageLibrary } from 'react-native-image-picker';
 import Ionicons from 'react-native-vector-icons/Ionicons';
 import { useProjectWizardStore } from '@/stores/project-wizard.store';
+import { pickPhotosWithSource } from '@/lib/media-picker';
 import { getUploadMetadata } from '@/lib/supabase/storage';
 import { Colors, Radius, Spacing, Typography } from '@/constants/theme';
 import { GlassButton, GradientBackground, Skeleton, WizardHeader } from '@/components/ui';
@@ -19,63 +19,63 @@ import { GlassButton, GradientBackground, Skeleton, WizardHeader } from '@/compo
 const MIN_PHOTOS = 4;
 const MAX_PHOTOS = 12;
 
+/** Photos usable for this draft only — must still have image bytes for analysis. */
+function isCurrentDraftPhoto(photo: { base64?: string; url?: string; status: string }) {
+  return photo.status === 'done' && Boolean(photo.base64 || photo.url);
+}
+
 export default function PhotosStep() {
   const navigation = useNavigation<any>();
   const { addPhoto, removePhoto, photos } = useProjectWizardStore();
 
+  // Ignore abandoned/persisted ghost thumbnails (no base64) from a prior attempt.
+  const draftPhotos = photos.filter(isCurrentDraftPhoto);
+
   const pickPhotos = async () => {
-    const result = await launchImageLibrary({
-      mediaType: 'photo',
-      selectionLimit: MAX_PHOTOS - photos.length,
-      quality: 0.3,       // Low quality keeps base64 small enough to send to Anthropic
+    const assets = await pickPhotosWithSource({
+      selectionLimit: Math.max(1, MAX_PHOTOS - draftPhotos.length),
+      quality: 0.3,
       maxWidth: 1024,
       maxHeight: 1024,
       includeBase64: true,
-      assetRepresentationMode: 'compatible',
     });
+    if (!assets) return;
 
-    if (result.errorCode) {
-      Alert.alert('Photo picker failed', result.errorMessage ?? 'Please try selecting your photos again.');
-      return;
+    let skipped = 0;
+    for (const asset of assets) {
+      try {
+        const upload = getUploadMetadata(asset);
+        if (!asset.base64) {
+          skipped += 1;
+          continue;
+        }
+        const tempId = `temp_${Date.now()}_${Math.random()}`;
+        addPhoto({
+          id: tempId,
+          uri: upload.uri,
+          base64: asset.base64,
+          fileName: asset.fileName ?? undefined,
+          extension: upload.extension,
+          contentType: upload.contentType,
+          status: 'done',
+          progress: 100,
+          url: '',
+        });
+      } catch {
+        skipped += 1;
+      }
     }
 
-    if (!result.didCancel && result.assets) {
-      let skipped = 0;
-      for (const asset of result.assets) {
-        try {
-          const upload = getUploadMetadata(asset);
-          if (!asset.base64) {
-            skipped += 1;
-            continue;
-          }
-          const tempId = `temp_${Date.now()}_${Math.random()}`;
-          addPhoto({
-            id: tempId,
-            uri: upload.uri,
-            base64: asset.base64,
-            fileName: asset.fileName ?? undefined,
-            extension: upload.extension,
-            contentType: upload.contentType,
-            status: 'done',
-            progress: 100,
-            url: '',
-          });
-        } catch {
-          skipped += 1;
-        }
-      }
-
-      if (skipped > 0) {
-        Alert.alert(
-          'Some photos were skipped',
-          'WalkerAI could not read one or more selected photos. Please re-select them from your camera roll.'
-        );
-      }
+    if (skipped > 0) {
+      Alert.alert(
+        'Some photos were skipped',
+        'WalkerAI could not read one or more selected photos. Please re-select them from your camera roll or take them again.',
+      );
     }
   };
 
   const handleAnalyze = async () => {
-    const uploadedPhotos = photos.filter((p) => p.status === 'done');
+    const uploadedPhotos = draftPhotos;
     if (uploadedPhotos.length < MIN_PHOTOS) {
       Alert.alert(
         'More photos needed',
@@ -87,7 +87,7 @@ export default function PhotosStep() {
     navigation.navigate('Measurements');
   };
 
-  const selectedCount = photos.filter((p) => p.status === 'done').length;
+  const selectedCount = draftPhotos.length;
   const uploadingCount = photos.filter((p) => p.status === 'uploading').length;
   const canContinue = selectedCount >= MIN_PHOTOS && uploadingCount === 0;
 
@@ -116,10 +116,10 @@ export default function PhotosStep() {
             ))}
           </View>
 
-          {/* Photo grid */}
-          {photos.length > 0 && (
+          {/* Photo grid — current draft only */}
+          {draftPhotos.length > 0 && (
             <View style={styles.grid}>
-              {photos.map((photo) => (
+              {draftPhotos.map((photo) => (
                 <View key={photo.id} style={styles.photoCell}>
                   <Image source={{ uri: photo.uri }} style={styles.photoImage} />
                   {photo.status === 'uploading' && (
@@ -147,7 +147,7 @@ export default function PhotosStep() {
               ))}
 
               {/* Add more cell */}
-              {photos.length < MAX_PHOTOS && (
+              {draftPhotos.length < MAX_PHOTOS && (
                 <TouchableOpacity style={styles.addCell} onPress={pickPhotos} activeOpacity={0.7}>
                   <Text style={styles.addCellIcon}>+</Text>
                 </TouchableOpacity>
@@ -156,17 +156,17 @@ export default function PhotosStep() {
           )}
 
           {/* Upload CTA when empty */}
-          {photos.length === 0 && (
+          {draftPhotos.length === 0 && (
             <TouchableOpacity style={styles.emptyArea} onPress={pickPhotos} activeOpacity={0.8}>
               <Ionicons name="camera-outline" size={48} color={Colors.text.tertiary} />
-              <Text style={styles.emptyTitle}>Select {MIN_PHOTOS}+ photos</Text>
-              <Text style={styles.emptySub}>From your camera roll</Text>
+              <Text style={styles.emptyTitle}>Add {MIN_PHOTOS}+ photos</Text>
+              <Text style={styles.emptySub}>Camera or photo library</Text>
             </TouchableOpacity>
           )}
 
           {/* Status line */}
           <Text style={styles.statusLine}>
-            {selectedCount} of {photos.length} selected
+            {selectedCount} photo{selectedCount === 1 ? '' : 's'} selected
             {uploadingCount > 0 ? ` · ${uploadingCount} uploading…` : ''}
             {selectedCount < MIN_PHOTOS
               ? ` · Need ${MIN_PHOTOS - selectedCount} more`

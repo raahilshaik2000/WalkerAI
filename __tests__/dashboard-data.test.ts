@@ -85,22 +85,25 @@ describe('homeowner optional GC context', () => {
     const projects = fs.readFileSync(path.join(repoRoot, 'src/app/(homeowner)/projects.tsx'), 'utf8');
     const projectDetail = fs.readFileSync(path.join(repoRoot, 'src/app/(homeowner)/project/[id]/index.tsx'), 'utf8');
     const messages = fs.readFileSync(path.join(repoRoot, 'src/app/(homeowner)/messages.tsx'), 'utf8');
+    const homeownerData = fs.readFileSync(path.join(repoRoot, 'src/lib/homeowner-data.ts'), 'utf8');
 
     expect(helper).toContain('isMissingSupabaseSchemaObjectError');
     expect(helper).toContain('/schema cache/');
     expect(helper).toContain('/could not find the (table|column|relationship|function)/');
     expect(helper).toContain('/relation .* does not exist/');
 
-    for (const source of [carousel, projects, projectDetail, messages]) {
+    for (const source of [projects, projectDetail, homeownerData]) {
       expect(source).toContain("isMissingSupabaseSchemaObjectError");
       expect(source).toContain("'general_contractor_projects'");
     }
 
-    expect(carousel).toContain('setProjects(projectList);');
+    expect(carousel).toContain('useHomeownerCarouselProjects(user?.id)');
+    expect(homeownerData).toContain('return projectList;');
     expect(projects).toContain('if (!isMissingSupabaseSchemaObjectError(gcContextError, \'general_contractor_projects\'))');
     expect(projectDetail).toContain('setGcProjectContext(gcContextResult.error ? null');
-    expect(messages).toContain('const gcContextUnavailable = isMissingSupabaseSchemaObjectError(gcResult.error, \'general_contractor_projects\');');
-    expect(messages).toContain('gcContextUnavailable ? [] : (gcResult.data ?? [])');
+    expect(messages).toContain('useHomeownerMessageThreads(user?.id)');
+    expect(homeownerData).toContain('const gcContextUnavailable = isMissingSupabaseSchemaObjectError(gcResult.error, \'general_contractor_projects\');');
+    expect(homeownerData).toContain('gcContextUnavailable ? [] : (gcResult.data ?? [])');
   });
 
   it('keeps project carousel load failures app-safe while reading optional GC context', () => {
@@ -108,8 +111,7 @@ describe('homeowner optional GC context', () => {
     const carousel = fs.readFileSync(path.join(repoRoot, 'src/components/dashboard/ProjectsCarousel.tsx'), 'utf8');
 
     expect(carousel).toContain("import { formatAppSafeErrorMessage } from '@/lib/supabase/functions';");
-    expect(carousel).toContain("setErrorMessage(formatAppSafeErrorMessage(error, 'Could not load projects.'))");
-    expect(carousel).toContain("setErrorMessage(formatAppSafeErrorMessage(gcContextError, 'Could not load project management context.'))");
+    expect(carousel).toContain("formatAppSafeErrorMessage(projectsQuery.error, 'Could not load projects.')");
     expect(carousel).not.toContain('setErrorMessage(error.message)');
     expect(carousel).not.toContain('setErrorMessage(gcContextError.message)');
   });

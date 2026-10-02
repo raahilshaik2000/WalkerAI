@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useState, useRef } from 'react';
 import {
   Alert,
   ScrollView,
@@ -57,6 +57,7 @@ export default function CompanyChangeOrdersScreen() {
   const [changeOrders, setChangeOrders] = useState<ChangeOrder[]>([]);
   const [companyId, setCompanyId] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
+  const hasLoadedRef = useRef(false);
   const [showForm, setShowForm] = useState(false);
   const [description, setDescription] = useState('');
   const [costDelta, setCostDelta] = useState('');
@@ -72,7 +73,7 @@ export default function CompanyChangeOrdersScreen() {
   }, []);
 
   const fetchChangeOrders = useCallback(async () => {
-    setLoading(true);
+    if (!hasLoadedRef.current) setLoading(true);
     if (!projectId || !user?.id) {
       setErrorMessage('Project is missing. Reopen change orders from the job page.');
       clearChangeOrderState();
@@ -145,6 +146,7 @@ export default function CompanyChangeOrdersScreen() {
     } catch (err) {
       setErrorMessage(formatAppSafeErrorMessage(err, 'Could not load change orders.'));
       clearChangeOrderState();
+      hasLoadedRef.current = true;
       setLoading(false);
     }
   }, [clearChangeOrderState, projectId, user?.id]);

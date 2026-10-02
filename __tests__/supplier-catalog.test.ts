@@ -51,17 +51,18 @@ describe('supplier catalog helpers', () => {
     const editCatalog = fs.readFileSync(path.join(__dirname, '../src/app/(supplier)/catalog/[id]/index.tsx'), 'utf8');
     const earnings = fs.readFileSync(path.join(__dirname, '../src/app/(supplier)/earnings/index.tsx'), 'utf8');
     const profile = fs.readFileSync(path.join(__dirname, '../src/app/(supplier)/profile/index.tsx'), 'utf8');
+    const supplierData = fs.readFileSync(path.join(__dirname, '../src/lib/supplier-data.ts'), 'utf8');
 
     expect(catalog).toContain("import { formatAppSafeErrorMessage } from '@/lib/supabase/functions';");
-    expect(catalog).toContain("import { getCurrentUser } from '@/lib/supabase/auth';");
-    expect(catalog).toContain('const currentUserId = user?.id ?? (await getCurrentUser())?.id ?? null;');
-    expect(catalog).toContain(".eq('user_id', currentUserId)");
-    expect(catalog).toContain("setErrorMessage(formatAppSafeErrorMessage(supplierError, 'Could not load catalog.'))");
-    expect(catalog).toContain("setErrorMessage(formatAppSafeErrorMessage(error, 'Could not load catalog.'))");
-    expect(catalog).toContain("setErrorMessage(formatAppSafeErrorMessage(err, 'Could not load catalog.'))");
-    expect(catalog).toContain("if (error) throw error;");
+    expect(catalog).toContain("import { supplierQueryKeys, useSupplierCatalog } from '@/lib/supplier-data';");
+    expect(catalog).toContain('useSupplierCatalog(user?.id)');
+    expect(catalog).toContain("formatAppSafeErrorMessage(profileQuery.error, 'Could not load catalog.')");
+    expect(catalog).toContain("formatAppSafeErrorMessage(catalogQuery.error, 'Could not load catalog.')");
+    expect(supplierData).toContain('export async function fetchSupplierCatalog(supplierId: string)');
+    expect(supplierData).toContain(".eq('supplier_id', supplierId)");
+    expect(supplierData).toContain('if (error) throw error;');
     expect(catalog).toContain("Alert.alert('Could not update stock', formatAppSafeErrorMessage(err, 'Please try again.'))");
-    expect(catalog).toContain("setItems((prev) => prev.map((i) => i.id === item.id ? { ...i, in_stock: item.in_stock } : i));");
+    expect(catalog).toContain('queryClient.setQueryData(');
     expect(catalog).not.toContain(".eq('user_id', user.id)");
     expect(catalog).not.toContain('setErrorMessage(supplierError.message)');
     expect(catalog).not.toContain('setErrorMessage(error.message)');
@@ -98,14 +99,15 @@ describe('supplier catalog helpers', () => {
     expect(earnings).toContain("import { formatAppSafeErrorMessage, formatSupabaseFunctionError } from '@/lib/supabase/functions';");
     expect(earnings).toContain("import { refreshStripeConnectStatus } from '@/lib/stripe-connect';");
     expect(earnings).toContain("await refreshStripeConnectStatus('supplier');");
-    expect(earnings).toContain("setErrorMessage(formatAppSafeErrorMessage(supplierError, 'Could not load earnings.'))");
-    expect(earnings).toContain("setErrorMessage(formatAppSafeErrorMessage(error, 'Could not load earnings.'))");
+    expect(earnings).toContain('useSupplierEarnings(user?.id)');
+    expect(earnings).toContain("formatAppSafeErrorMessage(profileQuery.error, 'Could not load earnings.')");
+    expect(earnings).toContain("formatAppSafeErrorMessage(earningsQuery.error, 'Could not load earnings.')");
     expect(earnings).toContain("Alert.alert('Could not start payout setup', error ? await formatSupabaseFunctionError(error, 'Please try again.') : 'Please try again.')");
     expect(earnings).not.toContain('setErrorMessage(supplierError.message)');
     expect(earnings).not.toContain('setErrorMessage(error.message)');
 
     expect(profile).toContain("import { formatAppSafeErrorMessage } from '@/lib/supabase/functions';");
-    expect(profile).toContain("setErrorMessage(formatAppSafeErrorMessage(error, 'Could not load supplier profile.'))");
+    expect(profile).toContain("formatAppSafeErrorMessage(error, 'Could not load supplier profile.')");
     expect(profile).not.toContain('setErrorMessage(error.message)');
   });
 });

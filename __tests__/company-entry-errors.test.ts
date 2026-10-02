@@ -75,7 +75,7 @@ describe('company entry and onboarding errors', () => {
       expect(source).toContain('}, [user?.id]);');
     });
     expect(jobFeed).toContain("setErrorMessage('You need to be signed in to view jobs.');");
-    expect(jobFeed).toContain("setCompany(null);\n      setErrorMessage(formatAppSafeErrorMessage(err, 'Could not load jobs.'))");
+    expect(jobFeed).toContain("if (!hasLoadedRef.current) {\n        setCompany(null);\n        setJobs([]);\n        setActiveJobs([]);\n      }\n      setErrorMessage(formatAppSafeErrorMessage(err, 'Could not load jobs.'))");
     expect(calendar).toContain("setErrorMessage(formatAppSafeErrorMessage(err, 'Could not load calendar.'))");
     expect(earnings).toContain("setErrorMessage(formatAppSafeErrorMessage(err, 'Could not load earnings.'))");
   });

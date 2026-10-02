@@ -237,6 +237,39 @@ Deno.serve(async (req) => {
       );
     }
 
+    if (project_id || slot_id) {
+      let holdProjectId = typeof project_id === 'string' ? project_id : null;
+      if (!holdProjectId && slot_id) {
+        const { data: slotRow, error: slotLookupError } = await adminClient
+          .from('project_slots')
+          .select('project_id')
+          .eq('id', slot_id)
+          .maybeSingle();
+        if (slotLookupError) throw slotLookupError;
+        holdProjectId = (slotRow as { project_id?: string } | null)?.project_id ?? null;
+      }
+      if (holdProjectId) {
+        let holdResult = await adminClient
+          .from('projects')
+          .select('admin_paused')
+          .eq('id', holdProjectId)
+          .maybeSingle();
+        if (holdResult.error && isMissingColumnError(holdResult.error)) {
+          holdResult = { data: null, error: null } as typeof holdResult;
+        } else if (holdResult.error) {
+          throw holdResult.error;
+        }
+        if (holdResult.data?.admin_paused) {
+          return new Response(
+            JSON.stringify({
+              error: 'This project is on admin hold. Contact Walker AI support before accepting.',
+            }),
+            { status: 403, headers: { ...corsHeaders, 'Content-Type': 'application/json' } },
+          );
+        }
+      }
+    }
+
     // ── Slot-based acceptance (new trade-slot flow) ──────────────
     if (slot_id) {
       try {

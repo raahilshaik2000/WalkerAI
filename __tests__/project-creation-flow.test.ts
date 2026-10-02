@@ -39,7 +39,7 @@ describe('project creation flow guards', () => {
     );
 
     expect(addressSource).toContain('handleVoiceAddressSearch');
-    expect(addressSource).toContain('listenForProjectAnswer(9)');
+    expect(addressSource).toContain('listenForProjectAnswer(14)');
     expect(addressSource).toContain('voiceQuery={voiceQuery}');
     expect(addressSource).toContain('Please select a suggested address from the list');
     expect(addressSource).not.toContain('setAddress(transcript');
@@ -60,8 +60,7 @@ describe('project creation flow guards', () => {
       'utf8',
     );
 
-    expect(questionnaireSource).toContain('const voiceAvailable = isProjectVoiceAvailable();');
-    expect(questionnaireSource).toContain('disabled={voiceBusy || !voiceAvailable || !!pendingVoiceMatch || voiceWalkthroughActive}');
+    expect(questionnaireSource).toContain('disabled={!voiceAvailable || !!pendingVoiceMatch}');
     expect(questionnaireSource).toContain('Voice unavailable on this device');
     expect(questionnaireSource).toContain('Tap an answer manually to continue.');
 
@@ -87,11 +86,11 @@ describe('project creation flow guards', () => {
 
     expect(questionnaireSource).toContain('analyzeTranscriptForQuestionOption');
     expect(questionnaireSource).toContain('buildVoiceContextTerms(activeQuestion)');
-    expect(questionnaireSource).toContain('const transcript = await listenForProjectAnswer(9, voiceContextTerms);');
+    expect(questionnaireSource).toContain('speakAndListenForProjectAnswer(');
     expect(questionnaireSource).toContain('if (match.confidence >= 0.78) {');
     expect(questionnaireSource).toContain('setAnswer(activeQuestion.id, match.optionId);');
     expect(questionnaireSource).toContain('Say yes, no, or tell me the answer you want instead.');
-    expect(questionnaireSource).toContain('const confirmationTranscript = await listenForProjectAnswer(6, [');
+    expect(questionnaireSource).toContain('const confirmationTranscript = await listenForProjectAnswer(14, [');
     expect(questionnaireSource).toContain('...voiceContextTerms,');
     expect(questionnaireSource).toContain('const alternateMatch = analyzeTranscriptForQuestionOption(confirmationTranscript, activeQuestion);');
     expect(questionnaireSource).toContain("type VoicePhase = 'idle' | 'speaking' | 'listening' | 'thinking' | 'helping' | 'confirming' | 'selected' | 'paused' | 'error';");
@@ -113,7 +112,7 @@ describe('project creation flow guards', () => {
     expect(questionnaireSource).toContain('Stop voice walkthrough');
     expect(questionnaireSource).not.toContain('const matchedOptionId = matchTranscriptToQuestionOption(transcript, question);');
 
-    expect(nativeVoiceSource).toContain('request.contextualStrings = contextualStrings');
+    expect(nativeVoiceSource).toContain('request.contextualStrings = activeContextStrings');
     expect(nativeVoiceSource).toContain('@objc func cancelListening(');
     expect(nativeVoiceSource).toContain('resolveActiveListening(cancelled: true)');
     expect(nativeVoiceSource).toContain('private func preferredVoice() -> AVSpeechSynthesisVoice?');
@@ -139,7 +138,11 @@ describe('project creation flow guards', () => {
     expect(addressSource).not.toContain('err?.details || err?.hint');
 
     expect(confirmSource).toContain("import { formatAppSafeErrorMessage } from '@/lib/supabase/functions';");
-    expect(confirmSource).toContain("Alert.alert('Dispatch failed', formatAppSafeErrorMessage(err, 'Could not send this project to contractors. Please try again.'))");
+    expect(confirmSource).toContain("'Dispatch failed'");
+    expect(confirmSource).toContain("formatAppSafeErrorMessage(err, 'Could not send this project to contractors. Please try again.')");
+    expect(confirmSource).toContain('restartProjectDispatch');
+    expect(confirmSource).toContain('if (!dispatchData?.success)');
+    expect(confirmSource).toContain('admin_paused');
     expect(confirmSource).not.toContain("Alert.alert('Dispatch failed', err instanceof Error ? err.message : 'Please try again.')");
   });
 
@@ -177,23 +180,22 @@ describe('project creation flow guards', () => {
     expect(questionnaireSource).toContain("setVoiceError(formatAppSafeErrorMessage(err, 'Voice answer failed. Try again or answer manually.'))");
     expect(questionnaireSource).not.toContain("setVoiceError(err instanceof Error ? err.message : 'Voice answer failed. Try again or answer manually.')");
 
-    expect(rendersSource).toContain("import { formatAppSafeErrorMessage } from '@/lib/supabase/functions';");
-    expect(rendersSource).toContain("setRenderError(visualPreviewUnavailableMessage(formatAppSafeErrorMessage(err, 'Render generation failed.')))");
-    expect(rendersSource).toContain("setRenderError(formatAppSafeErrorMessage(clearError, 'Could not update render selection.'))");
-    expect(rendersSource).toContain("setRenderError(formatAppSafeErrorMessage(selectError, 'Could not save selected render.'))");
-    expect(rendersSource).toContain("setRenderError(formatAppSafeErrorMessage(projectUpdateError, 'Could not save project render selection.'))");
-    expect(rendersSource).toContain("setRenderError(formatAppSafeErrorMessage(err, 'Could not save render selection.'))");
+    expect(rendersSource).toContain("import { formatAppSafeErrorMessage, formatSupabaseFunctionError } from '@/lib/supabase/functions';");
+    expect(rendersSource).toContain('Design & Materials');
+    expect(rendersSource).toContain('RoomMaterialCustomizer');
+    expect(rendersSource).toContain("setError(formatAppSafeErrorMessage(err, 'Could not continue.'))");
     expect(rendersSource).toContain('const [savingSelection, setSavingSelection] = useState(false);');
     expect(rendersSource).toContain('loading={savingSelection}');
-    expect(rendersSource).not.toContain("visualPreviewUnavailableMessage(err instanceof Error ? err.message : 'Render generation failed.')");
-    expect(rendersSource).not.toContain('setRenderError(`Could not update render selection: ${clearError.message}`)');
-    expect(rendersSource).not.toContain('setRenderError(`Could not save selected render: ${selectError.message}`)');
-    expect(rendersSource).not.toContain('setRenderError(`Could not save project render selection: ${projectUpdateError.message}`)');
+    expect(rendersSource).toContain('generate-render');
+    expect(rendersSource).toContain('image_url: selection.imageUrl ?? null');
+    expect(rendersSource).toContain('Scrap & generate new design');
+    expect(rendersSource).not.toContain('images.unsplash.com');
 
-    expect(briefSource).toContain("import { formatAppSafeErrorMessage, formatSupabaseFunctionError } from '@/lib/supabase/functions';");
+    expect(briefSource).toContain("import { formatAppSafeErrorMessage } from '@/lib/supabase/functions';");
     expect(briefSource).toContain("throw new Error(formatAppSafeErrorMessage(renderError, 'Selected render could not be loaded.'))");
-    expect(briefSource).toContain("throw new Error(formatAppSafeErrorMessage(confidenceError, 'Brief saved but confidence score update failed.'))");
     expect(briefSource).toContain("formatAppSafeErrorMessage(\n            updateError,\n            `Could not save ${brief?.materials[sortOrder]?.item ?? 'material'} details.`,\n          )");
+    expect(briefSource).toContain("from('permits')");
+    expect(briefSource).toContain('missingPermits');
     expect(briefSource).toContain("setError(formatAppSafeErrorMessage(err, 'Failed to generate brief.'))");
     expect(briefSource).toContain("setError(formatAppSafeErrorMessage(err, 'Failed to save material details.'))");
     expect(briefSource).not.toContain('Selected render could not be loaded: ${renderError.message}');
@@ -219,6 +221,10 @@ describe('project creation flow guards', () => {
       expect(source).not.toContain('if (!user?.id)');
     });
     expect(analyzingSource).toContain('userId: currentUserId');
+    expect(analyzingSource).toContain(".eq('id', existingProjectId)");
+    expect(analyzingSource).toContain(".eq('homeowner_id', userId)");
+    expect(analyzingSource).toContain('existing draft project was unavailable for the signed-in homeowner');
+    expect(analyzingSource).toContain('if (pid !== projectId)');
     expect(analyzingSource).toContain('}, [analysisRunId, measurementsSkipped, navigation, photos, projectId, roomType, setAnalysisResult, setQuestions, user?.id]);');
     expect(diyGeneratingSource).toContain('homeowner_id: currentUserId');
     expect(diyGeneratingSource).toContain('}, [navigation, store, user?.id]);');
@@ -237,12 +243,38 @@ describe('project creation flow guards', () => {
     expect(analyzingSource).toContain('{ retries: 2 },');
     expect(analyzingSource).toContain('for (const [i, photo] of localPhotos.entries()) {');
     expect(analyzingSource).toContain('uploadedPhotoResults.push(await saveProjectPhoto({');
-    expect(analyzingSource).toContain('const canContinueWithLocalPhotos =');
-    expect(analyzingSource).toContain('[analyzing] continuing with local photo payload after transient photo persistence failures:');
+    expect(analyzingSource).toContain('const hasPersistedPhoto = uploadedPhotoResults.some((result) => result.saved);');
+    expect(analyzingSource).toContain('Project photos could not be saved. Please check your connection and try uploading the photos again — design previews need saved photos.');
+    expect(analyzingSource).not.toContain('const canContinueWithLocalPhotos =');
+    expect(analyzingSource).not.toContain('[analyzing] continuing with local photo payload after transient photo persistence failures:');
     expect(analyzingSource).toContain("supabase.functions.invoke('analyze-photos'");
     expect(analyzingSource.indexOf('uploadedPhotoResults.push(await saveProjectPhoto({')).toBeLessThan(
       analyzingSource.indexOf("supabase.functions.invoke('analyze-photos'"),
     );
     expect(analyzingSource).not.toContain('const uploadPromise = Promise.all(');
+  });
+
+  it('does not persist project photos across abandoned drafts', () => {
+    const storeSource = fs.readFileSync(
+      path.join(__dirname, '../src/stores/project-wizard.store.ts'),
+      'utf8',
+    );
+    const roomTypeSource = fs.readFileSync(
+      path.join(__dirname, '../src/app/(homeowner)/project/create/room-type.tsx'),
+      'utf8',
+    );
+    const photosSource = fs.readFileSync(
+      path.join(__dirname, '../src/app/(homeowner)/project/create/photos.tsx'),
+      'utf8',
+    );
+
+    expect(storeSource).not.toContain('photos: stripPhotoBase64(state.photos),');
+    expect(storeSource).toContain('// Photos are session-only.');
+    expect(storeSource).toContain('version: 2');
+    expect(storeSource).toContain('Drop any legacy photo rows');
+    expect(roomTypeSource).toContain('onFinishHydration');
+    expect(roomTypeSource).toContain('didResetForSession');
+    expect(photosSource).toContain('isCurrentDraftPhoto');
+    expect(photosSource).toContain('draftPhotos');
   });
 });

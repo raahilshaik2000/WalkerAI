@@ -1,4 +1,4 @@
-import { useCallback, useMemo, useState } from 'react';
+import { useRef, useCallback, useMemo, useState } from 'react';
 import {
   Alert,
   RefreshControl,
@@ -19,7 +19,7 @@ import { GENERAL_CONTRACTOR_READINESS_SELECT, isGeneralContractorReadyForProject
 import { getRequiredStringParam } from '@/lib/navigation-params';
 import { formatTradeLabel } from '@/lib/trade-labels';
 import { Colors, Spacing, Typography } from '@/constants/theme';
-import { GlassButton, GlassCard, GlassInput, GradientBackground, StatusBadge } from '@/components/ui';
+import { CardSkeleton, GlassButton, GlassCard, GlassInput, GradientBackground, StatusBadge } from '@/components/ui';
 import type { GcTradeQuoteNegotiation } from '@/types/database.types';
 
 interface Slot {
@@ -125,6 +125,7 @@ export default function GeneralContractorTradesScreen() {
   const [counterAmount, setCounterAmount] = useState('');
   const [counterNote, setCounterNote] = useState('');
   const [loading, setLoading] = useState(true);
+  const hasLoadedRef = useRef(false);
   const [refreshing, setRefreshing] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [generatingSlots, setGeneratingSlots] = useState(false);
@@ -191,6 +192,7 @@ export default function GeneralContractorTradesScreen() {
 
   const fetchData = useCallback(async () => {
     try {
+      if (!hasLoadedRef.current) setLoading(true);
       setErrorMessage(null);
       const currentUser = (await supabase.auth.getUser()).data.user;
       if (!currentUser?.id) {
@@ -256,6 +258,7 @@ export default function GeneralContractorTradesScreen() {
       setErrorMessage(formatAppSafeErrorMessage(err, 'Could not load trade management.'));
       clearTradeManagementState();
     } finally {
+      hasLoadedRef.current = true;
       setLoading(false);
       setRefreshing(false);
     }
@@ -592,9 +595,10 @@ export default function GeneralContractorTradesScreen() {
               <Text style={styles.bodyText}>{errorMessage}</Text>
             </GlassCard>
           ) : loading ? (
-            <GlassCard style={styles.card}>
-              <Text style={styles.bodyText}>Loading trade plan...</Text>
-            </GlassCard>
+            <View style={{ gap: 12 }}>
+              <CardSkeleton />
+              <CardSkeleton />
+            </View>
           ) : slots.length === 0 ? (
             <GlassCard style={styles.card}>
               <Text style={styles.bodyText}>Trade slots have not been generated yet.</Text>

@@ -1,7 +1,6 @@
-import { useCallback, useState } from 'react';
+import { useCallback, useRef, useState } from 'react';
 import {
   Alert,
-  Linking,
   RefreshControl,
   ScrollView,
   StyleSheet,
@@ -16,6 +15,7 @@ import { supabase } from '@/lib/supabase/client';
 import { formatAppSafeErrorMessage, formatSupabaseFunctionError } from '@/lib/supabase/functions';
 import { isStripePayoutLocallyReady } from '@/lib/payouts';
 import { refreshStripeConnectStatus } from '@/lib/stripe-connect';
+import { openInAppBrowser } from '@/lib/in-app-browser';
 import { useAuthStore } from '@/stores/auth.store';
 import type { GeneralContractor } from '@/types/database.types';
 import { nextGeneralContractorOnboardingRoute } from '@/lib/general-contractor';
@@ -33,6 +33,7 @@ export default function GeneralContractorProfile() {
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  const hasLoadedRef = useRef(false);
 
   const clearProfileState = useCallback(() => {
     setGc(null);
@@ -41,7 +42,7 @@ export default function GeneralContractorProfile() {
     setStartingPayoutSetup(false);
   }, []);
 
-  const fetchData = useCallback(async () => {
+  const fetchData = useCallback(async ({ syncStripe = false, showSpinner = false } = {}) => {
     try {
       setErrorMessage(null);
       const currentUser = user ?? (await supabase.auth.getUser()).data.user;
@@ -50,11 +51,24 @@ export default function GeneralContractorProfile() {
         clearProfileState();
         return;
       }
-
-      await refreshStripeConnectStatus('general_contractor');
+      if (showSpinner && !hasLoadedRef.current) setLoading(true);
+      if (syncStripe) {
+        try {
+          await refreshStripeConnectStatus('general_contractor');
+        } catch {
+          // Keep local profile visible if Stripe sync fails.
+        }
+      }
       const { data: profile, error } = await supabase
         .from('general_contractors')
-        .select('*')
+        .select(`
+          id, user_id, business_name, address, city, province, postal_code,
+          lat, lng, service_radius_km, license_number, license_doc_url, insurance_doc_url,
+          stripe_account_id, stripe_details_submitted, stripe_payouts_enabled,
+          stripe_transfers_active, stripe_onboarding_checked_at, verified,
+          concierge_enabled, default_markup_pct, default_concierge_fee_pct,
+          rating, total_reviews, created_at
+        `)
         .eq('user_id', currentUser.id)
         .maybeSingle();
       if (error) throw error;
@@ -72,9 +86,10 @@ export default function GeneralContractorProfile() {
         setManagedCount(0);
         setCompletedCount(0);
       }
+      hasLoadedRef.current = true;
     } catch (err) {
       setErrorMessage(formatAppSafeErrorMessage(err, 'Could not load GC profile.'));
-      clearProfileState();
+      if (!hasLoadedRef.current) clearProfileState();
     } finally {
       setLoading(false);
       setRefreshing(false);
@@ -83,13 +98,13 @@ export default function GeneralContractorProfile() {
 
   useFocusEffect(
     useCallback(() => {
-      fetchData();
+      void fetchData({ showSpinner: !hasLoadedRef.current });
     }, [fetchData]),
   );
 
   const onRefresh = () => {
     setRefreshing(true);
-    fetchData();
+    void fetchData({ syncStripe: true });
   };
 
   const handleSignOut = async () => {
@@ -128,7 +143,11 @@ export default function GeneralContractorProfile() {
       if (error) throw new Error(await formatSupabaseFunctionError(error));
       const url = typeof data?.url === 'string' ? data.url : null;
       if (!url) throw new Error('Stripe did not return an onboarding link.');
-      await Linking.openURL(url);
+      const result = await openInAppBrowser(url);
+      await fetchData({ syncStripe: true });
+      if (result?.status === 'success' || (result?.url && result.url.includes('status=success'))) {
+        Alert.alert('Payouts Connected!', 'Your Stripe payout details were submitted successfully and your account status is updated.');
+      }
     } catch (err) {
       Alert.alert('Could not start payout setup', await formatSupabaseFunctionError(err, 'Please try again.'));
     } finally {

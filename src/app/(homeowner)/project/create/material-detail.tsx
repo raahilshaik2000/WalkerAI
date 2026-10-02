@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useCallback, useState } from 'react';
 import {
   KeyboardAvoidingView,
   Platform,
@@ -10,7 +10,7 @@ import {
   View,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { useNavigation, useRoute } from '@react-navigation/native';
+import { useFocusEffect, useNavigation, useRoute } from '@react-navigation/native';
 import Ionicons from 'react-native-vector-icons/Ionicons';
 import { useProjectWizardStore, type MaterialOverride } from '@/stores/project-wizard.store';
 import { lookupMaterialPrice } from '@/data/pricing-reference';
@@ -113,7 +113,7 @@ function MaterialDetailEditor({ params }: { params: MaterialDetailRouteParams })
   const [model, setModel] = useState(existing.specific_model ?? '');
   const [notes, setNotes] = useState(existing.contractor_notes ?? '');
 
-  const handleSave = () => {
+  const persistOverride = useCallback(() => {
     const override: MaterialOverride = {
       quality_tier: tier,
       brand_preference: brand.trim() || undefined,
@@ -122,6 +122,23 @@ function MaterialDetailEditor({ params }: { params: MaterialDetailRouteParams })
       contractor_notes: notes.trim() || undefined,
     };
     setMaterialOverride(materialIndex, override);
+  }, [brand, colorFinish, materialIndex, model, notes, setMaterialOverride, tier]);
+
+  useFocusEffect(
+    useCallback(() => {
+      return () => {
+        persistOverride();
+      };
+    }, [persistOverride])
+  );
+
+  const handleSave = () => {
+    persistOverride();
+    navigation.goBack();
+  };
+
+  const handleBack = () => {
+    persistOverride();
     navigation.goBack();
   };
 
@@ -131,7 +148,7 @@ function MaterialDetailEditor({ params }: { params: MaterialDetailRouteParams })
         <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined} style={{ flex: 1 }}>
           {/* Header */}
           <View style={styles.header}>
-            <TouchableOpacity style={styles.backBtn} onPress={() => navigation.goBack()}>
+            <TouchableOpacity style={styles.backBtn} onPress={handleBack}>
               <Ionicons name="chevron-back" size={22} color="#fff" />
             </TouchableOpacity>
             <View style={styles.headerCenter}>

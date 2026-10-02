@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useState, useRef } from 'react';
 import {
   Alert,
   ScrollView,
@@ -11,13 +11,13 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { useNavigation } from '@react-navigation/native'
 import { useRoute } from '@react-navigation/native';
 import ReactNativeHapticFeedback from 'react-native-haptic-feedback';
-import { launchImageLibrary } from 'react-native-image-picker';
 import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
 import Ionicons from 'react-native-vector-icons/Ionicons';
 import { supabase } from '@/lib/supabase/client';
 import { formatCadCents } from '@/lib/currency';
 import { formatAppSafeErrorMessage } from '@/lib/supabase/functions';
-import { getUploadMetadata, uploadFile } from '@/lib/supabase/storage';
+import { pickPhotosWithSource } from '@/lib/media-picker';
+import { getUploadMetadata, uploadBase64, uploadFile } from '@/lib/supabase/storage';
 import { useAuthStore } from '@/stores/auth.store';
 import { Colors, Spacing, Typography } from '@/constants/theme';
 import { getRequiredStringParam } from '@/lib/navigation-params';
@@ -78,10 +78,11 @@ export default function CompanyMilestonesScreen() {
   const [masterSlot, setMasterSlot] = useState<MasterSlotPayout | null>(null);
   const [masterUnlocked, setMasterUnlocked] = useState(true);
   const [loading, setLoading] = useState(true);
+  const hasLoadedRef = useRef(false);
   const [updating, setUpdating] = useState<string | null>(null);
 
   const fetchMilestones = useCallback(async () => {
-    setLoading(true);
+    if (!hasLoadedRef.current) setLoading(true);
     if (!projectId || !user?.id) {
       setLoading(false);
       return;
@@ -139,10 +140,12 @@ export default function CompanyMilestonesScreen() {
 
       setMasterSlot((slot as MasterSlotPayout) ?? null);
       setMasterUnlocked(unlocked);
+      hasLoadedRef.current = true;
       setLoading(false);
       return;
     }
     // No slotId: nothing to show for this master-only screen.
+    hasLoadedRef.current = true;
     setLoading(false);
   }, [projectId, slotId, user?.id]);
 
@@ -170,18 +173,19 @@ export default function CompanyMilestonesScreen() {
       return;
     }
 
-    const result = await launchImageLibrary({
-      mediaType: 'photo',
+    const assets = await pickPhotosWithSource({
       quality: 0.8,
       selectionLimit: 1,
-      assetRepresentationMode: 'compatible',
+      includeBase64: true,
     });
-    if (result.didCancel || !result.assets || !result.assets[0]) return;
+    if (!assets?.[0]) return;
 
     try {
-      const upload = getUploadMetadata(result.assets[0]);
+      const upload = getUploadMetadata(assets[0]);
       const path = `${projectId}/slots/${slotId}/completion-${Date.now()}.${upload.extension}`;
-      const { publicUrl, storagePath } = await uploadFile('project-photos', path, upload.uri, upload.contentType);
+      const { publicUrl, storagePath } = assets[0].base64
+        ? await uploadBase64('project-photos', path, assets[0].base64, upload.contentType)
+        : await uploadFile('project-photos', path, upload.uri, upload.contentType);
 
       const { error } = await supabase.from('project_photos').insert({
         project_id: projectId,

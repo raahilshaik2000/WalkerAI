@@ -16,11 +16,13 @@ import {
   analyzeTranscriptForQuestionOption,
   buildVoiceContextTerms,
   extractCorrectedAnswerTranscript,
+  formatQuestionVoicePrompt,
   isProjectVoiceAvailable,
   listenForProjectAnswer,
   optionExplanationForTranscript,
   recommendedOptionForQuestion,
   requestProjectVoicePermissions,
+  speakAndListenForProjectAnswer,
   speakProjectDecisionHelp,
   speakProjectOptionExplanation,
   speakProjectQuestion,
@@ -61,6 +63,7 @@ export default function QuestionnaireStep() {
   const [voiceError, setVoiceError] = useState<string | null>(null);
   const [voicePhase, setVoicePhase] = useState<VoicePhase>('idle');
   const voiceWalkthroughRef = useRef(false);
+  const voiceManualAdvanceRef = useRef(false);
 
   const question = questions[currentQuestionIndex];
   const voiceAvailable = isProjectVoiceAvailable();
@@ -93,12 +96,20 @@ export default function QuestionnaireStep() {
   };
 
   const shortOptionLabel = (label: string) => label.split('—')[0].trim();
+  const pauseBetweenVoiceTurns = (durationMs = 250) => new Promise((resolve) => setTimeout(resolve, durationMs));
 
   const advanceAfterVoiceAnswer = (answeredQuestion: ActiveQuestion, optionId: string) => {
     const selectedOptionForAdvance = answeredQuestion.options.find((o) => o.id === optionId);
     const nextQuestionId = selectedOptionForAdvance?.next_question_id;
     const latestState = useProjectWizardStore.getState();
-    const isLast = latestState.currentQuestionIndex >= latestState.questions.length - 1 || selectedOptionForAdvance?.next_question_id === null;
+    const answeredQuestionIndex = latestState.questions.findIndex((item) => item.id === answeredQuestion.id);
+    const currentIndex = answeredQuestionIndex >= 0 ? answeredQuestionIndex : latestState.currentQuestionIndex;
+    const nextQuestionIndex = nextQuestionId
+      ? latestState.questions.findIndex((item) => item.id === nextQuestionId)
+      : currentIndex + 1;
+    const hasExplicitNextQuestion = nextQuestionId ? nextQuestionIndex >= 0 : false;
+    const isExplicitTerminal = selectedOptionForAdvance?.next_question_id === null;
+    const isLast = isExplicitTerminal || nextQuestionIndex < 0 || nextQuestionIndex >= latestState.questions.length;
 
     if (isLast) {
       useProjectWizardStore.getState().setStep(5);
@@ -106,13 +117,17 @@ export default function QuestionnaireStep() {
       return false;
     }
 
-    nextQuestion(nextQuestionId ?? null);
+    if (hasExplicitNextQuestion) {
+      useProjectWizardStore.getState().goToQuestionIndex(nextQuestionIndex);
+    } else {
+      useProjectWizardStore.getState().goToQuestionIndex(currentIndex + 1);
+    }
     return true;
   };
 
   type VoiceQuestionResult =
     | { optionId: string; optionLabel: string }
-    | { command: 'previous' };
+    | { command: 'previous' | 'manual-advance' };
 
   const goBackByVoice = async () => {
     const latestState = useProjectWizardStore.getState();
@@ -131,8 +146,6 @@ export default function QuestionnaireStep() {
   };
 
   const askQuestionByVoice = async (activeQuestion: ActiveQuestion): Promise<VoiceQuestionResult | null> => {
-    setVoicePhase('speaking');
-    await speakProjectQuestion(activeQuestion);
     const voiceContextTerms = buildVoiceContextTerms(activeQuestion);
     const maxAttempts = 3;
     let suggestionWasOffered = false;
@@ -149,35 +162,51 @@ export default function QuestionnaireStep() {
       setVoiceTranscript(`Heard "${transcriptText}" and selected ${contextLabel}: ${spokenLabel}.`);
       setVoicePhase('selected');
       await speakProjectPrompt(`Got it. I selected ${spokenLabel}.`);
+      await pauseBetweenVoiceTurns(1000);
       return { optionId: option.id, optionLabel: option.label };
     };
 
     for (let attempt = 0; attempt < maxAttempts; attempt += 1) {
-      if (attempt > 0) {
-        await speakProjectPrompt('Let me try that again. You can say the option number, or say the answer in your own words.');
+      setVoicePhase('listening');
+      let transcript = '';
+      if (attempt === 0) {
+        const questionPrompt = formatQuestionVoicePrompt(activeQuestion);
+        transcript = await speakAndListenForProjectAnswer(questionPrompt, 16, voiceContextTerms);
+      } else {
+        const retryPrompt = 'Let me try that again. You can say the option number, or say the answer in your own words.';
+        transcript = await speakAndListenForProjectAnswer(retryPrompt, 16, voiceContextTerms);
       }
 
-      setVoicePhase('listening');
-      const transcript = await listenForProjectAnswer(9, voiceContextTerms);
       setVoicePhase('thinking');
       setVoiceTranscript(transcript);
 
       if (transcriptRequestsVoiceStop(transcript)) {
+        if (voiceManualAdvanceRef.current) {
+          voiceManualAdvanceRef.current = false;
+          return { command: 'manual-advance' };
+        }
+
         voiceWalkthroughRef.current = false;
-        setVoiceTranscript('Voice walkthrough paused.');
+        setVoiceTranscript('Voice assistant stopped.');
         setVoicePhase('paused');
-        await speakProjectPrompt('Okay, I paused the voice walkthrough. You can answer manually or start again.');
+        await stopProjectVoice();
         return null;
       }
 
       if (transcriptRequestsOptionsRepeat(transcript)) {
         setVoiceTranscript('Repeating the options.');
-        setVoicePhase('speaking');
+        setVoicePhase('listening');
         suggestionWasOffered = false;
         lastExplainedOptionId = null;
         lastSuggestedContextLabel = 'the explained option';
-        await speakProjectQuestion(activeQuestion);
-        continue;
+        const repeatPrompt = formatQuestionVoicePrompt(activeQuestion);
+        transcript = await speakAndListenForProjectAnswer(repeatPrompt, 16, voiceContextTerms);
+        setVoicePhase('thinking');
+        setVoiceTranscript(transcript);
+        if (voiceManualAdvanceRef.current) {
+          voiceManualAdvanceRef.current = false;
+          return { command: 'manual-advance' };
+        }
       }
 
       const optionExplanation = optionExplanationForTranscript(transcript, activeQuestion);
@@ -262,13 +291,15 @@ export default function QuestionnaireStep() {
         setVoiceTranscript(`Heard "${transcript}" and selected ${spokenLabel}.`);
         setVoicePhase('selected');
         await speakProjectPrompt(`Got it. I selected ${spokenLabel}.`);
+        await pauseBetweenVoiceTurns(1000);
         return { optionId: match.optionId, optionLabel: matchedOption.label };
       }
 
       setVoicePhase('confirming');
       await speakProjectPrompt(`I heard ${transcript}. Should I choose ${spokenLabel}? Say yes, no, or tell me the answer you want instead.`);
+      await pauseBetweenVoiceTurns();
       setVoicePhase('listening');
-      const confirmationTranscript = await listenForProjectAnswer(6, [
+      const confirmationTranscript = await listenForProjectAnswer(14, [
         ...voiceContextTerms,
         'yes',
         'no',
@@ -289,10 +320,15 @@ export default function QuestionnaireStep() {
       setVoiceTranscript(`${transcript}. Confirmation: ${confirmationTranscript}`);
 
       if (transcriptRequestsVoiceStop(confirmationTranscript)) {
+        if (voiceManualAdvanceRef.current) {
+          voiceManualAdvanceRef.current = false;
+          return { command: 'manual-advance' };
+        }
+
         voiceWalkthroughRef.current = false;
-        setVoiceTranscript('Voice walkthrough paused.');
+        setVoiceTranscript('Voice assistant stopped.');
         setVoicePhase('paused');
-        await speakProjectPrompt('Okay, I paused the voice walkthrough.');
+        await stopProjectVoice();
         return null;
       }
 
@@ -391,6 +427,7 @@ export default function QuestionnaireStep() {
         setVoiceTranscript(`Correction heard. Selected ${alternateLabel}.`);
         setVoicePhase('selected');
         await speakProjectPrompt(`Got it. I selected ${alternateLabel}.`);
+        await pauseBetweenVoiceTurns(1000);
         return { optionId: alternateMatch.optionId, optionLabel: alternateOption.label };
       }
 
@@ -399,6 +436,7 @@ export default function QuestionnaireStep() {
         setAnswer(activeQuestion.id, match.optionId);
         setVoicePhase('selected');
         await speakProjectPrompt(`Confirmed. I selected ${spokenLabel}.`);
+        await pauseBetweenVoiceTurns(1000);
         return { optionId: match.optionId, optionLabel: matchedOption.label };
       }
 
@@ -503,8 +541,16 @@ export default function QuestionnaireStep() {
     setVoiceWalkthroughActive(false);
     setVoiceBusy(false);
     await stopProjectVoice();
-    setVoiceTranscript('Voice walkthrough paused.');
+    setVoiceTranscript('Voice assistant stopped.');
     setVoicePhase('paused');
+  };
+
+  const handleVoiceCardPress = async () => {
+    if (voiceBusy || voiceWalkthroughActive) {
+      await stopVoiceWalkthrough();
+      return;
+    }
+    await handleVoiceAnswer();
   };
 
   const confirmVoiceMatch = () => {
@@ -521,6 +567,20 @@ export default function QuestionnaireStep() {
     const selectedOption = question.options.find((o) => o.id === answerId);
     const nextQuestionId = selectedOption?.next_question_id;
     const isExplicitTerminal = selectedOption?.next_question_id === null;
+
+    if (voiceWalkthroughActive) {
+      voiceManualAdvanceRef.current = true;
+      const shouldContinueVoice = advanceAfterVoiceAnswer(question, answerId);
+      if (shouldContinueVoice) {
+        setVoiceTranscript('Continuing to the next question.');
+        setVoicePhase('speaking');
+        void stopProjectVoice();
+      } else {
+        voiceWalkthroughRef.current = false;
+        void stopProjectVoice();
+      }
+      return;
+    }
 
     animateTransition(() => {
       const isLast = currentQuestionIndex >= questions.length - 1 || isExplicitTerminal;
@@ -549,39 +609,39 @@ export default function QuestionnaireStep() {
     ? 'Voice unavailable on this device'
     : pendingVoiceMatch
       ? 'Confirm your answer'
-      : voicePhase === 'speaking'
-        ? 'WalkerAI is speaking'
-        : voicePhase === 'listening'
-          ? 'Listening for your answer'
-          : voicePhase === 'thinking'
-            ? 'Checking your answer'
-            : voicePhase === 'helping'
-              ? 'Helping you choose'
-              : voicePhase === 'confirming'
-                ? 'Confirming your answer'
-                : voicePhase === 'selected'
-                  ? 'Answer selected'
-                  : voicePhase === 'paused'
-                    ? 'Voice paused'
-                    : voicePhase === 'error'
-                      ? 'Voice needs another try'
-                      : voiceBusy
-                        ? 'Talking with you...'
+      : voiceBusy || voiceWalkthroughActive
+        ? 'Tap to Stop Voice'
+        : voicePhase === 'speaking'
+          ? 'WalkerAI is speaking'
+          : voicePhase === 'listening'
+            ? 'Listening for your answer'
+            : voicePhase === 'thinking'
+              ? 'Checking your answer'
+              : voicePhase === 'helping'
+                ? 'Helping you choose'
+                : voicePhase === 'confirming'
+                  ? 'Confirming your answer'
+                  : voicePhase === 'selected'
+                    ? 'Answer selected'
+                    : voicePhase === 'paused'
+                      ? 'Voice stopped'
+                      : voicePhase === 'error'
+                        ? 'Voice needs another try'
                         : 'Talk through this answer';
-  const voiceIconName = voicePhase === 'speaking' || voicePhase === 'helping'
-    ? 'volume-high-outline'
-    : voicePhase === 'listening'
-      ? 'mic-outline'
-      : voicePhase === 'thinking' || voicePhase === 'confirming'
-        ? 'sync-outline'
-        : voicePhase === 'selected'
-          ? 'checkmark-circle-outline'
-          : voicePhase === 'paused'
-            ? 'pause-circle-outline'
-            : voicePhase === 'error'
-              ? 'alert-circle-outline'
-              : voiceBusy
-                ? 'radio-outline'
+  const voiceIconName = voiceBusy || voiceWalkthroughActive
+    ? 'stop-circle-outline'
+    : voicePhase === 'speaking' || voicePhase === 'helping'
+      ? 'volume-high-outline'
+      : voicePhase === 'listening'
+        ? 'mic-outline'
+        : voicePhase === 'thinking' || voicePhase === 'confirming'
+          ? 'sync-outline'
+          : voicePhase === 'selected'
+            ? 'checkmark-circle-outline'
+            : voicePhase === 'paused'
+              ? 'pause-circle-outline'
+              : voicePhase === 'error'
+                ? 'alert-circle-outline'
                 : 'mic-outline';
 
   return (
@@ -592,7 +652,16 @@ export default function QuestionnaireStep() {
           showsVerticalScrollIndicator={false}
           keyboardShouldPersistTaps="handled"
         >
-          <WizardHeader currentStep={4} />
+          <WizardHeader
+            currentStep={4}
+            onBack={() => {
+              if (currentQuestionIndex > 0) {
+                previousQuestion();
+              } else {
+                navigation.goBack();
+              }
+            }}
+          />
 
           <Text style={styles.stepLabel}>
             QUESTION {currentQuestionIndex + 1} OF {questions.length}
@@ -608,15 +677,15 @@ export default function QuestionnaireStep() {
             )}
 
             <TouchableOpacity
-              style={[styles.voiceWalkthroughButton, voiceWalkthroughActive && styles.voiceWalkthroughButtonActive, (!voiceAvailable || voiceBusy) && !voiceWalkthroughActive && styles.voiceCardDisabled]}
+              style={[styles.voiceWalkthroughButton, voiceWalkthroughActive && styles.voiceWalkthroughButtonActive, !voiceAvailable && styles.voiceCardDisabled]}
               onPress={voiceWalkthroughActive ? stopVoiceWalkthrough : startVoiceWalkthrough}
               activeOpacity={0.85}
-              disabled={!voiceAvailable || (voiceBusy && !voiceWalkthroughActive)}
+              disabled={!voiceAvailable}
             >
               <Ionicons
                 name={voiceWalkthroughActive ? 'stop-circle-outline' : 'sparkles-outline'}
                 size={18}
-                color={voiceWalkthroughActive ? '#000' : voiceAvailable ? Colors.accent : Colors.text.tertiary}
+                color={voiceWalkthroughActive ? Colors.accentFg : voiceAvailable ? Colors.success : Colors.text.tertiary}
               />
               <Text style={[styles.voiceWalkthroughText, voiceWalkthroughActive && styles.voiceWalkthroughTextActive]}>
                 {voiceWalkthroughActive ? 'Stop voice walkthrough' : 'Start voice walkthrough'}
@@ -624,16 +693,16 @@ export default function QuestionnaireStep() {
             </TouchableOpacity>
 
             <TouchableOpacity
-              style={[styles.voiceCard, voiceBusy && styles.voiceCardActive, !voiceAvailable && styles.voiceCardDisabled]}
-              onPress={handleVoiceAnswer}
+              style={[styles.voiceCard, (voiceBusy || voiceWalkthroughActive) && styles.voiceCardActive, !voiceAvailable && styles.voiceCardDisabled]}
+              onPress={handleVoiceCardPress}
               activeOpacity={0.85}
-              disabled={voiceBusy || !voiceAvailable || !!pendingVoiceMatch || voiceWalkthroughActive}
+              disabled={!voiceAvailable || !!pendingVoiceMatch}
             >
-              <View style={[styles.voiceIcon, voiceBusy && styles.voiceIconActive, !voiceAvailable && styles.voiceIconDisabled]}>
+              <View style={[styles.voiceIcon, (voiceBusy || voiceWalkthroughActive) && styles.voiceIconActive, !voiceAvailable && styles.voiceIconDisabled]}>
                 <Ionicons
                   name={voiceIconName}
                   size={18}
-                  color={voiceBusy ? '#000' : voiceAvailable ? Colors.accent : Colors.text.tertiary}
+                  color={(voiceBusy || voiceWalkthroughActive) ? Colors.accentFg : voiceAvailable ? Colors.success : Colors.text.tertiary}
                 />
               </View>
               <View style={styles.voiceTextWrap}>
@@ -643,11 +712,13 @@ export default function QuestionnaireStep() {
                     ? `Heard "${pendingVoiceMatch.transcript}"`
                     : voiceError
                       ? voiceError
-                      : voiceTranscript
-                        ? `Heard: ${voiceTranscript}`
-                        : voiceAvailable
-                          ? 'WalkerAI reads the question, listens, and selects confident matches for you.'
-                          : 'Tap an answer manually to continue.'}
+                      : (voiceBusy || voiceWalkthroughActive)
+                        ? 'Tap anywhere here to immediately stop voice.'
+                        : voiceTranscript
+                          ? `Heard: ${voiceTranscript}`
+                          : voiceAvailable
+                            ? 'WalkerAI reads the question, listens, and selects confident matches for you.'
+                            : 'Tap an answer manually to continue.'}
                 </Text>
               </View>
             </TouchableOpacity>
@@ -725,7 +796,7 @@ export default function QuestionnaireStep() {
           </Animated.View>
 
           <GlassButton
-            label={isTerminalQuestion ? 'Visual Preview' : 'Next'}
+            label={isTerminalQuestion ? 'Design & Materials' : 'Next'}
             onPress={handleNext}
             disabled={!selectedAnswer}
             fullWidth
@@ -815,8 +886,8 @@ const styles = StyleSheet.create({
     backgroundColor: Colors.accent,
     borderColor: Colors.accent,
   },
-  voiceWalkthroughText: { fontSize: 13, fontWeight: '700', color: Colors.accent },
-  voiceWalkthroughTextActive: { color: '#000' },
+  voiceWalkthroughText: { fontSize: 13, fontWeight: '700', color: Colors.success },
+  voiceWalkthroughTextActive: { color: Colors.accentFg },
   voiceConfirmRow: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -850,7 +921,7 @@ const styles = StyleSheet.create({
   },
   voiceActionRetryText: { fontSize: 12, fontWeight: '600', color: Colors.text.primary },
   voiceActionConfirm: { backgroundColor: Colors.accent },
-  voiceActionConfirmText: { fontSize: 12, fontWeight: '700', color: '#000' },
+  voiceActionConfirmText: { fontSize: 12, fontWeight: '700', color: Colors.accentFg },
   voiceRetryInline: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -865,7 +936,7 @@ const styles = StyleSheet.create({
     marginTop: -6,
     marginBottom: Spacing.md,
   },
-  voiceRetryInlineText: { fontSize: 12, fontWeight: '700', color: Colors.accent },
+  voiceRetryInlineText: { fontSize: 12, fontWeight: '700', color: Colors.success },
   optionsContainer: {
     gap: 10,
     marginBottom: Spacing.lg,

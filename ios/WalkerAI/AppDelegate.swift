@@ -11,6 +11,10 @@ class AppDelegate: UIResponder, UIApplicationDelegate, UNUserNotificationCenterD
   var reactNativeDelegate: ReactNativeDelegate?
   var reactNativeFactory: RCTReactNativeFactory?
 
+  // NOTE: Future iOS versions may require UIScene lifecycle. Migrating RN's
+  // root window to a SceneDelegate is deferred until Apple enforces it, to
+  // avoid destabilizing the current TestFlight build path.
+
   func application(
     _ application: UIApplication,
     didFinishLaunchingWithOptions launchOptions: [UIApplication.LaunchOptionsKey: Any]? = nil
@@ -22,13 +26,17 @@ class AppDelegate: UIResponder, UIApplicationDelegate, UNUserNotificationCenterD
     reactNativeDelegate = delegate
     reactNativeFactory = factory
 
-    window = UIWindow(frame: UIScreen.main.bounds)
-
-    factory.startReactNative(
-      withModuleName: "WalkerAI",
-      in: window,
-      launchOptions: launchOptions
-    )
+    // If UIScene lifecycle is not active (e.g. earlier iOS or fallback), initialize window directly
+    if #available(iOS 13.0, *) {
+      // SceneDelegate will handle window creation and factory.startReactNative via scene willConnectTo
+    } else {
+      window = UIWindow(frame: UIScreen.main.bounds)
+      factory.startReactNative(
+        withModuleName: "WalkerAI",
+        in: window,
+        launchOptions: launchOptions
+      )
+    }
 
     // Wire up notification handling. JS calls into the WalkerPush native
     // module after sign-in to request permission and register for remote
@@ -38,6 +46,35 @@ class AppDelegate: UIResponder, UIApplicationDelegate, UNUserNotificationCenterD
     UNUserNotificationCenter.current().delegate = self
 
     return true
+  }
+
+  // MARK: - UISceneSession Lifecycle
+
+  func application(
+    _ application: UIApplication,
+    configurationForConnecting connectingSceneSession: UISceneSession,
+    options: UIScene.ConnectionOptions
+  ) -> UISceneConfiguration {
+    let configuration = UISceneConfiguration(
+      name: "Default Configuration",
+      sessionRole: connectingSceneSession.role
+    )
+    configuration.delegateClass = SceneDelegate.self
+    return configuration
+  }
+
+  // MARK: - Deep Linking & Custom URL Schemes
+
+  func application(
+    _ app: UIApplication,
+    open url: URL,
+    options: [UIApplication.OpenURLOptionsKey: Any] = [:]
+  ) -> Bool {
+    NSLog("[DeepLink] Received URL: \(url.absoluteString)")
+    if url.scheme == "walkerai" {
+      WalkerInAppBrowser.dismissCurrent(withURL: url)
+    }
+    return RCTLinkingManager.application(app, open: url, options: options)
   }
 
   // MARK: - APNs Registration

@@ -17,7 +17,9 @@ describe('warranty upload screens', () => {
       'utf8',
     );
 
-    expect(companySource).toContain("mediaType: 'photo'");
+    expect(companySource).toContain("import { pickPhotosWithSource } from '@/lib/media-picker';");
+    expect(companySource).toContain('const assets = await pickPhotosWithSource({');
+    expect(companySource).toContain('selectionLimit: 1');
     expect(companySource).toContain('Add warranty photo');
     expect(companySource).toContain('Upload a warranty card or product coverage photo first.');
     expect(companySource).toContain('handleOpenDocument(previewUrl)');

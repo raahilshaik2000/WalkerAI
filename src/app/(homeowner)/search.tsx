@@ -1,4 +1,4 @@
-import React, { useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import {
   FlatList,
   StyleSheet,
@@ -9,7 +9,7 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useNavigation } from '@react-navigation/native';
 import Ionicons from 'react-native-vector-icons/Ionicons';
-import { AnimatedPressable, GradientBackground } from '@/components/ui';
+import { AnimatedPressable, GlassButton, GradientBackground } from '@/components/ui';
 import { Colors, Radius } from '@/constants/theme';
 import { formatGcProjectType } from '@/lib/gc-project-type';
 import { supabase } from '@/lib/supabase/client';
@@ -32,7 +32,7 @@ export default function SearchScreen() {
   const [projects, setProjects] = useState<Project[]>([]);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
-  useEffect(() => {
+  const loadProjects = useCallback(() => {
     if (!user) return;
     setErrorMessage(null);
     supabase
@@ -50,6 +50,10 @@ export default function SearchScreen() {
         setProjects((data as Project[]) ?? []);
       });
   }, [user]);
+
+  useEffect(() => {
+    loadProjects();
+  }, [loadProjects]);
 
   const q = query.toLowerCase().trim();
   const results = q
@@ -97,6 +101,7 @@ export default function SearchScreen() {
           <View style={styles.empty}>
             <Ionicons name="alert-circle-outline" size={48} color={Colors.text.tertiary} />
             <Text style={styles.emptyText}>Could not load projects: {errorMessage}</Text>
+            <GlassButton label="Try Again" onPress={loadProjects} size="sm" style={{ marginTop: 12 }} />
           </View>
         ) : q.length === 0 ? (
           <View style={styles.empty}>

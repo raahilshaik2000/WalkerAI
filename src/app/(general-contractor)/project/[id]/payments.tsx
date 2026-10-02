@@ -1,4 +1,4 @@
-import { useCallback, useState } from 'react';
+import { useCallback, useRef, useState } from 'react';
 import {
   Alert,
   RefreshControl,
@@ -18,7 +18,7 @@ import { formatStatusLabel } from '@/lib/formatters';
 import { GENERAL_CONTRACTOR_READINESS_SELECT, isGeneralContractorReadyForProjectControls } from '@/lib/general-contractor';
 import { getRequiredStringParam } from '@/lib/navigation-params';
 import { Colors, Spacing, Typography } from '@/constants/theme';
-import { GlassButton, GlassCard, GlassInput, GradientBackground, StatusBadge } from '@/components/ui';
+import { CardSkeleton, GlassButton, GlassCard, GlassInput, GradientBackground, StatusBadge } from '@/components/ui';
 import type { GcPaymentRequest } from '@/types/database.types';
 
 type PaymentKind = 'deposit' | 'progress_draw' | 'final_payment';
@@ -72,6 +72,7 @@ export default function GeneralContractorPaymentsScreen() {
   const [title, setTitle] = useState('');
   const [description, setDescription] = useState('');
   const [loading, setLoading] = useState(true);
+  const hasLoadedRef = useRef(false);
   const [refreshing, setRefreshing] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [cancellingRequestId, setCancellingRequestId] = useState<string | null>(null);
@@ -138,6 +139,7 @@ export default function GeneralContractorPaymentsScreen() {
       setErrorMessage(formatAppSafeErrorMessage(err, 'Could not load payment requests.'));
       clearPaymentRequestState();
     } finally {
+      hasLoadedRef.current = true;
       setLoading(false);
       setRefreshing(false);
     }
@@ -282,9 +284,10 @@ export default function GeneralContractorPaymentsScreen() {
               <Text style={styles.bodyText}>{errorMessage}</Text>
             </GlassCard>
           ) : loading ? (
-            <GlassCard style={styles.card}>
-              <Text style={styles.bodyText}>Loading payment requests...</Text>
-            </GlassCard>
+            <View style={{ gap: 12 }}>
+              <CardSkeleton />
+              <CardSkeleton />
+            </View>
           ) : (
             <>
               {canManagePaymentRequests ? (

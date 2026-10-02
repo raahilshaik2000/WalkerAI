@@ -1,4 +1,4 @@
-import { useCallback, useState } from 'react';
+import { useCallback, useRef, useState } from 'react';
 import {
   Alert,
   RefreshControl,
@@ -20,7 +20,7 @@ import { formatGcProjectType } from '@/lib/gc-project-type';
 import { isGeneralContractorReadyForProjectControls } from '@/lib/general-contractor';
 import type { GcConciergeBooking, GcPaymentRequest } from '@/types/database.types';
 import { Colors, Spacing, Typography } from '@/constants/theme';
-import { GradientBackground, GlassButton, GlassCard, GlassInput, StatusBadge } from '@/components/ui';
+import { CardSkeleton, GradientBackground, GlassButton, GlassCard, GlassInput, StatusBadge } from '@/components/ui';
 import { TradeEmptyState, TradeScreenHeader } from '@/components/company/TradeUI';
 
 type ProjectJoin = {
@@ -104,6 +104,7 @@ export default function GeneralContractorApprovals() {
   const [bookingResponseNotes, setBookingResponseNotes] = useState<Record<string, string>>({});
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [setupLockMessage, setSetupLockMessage] = useState<string | null>(null);
+  const hasLoadedRef = useRef(false);
 
   const clearApprovalsState = useCallback(() => {
     setApprovals([]);
@@ -117,6 +118,7 @@ export default function GeneralContractorApprovals() {
 
   const fetchData = useCallback(async () => {
     try {
+      if (!hasLoadedRef.current) setLoading(true);
       setErrorMessage(null);
       setSetupLockMessage(null);
       const currentUser = user ?? (await supabase.auth.getUser()).data.user;
@@ -220,9 +222,12 @@ export default function GeneralContractorApprovals() {
       })));
     } catch (err) {
       setErrorMessage(formatAppSafeErrorMessage(err, 'Could not load approvals.'));
-      clearApprovalsState();
-      setSetupLockMessage(null);
+      if (!hasLoadedRef.current) {
+        clearApprovalsState();
+        setSetupLockMessage(null);
+      }
     } finally {
+      hasLoadedRef.current = true;
       setLoading(false);
       setRefreshing(false);
     }
@@ -299,9 +304,10 @@ export default function GeneralContractorApprovals() {
           {errorMessage ? (
             <TradeEmptyState icon="wifi-off" title="Could not load approvals" body={errorMessage} />
           ) : loading ? (
-            <GlassCard style={styles.card}>
-              <Text style={styles.bodyText}>Loading approvals...</Text>
-            </GlassCard>
+            <View style={{ gap: 12 }}>
+              <CardSkeleton />
+              <CardSkeleton />
+            </View>
           ) : setupLockMessage ? (
             <TradeEmptyState
               icon="lock-alert-outline"

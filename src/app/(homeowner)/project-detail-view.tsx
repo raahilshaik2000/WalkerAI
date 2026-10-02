@@ -1,20 +1,23 @@
-import React, { useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
 import {
   ActivityIndicator,
   Alert,
   Dimensions,
   FlatList,
   Image,
+  Modal,
   NativeScrollEvent,
   NativeSyntheticEvent,
+  Platform,
   Share,
   ScrollView,
   StyleSheet,
   Text,
+  TouchableOpacity,
   View,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { useNavigation, useRoute } from '@react-navigation/native';
+import { useFocusEffect, useNavigation, useRoute } from '@react-navigation/native';
 import Ionicons from 'react-native-vector-icons/Ionicons';
 import LinearGradient from 'react-native-linear-gradient';
 import { AnimatedPressable, GlassButton, GlassCard, GradientBackground } from '@/components/ui';
@@ -39,6 +42,7 @@ interface RealProject {
   city: string | null;
   ai_cost_min: number | null;
   ai_cost_max: number | null;
+  payment_status?: string | null;
   created_at: string;
   renders: Array<{ url: string; selected?: boolean | null }>;
   project_photos: Array<{ url: string }>;
@@ -75,7 +79,7 @@ function isMissingColumnError(message?: string | null) {
 async function fetchProjectWithOptionalConfidence(projectId: string) {
   const withConfidence = await supabase
     .from('projects')
-    .select('id, room_type, status, description, address, city, ai_cost_min, ai_cost_max, created_at, ai_analysis, questionnaire_answers, ai_confidence_score, renders(url, selected), project_photos(url)')
+    .select('id, room_type, status, payment_status, description, address, city, ai_cost_min, ai_cost_max, created_at, ai_analysis, questionnaire_answers, ai_confidence_score, renders(url, selected), project_photos(url)')
     .eq('id', projectId)
     .maybeSingle();
 
@@ -84,7 +88,7 @@ async function fetchProjectWithOptionalConfidence(projectId: string) {
 
   const withoutConfidence = await supabase
     .from('projects')
-    .select('id, room_type, status, description, address, city, ai_cost_min, ai_cost_max, created_at, ai_analysis, questionnaire_answers, renders(url, selected), project_photos(url)')
+    .select('id, room_type, status, payment_status, description, address, city, ai_cost_min, ai_cost_max, created_at, ai_analysis, questionnaire_answers, renders(url, selected), project_photos(url)')
     .eq('id', projectId)
     .maybeSingle();
 
@@ -98,7 +102,7 @@ async function fetchProjectWithOptionalConfidence(projectId: string) {
 
   const withoutConfidenceOrDescription = await supabase
     .from('projects')
-    .select('id, room_type, status, address, city, ai_cost_min, ai_cost_max, created_at, ai_analysis, questionnaire_answers, renders(url, selected), project_photos(url)')
+    .select('id, room_type, status, payment_status, address, city, ai_cost_min, ai_cost_max, created_at, ai_analysis, questionnaire_answers, renders(url, selected), project_photos(url)')
     .eq('id', projectId)
     .maybeSingle();
 
@@ -216,8 +220,8 @@ function getContractorCopy(status: string) {
   }
   if (status === 'quoting') {
     return {
-      title: 'Contractors are reviewing',
-      subtitle: 'Contractors in your area are preparing quotes',
+      title: 'Quote submitted for review',
+      subtitle: 'A contractor has submitted their quote. Review your project breakdown to fund escrow',
     };
   }
   return {
@@ -246,6 +250,8 @@ export default function ProjectDetailViewScreen() {
   const [redispatching, setRedispatching] = useState(false);
 
   const [photoUrls, setPhotoUrls] = useState<string[]>(getOrderedPhotoUrls(initialProject));
+  const [fullScreenVisible, setFullScreenVisible] = useState(false);
+  const [fullScreenIndex, setFullScreenIndex] = useState(0);
 
   const handleRetryDispatch = async () => {
     if (!project?.id) return;
@@ -266,47 +272,60 @@ export default function ProjectDetailViewScreen() {
     }
   };
 
+  const hasFocusedOnce = useRef(false);
+
+  const loadProject = useCallback(async () => {
+    if (!projectId) {
+      setLoading(false);
+      return;
+    }
+    try {
+      const [projectData, scopeRes, matsRes, permitsRes] = await Promise.all([
+        fetchProjectWithOptionalConfidence(projectId),
+        supabase
+          .from('scope_of_work')
+          .select('phase, description, sort_order')
+          .eq('project_id', projectId)
+          .order('sort_order'),
+        supabase
+          .from('materials')
+          .select('item, quantity, unit, quality_tier')
+          .eq('project_id', projectId),
+        supabase
+          .from('permits')
+          .select('permit_type, status')
+          .eq('project_id', projectId),
+      ]);
+
+      if (projectData) {
+        setProject(projectData as RealProject);
+        setDetail(projectData as ProjectDetail);
+      }
+      if (scopeRes.data) setScope(scopeRes.data as ScopeItem[]);
+      if (matsRes.data)  setMats(matsRes.data as MaterialItem[]);
+      if (permitsRes.data) setPermits(permitsRes.data as PermitItem[]);
+
+      // Merge freshly-fetched photos with anything already in params
+      const freshUrls = getOrderedPhotoUrls(projectData as Partial<RealProject> | null);
+      if (freshUrls.length > 0) setPhotoUrls(freshUrls);
+    } finally {
+      setLoading(false);
+    }
+  }, [projectId]);
+
   useEffect(() => {
-    const load = async () => {
-      if (!projectId) {
-        setLoading(false);
+    loadProject();
+  }, [loadProject]);
+
+  useFocusEffect(
+    useCallback(() => {
+      if (!hasFocusedOnce.current) {
+        hasFocusedOnce.current = true;
         return;
       }
-      try {
-        const [projectData, scopeRes, matsRes, permitsRes] = await Promise.all([
-          fetchProjectWithOptionalConfidence(projectId),
-          supabase
-            .from('scope_of_work')
-            .select('phase, description, sort_order')
-            .eq('project_id', projectId)
-            .order('sort_order'),
-          supabase
-            .from('materials')
-            .select('item, quantity, unit, quality_tier')
-            .eq('project_id', projectId),
-          supabase
-            .from('permits')
-            .select('permit_type, status')
-            .eq('project_id', projectId),
-        ]);
-
-        if (projectData) {
-          setProject(projectData as RealProject);
-          setDetail(projectData as ProjectDetail);
-        }
-        if (scopeRes.data) setScope(scopeRes.data as ScopeItem[]);
-        if (matsRes.data)  setMats(matsRes.data as MaterialItem[]);
-        if (permitsRes.data) setPermits(permitsRes.data as PermitItem[]);
-
-        // Merge freshly-fetched photos with anything already in params
-        const freshUrls = getOrderedPhotoUrls(projectData as Partial<RealProject> | null);
-        if (freshUrls.length > 0) setPhotoUrls(freshUrls);
-      } finally {
-        setLoading(false);
-      }
-    };
-    load();
-  }, [projectId]);
+      void loadProject();
+    }, [loadProject])
+  );
 
   if (!projectId) {
     return (
@@ -393,8 +412,16 @@ export default function ProjectDetailViewScreen() {
               showsHorizontalScrollIndicator={false}
               onScroll={onScroll}
               scrollEventThrottle={16}
-              renderItem={({ item: uri }) => (
-                <Image source={{ uri }} style={styles.heroImage} />
+              renderItem={({ item: uri, index }) => (
+                <TouchableOpacity
+                  activeOpacity={0.95}
+                  onPress={() => {
+                    setFullScreenIndex(index);
+                    setFullScreenVisible(true);
+                  }}
+                >
+                  <Image source={{ uri }} style={styles.heroImage} />
+                </TouchableOpacity>
               )}
             />
           ) : (
@@ -410,7 +437,11 @@ export default function ProjectDetailViewScreen() {
           />
 
           <SafeAreaView style={styles.topBar}>
-            <AnimatedPressable style={styles.iconBtn} haptic onPress={() => navigation.goBack()}>
+            <AnimatedPressable
+              style={styles.iconBtn}
+              haptic
+              onPress={() => (navigation.canGoBack() ? navigation.goBack() : navigation.reset({ index: 0, routes: [{ name: 'HomeownerTabs' }] }))}
+            >
               <Ionicons name="arrow-back" size={20} color="#fff" />
             </AnimatedPressable>
             <AnimatedPressable style={styles.iconBtn} haptic onPress={handleShare}>
@@ -443,6 +474,20 @@ export default function ProjectDetailViewScreen() {
                 <View key={i} style={[styles.dot, i === activeIdx && styles.dotActive]} />
               ))}
             </View>
+          )}
+
+          {photoUrls.length > 0 && (
+            <TouchableOpacity
+              style={styles.heroExpandBadge}
+              activeOpacity={0.8}
+              onPress={() => {
+                setFullScreenIndex(activeIdx);
+                setFullScreenVisible(true);
+              }}
+            >
+              <Ionicons name="scan-outline" size={13} color="#fff" />
+              <Text style={styles.heroExpandText}>Tap for full screen</Text>
+            </TouchableOpacity>
           )}
         </View>
 
@@ -481,15 +526,19 @@ export default function ProjectDetailViewScreen() {
             </GlassCard>
           ) : null}
 
-          {/* AI Project Price review is the authoritative payment path. */}
-          {project.status === 'accepted' && project.ai_cost_min && project.ai_cost_max && (
+          {/* AI Project Price / Quote review is the authoritative payment path. */}
+          {['accepted', 'quoting', 'scheduling'].includes(project.status) && project.payment_status !== 'funded' && project.ai_cost_min && project.ai_cost_max && (
             <GlassCard style={[styles.section, styles.acceptedPaymentCard]}>
-              <Text style={styles.sectionLabel}>TRADE ASSIGNED</Text>
+              <Text style={styles.sectionLabel}>
+                {project.status === 'quoting' ? 'QUOTE SUBMITTED' : 'TRADE ASSIGNED'}
+              </Text>
               <Text style={styles.paymentTitle}>
-                Your trade is ready for the next step. Review your AI Project Price before funding any work.
+                {project.status === 'quoting'
+                  ? 'Your contractor has submitted their quote. Review your project breakdown to fund escrow.'
+                  : 'Your trade is ready for the next step. Review your AI Project Price before funding any work.'}
               </Text>
               <Text style={styles.paymentSub}>
-                The price is set by WalkerAI from your measurements & materials. Funds are held in escrow and released as work is approved.
+                Funds are held securely in Stripe Escrow and released to each trade only after you approve their completed work.
               </Text>
               <GlassButton
                 label="Review Project Breakdown"
@@ -573,10 +622,10 @@ export default function ProjectDetailViewScreen() {
                       <Text style={styles.conditionVal}>{existingMats.flooring.material}</Text>
                     </View>
                   ) : null}
-                  {layoutInfo?.estimated_sqft > 0 ? (
+                  {(layoutInfo?.verified_sqft ?? layoutInfo?.estimated_sqft ?? 0) > 0 ? (
                     <View style={styles.conditionChip}>
-                      <Text style={styles.conditionKey}>Est. Size</Text>
-                      <Text style={styles.conditionVal}>{layoutInfo.estimated_sqft} sqft</Text>
+                      <Text style={styles.conditionKey}>{layoutInfo?.is_verified ? 'Verified Size' : 'Est. Size'}</Text>
+                      <Text style={styles.conditionVal}>{layoutInfo.verified_sqft || layoutInfo.estimated_sqft} sqft</Text>
                     </View>
                   ) : null}
                   {layoutInfo?.window_count > 0 ? (
@@ -724,6 +773,79 @@ export default function ProjectDetailViewScreen() {
 
         </ScrollView>
       </View>
+
+      {/* Full-Screen Photo & Render Viewer Modal */}
+      <Modal
+        visible={fullScreenVisible}
+        transparent={false}
+        animationType="fade"
+        onRequestClose={() => setFullScreenVisible(false)}
+      >
+        <View style={styles.fullScreenContainer}>
+          <FlatList
+            data={photoUrls}
+            keyExtractor={(_, i) => `fullscreen-img-${i}`}
+            horizontal
+            pagingEnabled
+            showsHorizontalScrollIndicator={false}
+            initialScrollIndex={fullScreenIndex}
+            getItemLayout={(_, index) => ({
+              length: SCREEN_WIDTH,
+              offset: SCREEN_WIDTH * index,
+              index,
+            })}
+            onMomentumScrollEnd={(e) => {
+              const idx = Math.round(e.nativeEvent.contentOffset.x / SCREEN_WIDTH);
+              if (idx >= 0 && idx < photoUrls.length) {
+                setFullScreenIndex(idx);
+                setActiveIdx(idx);
+              }
+            }}
+            renderItem={({ item: uri }) => (
+              <TouchableOpacity
+                activeOpacity={1}
+                onPress={() => setFullScreenVisible(false)}
+                style={styles.fullScreenImageWrapper}
+              >
+                <Image
+                  source={{ uri }}
+                  style={styles.fullScreenImage}
+                  resizeMode="contain"
+                />
+              </TouchableOpacity>
+            )}
+          />
+
+          <View style={styles.fullScreenHeader} pointerEvents="auto">
+            <TouchableOpacity
+              style={styles.fullScreenCloseBtn}
+              onPress={() => setFullScreenVisible(false)}
+              activeOpacity={0.7}
+              hitSlop={{ top: 20, bottom: 20, left: 20, right: 20 }}
+            >
+              <Ionicons name="close" size={26} color="#fff" />
+            </TouchableOpacity>
+            <View style={styles.fullScreenTitleWrap} pointerEvents="none">
+              <Text style={styles.fullScreenTitle} numberOfLines={1}>
+                {title || 'Project Photos & Renders'}
+              </Text>
+              {photoUrls.length > 1 && (
+                <Text style={styles.fullScreenCounter}>
+                  {fullScreenIndex + 1} of {photoUrls.length} · Swipe to explore
+                </Text>
+              )}
+            </View>
+            <TouchableOpacity
+              style={styles.fullScreenDoneBtn}
+              onPress={() => setFullScreenVisible(false)}
+              activeOpacity={0.7}
+              hitSlop={{ top: 20, bottom: 20, left: 20, right: 20 }}
+            >
+              <Text style={styles.fullScreenDoneText}>Done</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      </Modal>
     </GradientBackground>
   );
 }
@@ -919,4 +1041,98 @@ const styles = StyleSheet.create({
 
   // Info rows
   infoDivider: { height: 1, backgroundColor: 'rgba(255,255,255,0.05)' },
+
+  // Hero expand badge
+  heroExpandBadge: {
+    position: 'absolute',
+    top: 70,
+    right: 16,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 5,
+    backgroundColor: 'rgba(0, 0, 0, 0.65)',
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+    borderRadius: Radius.pill,
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.15)',
+    zIndex: 15,
+  },
+  heroExpandText: {
+    fontSize: 11,
+    fontWeight: '600',
+    color: '#fff',
+  },
+
+  // Full-Screen modal
+  fullScreenContainer: {
+    flex: 1,
+    backgroundColor: '#000',
+  },
+  fullScreenHeader: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    zIndex: 9999,
+    elevation: 20,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: 16,
+    paddingTop: Platform.OS === 'ios' ? 56 : 28,
+    paddingBottom: 14,
+    backgroundColor: 'rgba(0,0,0,0.65)',
+  },
+  fullScreenCloseBtn: {
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    backgroundColor: 'rgba(255,255,255,0.25)',
+    alignItems: 'center',
+    justifyContent: 'center',
+    zIndex: 10000,
+    elevation: 25,
+  },
+  fullScreenDoneBtn: {
+    paddingHorizontal: 14,
+    paddingVertical: 8,
+    borderRadius: 16,
+    backgroundColor: 'rgba(255,255,255,0.25)',
+    alignItems: 'center',
+    justifyContent: 'center',
+    zIndex: 10000,
+    elevation: 25,
+  },
+  fullScreenDoneText: {
+    color: '#fff',
+    fontSize: 14,
+    fontWeight: '700',
+  },
+  fullScreenTitleWrap: {
+    alignItems: 'center',
+    maxWidth: SCREEN_WIDTH - 140,
+  },
+  fullScreenTitle: {
+    fontSize: 16,
+    fontWeight: '700',
+    color: '#fff',
+  },
+  fullScreenCounter: {
+    fontSize: 12,
+    fontWeight: '500',
+    color: 'rgba(255,255,255,0.7)',
+    marginTop: 2,
+  },
+  fullScreenImageWrapper: {
+    width: SCREEN_WIDTH,
+    height: SCREEN_HEIGHT,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#000',
+  },
+  fullScreenImage: {
+    width: SCREEN_WIDTH,
+    height: SCREEN_HEIGHT,
+  },
 });

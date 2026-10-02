@@ -32,8 +32,13 @@ const BUDGET_PRESETS = [
 export default function DIYDetailsScreen() {
   const navigation = useNavigation<any>();
   const store = useDIYWizardStore();
+  const restoredBudgetIdx = BUDGET_PRESETS.findIndex(
+    (preset) => store.budgetMin === preset.min && store.budgetMax === preset.max,
+  );
 
-  const [selectedBudgetIdx, setSelectedBudgetIdx] = useState<number | null>(null);
+  const [selectedBudgetIdx, setSelectedBudgetIdx] = useState<number | null>(
+    restoredBudgetIdx >= 0 ? restoredBudgetIdx : null,
+  );
   const [skill, setSkill] = useState<SkillLevel>(store.skillLevel);
   const [timeline, setTimeline] = useState(store.timeline);
   const [tools, setTools] = useState(store.toolsAvailable);

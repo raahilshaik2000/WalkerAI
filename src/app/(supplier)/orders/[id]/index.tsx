@@ -1,5 +1,5 @@
-import { useCallback, useEffect, useState } from 'react';
-import { ActivityIndicator, Alert, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { useCallback, useEffect, useRef, useState } from 'react';
+import { Alert, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useNavigation, useRoute } from '@react-navigation/native';
 import Ionicons from 'react-native-vector-icons/Ionicons';
@@ -8,13 +8,22 @@ import { formatAppSafeErrorMessage, formatSupabaseFunctionError } from '@/lib/su
 import { joinedMaterialItemName } from '@/lib/material-orders';
 import { getRequiredStringParam } from '@/lib/navigation-params';
 import { isStripePayoutLocallyReady } from '@/lib/payouts';
+import { fetchSupplierProfile, useInvalidateSupplierQueries } from '@/lib/supplier-data';
 import { getCurrentUser } from '@/lib/supabase/auth';
 import { useAuthStore } from '@/stores/auth.store';
 import { Colors, Spacing, Typography } from '@/constants/theme';
-import { GlassButton, GlassCard, GradientBackground } from '@/components/ui';
+import { CardSkeleton, GlassButton, GlassCard, GradientBackground } from '@/components/ui';
 import type { MaterialOrder, Supplier } from '@/types/database.types';
 
 const MANAGEABLE_STATUSES = ['accepted', 'processing', 'shipped'];
+
+const ORDER_DETAIL_SELECT = `
+  id, project_id, material_id, status, accepted_supplier_id, category,
+  quantity_needed, unit, quality_tier, offered_price, final_price,
+  delivery_deadline, tracking_number, carrier, shipped_at, delivered_at,
+  confirmed_at, delivery_photo_url, created_at,
+  material:materials!material_orders_material_id_fkey(id, item, unit)
+`;
 
 function formatCad(cents: number): string {
   return `$${(cents / 100).toLocaleString('en-CA', {
@@ -52,15 +61,17 @@ export default function SupplierOrderDetail() {
   const route = useRoute<any>();
   const orderId = getRequiredStringParam(route.params, 'orderId');
   const { user } = useAuthStore();
+  const invalidateSupplier = useInvalidateSupplierQueries();
   const [order, setOrder] = useState<MaterialOrder | null>(null);
   const [supplier, setSupplier] = useState<Supplier | null>(null);
   const [loading, setLoading] = useState(true);
   const [claiming, setClaiming] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [canClaimOpenOrder, setCanClaimOpenOrder] = useState(true);
+  const hasLoadedRef = useRef(false);
 
-  const fetchOrder = useCallback(async () => {
-    setLoading(true);
+  const fetchOrder = useCallback(async ({ showSpinner = false } = {}) => {
+    if (showSpinner || !hasLoadedRef.current) setLoading(true);
     setErrorMessage(null);
     try {
       if (!orderId) {
@@ -71,21 +82,13 @@ export default function SupplierOrderDetail() {
         return;
       }
       const currentUserId = user?.id ?? (await getCurrentUser())?.id ?? null;
-      const [orderResult, supplierResult] = await Promise.all([
+      const [orderResult, fetchedSupplier] = await Promise.all([
         supabase
-            .from('material_orders')
-            .select('*, material:materials!material_orders_material_id_fkey(*)')
-            .eq('id', orderId)
-            .maybeSingle(),
-        currentUserId
-          ? supabase
-              .from('suppliers')
-              .select('*')
-              .eq('user_id', currentUserId)
-              .order('created_at', { ascending: false })
-              .limit(1)
-              .maybeSingle()
-          : Promise.resolve({ data: null, error: null }),
+          .from('material_orders')
+          .select(ORDER_DETAIL_SELECT)
+          .eq('id', orderId)
+          .maybeSingle(),
+        currentUserId ? fetchSupplierProfile(currentUserId) : Promise.resolve(null),
       ]);
 
       if (orderResult.error) {
@@ -98,14 +101,8 @@ export default function SupplierOrderDetail() {
         setSupplier(null);
         setCanClaimOpenOrder(false);
         setErrorMessage('This order may have been claimed, cancelled, or removed.');
-      } else if (supplierResult.error) {
-        setOrder(orderResult.data as MaterialOrder);
-        setSupplier(null);
-        setCanClaimOpenOrder(false);
-        setErrorMessage(formatAppSafeErrorMessage(supplierResult.error, 'Could not load supplier profile.'));
       } else {
         const fetchedOrder = orderResult.data as MaterialOrder;
-        const fetchedSupplier = (supplierResult.data as Supplier | null) ?? null;
         setOrder(fetchedOrder);
         setSupplier(fetchedSupplier);
 
@@ -115,10 +112,13 @@ export default function SupplierOrderDetail() {
           setCanClaimOpenOrder(true);
         }
       }
+      hasLoadedRef.current = true;
     } catch (err) {
-      setOrder(null);
-      setSupplier(null);
-      setCanClaimOpenOrder(false);
+      if (!hasLoadedRef.current) {
+        setOrder(null);
+        setSupplier(null);
+        setCanClaimOpenOrder(false);
+      }
       setErrorMessage(formatAppSafeErrorMessage(err, 'Could not load material order.'));
     } finally {
       setLoading(false);
@@ -126,7 +126,7 @@ export default function SupplierOrderDetail() {
   }, [orderId, user?.id]);
 
   useEffect(() => {
-    fetchOrder();
+    void fetchOrder({ showSpinner: true });
   }, [fetchOrder]);
 
   const claimOrder = async () => {
@@ -168,6 +168,7 @@ export default function SupplierOrderDetail() {
         body: { order_id: orderId },
       });
       if (error) throw new Error(await formatSupabaseFunctionError(error));
+      invalidateSupplier(user?.id, supplier.id);
       await fetchOrder();
       Alert.alert('Order claimed', 'This order is now in My Orders. Add tracking once it ships.', [
         { text: 'Manage Order', onPress: () => navigation.navigate('SupplierActiveOrders') },
@@ -179,7 +180,25 @@ export default function SupplierOrderDetail() {
     }
   };
 
-  if (loading) return <View style={styles.center}><ActivityIndicator color={Colors.accent} size="large" /></View>;
+  if (loading && !order) {
+    return (
+      <GradientBackground>
+        <SafeAreaView style={styles.safe}>
+          <View style={styles.navRow}>
+            <TouchableOpacity onPress={() => navigation.goBack()}>
+              <Ionicons name="arrow-back" size={22} color={Colors.text.secondary} />
+            </TouchableOpacity>
+            <Text style={styles.navTitle}>Order Detail</Text>
+            <View style={styles.navSpacer} />
+          </View>
+          <View style={{ paddingHorizontal: Spacing.md, gap: 12 }}>
+            <CardSkeleton />
+            <CardSkeleton />
+          </View>
+        </SafeAreaView>
+      </GradientBackground>
+    );
+  }
   if (!order) {
     return (
       <GradientBackground>
@@ -219,7 +238,7 @@ export default function SupplierOrderDetail() {
           <View style={styles.navSpacer} />
         </View>
         <ScrollView contentContainerStyle={styles.scroll} showsVerticalScrollIndicator={false}>
-          <GlassCard style={styles.section}>
+          <GlassCard style={styles.section} padding={Spacing.md}>
             <Text style={styles.sectionTitle}>Material Needed</Text>
             <Text style={styles.materialName}>{joinedMaterialItemName(order.material)}</Text>
             <View style={styles.row}>
@@ -235,9 +254,39 @@ export default function SupplierOrderDetail() {
             {order.notes && <DetailItem label="Notes" value={order.notes} />}
           </GlassCard>
 
-          <GlassCard style={styles.section}>
-            <Text style={styles.sectionTitle}>Fulfillment</Text>
-            <DetailItem label="Status" value={order.status.replace(/_/g, ' ')} />
+          {/* Named Stage Stepper */}
+          <GlassCard style={styles.section} padding={Spacing.md}>
+            <Text style={styles.sectionTitle}>Order Progress</Text>
+            <View style={styles.stepperContainer}>
+              {[
+                { key: 'claimed', label: 'Claimed', done: ['accepted', 'processing', 'shipped', 'delivered', 'paid'].includes(order.status) },
+                { key: 'processing', label: 'Processing', done: ['processing', 'shipped', 'delivered', 'paid'].includes(order.status) },
+                { key: 'shipped', label: 'In Transit', done: ['shipped', 'delivered', 'paid'].includes(order.status) },
+                { key: 'delivered', label: 'Delivered', done: ['delivered', 'paid'].includes(order.status) },
+                { key: 'paid', label: 'Paid', done: order.status === 'paid' },
+              ].map((step, idx, arr) => (
+                <View key={step.key} style={styles.stepperItem}>
+                  <View style={styles.stepperRow}>
+                    <View style={[styles.stepDot, step.done && styles.stepDotActive]}>
+                      {step.done ? (
+                        <Ionicons name="checkmark" size={12} color="#000" />
+                      ) : (
+                        <Text style={styles.stepNum}>{idx + 1}</Text>
+                      )}
+                    </View>
+                    {idx < arr.length - 1 ? (
+                      <View style={[styles.stepLine, arr[idx + 1].done && styles.stepLineActive]} />
+                    ) : null}
+                  </View>
+                  <Text style={[styles.stepLabel, step.done && styles.stepLabelActive]}>{step.label}</Text>
+                </View>
+              ))}
+            </View>
+          </GlassCard>
+
+          <GlassCard style={styles.section} padding={Spacing.md}>
+            <Text style={styles.sectionTitle}>Fulfillment Details</Text>
+            <DetailItem label="Current Status" value={order.status.replace(/_/g, ' ').toUpperCase()} />
             {orderValue != null && (
               <DetailItem
                 label="Order Value"
@@ -249,7 +298,7 @@ export default function SupplierOrderDetail() {
           </GlassCard>
 
           {order.status === 'paid' && (
-            <GlassCard style={styles.paidBanner}>
+            <GlassCard style={styles.paidBanner} padding={Spacing.md}>
               <Ionicons name="checkmark-circle" size={20} color="#34D399" />
               <Text style={styles.paidText}>
                 Payment initiated{orderValue != null ? ` for ${formatCad(orderValue)}` : ''} — funds arriving within 2–3 business days
@@ -346,11 +395,49 @@ const styles = StyleSheet.create({
   navTitle: { ...Typography.h3 },
   navSpacer: { width: 22 },
   scroll: { paddingHorizontal: Spacing.md, paddingBottom: 100, gap: 16 },
-  section: { padding: Spacing.md },
+  section: {},
   sectionTitle: { fontSize: 13, color: Colors.text.tertiary, textTransform: 'uppercase', letterSpacing: 1, marginBottom: 12 },
+  stepperContainer: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start', paddingVertical: 8 },
+  stepperItem: { flex: 1, alignItems: 'center' },
+  stepperRow: { flexDirection: 'row', alignItems: 'center', width: '100%', justifyContent: 'center' },
+  stepDot: {
+    width: 22,
+    height: 22,
+    borderRadius: 11,
+    backgroundColor: 'rgba(255, 255, 255, 0.12)',
+    alignItems: 'center',
+    justifyContent: 'center',
+    zIndex: 2,
+  },
+  stepDotActive: {
+    backgroundColor: '#34D399',
+  },
+  stepNum: { fontSize: 10, fontWeight: '700', color: Colors.text.secondary },
+  stepLine: {
+    position: 'absolute',
+    left: '50%',
+    right: '-50%',
+    height: 2,
+    backgroundColor: 'rgba(255, 255, 255, 0.12)',
+    zIndex: 1,
+  },
+  stepLineActive: {
+    backgroundColor: '#34D399',
+  },
+  stepLabel: {
+    fontSize: 10,
+    color: Colors.text.tertiary,
+    marginTop: 6,
+    textAlign: 'center',
+    fontWeight: '500',
+  },
+  stepLabelActive: {
+    color: Colors.text.primary,
+    fontWeight: '700',
+  },
   materialName: { fontSize: 20, fontWeight: '800', color: Colors.text.primary, marginBottom: 12 },
   row: { flexDirection: 'row', gap: 24 },
-  paidBanner: { flexDirection: 'row', alignItems: 'center', gap: 10, padding: Spacing.md },
+  paidBanner: {flexDirection: 'row', alignItems: 'center', gap: 10},
   paidText: { flex: 1, fontSize: 14, color: '#34D399', fontWeight: '500', lineHeight: 20 },
   waitingText: { fontSize: 14, color: Colors.text.tertiary, textAlign: 'center', lineHeight: 20 },
   deliverBtn: { marginTop: 4 },

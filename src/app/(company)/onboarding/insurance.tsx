@@ -10,10 +10,10 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useNavigation } from '@react-navigation/native';
-import { launchImageLibrary } from 'react-native-image-picker';
+import { pickPhotosWithSource } from '@/lib/media-picker';
 import { supabase } from '@/lib/supabase/client';
 import { formatAppSafeErrorMessage } from '@/lib/supabase/functions';
-import { getUploadMetadata, uploadFile } from '@/lib/supabase/storage';
+import { getUploadMetadata, uploadBase64, uploadFile } from '@/lib/supabase/storage';
 import { useAuthStore } from '@/stores/auth.store';
 import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
 import { Colors, Radius, Spacing, Typography } from '@/constants/theme';
@@ -21,6 +21,7 @@ import { GlassButton, GlassCard, GradientBackground } from '@/components/ui';
 
 interface DocUploadState {
   uri: string | null;
+  base64?: string | null;
   fileName?: string | null;
   type?: string | null;
   uploading: boolean;
@@ -36,22 +37,23 @@ export default function InsuranceOnboardingScreen() {
   const [submitting, setSubmitting] = useState(false);
 
   const pickDoc = async (setter: (s: DocUploadState) => void) => {
-    const result = await launchImageLibrary({
-      mediaType: 'photo',
-      quality: 0.8,
+    const assets = await pickPhotosWithSource({
       selectionLimit: 1,
-      assetRepresentationMode: 'compatible',
+      quality: 0.8,
+      maxWidth: 1600,
+      maxHeight: 1600,
+      includeBase64: true,
     });
-    if (!result.didCancel && result.assets && result.assets[0]) {
-      const asset = result.assets[0];
-      setter({
-        uri: asset.uri ?? null,
-        fileName: asset.fileName ?? null,
-        type: asset.type ?? null,
-        uploading: false,
-        progress: 0,
-      });
-    }
+    if (!assets?.[0]) return;
+    const asset = assets[0];
+    setter({
+      uri: asset.uri ?? null,
+      base64: asset.base64 ?? null,
+      fileName: asset.fileName ?? null,
+      type: asset.type ?? null,
+      uploading: false,
+      progress: 0,
+    });
   };
 
   const uploadDoc = async (
@@ -62,7 +64,9 @@ export default function InsuranceOnboardingScreen() {
     if (!user?.id) throw new Error('Please sign in again before uploading documents.');
     const upload = getUploadMetadata(state);
     const path = `${user.id}/${prefix}-${Date.now()}.${upload.extension}`;
-    const result = await uploadFile('company-docs', path, upload.uri, upload.contentType);
+    const result = state.base64
+      ? await uploadBase64('company-docs', path, state.base64, upload.contentType)
+      : await uploadFile('company-docs', path, upload.uri, upload.contentType);
     return result.storagePath;
   };
 

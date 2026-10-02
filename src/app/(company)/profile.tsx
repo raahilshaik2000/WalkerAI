@@ -1,8 +1,6 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useRef, useState } from 'react';
 import {
   Alert,
-  AppState,
-  Linking,
   RefreshControl,
   ScrollView,
   StyleSheet,
@@ -17,6 +15,7 @@ import { supabase } from '@/lib/supabase/client';
 import { formatAppSafeErrorMessage, formatSupabaseFunctionError } from '@/lib/supabase/functions';
 import { isStripePayoutLocallyReady } from '@/lib/payouts';
 import { refreshStripeConnectStatus } from '@/lib/stripe-connect';
+import { openInAppBrowser } from '@/lib/in-app-browser';
 import { useAuthStore } from '@/stores/auth.store';
 import { Colors, Spacing, Typography } from '@/constants/theme';
 import { GlassButton, GlassCard, GradientBackground, StatusBadge } from '@/components/ui';
@@ -139,8 +138,9 @@ export default function CompanyProfileScreen() {
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  const hasLoadedRef = useRef(false);
 
-  const fetchData = useCallback(async () => {
+  const fetchData = useCallback(async ({ syncStripe = false, showSpinner = false } = {}) => {
     const currentUser = user ?? (await supabase.auth.getUser()).data.user;
     if (!currentUser) {
       setErrorMessage('You need to be signed in to view your company profile.');
@@ -148,8 +148,15 @@ export default function CompanyProfileScreen() {
       setRefreshing(false);
       return;
     }
+    if (showSpinner && !hasLoadedRef.current) setLoading(true);
     setErrorMessage(null);
-    await refreshStripeConnectStatus();
+    if (syncStripe) {
+      try {
+        await refreshStripeConnectStatus();
+      } catch {
+        // Keep local profile visible if Stripe sync fails.
+      }
+    }
 
     let co: Company | null = null;
     try {
@@ -228,20 +235,14 @@ export default function CompanyProfileScreen() {
 
     setLoading(false);
     setRefreshing(false);
+    hasLoadedRef.current = true;
   }, [user]);
 
   useFocusEffect(
     useCallback(() => {
-      fetchData();
+      void fetchData({ showSpinner: !hasLoadedRef.current });
     }, [fetchData])
   );
-
-  useEffect(() => {
-    const subscription = AppState.addEventListener('change', (state) => {
-      if (state === 'active') fetchData();
-    });
-    return () => subscription.remove();
-  }, [fetchData]);
 
   const handleSignOut = async () => {
     Alert.alert('Sign out', 'Are you sure?', [
@@ -259,7 +260,7 @@ export default function CompanyProfileScreen() {
 
   const onRefresh = () => {
     setRefreshing(true);
-    fetchData();
+    void fetchData({ syncStripe: true });
   };
 
   const [connectLoading, setConnectLoading] = useState(false);
@@ -276,7 +277,11 @@ export default function CompanyProfileScreen() {
       const { data, error } = await supabase.functions.invoke('create-connect-account');
       if (error) throw new Error(await formatSupabaseFunctionError(error));
       if (data?.url) {
-        await Linking.openURL(data.url);
+        const result = await openInAppBrowser(data.url);
+        await fetchData({ syncStripe: true });
+        if (result?.status === 'success' || (result?.url && result.url.includes('status=success'))) {
+          Alert.alert('Payouts Connected!', 'Your Stripe payout details were submitted successfully and your account status is updated.');
+        }
       }
     } catch (err) {
       Alert.alert('Could not start payout setup', await formatSupabaseFunctionError(err, 'Please try again.'));

@@ -68,8 +68,11 @@ target 'WalkerAI' do
     # Fix deployment target warnings — ensure all pods meet the minimum iOS version
     installer.pods_project.targets.each do |target|
       target.build_configurations.each do |config|
-        if config.build_settings['IPHONEOS_DEPLOYMENT_TARGET'].to_f < 13.4
-          config.build_settings['IPHONEOS_DEPLOYMENT_TARGET'] = '13.4'
+        if config.build_settings['IPHONEOS_DEPLOYMENT_TARGET'].to_f < 15.0
+          config.build_settings['IPHONEOS_DEPLOYMENT_TARGET'] = '15.0'
+        end
+        if config.name == 'Debug'
+          config.build_settings['DEBUG_INFORMATION_FORMAT'] = 'dwarf'
         end
         if target.name == 'fmt'
           definitions = config.build_settings['GCC_PREPROCESSOR_DEFINITIONS'] || ['$(inherited)']
@@ -113,8 +116,30 @@ target 'WalkerAI' do
           "  # Resign the code if required by the build settings to avoid unstable apps\n",
           "  strip_code_sign_blocking_xattrs \"${destination}/$(basename \"$1\")\"\n\n  # Resign the code if required by the build settings to avoid unstable apps\n"
         )
-        File.write(frameworks_script, script)
       end
+
+      unless script.include?('generate_hermes_dsym')
+        hermes_dsym_helper = <<~'SH'
+          generate_hermes_dsym() {
+            if [ -n "${DWARF_DSYM_FOLDER_PATH:-}" ]; then
+              local hermes_bin="${PODS_XCFRAMEWORKS_BUILD_DIR}/hermes-engine/Pre-built/hermesvm.framework/hermesvm"
+              local target_dsym="${DWARF_DSYM_FOLDER_PATH}/hermesvm.framework.dSYM"
+              if [ -f "$hermes_bin" ] && [ ! -d "$target_dsym" ]; then
+                echo "Generating dSYM for hermesvm.framework at ${target_dsym}..."
+                mkdir -p "${DWARF_DSYM_FOLDER_PATH}"
+                dsymutil "$hermes_bin" -o "$target_dsym" 2>/dev/null || true
+              fi
+            fi
+          }
+
+        SH
+        script = "#{hermes_dsym_helper}\n" + script
+        script.sub!(
+          'install_framework "${PODS_XCFRAMEWORKS_BUILD_DIR}/hermes-engine/Pre-built/hermesvm.framework"',
+          "install_framework \"${PODS_XCFRAMEWORKS_BUILD_DIR}/hermes-engine/Pre-built/hermesvm.framework\"\n  generate_hermes_dsym"
+        )
+      end
+      File.write(frameworks_script, script)
     end
   end
 end

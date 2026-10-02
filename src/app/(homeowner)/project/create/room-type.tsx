@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useNavigation } from '@react-navigation/native';
@@ -15,8 +15,32 @@ const ROOM_TYPES: { value: RoomType; icon: string; label: string; desc: string }
 
 export default function RoomTypeStep() {
   const navigation = useNavigation<any>();
-  const { setRoomType } = useProjectWizardStore();
+  const { setRoomType, reset } = useProjectWizardStore();
   const [selected, setSelected] = useState<RoomType>('kitchen');
+  const didResetForSession = useRef(false);
+
+  // Fresh project only: clear prior draft once when landing on Room Type.
+  // Skip when ProjectCreate was opened mid-flow (e.g. after RoomScan → Analyzing)
+  // so we don't wipe photos/scan data. Wait for persist hydrate so old AsyncStorage
+  // photos can't reappear after reset.
+  useEffect(() => {
+    const startFresh = () => {
+      if (didResetForSession.current) return;
+      const state = navigation.getState();
+      const index = state?.index ?? 0;
+      const active = state?.routes?.[index]?.name;
+      if ((state?.routes?.length ?? 1) > 1 || (active && active !== 'RoomType')) {
+        return;
+      }
+      didResetForSession.current = true;
+      reset();
+    };
+    const unsub = useProjectWizardStore.persist.onFinishHydration(startFresh);
+    if (useProjectWizardStore.persist.hasHydrated()) {
+      startFresh();
+    }
+    return unsub;
+  }, [navigation, reset]);
 
   const handleContinue = () => {
     setRoomType(selected);

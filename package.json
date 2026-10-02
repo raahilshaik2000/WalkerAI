@@ -8,6 +8,7 @@
     "lint": "eslint .",
     "qa:check": "node scripts/check-qa-credentials.mjs",
     "qa:reset": "node scripts/reset-qa-credentials.mjs",
+    "qa:seed-design-catalog": "node scripts/seed-qa-design-catalog.mjs",
     "secrets:check": "node scripts/check-client-secrets.mjs",
     "prestart": "node scripts/check-client-secrets.mjs",
     "preios": "node scripts/check-client-secrets.mjs",

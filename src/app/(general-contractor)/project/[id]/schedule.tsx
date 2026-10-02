@@ -1,4 +1,4 @@
-import { useCallback, useState } from 'react';
+import { useCallback, useRef, useState } from 'react';
 import {
   Alert,
   RefreshControl,
@@ -18,7 +18,7 @@ import { GENERAL_CONTRACTOR_READINESS_SELECT, isGeneralContractorReadyForProject
 import { getRequiredStringParam } from '@/lib/navigation-params';
 import { formatTradeLabel } from '@/lib/trade-labels';
 import { Colors, Spacing, Typography } from '@/constants/theme';
-import { GlassButton, GlassCard, GlassInput, GradientBackground, StatusBadge } from '@/components/ui';
+import { CardSkeleton, GlassButton, GlassCard, GlassInput, GradientBackground, StatusBadge } from '@/components/ui';
 
 interface Slot {
   id: string;
@@ -75,6 +75,7 @@ export default function GeneralContractorScheduleScreen() {
   const [endDate, setEndDate] = useState('');
   const [note, setNote] = useState('');
   const [loading, setLoading] = useState(true);
+  const hasLoadedRef = useRef(false);
   const [refreshing, setRefreshing] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [gcReady, setGcReady] = useState(false);
@@ -143,6 +144,7 @@ export default function GeneralContractorScheduleScreen() {
       setErrorMessage(formatAppSafeErrorMessage(err, 'Could not load schedule.'));
       clearScheduleState();
     } finally {
+      hasLoadedRef.current = true;
       setLoading(false);
       setRefreshing(false);
     }
@@ -260,9 +262,10 @@ export default function GeneralContractorScheduleScreen() {
               <Text style={styles.bodyText}>{errorMessage}</Text>
             </GlassCard>
           ) : loading ? (
-            <GlassCard style={styles.card}>
-              <Text style={styles.bodyText}>Loading schedule...</Text>
-            </GlassCard>
+            <View style={{ gap: 12 }}>
+              <CardSkeleton />
+              <CardSkeleton />
+            </View>
           ) : slots.length === 0 ? (
             <GlassCard style={styles.card}>
               <Text style={styles.bodyText}>Trade slots have not been generated yet.</Text>

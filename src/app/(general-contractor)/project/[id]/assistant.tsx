@@ -1,4 +1,4 @@
-import { useCallback, useMemo, useState } from 'react';
+import { useRef, useCallback, useMemo, useState } from 'react';
 import {
   RefreshControl,
   ScrollView,
@@ -100,11 +100,13 @@ export default function GeneralContractorAssistantScreen() {
   const [messages, setMessages] = useState<MessageRow[]>([]);
   const [assignment, setAssignment] = useState<AssignmentRow | null>(null);
   const [loading, setLoading] = useState(true);
+  const hasLoadedRef = useRef(false);
   const [refreshing, setRefreshing] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
   const fetchData = useCallback(async () => {
     try {
+      if (!hasLoadedRef.current) setLoading(true);
       setErrorMessage(null);
       const currentUser = (await supabase.auth.getUser()).data.user;
       if (!currentUser?.id) {
@@ -203,6 +205,7 @@ export default function GeneralContractorAssistantScreen() {
       setMaterialOrders([]);
       setMessages([]);
     } finally {
+      hasLoadedRef.current = true;
       setLoading(false);
       setRefreshing(false);
     }

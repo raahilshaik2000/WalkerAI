@@ -1,6 +1,9 @@
 const mockSignUp = jest.fn();
 const mockSignInWithPassword = jest.fn();
 const mockUpsert = jest.fn();
+const mockMaybeSingle = jest.fn();
+const mockEq = jest.fn(() => ({ maybeSingle: mockMaybeSingle }));
+const mockSelect = jest.fn(() => ({ eq: mockEq }));
 declare const __dirname: string;
 const fs = require('fs');
 const path = require('path');
@@ -8,10 +11,14 @@ const mockSupabaseClient = {
   auth: {
     signUp: mockSignUp,
     signInWithPassword: mockSignInWithPassword,
+    signOut: jest.fn().mockResolvedValue({ error: null }),
   },
-  from: jest.fn(() => ({
-    upsert: mockUpsert,
-  })),
+  from: jest.fn((table: string) => {
+    if (table === 'users') {
+      return { upsert: mockUpsert, select: mockSelect };
+    }
+    return { upsert: mockUpsert };
+  }),
 };
 
 let authHelpers: typeof import('../src/lib/supabase/auth');
@@ -22,6 +29,10 @@ describe('Supabase auth helpers', () => {
     mockSignUp.mockReset();
     mockSignInWithPassword.mockReset();
     mockUpsert.mockReset();
+    mockMaybeSingle.mockReset();
+    mockEq.mockClear();
+    mockSelect.mockClear();
+    mockMaybeSingle.mockResolvedValue({ data: { account_status: 'active' }, error: null });
     jest.doMock('../src/lib/supabase/client', () => ({
       supabase: mockSupabaseClient,
     }));
@@ -84,7 +95,10 @@ describe('Supabase auth helpers', () => {
   });
 
   it('normalizes login email before signing in', async () => {
-    mockSignInWithPassword.mockResolvedValue({ data: { session: null }, error: null });
+    mockSignInWithPassword.mockResolvedValue({
+      data: { user: { id: 'user-1' }, session: null },
+      error: null,
+    });
 
     await authHelpers.signIn('  TEST@Example.COM ', 'password123');
 
@@ -92,6 +106,20 @@ describe('Supabase auth helpers', () => {
       email: 'test@example.com',
       password: 'password123',
     });
+    expect(mockSelect).toHaveBeenCalledWith('account_status');
+  });
+
+  it('blocks suspended accounts after password auth', async () => {
+    mockSignInWithPassword.mockResolvedValue({
+      data: { user: { id: 'user-suspended' }, session: { access_token: 't' } },
+      error: null,
+    });
+    mockMaybeSingle.mockResolvedValue({ data: { account_status: 'suspended' }, error: null });
+
+    await expect(authHelpers.signIn('blocked@example.com', 'password123')).rejects.toThrow(
+      /suspended by Walker AI admin/i,
+    );
+    expect(mockSupabaseClient.auth.signOut).toHaveBeenCalled();
   });
 
   it('sanitizes self-service auth metadata roles before creating public user rows', () => {
@@ -137,7 +165,7 @@ describe('Supabase auth helpers', () => {
 
     expect(rootNavigator).toContain("import { formatAppSafeErrorMessage } from '@/lib/supabase/functions';");
     expect(rootNavigator).toContain('const [authErrorMessage, setAuthErrorMessage] = useState<string | null>(null);');
-    expect(rootNavigator).toContain("setAuthErrorMessage(formatAppSafeErrorMessage(userResult.error, 'Could not load your account. Please try again.'))");
+    expect(rootNavigator).toContain("finish(formatAppSafeErrorMessage(err, 'Could not load your account. Please try again.'))");
     expect(rootNavigator).toContain('Account temporarily unavailable');
     expect(rootNavigator).toContain('onPress={() => applySession(session)}');
     expect(rootNavigator).toContain('Try Again');
@@ -150,7 +178,11 @@ describe('Supabase auth helpers', () => {
     expect(rootNavigator).toContain('setAuthErrorMessage(null);');
     expect(rootNavigator).toContain('onPress={handleFallbackSignOut}');
     expect(rootNavigator).not.toContain('onPress={() => supabase.auth.signOut()}');
+    expect(rootNavigator).toContain('ensurePublicUserProfile');
     expect(rootNavigator).toContain('if (!data) {');
-    expect(rootNavigator).toContain('} else {\n      updateProfile({');
-  });
+    expect(rootNavigator).toContain('if (data) {');
+    expect(rootNavigator).toContain('updateProfile({');
+    expect(rootNavigator).toContain('AUTH_BOOTSTRAP_TIMEOUT_MS');
+    expect(rootNavigator).toContain('Account load timed out');
+    expect(rootNavigator).toContain('withTimeout(');  });
 });

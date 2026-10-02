@@ -154,7 +154,7 @@ export default function SupplierBusinessOnboarding() {
             <Text style={styles.title}>Business Info</Text>
             <Text style={styles.subtitle}>Tell us about your supply business</Text>
 
-            <GlassCard style={styles.card}>
+            <GlassCard style={styles.card} padding={Spacing.md}>
               <GlassInput label="Business Name" value={businessName} onChangeText={setBusinessName} autoCapitalize="words" containerStyle={styles.input} />
               <AddressAutocomplete
                 placeholder="Search business address"
@@ -223,7 +223,7 @@ const styles = StyleSheet.create({
   stepDotActive: { backgroundColor: Colors.accent, width: 24 },
   title: { ...Typography.h1, marginBottom: 6 },
   subtitle: { ...Typography.bodySecondary, marginBottom: Spacing.lg },
-  card: { padding: Spacing.md, marginBottom: Spacing.lg },
+  card: { marginBottom: Spacing.lg },
   input: { marginBottom: Spacing.sm },
   row: { flexDirection: 'row', gap: 10 },
   hint: { fontSize: 12, color: Colors.text.tertiary, marginTop: 4 },

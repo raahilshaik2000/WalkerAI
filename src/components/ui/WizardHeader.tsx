@@ -9,17 +9,25 @@ interface WizardHeaderProps {
   currentStep: number;
   totalSteps?: number;
   showBack?: boolean;
+  onBack?: () => void;
+  onCancel?: () => void;
 }
 
 export function WizardHeader({
   currentStep,
   totalSteps = 8,
   showBack = true,
+  onBack,
+  onCancel,
 }: WizardHeaderProps) {
   const navigation = useNavigation<any>();
   const { reset } = useProjectWizardStore();
 
   const handleCancel = () => {
+    if (onCancel) {
+      onCancel();
+      return;
+    }
     Alert.alert(
       'Cancel project?',
       'All progress will be lost.',
@@ -42,7 +50,7 @@ export function WizardHeader({
       {showBack ? (
         <TouchableOpacity
           style={styles.btn}
-          onPress={() => navigation.goBack()}
+          onPress={onBack ?? (() => navigation.goBack())}
           hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
         >
           <Ionicons name="arrow-back" size={20} color="rgba(255,255,255,0.7)" />

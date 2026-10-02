@@ -13,15 +13,14 @@ import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import Ionicons from 'react-native-vector-icons/Ionicons';
 import { useAuthStore } from '@/stores/auth.store';
 import { useProfileStore } from '@/stores/profile.store';
+import { ensurePublicUserProfile } from '@/lib/supabase/auth';
 import { supabase } from '@/lib/supabase/client';
 import { formatAppSafeErrorMessage } from '@/lib/supabase/functions';
 import { FloatingTabBar } from '@/components/ui/FloatingTabBar';
+import { Skeleton } from '@/components/ui';
 import type { UserRole } from '@/constants/enums';
 import { toRootNotificationRoute } from '@/lib/notifications/navigation';
 import { initPushForUser, deactivatePushForUser, setPushDeepLinkHandler, setPushCurrentRole } from '@/lib/push';
-
-// Shared navigation ref so the push module can deep-link without prop-drilling.
-const navigationRef = createNavigationContainerRef();
 
 // Auth screens
 import WelcomeScreen from '@/app/(auth)/index';
@@ -80,6 +79,7 @@ import ProjectMaterials from '@/app/(homeowner)/project/[id]/materials';
 import ProjectSchedule from '@/app/(homeowner)/project/[id]/schedule';
 import ProjectWarranties from '@/app/(homeowner)/project/[id]/warranties';
 import ProjectConcierge from '@/app/(homeowner)/project/[id]/concierge';
+import ProjectInspectionAdjustment from '@/app/(homeowner)/project/[id]/inspection-adjustment';
 
 // Supplier navigator
 import { SupplierNavigator } from '@/navigation/SupplierNavigator';
@@ -106,6 +106,28 @@ import JobQuoteBuilder from '@/app/(company)/job/[id]/quote-builder';
 import JobMaterials from '@/app/(company)/job/[id]/materials';
 import JobWarranties from '@/app/(company)/job/[id]/warranties';
 import JobReview from '@/app/(company)/job/[id]/review';
+import JobSiteInspection from '@/app/(company)/job/[id]/site-inspection';
+
+// Shared navigation ref so the push module can deep-link without prop-drilling.
+const navigationRef = createNavigationContainerRef();
+
+const AUTH_BOOTSTRAP_TIMEOUT_MS = 15_000;
+
+function withTimeout<T>(promise: PromiseLike<T>, ms: number, message: string): Promise<T> {
+  return new Promise<T>((resolve, reject) => {
+    const timer = setTimeout(() => reject(new Error(message)), ms);
+    Promise.resolve(promise).then(
+      (value) => {
+        clearTimeout(timer);
+        resolve(value);
+      },
+      (err) => {
+        clearTimeout(timer);
+        reject(err);
+      },
+    );
+  });
+}
 
 const Stack = createStackNavigator();
 const Tab = createBottomTabNavigator();
@@ -119,7 +141,7 @@ const DIYCreateStack = createStackNavigator();
 
 function isMissingUserProfileColumn(message: string | undefined | null) {
   const text = message ?? '';
-  return /column .*(avatar_url|address|city|province|postal_code|full_name|phone).* does not exist/i.test(text)
+  return /column .*(avatar_url|address|city|province|postal_code|full_name|phone|account_status).* does not exist/i.test(text)
     || /could not find .* column .* users .* schema cache/i.test(text)
     || /could not find .* users .* column .* schema cache/i.test(text);
 }
@@ -278,6 +300,7 @@ function ProjectDetailNavigator() {
       <ProjectDetailStack.Screen name="ProjectSchedule" component={ProjectSchedule} />
       <ProjectDetailStack.Screen name="Warranties" component={ProjectWarranties} />
       <ProjectDetailStack.Screen name="Concierge" component={ProjectConcierge} />
+      <ProjectDetailStack.Screen name="InspectionAdjustment" component={ProjectInspectionAdjustment} />
     </ProjectDetailStack.Navigator>
   );
 }
@@ -314,6 +337,7 @@ function JobDetailNavigator() {
     <JobDetailStack.Navigator screenOptions={{ headerShown: false }}>
       <JobDetailStack.Screen name="JobDetailMain" component={JobDetail} />
       <JobDetailStack.Screen name="JobChangeOrders" component={JobChangeOrders} />
+      <JobDetailStack.Screen name="JobSiteInspection" component={JobSiteInspection} />
       <JobDetailStack.Screen name="JobMessages" component={JobMessages} />
       <JobDetailStack.Screen name="JobMilestones" component={JobMilestones} />
       <JobDetailStack.Screen name="QuoteBuilder" component={JobQuoteBuilder} />
@@ -345,8 +369,10 @@ export function RootNavigator() {
   const [authRoleResolved, setAuthRoleResolved] = useState(false);
   const [authErrorMessage, setAuthErrorMessage] = useState<string | null>(null);
   const appliedUserIdRef = useRef<string | null>(null);
+  const applyGenerationRef = useRef(0);
 
   const applySession = useCallback(async (nextSession: typeof session) => {
+    const generation = ++applyGenerationRef.current;
     const nextUserId = nextSession?.user?.id ?? null;
     // Only blank the app while resolving a *real* identity change (sign in/out).
     // A token refresh for the same user must NOT reset the navigator — otherwise
@@ -357,69 +383,129 @@ export function RootNavigator() {
     if (!sameUser) setAuthRoleResolved(false);
     setAuthErrorMessage(null);
     setSession(nextSession);
+
+    const finish = (errorMessage: string | null = null) => {
+      if (generation !== applyGenerationRef.current) return;
+      if (errorMessage) setAuthErrorMessage(errorMessage);
+      setHydrated(true);
+      setAuthRoleResolved(true);
+    };
+
     if (!nextSession?.user?.id) {
       setRole(null);
       resetProfile();
-      setHydrated(true);
-      setAuthRoleResolved(true);
+      finish();
       return;
     }
 
-    let userResult: any = await supabase
-      .from('users')
-      .select('role, full_name, phone, avatar_url, address, city, province, postal_code')
-      .eq('id', nextSession.user.id)
-      .maybeSingle();
+    try {
+      const loadProfile = async () => {
+        let userResult: any = await supabase
+          .from('users')
+          .select('role, full_name, phone, avatar_url, address, city, province, postal_code, account_status')
+          .eq('id', nextSession.user.id)
+          .maybeSingle();
 
-    if (userResult.error && isMissingUserProfileColumn(userResult.error.message)) {
-      userResult = await supabase
-        .from('users')
-        .select('role, full_name, phone, avatar_url')
-        .eq('id', nextSession.user.id)
-        .maybeSingle();
-    }
+        if (userResult.error && isMissingUserProfileColumn(userResult.error.message)) {
+          userResult = await supabase
+            .from('users')
+            .select('role, full_name, phone, avatar_url, address, city, province, postal_code')
+            .eq('id', nextSession.user.id)
+            .maybeSingle();
+        }
 
-    if (userResult.error && isMissingUserProfileColumn(userResult.error.message)) {
-      userResult = await supabase
-        .from('users')
-        .select('role, full_name, phone')
-        .eq('id', nextSession.user.id)
-        .maybeSingle();
-    }
+        if (userResult.error && isMissingUserProfileColumn(userResult.error.message)) {
+          userResult = await supabase
+            .from('users')
+            .select('role, full_name, phone, avatar_url')
+            .eq('id', nextSession.user.id)
+            .maybeSingle();
+        }
 
-    if (userResult.error && isMissingUserProfileColumn(userResult.error.message)) {
-      userResult = await supabase
-        .from('users')
-        .select('role')
-        .eq('id', nextSession.user.id)
-        .maybeSingle();
-    }
+        if (userResult.error && isMissingUserProfileColumn(userResult.error.message)) {
+          userResult = await supabase
+            .from('users')
+            .select('role, full_name, phone')
+            .eq('id', nextSession.user.id)
+            .maybeSingle();
+        }
 
-    if (userResult.error) {
-      setAuthErrorMessage(formatAppSafeErrorMessage(userResult.error, 'Could not load your account. Please try again.'));
+        if (userResult.error && isMissingUserProfileColumn(userResult.error.message)) {
+          userResult = await supabase
+            .from('users')
+            .select('role')
+            .eq('id', nextSession.user.id)
+            .maybeSingle();
+        }
+
+        if (userResult.error) {
+          throw userResult.error;
+        }
+
+        let data = userResult.data;
+        if (!data) {
+          // Auth can succeed before public.users exists — heal from signup metadata once.
+          const healed = await ensurePublicUserProfile(nextSession.user);
+          if (healed?.role) {
+            const healedResult = await supabase
+              .from('users')
+              .select('role, full_name, phone, avatar_url, address, city, province, postal_code, account_status')
+              .eq('id', nextSession.user.id)
+              .maybeSingle();
+            data = healedResult.data ?? { role: healed.role };
+          }
+        }
+
+        return data;
+      };
+
+      const data = await withTimeout(
+        loadProfile(),
+        AUTH_BOOTSTRAP_TIMEOUT_MS,
+        'Account load timed out. Check your connection and try again.',
+      );
+
+      if (generation !== applyGenerationRef.current) return;
+
+      const accountStatus = (data as { account_status?: string | null } | null)?.account_status;
+      if (accountStatus && accountStatus !== 'active') {
+        await supabase.auth.signOut();
+        setRole(null);
+        resetProfile();
+        finish(
+          accountStatus === 'suspended'
+            ? 'This account has been suspended by Walker AI admin. Contact support.'
+            : 'This account has been deactivated. Contact support.',
+        );
+        return;
+      }
+
+      if (data) {
+        updateProfile({
+          displayName: data.full_name ?? '',
+          phone: data.phone ?? '',
+          avatarUri: data.avatar_url ?? null,
+          address: data.address ?? '',
+          city: data.city ?? '',
+          province: data.province ?? '',
+        });
+      } else {
+        resetProfile();
+      }
+      setRole((data?.role as UserRole | undefined) ?? null);
+      finish();
+    } catch (err) {
+      if (generation !== applyGenerationRef.current) return;
+      // Soft-fail token refresh for an already-resolved session — don't kick the user out.
+      if (sameUser && useAuthStore.getState().role) {
+        console.warn('[auth] profile refresh failed; keeping current session', err);
+        finish();
+        return;
+      }
       setRole(null);
       resetProfile();
-      setHydrated(true);
-      setAuthRoleResolved(true);
-      return;
+      finish(formatAppSafeErrorMessage(err, 'Could not load your account. Please try again.'));
     }
-
-    const data = userResult.data;
-    if (!data) {
-      resetProfile();
-    } else {
-      updateProfile({
-        displayName: data.full_name ?? '',
-        phone: data.phone ?? '',
-        avatarUri: data.avatar_url ?? null,
-        address: data.address ?? '',
-        city: data.city ?? '',
-        province: data.province ?? '',
-      });
-    }
-    setRole((data?.role as UserRole | undefined) ?? null);
-    setHydrated(true);
-    setAuthRoleResolved(true);
   }, [resetProfile, setHydrated, setRole, setSession, updateProfile]);
 
   const handleFallbackSignOut = useCallback(async () => {
@@ -436,23 +522,54 @@ export function RootNavigator() {
   }, [resetProfile, setHydrated, setRole, setSession]);
 
   useEffect(() => {
+    let cancelled = false;
     const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, newSession) => {
-      applySession(newSession);
+      void applySession(newSession);
     });
-    supabase.auth.getSession().then(({ data: { session: existingSession } }) => {
-      applySession(existingSession);
-    });
-    return () => subscription.unsubscribe();
-  }, [applySession]);
+
+    void (async () => {
+      try {
+        const { data: { session: existingSession } } = await withTimeout(
+          supabase.auth.getSession(),
+          AUTH_BOOTSTRAP_TIMEOUT_MS,
+          'Session check timed out. Check your connection and try again.',
+        );
+        if (!cancelled) await applySession(existingSession);
+      } catch (err) {
+        if (cancelled) return;
+        setAuthErrorMessage(formatAppSafeErrorMessage(err, 'Could not load your account. Please try again.'));
+        setHydrated(true);
+        setAuthRoleResolved(true);
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+      subscription.unsubscribe();
+    };
+  }, [applySession, setHydrated]);
 
   // Push notification wiring. Effect runs once on mount to teach the push
   // service how to deep-link. A separate effect handles per-session init/
   // deactivate so signing out properly deactivates this device's APNs token.
   useEffect(() => {
     setPushDeepLinkHandler((route) => {
-      if (!route || !navigationRef.isReady()) return;
+      if (!navigationRef.isReady()) {
+        console.warn('[push] deep link deferred — navigation not ready');
+        return;
+      }
+      if (!route) {
+        console.warn('[push] deep link ignored — empty route');
+        return;
+      }
       const rootRoute = toRootNotificationRoute(route, role);
-      if (!rootRoute) return;
+      if (!rootRoute) {
+        console.warn('[push] deep link ignored — unsupported role/route', {
+          role,
+          routeName: route.name,
+        });
+        return;
+      }
       // CommonActions.navigate bypasses the strict per-stack typing the
       // direct navigationRef.navigate enforces; routes come from a runtime
       // string lookup, so static types don't help here anyway.
@@ -481,7 +598,19 @@ export function RootNavigator() {
     lastPushUserId.current = currentUserId;
   }, [hydrated, session?.user?.id, role]);
 
-  if (!hydrated || !authRoleResolved) return null;
+  if (!hydrated || !authRoleResolved) {
+    return (
+      <View style={roleFallbackStyles.container}>
+        <View style={roleFallbackStyles.skeletonBlock}>
+          <Skeleton width={72} height={72} radius={36} style={{ marginBottom: 20 }} />
+          <Skeleton width="55%" height={18} radius={6} style={{ marginBottom: 12 }} />
+          <Skeleton width="75%" height={14} radius={5} style={{ marginBottom: 8 }} />
+          <Skeleton width="65%" height={14} radius={5} />
+        </View>
+        <Text style={roleFallbackStyles.loadingText}>Loading your account…</Text>
+      </View>
+    );
+  }
 
   if (session && authErrorMessage) {
     return (
@@ -511,11 +640,16 @@ export function RootNavigator() {
       <View style={roleFallbackStyles.container}>
         <Text style={roleFallbackStyles.title}>Account setup incomplete</Text>
         <Text style={roleFallbackStyles.body}>
-          Your account role is missing. Sign out and sign in again, or contact support if this keeps happening.
+          Your account signed in, but the profile role is missing. Tap Try Again after a moment, or sign out and register again. If this continues, contact support.
         </Text>
-        <TouchableOpacity style={roleFallbackStyles.button} onPress={handleFallbackSignOut}>
-          <Text style={roleFallbackStyles.buttonText}>Sign Out</Text>
-        </TouchableOpacity>
+        <View style={roleFallbackStyles.actionRow}>
+          <TouchableOpacity style={roleFallbackStyles.secondaryButton} onPress={() => applySession(session)}>
+            <Text style={roleFallbackStyles.secondaryButtonText}>Try Again</Text>
+          </TouchableOpacity>
+          <TouchableOpacity style={roleFallbackStyles.button} onPress={handleFallbackSignOut}>
+            <Text style={roleFallbackStyles.buttonText}>Sign Out</Text>
+          </TouchableOpacity>
+        </View>
       </View>
     );
   }
@@ -546,6 +680,17 @@ const roleFallbackStyles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     paddingHorizontal: 24,
+  },
+  loadingText: {
+    color: 'rgba(255,255,255,0.65)',
+    fontSize: 15,
+    marginTop: 16,
+    textAlign: 'center',
+  },
+  skeletonBlock: {
+    width: '100%',
+    maxWidth: 280,
+    alignItems: 'center',
   },
   title: { color: '#fff', fontSize: 22, fontWeight: '800', textAlign: 'center', marginBottom: 10 },
   body: { color: 'rgba(255,255,255,0.65)', fontSize: 15, lineHeight: 22, textAlign: 'center', marginBottom: 20 },

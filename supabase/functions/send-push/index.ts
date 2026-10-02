@@ -318,8 +318,8 @@ function buildNotificationContent(
       };
     case 'quote_submitted':
       return {
-        title: 'Your Quote Is Ready',
-        body: 'Your contractor has submitted their final quote. Review and approve to get started.',
+        title: 'Your Project Estimate Is Ready',
+        body: 'Your standardized project breakdown is ready. Review and approve to get started.',
         priority: 'high',
       };
     case 'quote_approved':

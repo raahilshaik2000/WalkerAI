@@ -12,7 +12,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { useNavigation } from '@react-navigation/native';
 import Ionicons from 'react-native-vector-icons/Ionicons';
 import { supabase } from '@/lib/supabase/client';
-import { formatAppSafeErrorMessage, formatSupabaseFunctionError } from '@/lib/supabase/functions';
+import { formatAppSafeErrorMessage } from '@/lib/supabase/functions';
 import { useProjectWizardStore } from '@/stores/project-wizard.store';
 import { Colors, Spacing, Typography, Radius } from '@/constants/theme';
 import { GlassButton, GlassCard, GradientBackground, StatusBadge, WizardHeader } from '@/components/ui';
@@ -25,7 +25,13 @@ import {
   buildSurfaceSelectionSummary,
   projectAnswersWithSurfaceSelections,
 } from '@/lib/room-customizer';
-
+import {
+  catalogSelectionsEstimateCents,
+  catalogSelectionsToMaterialRows,
+  formatCatalogPrice,
+  listCatalogSelections,
+  quantityAndUnitForSurface,
+} from '@/lib/design-catalog';
 
 interface BriefData {
   materials: Array<{
@@ -141,15 +147,6 @@ export default function BriefStep() {
       const pricingAnswers = answersWithSurfaceSelections(answers, roomType, surfaceSelections);
       const persistedAnswers = projectAnswersWithSurfaceSelections(answers, roomType, surfaceSelections);
       const finishSummary = buildSurfaceSelectionSummary(roomType, surfaceSelections, pricingAnswers);
-      const provinceCode = normalizeCanadianProvince(province);
-      if (!provinceCode) {
-        throw new Error('Project province is missing. Add the project address before generating the brief.');
-      }
-
-      // Resolve quality tier and human-readable answer summary from fixed questions
-      const qualityTier = extractQualityTier(pricingAnswers);
-      const fixedQuestions = getQuestionsForRoomType(roomType);
-      const answerSummary = buildAnswerSummary(fixedQuestions, pricingAnswers);
 
       const hasAnyNumericMeasurement = measurements
         ? Object.values(measurements).some((value) => typeof value === 'string' && positiveMeasurement(value))
@@ -181,6 +178,30 @@ export default function BriefStep() {
       const quantityLines = measuredQuantityLines(quantities)
         .filter(([, value]) => Number.isFinite(value) && value > 0)
         .map(([label, value, unit]) => `- ${label}: ${value} ${unit}`);
+
+      const catalogPicks = listCatalogSelections(surfaceSelections);
+      const catalogMaterialRows = catalogSelectionsToMaterialRows(catalogPicks, 0, 'mid-range', quantities);
+      const catalogTotalCents = catalogSelectionsEstimateCents(catalogPicks, quantities);
+      const catalogPromptBlock = catalogPicks.length
+        ? `\n=== HOMEOWNER WALKER CATALOG PRODUCTS (REAL SKUs — MUST INCLUDE IN MATERIALS) ===\n${catalogPicks
+            .map(
+              (p) => {
+                const { quantity, unit } = quantityAndUnitForSurface(p.surfaceId, quantities);
+                const extCents = (p.priceCents || 0) * quantity;
+                return `- ${p.surfaceLabel}: ${p.material}${p.sku ? ` (SKU ${p.sku})` : ''} · Qty: ${quantity} ${unit} · Unit Price: ${formatCatalogPrice(p.priceCents)} · Line Total: ${formatCatalogPrice(extCents)} · catalog_id=${p.catalogItemId}`;
+              }
+            )
+            .join('\n')}\nCatalog materials subtotal: ${formatCatalogPrice(catalogTotalCents)}\n`
+        : '';
+      const provinceCode = normalizeCanadianProvince(province);
+      if (!provinceCode) {
+        throw new Error('Project province is missing. Add the project address before generating the brief.');
+      }
+
+      // Resolve quality tier and human-readable answer summary from fixed questions
+      const qualityTier = extractQualityTier(pricingAnswers);
+      const fixedQuestions = getQuestionsForRoomType(roomType);
+      const answerSummary = buildAnswerSummary(fixedQuestions, pricingAnswers);
 
       // Calculate cost directly from Walker AI pricing data — do NOT let AI guess this
       const costEstimate = estimateProjectCost({
@@ -216,7 +237,7 @@ ${answerSummary}
 
 === FINISH CUSTOMIZER SELECTIONS ===
 ${finishSummary}
-
+${catalogPromptBlock}
 === QUALITY TIER: ${qualityTier.toUpperCase()} ===
 The homeowner selected "${qualityTier}" quality. ALL materials must be "${qualityTier}" grade.
 ${quantitiesNote}
@@ -251,43 +272,202 @@ Return a valid JSON object — no markdown, no explanation, just the JSON:
 RULES:
 1. ai_cost_min and ai_cost_max: copy the exact values above (${costEstimate.min} and ${costEstimate.max}). Do not change them.
 2. QUALITY TIER: All materials MUST use quality_tier: "${qualityTier}". For luxury: name premium brands (Thermador, Sub-Zero, Caesarstone, Kohler Artifacts, Wolf). For budget: name stock-grade products. For mid-range: semi-custom grades.
-3. MATERIALS LIST: Include ${materialsTarget} line items that match the cost breakdown above and the finish customizer selections. Treat "Homeowner selected" and "From questionnaire" finishes as homeowner intent; treat "Preview default" finishes only as visual placeholders. Do not add cabinets, countertops, backsplash, flooring, appliances, demolition, or other work the homeowner selected to keep unless the pricing engine cost breakdown includes that line. Add appliances only if homeowner selected replacement.
+3. MATERIALS LIST: Include ${materialsTarget} line items that match the cost breakdown above and the finish customizer selections. Treat "Homeowner selected" and "From questionnaire" finishes as homeowner intent; treat "Preview default" finishes only as visual placeholders. Do not add cabinets, countertops, backsplash, flooring, appliances, demolition, or other work the homeowner selected to keep unless the pricing engine cost breakdown includes that line. Add appliances only if homeowner selected replacement. If WALKER CATALOG PRODUCTS are listed above, include each as its own materials line with the exact product name/SKU and do not invent a competing product for that surface.
 4. SCOPE: Cover all phases in logical order (demolition → rough-in → installation → finishing).
 5. PERMITS: List realistic local Canadian permit requirements for ${provinceCode}. Mention Ontario Building Code only when the project province is ON; otherwise use the local authority having jurisdiction for that province/municipality.
 6. CONFIDENCE: copy confidence_score ${confidenceEstimate.score} and confidence_notes ${JSON.stringify(confidenceEstimate.notes)}. Do not recalculate confidence.
 7. Return ONLY the JSON.`;
 
-      // Route through edge function — API key stays server-side, DB writes handled there
-      const { data: briefResponse, error: briefError } = await supabase.functions.invoke('generate-project-brief', {
-        body: {
-          project_id: projectId,
-          questionnaire_answers: persistedAnswers,
-          province,
-          custom_prompt: prompt,
-          forced_cost_min: costEstimate.min,
-          forced_cost_max: costEstimate.max,
-        },
-      });
+      let briefData: BriefData;
+      let briefResponse: any = null;
 
-      if (briefError) throw new Error(`Brief generation failed: ${await formatSupabaseFunctionError(briefError)}`);
-      if (!briefResponse?.materials) throw new Error('Invalid response from brief generator.');
-
-      const briefData: BriefData = {
-        ...briefResponse,
-        ai_cost_min: costEstimate.min,
-        ai_cost_max: costEstimate.max,
-        confidence_score: confidenceEstimate.score,
-        confidence_notes: confidenceEstimate.notes,
-      };
-
-      // Persist confidence score if present (edge function doesn't handle this field)
-      if (briefData.confidence_score != null) {
-        const { error: confidenceError } = await supabase.from('projects')
-          .update({ ai_confidence_score: briefData.confidence_score })
-          .eq('id', projectId);
-        if (confidenceError && !isMissingColumnError(confidenceError.message)) {
-          throw new Error(formatAppSafeErrorMessage(confidenceError, 'Brief saved but confidence score update failed.'));
+      try {
+        const { data, error: briefError } = await supabase.functions.invoke('generate-project-brief', {
+          body: {
+            project_id: projectId,
+            questionnaire_answers: persistedAnswers,
+            province,
+            custom_prompt: prompt,
+            forced_cost_min: costEstimate.min,
+            forced_cost_max: costEstimate.max,
+          },
+        });
+        if (!briefError && data?.materials) {
+          briefResponse = data;
         }
+      } catch (e) {
+        console.warn('[brief] generate-project-brief invocation fallback:', e);
+      }
+
+      if (briefResponse?.materials) {
+        briefData = {
+          ...briefResponse,
+          ai_cost_min: costEstimate.min,
+          ai_cost_max: costEstimate.max,
+          confidence_score: confidenceEstimate.score,
+          confidence_notes: confidenceEstimate.notes,
+        };
+      } else {
+        // Fallback brief generation directly from Walker AI pricing engine
+        const fallbackMaterials = costEstimate.lineItems.map((item, idx) => ({
+          item: item.label,
+          quantity: 1,
+          unit: 'allowance',
+          quality_tier: qualityTier as 'budget' | 'mid-range' | 'luxury',
+          sort_order: idx,
+        }));
+
+        const fallbackScope = [
+          { phase: 'demolition', description: `Demolition, surface removal, and disposal for ${roomType}`, sort_order: 1 },
+          { phase: 'rough-in', description: 'Plumbing rough-in, electrical wiring, and framing adjustments', sort_order: 2 },
+          { phase: 'installation', description: 'Installation of cabinets, countertops, tile, fixtures, and finishes', sort_order: 3 },
+          { phase: 'finishing', description: 'Trim work, silicone caulking, painting, and final detailing', sort_order: 4 },
+        ];
+
+        briefData = {
+          materials: fallbackMaterials,
+          scope_of_work: fallbackScope,
+          ai_cost_min: costEstimate.min,
+          ai_cost_max: costEstimate.max,
+          permits: [{ permit_type: `${provinceCode} Building & Plumbing Permit`, required: true }],
+          ai_observations: `Estimated ${roomType} renovation plan with ${qualityTier} tier materials for ${provinceCode}, Canada.`,
+          confidence_score: confidenceEstimate.score,
+          confidence_notes: confidenceEstimate.notes,
+        };
+
+        const updatedAnalysis = {
+          ...(analysisResult || {}),
+          verified_measurements: measurements,
+          verified_quantities: quantities,
+          layout: {
+            ...((analysisResult as any)?.layout || {}),
+            estimated_sqft: quantities?.floor_area_sqf ?? (analysisResult as any)?.layout?.estimated_sqft ?? 0,
+            verified_sqft: quantities?.floor_area_sqf ?? null,
+            is_verified: !!quantities?.floor_area_sqf,
+          },
+        };
+
+        // Persist cost estimates, answers, and verified measurements directly to projects table
+        await supabase.from('projects').update({
+          ai_cost_min: costEstimate.min,
+          ai_cost_max: costEstimate.max,
+          questionnaire_answers: persistedAnswers,
+          ai_confidence_score: confidenceEstimate.score,
+          ai_analysis: updatedAnalysis,
+          status: 'brief_ready',
+        }).eq('id', projectId);
+
+        // Persist fallback materials if none exist yet
+        const { data: existingMats } = await supabase.from('materials').select('id').eq('project_id', projectId).limit(1);
+        if (!existingMats || existingMats.length === 0) {
+          const insertPayload = fallbackMaterials.map((m, i) => ({
+            project_id: projectId,
+            item: m.item,
+            quantity: m.quantity,
+            unit: m.unit,
+            quality_tier: m.quality_tier,
+            sort_order: i,
+          }));
+          await supabase.from('materials').insert(insertPayload);
+        }
+
+        // Fallback path must also create permit rows — Permits screen uploads against DB records.
+        const { data: existingPermits } = await supabase
+          .from('permits')
+          .select('id')
+          .eq('project_id', projectId)
+          .limit(1);
+        if (!existingPermits || existingPermits.length === 0) {
+          await supabase.from('permits').insert(
+            briefData.permits
+              .filter((p) => p.required !== false && !!p.permit_type?.trim())
+              .map((p) => ({
+                project_id: projectId,
+                permit_type: p.permit_type.trim(),
+                status: 'not_applied',
+              })),
+          );
+        }
+      }
+
+      // Reconcile brief permits into DB even when the edge function returned materials
+      // but permit rows are missing (older deploys / partial failures).
+      if (projectId && Array.isArray(briefData.permits) && briefData.permits.length > 0) {
+        const { data: existingPermitRows } = await supabase
+          .from('permits')
+          .select('permit_type')
+          .eq('project_id', projectId);
+        const existingTypes = new Set(
+          (existingPermitRows ?? [])
+            .map((row) => (typeof row.permit_type === 'string' ? row.permit_type.trim().toLowerCase() : ''))
+            .filter(Boolean),
+        );
+        const missingPermits = briefData.permits
+          .filter((p) => p.required !== false && typeof p.permit_type === 'string' && p.permit_type.trim().length > 0)
+          .filter((p) => !existingTypes.has(p.permit_type.trim().toLowerCase()))
+          .map((p) => ({
+            project_id: projectId,
+            permit_type: p.permit_type.trim(),
+            status: 'not_applied' as const,
+          }));
+        if (missingPermits.length > 0) {
+          await supabase.from('permits').insert(missingPermits);
+        }
+      }
+
+      // Always persist homeowner-selected Walker catalog SKUs into materials (design tool).
+      if (catalogMaterialRows.length > 0 && projectId) {
+        const catalogInsert = catalogSelectionsToMaterialRows(
+          catalogPicks,
+          900,
+          qualityTier as 'budget' | 'mid-range' | 'luxury',
+          quantities,
+        ).map((m) => ({
+          project_id: projectId,
+          item: m.item,
+          quantity: m.quantity,
+          unit: m.unit,
+          quality_tier: m.quality_tier,
+          brand_preference: m.brand_preference,
+          color_finish: m.color_finish,
+          specific_model: m.specific_model,
+          contractor_notes: m.contractor_notes,
+          sort_order: m.sort_order,
+        }));
+
+        // Replace previous design-tool catalog lines for this project (notes marker).
+        const { data: existingCatalogMats } = await supabase
+          .from('materials')
+          .select('id, contractor_notes')
+          .eq('project_id', projectId);
+        const staleIds = (existingCatalogMats ?? [])
+          .filter((m) => typeof m.contractor_notes === 'string' && m.contractor_notes.includes('Walker catalog item'))
+          .map((m) => m.id);
+        if (staleIds.length > 0) {
+          await supabase.from('materials').delete().in('id', staleIds);
+        }
+        await supabase.from('materials').insert(catalogInsert);
+
+        // Surface in local brief UI
+        briefData = {
+          ...briefData,
+          materials: [
+            ...catalogMaterialRows.map((m) => ({
+              item: m.item,
+              quantity: m.quantity,
+              unit: m.unit,
+              quality_tier: m.quality_tier,
+            })),
+            ...briefData.materials,
+          ],
+        };
+      }
+
+      // Persist confidence score if present
+      if (briefData.confidence_score != null) {
+        await supabase.from('projects')
+          .update({ ai_confidence_score: briefData.confidence_score, ai_cost_min: briefData.ai_cost_min, ai_cost_max: briefData.ai_cost_max })
+          .eq('id', projectId);
       }
 
       setBrief(briefData);

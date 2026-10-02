@@ -30,8 +30,15 @@ const REFRESH_TEXT = [
 Deno.serve((req) => {
   const url = new URL(req.url);
   const refresh = url.searchParams.get('refresh') === '1';
+  const targetUrl = refresh
+    ? 'walkerai://stripe-return?refresh=1'
+    : 'walkerai://stripe-return?status=success';
+
   return new Response(refresh ? REFRESH_TEXT : RETURN_TEXT, {
-    status: 200,
-    headers: { 'Content-Type': 'text/plain; charset=utf-8' },
+    status: 302,
+    headers: {
+      'Location': targetUrl,
+      'Content-Type': 'text/plain; charset=utf-8',
+    },
   });
 });

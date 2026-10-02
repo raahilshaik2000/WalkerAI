@@ -28,7 +28,7 @@ function Field({
   onChangeText,
   unit = 'ft',
   keyboardType = 'decimal-pad',
-  placeholder = '—',
+  placeholder = '',
 }: {
   label: string;
   hint?: string;
@@ -109,55 +109,66 @@ function Divider() {
 
 export default function MeasurementsStep() {
   const navigation = useNavigation<any>();
-  const { setMeasurements, setRoomScanData, roomType } = useProjectWizardStore();
+  const { measurements, setMeasurements, setRoomScanData, roomType } = useProjectWizardStore();
   const isBathroom = roomType === 'bathroom';
+  const saved = measurements;
 
   // Room
-  const [roomLength, setRoomLength] = useState('');
-  const [roomWidth, setRoomWidth] = useState('');
-  const [ceilingHeight, setCeilingHeight] = useState('');
+  const [roomLength, setRoomLength] = useState(saved?.lengthFt ?? '');
+  const [roomWidth, setRoomWidth] = useState(saved?.widthFt ?? '');
+  const [ceilingHeight, setCeilingHeight] = useState(saved?.ceilingHeightFt ?? '');
 
   // Cabinets (kitchen)
-  const [upperCabHeight, setUpperCabHeight] = useState('');
-  const [lowerCabHeight, setLowerCabHeight] = useState('');
-  const [cabDepth, setCabDepth] = useState('');
-  const [upperLinearFt, setUpperLinearFt] = useState('');
-  const [lowerLinearFt, setLowerLinearFt] = useState('');
+  const [upperCabHeight, setUpperCabHeight] = useState(saved?.upperCabHeight ?? '');
+  const [lowerCabHeight, setLowerCabHeight] = useState(saved?.lowerCabHeight ?? '');
+  const [cabDepth, setCabDepth] = useState(saved?.cabDepth ?? '');
+  const [upperLinearFt, setUpperLinearFt] = useState(saved?.upperLinearFt ?? '');
+  const [lowerLinearFt, setLowerLinearFt] = useState(saved?.lowerLinearFt ?? '');
 
   // Countertops (kitchen)
-  const [countertopLinearFt, setCountertopLinearFt] = useState('');
+  const [countertopLinearFt, setCountertopLinearFt] = useState(saved?.countertopLinearFt ?? '');
 
   // Doors & Windows
-  const [numDoors, setNumDoors] = useState('');
-  const [doorWidth, setDoorWidth] = useState('');
-  const [doorHeight, setDoorHeight] = useState('');
-  const [numWindows, setNumWindows] = useState('');
-  const [windowWidth, setWindowWidth] = useState('');
-  const [windowHeight, setWindowHeight] = useState('');
+  const [numDoors, setNumDoors] = useState(saved?.numDoors ?? '');
+  const [doorWidth, setDoorWidth] = useState(saved?.doorWidth ?? '');
+  const [doorHeight, setDoorHeight] = useState(saved?.doorHeight ?? '');
+  const [numWindows, setNumWindows] = useState(saved?.numWindows ?? '');
+  const [windowWidth, setWindowWidth] = useState(saved?.windowWidth ?? '');
+  const [windowHeight, setWindowHeight] = useState(saved?.windowHeight ?? '');
 
   // Appliances (kitchen)
-  const [fridgeWidth, setFridgeWidth] = useState('');
-  const [rangeWidth, setRangeWidth] = useState('');
-  const [hasDishwasher, setHasDishwasher] = useState(false);
+  const [fridgeWidth, setFridgeWidth] = useState(saved?.fridgeWidth ?? '');
+  const [rangeWidth, setRangeWidth] = useState(saved?.rangeWidth ?? '');
+  const [hasDishwasher, setHasDishwasher] = useState(saved?.hasDishwasher ?? false);
 
   // Island (kitchen)
-  const [hasIsland, setHasIsland] = useState(false);
-  const [islandLength, setIslandLength] = useState('');
-  const [islandWidth, setIslandWidth] = useState('');
+  const [hasIsland, setHasIsland] = useState(saved?.hasIsland ?? false);
+  const [islandLength, setIslandLength] = useState(saved?.islandLength ?? '');
+  const [islandWidth, setIslandWidth] = useState(saved?.islandWidth ?? '');
 
   // Shower / Tub (bathroom)
-  const [hasShowerTub, setHasShowerTub] = useState(false);
-  const [showerLength, setShowerLength] = useState('');
-  const [showerWidth, setShowerWidth] = useState('');
+  const [hasShowerTub, setHasShowerTub] = useState(saved?.hasShowerTub ?? false);
+  const [showerLength, setShowerLength] = useState(saved?.showerLength ?? '');
+  const [showerWidth, setShowerWidth] = useState(saved?.showerWidth ?? '');
 
   // Vanity (bathroom)
-  const [vanityWidth, setVanityWidth] = useState('');
-  const [numSinks, setNumSinks] = useState('');
+  const [vanityWidth, setVanityWidth] = useState(saved?.vanityWidth ?? '');
+  const [numSinks, setNumSinks] = useState(saved?.numSinks ?? '');
 
   // Tile (bathroom)
-  const [floorTileArea, setFloorTileArea] = useState('');
-  const [wallTileArea, setWallTileArea] = useState('');
-  const [showAdvanced, setShowAdvanced] = useState(false);
+  const [floorTileArea, setFloorTileArea] = useState(saved?.floorTileArea ?? '');
+  const [wallTileArea, setWallTileArea] = useState(saved?.wallTileArea ?? '');
+  const [showAdvanced, setShowAdvanced] = useState(() => {
+    if (!saved) return false;
+    const advancedValues = isBathroom
+      ? [saved.showerLength, saved.showerWidth, saved.vanityWidth, saved.numSinks, saved.floorTileArea, saved.wallTileArea]
+      : [
+        saved.upperCabHeight, saved.lowerCabHeight, saved.cabDepth, saved.upperLinearFt, saved.lowerLinearFt,
+        saved.countertopLinearFt, saved.fridgeWidth, saved.rangeWidth, saved.islandLength, saved.islandWidth,
+        saved.doorWidth, saved.doorHeight, saved.windowWidth, saved.windowHeight,
+      ];
+    return advancedValues.some(Boolean) || !!saved.hasIsland || !!saved.hasDishwasher || !!saved.hasShowerTub;
+  });
   const [submitting, setSubmitting] = useState(false);
 
   const kitchenValues = [
@@ -465,7 +476,7 @@ export default function MeasurementsStep() {
 
             {/* Tip */}
             <View style={styles.tip}>
-              <Ionicons name="information-circle-outline" size={15} color={Colors.text.tertiary} />
+              <Ionicons name="information-circle-outline" size={15} color={Colors.text.tertiary} style={styles.tipIcon} />
               <Text style={styles.tipText}>
                 Leave anything blank if you are unsure. Photos and the pricing engine will use standard defaults.
               </Text>
@@ -570,6 +581,9 @@ const styles = StyleSheet.create({
     marginTop: Spacing.md,
     marginBottom: Spacing.lg,
     paddingHorizontal: 4,
+  },
+  tipIcon: {
+    marginTop: 1,
   },
   tipText: { ...Typography.caption, flex: 1, lineHeight: 18 },
 

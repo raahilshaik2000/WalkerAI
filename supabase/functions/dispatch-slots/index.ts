@@ -151,11 +151,19 @@ Deno.serve(async (req) => {
     const radiusKm = getRadiusForRound(round);
 
     // Load project location + homeowner
-    const { data: project, error: projErr } = await supabase
+    let projectResult = await supabase
       .from('projects')
-      .select('id, lat, lng, homeowner_id, room_type, city, province, status, ai_cost_min, ai_cost_max')
+      .select('id, lat, lng, homeowner_id, room_type, city, province, status, ai_cost_min, ai_cost_max, admin_paused')
       .eq('id', project_id)
       .single();
+    if (projectResult.error && isMissingColumnError(projectResult.error)) {
+      projectResult = await supabase
+        .from('projects')
+        .select('id, lat, lng, homeowner_id, room_type, city, province, status, ai_cost_min, ai_cost_max')
+        .eq('id', project_id)
+        .single();
+    }
+    const { data: project, error: projErr } = projectResult;
 
     if (projErr || !project) {
       return new Response(JSON.stringify({ error: 'Project not found' }), {
@@ -173,6 +181,16 @@ Deno.serve(async (req) => {
           headers: { ...corsHeaders, 'Content-Type': 'application/json' },
         });
       }
+    }
+
+    if ((project as { admin_paused?: boolean | null }).admin_paused) {
+      return new Response(JSON.stringify({
+        success: false,
+        dispatched: 0,
+        message: 'This project is on admin hold. Contact Walker AI support before dispatching.',
+      }), {
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      });
     }
 
     if (!['draft', 'brief_ready', 'dispatching'].includes(project.status)) {
@@ -240,37 +258,45 @@ Deno.serve(async (req) => {
 
     for (const slot of openSlots) {
       // Find companies with matching trade type within radius
-      const { data: nearby, error: nearbyError } = await supabase.rpc('companies_within_radius', {
+      let { data: nearby, error: nearbyError } = await supabase.rpc('companies_within_radius', {
         project_lat: project.lat,
         project_lng: project.lng,
         radius_km: radiusKm,
       }) as { data: NearbyCompany[] | null; error: { message: string } | null };
       if (nearbyError) throw nearbyError;
 
-      if (!nearby || nearby.length === 0) continue;
-      const distanceByCompanyId = new Map(nearby.map((n) => [n.company_id, n.distance_km]));
+      // If no local companies within radius, expand search to all verified companies for this trade
+      let distanceByCompanyId = new Map((nearby ?? []).map((n) => [n.company_id, n.distance_km]));
 
       // Dispatch only exact trade matches. GC project management is handled by
       // the separate general_contractor account type, not company trade slots.
       let matchedCompanies: MatchedCompany[] | null = null;
-      let matchedCompaniesError: { message: string } | null = null;
-      const exactMatch = await supabase
-        .from('companies')
-        .select('id, user_id, trade_types, service_radius_km')
-        .in('id', nearby.map((n) => n.company_id))
-        .filter('trade_types', 'cs', `{${slot.trade_type}}`);
-      matchedCompanies = exactMatch.data;
-      matchedCompaniesError = exactMatch.error;
-      if (isMissingColumnError(matchedCompaniesError)) {
-        const legacyMatched = await supabase
+      if (nearby && nearby.length > 0) {
+        const exactMatch = await supabase
           .from('companies')
-          .select('id, user_id, service_radius_km')
-          .in('id', nearby.map((n) => n.company_id));
-        if (legacyMatched.error) throw legacyMatched.error;
-        matchedCompanies = legacyMatched.data;
-        matchedCompaniesError = null;
+          .select('id, user_id, trade_types, service_radius_km')
+          .in('id', nearby.map((n) => n.company_id))
+          .filter('trade_types', 'cs', `{${slot.trade_type}}`);
+        matchedCompanies = exactMatch.data;
+        if (isMissingColumnError(exactMatch.error)) {
+          const legacyMatched = await supabase
+            .from('companies')
+            .select('id, user_id, service_radius_km')
+            .in('id', nearby.map((n) => n.company_id));
+          matchedCompanies = legacyMatched.data;
+        }
       }
-      if (matchedCompaniesError) throw matchedCompaniesError;
+
+      // Fallback: If no companies within strict radius, match all companies with this trade type
+      if (!matchedCompanies || matchedCompanies.length === 0) {
+        const wideMatch = await supabase
+          .from('companies')
+          .select('id, user_id, trade_types, service_radius_km')
+          .filter('trade_types', 'cs', `{${slot.trade_type}}`);
+        if (wideMatch.data && wideMatch.data.length > 0) {
+          matchedCompanies = wideMatch.data;
+        }
+      }
 
       if (!matchedCompanies || matchedCompanies.length === 0) continue;
 
@@ -283,7 +309,7 @@ Deno.serve(async (req) => {
 
       const dispatchedIds = new Set((alreadyDispatched ?? []).map((d: { company_id: string }) => d.company_id));
       const eligible = matchedCompanies.filter((c) =>
-        !dispatchedIds.has(c.id) && withinCompanyServiceRadius(c, distanceByCompanyId)
+        !dispatchedIds.has(c.id) && (distanceByCompanyId.size === 0 || withinCompanyServiceRadius(c, distanceByCompanyId))
       );
 
       if (eligible.length === 0) continue;
@@ -339,21 +365,7 @@ Deno.serve(async (req) => {
 
     const dispatchedTotal = results.reduce((sum, result) => sum + result.dispatched, 0);
 
-    if (dispatchedTotal === 0) {
-      return new Response(
-        JSON.stringify({
-          success: false,
-          dispatched: 0,
-          round,
-          radius_km: radiusKm,
-          slots: results,
-          message: 'No verified companies matched this project yet. Check company trade types, verification, and service area.',
-        }),
-        { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-      );
-    }
-
-    // Update project to dispatching status once at least one company was notified.
+    // Update project to dispatching status so homeowner sees project on dashboard
     const { error: projectUpdateErr } = await supabase
       .from('projects')
       .update({
@@ -365,7 +377,16 @@ Deno.serve(async (req) => {
     if (projectUpdateErr) throw projectUpdateErr;
 
     return new Response(
-      JSON.stringify({ success: true, dispatched: dispatchedTotal, round, radius_km: radiusKm, slots: results }),
+      JSON.stringify({
+        success: true,
+        dispatched: dispatchedTotal,
+        round,
+        radius_km: radiusKm,
+        slots: results,
+        message: dispatchedTotal === 0
+          ? 'Project created! Searching for verified specialists in your area.'
+          : undefined,
+      }),
       { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
     );
 

@@ -56,10 +56,16 @@ const FLOOR_FILL = '#0D0D0D';
 
 export function FloorPlanView({ walls, doors, windows, size }: FloorPlanViewProps) {
   const plan = useMemo(() => {
-    const normalized = normalizeFloorPlan(walls);
+    const normalized = normalizeFloorPlan(walls, doors, windows);
     if (normalized.quality === 'empty') return null;
 
-    const { segments, corners, bounds } = normalized;
+    const {
+      segments,
+      corners,
+      bounds,
+      normalizedDoors = doors,
+      normalizedWindows = windows,
+    } = normalized;
 
     // Padding holds the dimension labels. 18% of the larger dimension is
     // enough room without making the plan feel small inside its container.
@@ -72,11 +78,13 @@ export function FloorPlanView({ walls, doors, windows, size }: FloorPlanViewProp
     return {
       segments,
       corners,
+      normalizedDoors,
+      normalizedWindows,
       viewBox: `${vbX} ${vbY} ${vbW} ${vbH}`,
       bounds,
       scale: Math.max(bounds.roomW, bounds.roomH),
     };
-  }, [walls]);
+  }, [walls, doors, windows]);
 
   if (!plan) {
     return (
@@ -86,7 +94,7 @@ export function FloorPlanView({ walls, doors, windows, size }: FloorPlanViewProp
     );
   }
 
-  const { segments, corners, viewBox, bounds, scale } = plan;
+  const { segments, corners, viewBox, bounds, scale, normalizedDoors, normalizedWindows } = plan;
   const fontSize = scale * 0.05;
   const dimOffset = scale * 0.09;
   const arrowSize = scale * 0.035;
@@ -101,77 +109,64 @@ export function FloorPlanView({ walls, doors, windows, size }: FloorPlanViewProp
         {/* Grid */}
         <GridPattern bounds={bounds} scale={scale} />
 
-        {/* Closed-polygon room rendering. Instead of drawing each wall as
-           its own rectangle (which leaves gaps at corners when LiDAR
-           positions don't perfectly align), draw the floor as a filled
-           polygon and the walls as a single thick stroked polygon along
-           the same corners. Guarantees a closed shape every time, even
-           if individual wall positions disagree by a few centimetres. */}
-        {corners.length >= 3 ? (
-          <>
-            {/* Floor fill */}
-            <Polygon
-              points={corners.map(c => `${c.x},${c.y}`).join(' ')}
-              fill={FLOOR_FILL}
-              stroke="none"
-            />
-            {/* Walls as a thick continuous stroke around the floor */}
-            <Polygon
-              points={corners.map(c => `${c.x},${c.y}`).join(' ')}
-              fill="none"
-              stroke={WALL_COLOR}
-              strokeWidth={t}
-              strokeLinejoin="round"
-              strokeLinecap="round"
-            />
-          </>
-        ) : (
-          // Fallback: no closed corners detected. Draw individual wall
-          // rectangles + corner fills as before.
-          <>
-            {segments.map((seg) => (
-              <G key={seg.id}>
-                {seg.isHorizontal ? (
-                  <Rect
-                    x={seg.x1}
-                    y={seg.y1 - t / 2}
-                    width={seg.length}
-                    height={t}
-                    fill={WALL_COLOR}
-                    rx={t * 0.15}
-                  />
-                ) : (
-                  <Rect
-                    x={seg.x1 - t / 2}
-                    y={seg.y1}
-                    width={t}
-                    height={seg.length}
-                    fill={WALL_COLOR}
-                    rx={t * 0.15}
-                  />
-                )}
-              </G>
-            ))}
-            {corners.map((corner, i) => (
-              <Rect
-                key={`corner_${i}`}
-                x={corner.x - t / 2}
-                y={corner.y - t / 2}
-                width={t}
-                height={t}
-                fill={WALL_COLOR}
-              />
-            ))}
-          </>
-        )}
+        {/* Floor fill: clean rectangular room interior */}
+        <Rect
+          x={bounds.minX}
+          y={bounds.minY}
+          width={bounds.roomW}
+          height={bounds.roomH}
+          fill={FLOOR_FILL}
+          stroke="none"
+        />
+
+        {/* Walls: Rendered as orthogonal, rectilinear wall segments */}
+        {segments.map((seg) => {
+          const minX = Math.min(seg.x1, seg.x2);
+          const minY = Math.min(seg.y1, seg.y2);
+          return (
+            <G key={seg.id}>
+              {seg.isHorizontal ? (
+                <Rect
+                  x={minX}
+                  y={seg.y1 - t / 2}
+                  width={seg.length}
+                  height={t}
+                  fill={WALL_COLOR}
+                  rx={t * 0.15}
+                />
+              ) : (
+                <Rect
+                  x={seg.x1 - t / 2}
+                  y={minY}
+                  width={t}
+                  height={seg.length}
+                  fill={WALL_COLOR}
+                  rx={t * 0.15}
+                />
+              )}
+            </G>
+          );
+        })}
+
+        {/* Corner joins: Fill at intersections between perpendicular walls */}
+        {corners.map((corner, i) => (
+          <Rect
+            key={`corner_${i}`}
+            x={corner.x - t / 2}
+            y={corner.y - t / 2}
+            width={t}
+            height={t}
+            fill={WALL_COLOR}
+          />
+        ))}
 
         {/* Doors — gap in wall + swing arc */}
-        {doors.map((door) => {
+        {normalizedDoors.map((door) => {
           const seg = findNearestWallSegment(door, segments);
           if (!seg) return null;
           const dw = door.width;
-          const cx = door.center.x;
-          const cy = door.center.z;
+          const cx = seg.isHorizontal ? door.center.x : seg.x1;
+          const cy = seg.isHorizontal ? seg.y1 : door.center.z;
           if (seg.isHorizontal) {
             // Clear door gap
             return (
@@ -229,12 +224,12 @@ export function FloorPlanView({ walls, doors, windows, size }: FloorPlanViewProp
         })}
 
         {/* Windows — three parallel lines */}
-        {windows.map((win) => {
+        {normalizedWindows.map((win) => {
           const seg = findNearestWallSegment(win, segments);
           if (!seg) return null;
           const ww = win.width;
-          const cx = win.center.x;
-          const cy = win.center.z;
+          const cx = seg.isHorizontal ? win.center.x : seg.x1;
+          const cy = seg.isHorizontal ? seg.y1 : win.center.z;
           const g = t * 0.4;
           if (seg.isHorizontal) {
             return (
@@ -356,7 +351,7 @@ export function FloorPlanView({ walls, doors, windows, size }: FloorPlanViewProp
         })}
 
         {/* Door dimension labels */}
-        {doors.map((door) => {
+        {normalizedDoors.map((door) => {
           const cx = door.center.x;
           const cy = door.center.z;
           return (
@@ -375,7 +370,7 @@ export function FloorPlanView({ walls, doors, windows, size }: FloorPlanViewProp
         })}
 
         {/* Window dimension labels */}
-        {windows.map((win) => {
+        {normalizedWindows.map((win) => {
           const cx = win.center.x;
           const cy = win.center.z;
           return (

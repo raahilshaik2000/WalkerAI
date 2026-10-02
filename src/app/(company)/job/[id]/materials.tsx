@@ -1,6 +1,5 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import {
-  ActivityIndicator,
   Alert,
   KeyboardAvoidingView,
   Platform,
@@ -19,7 +18,7 @@ import { parseNonNegativeMetricQuantity } from '@/lib/measurements';
 import { getRequiredStringParam } from '@/lib/navigation-params';
 import { formatAppSafeErrorMessage, formatSupabaseFunctionError } from '@/lib/supabase/functions';
 import { useAuthStore } from '@/stores/auth.store';
-import { GlassButton, GradientBackground } from '@/components/ui';
+import { GlassButton, GradientBackground, ListItemSkeleton } from '@/components/ui';
 import { Colors, Radius, Spacing, Typography } from '@/constants/theme';
 import { TradeMetricStrip, TradePanel } from '@/components/company/TradeUI';
 
@@ -118,9 +117,10 @@ export default function ContractorMaterialsScreen() {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [submittingReview, setSubmittingReview] = useState<string | null>(null);
+  const hasLoadedRef = useRef(false);
 
-  const loadMaterials = useCallback(async () => {
-    setLoading(true);
+  const loadMaterials = useCallback(async ({ showSpinner = false } = {}) => {
+    if (showSpinner || !hasLoadedRef.current) setLoading(true);
 
     if (!projectId) {
       setMaterials([]);
@@ -186,11 +186,12 @@ export default function ContractorMaterialsScreen() {
         setExistingReviews({});
       }
     }
+    hasLoadedRef.current = true;
     setLoading(false);
   }, [projectId, user?.id]);
 
   useEffect(() => {
-    loadMaterials();
+    void loadMaterials({ showSpinner: true });
   }, [loadMaterials]);
 
   async function handleConfirm() {
@@ -336,11 +337,15 @@ export default function ContractorMaterialsScreen() {
     }
   }
 
-  if (loading) {
+  if (loading && !hasLoadedRef.current) {
     return (
       <GradientBackground>
         <SafeAreaView style={styles.centered}>
-          <ActivityIndicator size="large" color="#FF6B00" />
+          <View style={{ width: '100%', paddingHorizontal: 16 }}>
+            <ListItemSkeleton style={{ marginBottom: 12 }} />
+            <ListItemSkeleton style={{ marginBottom: 12 }} />
+            <ListItemSkeleton style={{ marginBottom: 12 }} />
+          </View>
         </SafeAreaView>
       </GradientBackground>
     );

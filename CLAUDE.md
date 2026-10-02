@@ -4,17 +4,11 @@ This file is auto-loaded by Claude Code at the start of every session in this
 repo. Anything captured here persists across sessions and helps the next
 Claude pick up where the last one left off.
 
-## ⚠️ Pending: APNs Key for Push Notifications
+## ✅ Configured: APNs Key for Push Notifications
 
-**Status as of 2026-06-10:** Push notification code is fully wired (Notifee
-on the RN side + custom native bridge + raw APNs HTTP/2 + JWT-signed
-send-push edge function), but **push delivery is blocked on the user
-configuring an APNs Authentication Key**.
+**Status as of 2026-08-07:** APNs Authentication Key and secrets (`APNS_KEY`, `APNS_KEY_ID="7W7X4AXHPX"`, `APNS_TEAM_ID="W4V4NXYYW5"`, `APNS_BUNDLE_ID="com.walkerai.app"`) have been **successfully set in Supabase secrets** for project `wgbloslndalmocckrejw`.
 
-The native code compiles and the app runs fine without this — pushes just
-won't deliver until secrets are set. The send-push function detects missing
-secrets and writes `push_error='APNS_NOT_CONFIGURED'` on the notification
-row rather than crashing.
+Push notifications via the `send-push` edge function are ready for delivery to iOS devices.
 
 ### What the user still needs to do
 

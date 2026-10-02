@@ -208,7 +208,11 @@ export default function CompanyMessagesScreen() {
               onPress={sendMessage}
               disabled={!body.trim() || sending}
             >
-              <Ionicons name="arrow-up" size={20} color={Colors.accentFg} />
+              <Ionicons
+                name="arrow-up"
+                size={20}
+                color={!body.trim() || sending ? Colors.text.tertiary : Colors.accentFg}
+              />
             </TouchableOpacity>
           </View>
         </KeyboardAvoidingView>
@@ -269,5 +273,4 @@ const styles = StyleSheet.create({
   },
   sendBtn: { width: 42, height: 42, borderRadius: 21, backgroundColor: Colors.accent, alignItems: 'center', justifyContent: 'center' },
   sendBtnDisabled: { backgroundColor: Colors.glass.surface, borderWidth: 1, borderColor: Colors.glass.border },
-  sendBtnText: { color: '#fff', fontSize: 18, fontWeight: '700' },
 });

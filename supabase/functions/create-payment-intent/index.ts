@@ -55,6 +55,7 @@ interface MasterProject {
   master_payment_intent_id?: string | null;
   ai_cost_min?: number | null;
   ai_cost_max?: number | null;
+  admin_paused?: boolean | null;
 }
 
 // Master-quote model: one PaymentIntent for the whole project, captured to the
@@ -69,6 +70,11 @@ async function handleMasterPaymentIntent(
 ): Promise<Response> {
   if (project.homeowner_id !== user.id) {
     return jsonResponse({ error: 'Forbidden' }, 403);
+  }
+  if (project.admin_paused) {
+    return jsonResponse({
+      error: 'This project is on admin hold. Contact Walker AI support before paying.',
+    }, 403);
   }
   if (project.payment_status === 'funded') {
     return jsonResponse({ error: 'This project has already been paid' }, 409);
@@ -172,6 +178,79 @@ async function handleMasterPaymentIntent(
   });
 }
 
+async function handleSiteInspectionAdjustmentPaymentIntent(
+  adminClient: ReturnType<typeof createClient>,
+  stripe: Stripe,
+  user: { id: string; email?: string | null },
+  adjustmentId: string,
+): Promise<Response> {
+  const { data: adjustment, error: adjErr } = await adminClient
+    .from('site_inspection_adjustments')
+    .select('*, project:projects(id, homeowner_id, admin_paused)')
+    .eq('id', adjustmentId)
+    .single();
+
+  if (adjErr || !adjustment) {
+    return jsonResponse({ error: 'Site inspection adjustment not found' }, 404);
+  }
+
+  const project = Array.isArray(adjustment.project)
+    ? adjustment.project[0]
+    : adjustment.project as { id: string; homeowner_id: string; admin_paused?: boolean | null } | null;
+
+  if (!project || project.homeowner_id !== user.id) {
+    return jsonResponse({ error: 'Forbidden' }, 403);
+  }
+
+  if (project.admin_paused) {
+    return jsonResponse({ error: 'This project is on admin hold.' }, 403);
+  }
+
+  if (adjustment.status !== 'awaiting_homeowner_funding') {
+    return jsonResponse({ error: 'Adjustment is not awaiting funding' }, 400);
+  }
+
+  if (adjustment.cost_delta <= 0) {
+    return jsonResponse({ error: 'Adjustment does not require additional funding' }, 400);
+  }
+
+  const customerId = await getOrCreateStripeCustomer(adminClient, stripe, user);
+
+  let paymentIntent: Stripe.PaymentIntent;
+  if (adjustment.payment_intent_id) {
+    paymentIntent = await stripe.paymentIntents.retrieve(adjustment.payment_intent_id);
+    if (paymentIntent.status === 'succeeded') {
+      return jsonResponse({ error: 'Payment already succeeded for this adjustment' }, 409);
+    }
+  } else {
+    paymentIntent = await stripe.paymentIntents.create({
+      amount: adjustment.cost_delta,
+      currency: 'cad',
+      customer: customerId,
+      metadata: {
+        purpose: 'site_inspection_adjustment',
+        site_inspection_adjustment_id: adjustment.id,
+        project_id: adjustment.project_id,
+        company_id: adjustment.company_id,
+        homeowner_id: user.id,
+      },
+    });
+
+    await adminClient
+      .from('site_inspection_adjustments')
+      .update({ payment_intent_id: paymentIntent.id, updated_at: new Date().toISOString() })
+      .eq('id', adjustment.id);
+  }
+
+  return jsonResponse({
+    success: true,
+    client_secret: paymentIntent.client_secret,
+    payment_intent_id: paymentIntent.id,
+    amount: adjustment.cost_delta,
+    currency: 'CAD',
+  });
+}
+
 Deno.serve(async (req) => {
   if (req.method === 'OPTIONS') return new Response('ok', { headers: corsHeaders });
 
@@ -201,31 +280,69 @@ Deno.serve(async (req) => {
       });
     }
 
-    const { data: requesterAppUser, error: requesterRoleError } = await adminClient
-      .from('users')
-      .select('role')
-      .eq('id', user.id)
-      .maybeSingle();
-    if (requesterRoleError) throw requesterRoleError;
+    let requesterAppUser: { role?: string | null; account_status?: string | null } | null = null;
+    {
+      const withStatus = await adminClient
+        .from('users')
+        .select('role, account_status')
+        .eq('id', user.id)
+        .maybeSingle();
+      if (withStatus.error && isMissingColumnError(withStatus.error)) {
+        const roleOnly = await adminClient
+          .from('users')
+          .select('role')
+          .eq('id', user.id)
+          .maybeSingle();
+        if (roleOnly.error) throw roleOnly.error;
+        requesterAppUser = roleOnly.data;
+      } else if (withStatus.error) {
+        throw withStatus.error;
+      } else {
+        requesterAppUser = withStatus.data;
+      }
+    }
     if (requesterAppUser?.role !== 'homeowner') {
       return new Response(JSON.stringify({ error: 'Forbidden' }), {
         status: 403, headers: { ...corsHeaders, 'Content-Type': 'application/json' },
       });
     }
+    const accountStatus = requesterAppUser?.account_status;
+    if (accountStatus && accountStatus !== 'active') {
+      return new Response(JSON.stringify({
+        error: accountStatus === 'suspended'
+          ? 'This account has been suspended. Contact Walker AI support.'
+          : 'This account is not active. Contact Walker AI support.',
+      }), {
+        status: 403, headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      });
+    }
 
+    const clonedReq = req.clone();
+    const { adjustment_id, purpose } = await clonedReq.json().catch(() => ({}));
     const { quote_id, project_id: pid } = await req.json();
+
+    if (purpose === 'site_inspection_adjustment' || adjustment_id) {
+      return await handleSiteInspectionAdjustmentPaymentIntent(adminClient, stripe, user, adjustment_id);
+    }
 
     // Master-quote projects pay one project-level PI (no quotes). Detect and branch
     // before the quote lookup. Legacy projects fall through to the per-quote path.
     if (pid && !quote_id) {
       let projectResult = await adminClient
         .from('projects')
-        .select('id, homeowner_id, payment_model, payment_status, master_total_cents, master_payment_intent_id, ai_cost_min, ai_cost_max')
+        .select('id, homeowner_id, payment_model, payment_status, master_total_cents, master_payment_intent_id, ai_cost_min, ai_cost_max, admin_paused')
         .eq('id', pid)
         .maybeSingle();
       if (projectResult.error && isMissingColumnError(projectResult.error)) {
-        // Pre-migration: master columns absent, so no master projects exist — fall through.
-        projectResult = { data: null, error: null } as typeof projectResult;
+        // Pre-migration: master/admin_paused columns absent — retry without hold column.
+        projectResult = await adminClient
+          .from('projects')
+          .select('id, homeowner_id, payment_model, payment_status, master_total_cents, master_payment_intent_id, ai_cost_min, ai_cost_max')
+          .eq('id', pid)
+          .maybeSingle();
+        if (projectResult.error && isMissingColumnError(projectResult.error)) {
+          projectResult = { data: null, error: null } as typeof projectResult;
+        }
       }
       if (projectResult.error) throw projectResult.error;
       const projectRow = projectResult.data as (MasterProject & { payment_model?: string }) | null;
@@ -236,7 +353,7 @@ Deno.serve(async (req) => {
 
     const quoteSelect = `
       id, total_amount, status, project_id, stripe_payment_intent_id, stripe_transfer_group,
-      project:projects ( id, homeowner_id )
+      project:projects ( id, homeowner_id, admin_paused )
     `;
 
     let quote: any = null;
@@ -271,7 +388,7 @@ Deno.serve(async (req) => {
 
     const project = Array.isArray(quote.project)
       ? quote.project[0]
-      : quote.project as { id: string; homeowner_id: string } | null;
+      : quote.project as { id: string; homeowner_id: string; admin_paused?: boolean | null } | null;
     if (!project) {
       return new Response(JSON.stringify({ error: 'Quote project not found' }), {
         status: 404, headers: { ...corsHeaders, 'Content-Type': 'application/json' },
@@ -281,6 +398,14 @@ Deno.serve(async (req) => {
     // Only homeowner can pay
     if (project.homeowner_id !== user.id) {
       return new Response(JSON.stringify({ error: 'Forbidden' }), {
+        status: 403, headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      });
+    }
+
+    if (project.admin_paused) {
+      return new Response(JSON.stringify({
+        error: 'This project is on admin hold. Contact Walker AI support before paying.',
+      }), {
         status: 403, headers: { ...corsHeaders, 'Content-Type': 'application/json' },
       });
     }

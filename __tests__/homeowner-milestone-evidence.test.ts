@@ -20,10 +20,10 @@ describe('homeowner milestone evidence visibility', () => {
     expect(source).toContain(".ilike('body', '%[slot:%')");
     // Evidence gate before homeowner approval
     expect(source).toContain('const hasEvidence = trade.evidence_urls.length > 0;');
-    expect(source).toContain('const canApprove = readyForReview && !hasActiveDispute && hasEvidence;');
+    expect(source).toContain('const canApprove = readyForReview && !releaseBlocked && hasEvidence;');
     // Approve & Release button
     expect(source).toContain('handleApproveTrade');
-    expect(source).toContain("hasEvidence ? 'Approve & Release Payment' : 'Awaiting Photos'");
+    expect(source).toContain("label={releaseBlocked ? 'Release Paused' : hasEvidence ? 'Approve & Release Payment' : 'Awaiting Photos'}");
     expect(source).toContain('disabled={!canApprove}');
     // Evidence missing hint
     expect(source).toContain('readyForReview && !hasEvidence');
